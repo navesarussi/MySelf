@@ -23,8 +23,14 @@ export async function makeSessionToken(secret: string) {
   return hmac(secret);
 }
 
+let cachedSecret: string | null = null;
+let cachedExpected: string | null = null;
+
 export async function isValidSessionToken(token: string | undefined, secret: string) {
   if (!token) return false;
-  const expected = await hmac(secret);
-  return token === expected;
+  if (cachedSecret !== secret || !cachedExpected) {
+    cachedSecret = secret;
+    cachedExpected = await hmac(secret);
+  }
+  return token === cachedExpected;
 }

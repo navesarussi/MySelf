@@ -6,7 +6,7 @@ import type { ContentEntry } from "@/lib/types";
 import { addContentEntry, updateContentEntry, deleteContentEntry } from "./actions";
 import { Trash2 } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 export default async function LibraryPage({
   searchParams,
@@ -24,23 +24,25 @@ export default async function LibraryPage({
   }
 
   const supabase = getSupabase();
-  const { data } = await supabase.from("content_entries").select("*").order("updated_at", { ascending: false });
-  const entries = (data as ContentEntry[]) || [];
-
-  const q = (resolvedSearchParams.q || "").trim().toLowerCase();
+  const q = (resolvedSearchParams.q || "").trim();
   const category = resolvedSearchParams.category || "";
 
-  const categories = Array.from(new Set(entries.map((e) => e.category))).sort();
+  let query = supabase
+    .from("content_entries")
+    .select("id, title, category, body, tags, created_at, updated_at")
+    .order("updated_at", { ascending: false });
 
-  const filtered = entries.filter((e) => {
-    const matchesCategory = !category || e.category === category;
-    const matchesQuery =
-      !q ||
-      e.title.toLowerCase().includes(q) ||
-      e.body.toLowerCase().includes(q) ||
-      e.tags.some((t) => t.toLowerCase().includes(q));
-    return matchesCategory && matchesQuery;
-  });
+  if (category) query = query.eq("category", category);
+  if (q) {
+    const pattern = `%${q}%`;
+    query = query.or(`title.ilike.${pattern},body.ilike.${pattern}`);
+  }
+
+  const { data } = await query;
+  const filtered = (data as ContentEntry[]) || [];
+
+  const { data: categoryRows } = await supabase.from("content_entries").select("category");
+  const categories = Array.from(new Set((categoryRows || []).map((e) => e.category))).sort();
 
   return (
     <>

@@ -8,7 +8,7 @@ import { addRelationship, markContactedToday, updateRelationshipNotes, deleteRel
 import { NotesForm } from "./notes-form";
 import { Trash2, MessageCircle } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 function groupBy<T, K extends string>(items: T[], key: (item: T) => K) {
   const map = new Map<K, T[]>();

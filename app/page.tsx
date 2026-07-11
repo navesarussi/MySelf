@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui";
 import type { Habit, Goal, Commitment, Relationship, TimelineEvent } from "@/lib/types";
 import { Compass, Clock, Target, Users, BookOpen, Flame, AlertCircle } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 const modules = [
   { href: "/timeline", label: "ציר זמן", icon: Clock, desc: "האירועים החשובים בחיים שלך" },
@@ -28,11 +28,11 @@ export default async function HomePage() {
   if (configured) {
     const supabase = getSupabase();
     const [habitsRes, goalsRes, commitmentsRes, relRes, eventsRes] = await Promise.all([
-      supabase.from("habits").select("*").eq("archived", false),
+      supabase.from("habits").select("id, name, streak_count").eq("archived", false),
       supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "active"),
-      supabase.from("commitments").select("*").eq("status", "pending").order("commitment_date", { ascending: false }).limit(5),
-      supabase.from("relationships").select("*"),
-      supabase.from("timeline_events").select("*").order("event_date", { ascending: false }).limit(3),
+      supabase.from("commitments").select("id, text, commitment_date").eq("status", "pending").order("commitment_date", { ascending: false }).limit(5),
+      supabase.from("relationships").select("id, name, last_contact_date, reminder_days"),
+      supabase.from("timeline_events").select("id, title, event_date").order("event_date", { ascending: false }).limit(3),
     ]);
     habits = (habitsRes.data as Habit[]) || [];
     activeGoalsCount = goalsRes.count || 0;

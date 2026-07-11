@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { FLASH_COOKIE, parseFlash, type FlashPayload } from "@/lib/flash";
 
 function readClientFlash(): FlashPayload | null {
@@ -18,6 +19,7 @@ function clearClientFlash() {
 }
 
 export function ToastHost() {
+  const pathname = usePathname();
   const [toast, setToast] = useState<FlashPayload | null>(null);
   const hideTimer = useRef<number | null>(null);
 
@@ -35,13 +37,19 @@ export function ToastHost() {
     }
 
     tick();
-    // Server Actions revalidate without remounting layout — poll for flash cookie.
-    const id = window.setInterval(tick, 400);
+
+    const onSubmit = () => window.setTimeout(tick, 120);
+    const onFocus = () => tick();
+
+    document.addEventListener("submit", onSubmit, true);
+    window.addEventListener("focus", onFocus);
+
     return () => {
-      window.clearInterval(id);
+      document.removeEventListener("submit", onSubmit, true);
+      window.removeEventListener("focus", onFocus);
       if (hideTimer.current) window.clearTimeout(hideTimer.current);
     };
-  }, []);
+  }, [pathname]);
 
   if (!toast) return null;
 

@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui";
 import type { Task, TaskProject, TaskStatus } from "@/lib/types";
 import { TaskForm, TaskList } from "./task-board";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 const projects: Array<TaskProject | "הכל"> = ["הכל", "Digital Scale", "Glowy", "KupaPay", "אישי", "אחר"];
 const statuses: Array<TaskStatus | "הכל"> = ["הכל", "open", "in_progress", "done"];

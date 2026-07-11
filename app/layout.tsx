@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
-import { ToastHost } from "@/components/toast-host";
+import { ToastLoader } from "@/components/toast-loader";
 
 const heebo = Heebo({
   subsets: ["hebrew", "latin"],
@@ -28,7 +28,7 @@ export default function RootLayout({
           <Nav />
           <main className="mt-6 flex-1">{children}</main>
         </div>
-        <ToastHost />
+        <ToastLoader />
       </body>
     </html>
   );

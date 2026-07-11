@@ -7,7 +7,7 @@ import { HabitsSection } from "./habits-section";
 import { GoalsSection } from "./goals-section";
 import { CommitmentsSection } from "./commitments-section";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 export default async function HabitsPage() {
   if (!dbConfigured()) {
