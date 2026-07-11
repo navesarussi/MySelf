@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { setFlash } from "@/lib/flash";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -19,6 +20,7 @@ export async function addRelationship(formData: FormData) {
     reminder_days: reminder_days ? Number(reminder_days) : null,
     notes: notes || null,
   });
+  await setFlash("הקשר נוסף");
   revalidatePath("/relationships");
 }
 
@@ -27,6 +29,7 @@ export async function markContactedToday(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("relationships").update({ last_contact_date: todayISO() }).eq("id", id);
+  await setFlash("עודכן תאריך קשר");
   revalidatePath("/relationships");
   revalidatePath("/");
 }
@@ -37,6 +40,7 @@ export async function updateRelationshipNotes(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("relationships").update({ notes: notes || null }).eq("id", id);
+  await setFlash("ההערות עודכנו");
   revalidatePath("/relationships");
 }
 
@@ -45,5 +49,6 @@ export async function deleteRelationship(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("relationships").delete().eq("id", id);
+  await setFlash("הקשר נמחק");
   revalidatePath("/relationships");
 }

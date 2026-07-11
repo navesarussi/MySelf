@@ -1,10 +1,11 @@
 import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
-import { PageHeader, EmptyState, Badge, SubmitButton, inputClass } from "@/components/ui";
+import { PageHeader, SubmitButton, inputClass } from "@/components/ui";
 import type { TimelineEvent } from "@/lib/types";
-import { addTimelineEvent, deleteTimelineEvent } from "./actions";
-import { Trash2 } from "lucide-react";
+import type { LifePeriod } from "@/lib/life-periods";
+import { addTimelineEvent, addLifePeriod } from "./actions";
+import { TimelineBoard } from "./timeline-board";
 
 export const dynamic = "force-dynamic";
 
@@ -14,26 +15,38 @@ async function getEvents(): Promise<TimelineEvent[]> {
     .from("timeline_events")
     .select("*")
     .order("event_date", { ascending: false });
-  return data || [];
+  return (data || []) as TimelineEvent[];
+}
+
+async function getPeriods(): Promise<LifePeriod[]> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("life_periods")
+    .select("*")
+    .order("sort_order", { ascending: true });
+  return (data || []) as LifePeriod[];
 }
 
 export default async function TimelinePage() {
   if (!dbConfigured()) {
     return (
       <>
-        <PageHeader title="ציר זמן" subtitle="האירועים החשובים בחיים שלך" />
+        <PageHeader title="ציר זמן" subtitle="תקופות חופפות ואבני דרך" />
         <DbWarning />
       </>
     );
   }
 
-  const events = await getEvents();
+  const [events, periods] = await Promise.all([getEvents(), getPeriods()]);
 
   return (
     <>
-      <PageHeader title="ציר זמן" subtitle="האירועים החשובים בחיים שלך" />
+      <PageHeader
+        title="ציר זמן"
+        subtitle="תקופות שחופפות זו לזו — תיכון בתוך ילדות, זוגיות בתוך צבא, וכו׳"
+      />
 
-      <form action={addTimelineEvent} className="card mb-8 grid gap-3 p-4 sm:grid-cols-2">
+      <form action={addTimelineEvent} className="card mb-4 grid gap-3 p-4 sm:grid-cols-2">
         <input type="date" name="event_date" required className={inputClass} />
         <input type="text" name="category" placeholder="קטגוריה (למשל: משפחה, צבא, טיול)" className={inputClass} />
         <input type="text" name="title" placeholder="כותרת האירוע" required className={`${inputClass} sm:col-span-2`} />
@@ -43,35 +56,20 @@ export default async function TimelinePage() {
         </div>
       </form>
 
-      {events.length === 0 ? (
-        <EmptyState text="אין עדיין אירועים בציר הזמן. הוסף את הראשון למעלה." />
-      ) : (
-        <ol className="relative space-y-6 border-e-2 border-border pe-6">
-          {events.map((ev) => (
-            <li key={ev.id} className="relative">
-              <span className="absolute -end-[31px] top-1.5 h-3 w-3 rounded-full bg-accent" />
-              <div className="card p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted">
-                      {new Date(ev.event_date).toLocaleDateString("he-IL")}
-                    </span>
-                    {ev.category && <Badge tone="accent">{ev.category}</Badge>}
-                  </div>
-                  <form action={deleteTimelineEvent}>
-                    <input type="hidden" name="id" value={ev.id} />
-                    <button className="rounded-lg p-1.5 text-muted hover:text-warn" title="מחיקה">
-                      <Trash2 size={16} />
-                    </button>
-                  </form>
-                </div>
-                <h3 className="mt-2 font-semibold">{ev.title}</h3>
-                {ev.description && <p className="mt-1 text-sm text-muted">{ev.description}</p>}
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
+      <details className="card mb-8 p-4">
+        <summary className="cursor-pointer text-sm font-medium">הוספת תקופת חיים חדשה</summary>
+        <form action={addLifePeriod} className="mt-3 grid gap-3 sm:grid-cols-2">
+          <input type="text" name="title" placeholder="שם התקופה" required className={`${inputClass} sm:col-span-2`} />
+          <input type="date" name="start_date" required className={inputClass} />
+          <input type="date" name="end_date" className={inputClass} title="ריק = נמשך עד היום" />
+          <input type="color" name="color" defaultValue="#7dd3c0" className="h-10 w-full rounded-lg border bg-transparent" />
+          <div className="sm:col-span-2">
+            <SubmitButton>הוספת תקופה</SubmitButton>
+          </div>
+        </form>
+      </details>
+
+      <TimelineBoard events={events} periods={periods} />
     </>
   );
 }

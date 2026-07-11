@@ -58,3 +58,19 @@ export type ContentEntry = {
   created_at: string;
   updated_at: string;
 };
+
+export type TaskProject = "Digital Scale" | "Glowy" | "KupaPay" | "אישי" | "אחר";
+export type TaskPriority = "high" | "medium" | "low";
+export type TaskStatus = "open" | "in_progress" | "done";
+
+export type Task = {
+  id: string;
+  title: string;
+  project: TaskProject;
+  priority: TaskPriority;
+  status: TaskStatus;
+  due_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};

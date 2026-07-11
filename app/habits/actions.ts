@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { differenceInCalendarDays } from "date-fns";
 import { getSupabase } from "@/lib/supabase";
+import { setFlash } from "@/lib/flash";
 import type { Habit } from "@/lib/types";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -15,6 +16,7 @@ export async function addHabit(formData: FormData) {
 
   const supabase = getSupabase();
   await supabase.from("habits").insert({ name, kind, target_note: target_note || null });
+  await setFlash("ההרגל נוסף");
   revalidatePath("/habits");
 }
 
@@ -38,6 +40,7 @@ export async function checkInHabit(formData: FormData) {
     .update({ streak_count: newStreak, best_streak: bestStreak, last_checked_on: today })
     .eq("id", id);
 
+  await setFlash("צ׳ק־אין נרשם");
   revalidatePath("/habits");
   revalidatePath("/");
 }
@@ -47,6 +50,7 @@ export async function resetHabit(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("habits").update({ streak_count: 0, last_checked_on: null }).eq("id", id);
+  await setFlash("הרצף אופס");
   revalidatePath("/habits");
   revalidatePath("/");
 }
@@ -56,6 +60,7 @@ export async function deleteHabit(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("habits").delete().eq("id", id);
+  await setFlash("ההרגל נמחק");
   revalidatePath("/habits");
 }
 
@@ -75,6 +80,7 @@ export async function addGoal(formData: FormData) {
     first_step: first_step || null,
     definition_of_done: definition_of_done || null,
   });
+  await setFlash("המטרה נוספה");
   revalidatePath("/habits");
 }
 
@@ -87,6 +93,7 @@ export async function toggleGoalStatus(formData: FormData) {
     .from("goals")
     .update({ status: status === "active" ? "done" : "active" })
     .eq("id", id);
+  await setFlash("המטרה עודכנה");
   revalidatePath("/habits");
 }
 
@@ -95,6 +102,7 @@ export async function deleteGoal(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("goals").delete().eq("id", id);
+  await setFlash("המטרה נמחקה");
   revalidatePath("/habits");
 }
 
@@ -104,6 +112,7 @@ export async function addCommitment(formData: FormData) {
   if (!text) return;
   const supabase = getSupabase();
   await supabase.from("commitments").insert({ text, commitment_date });
+  await setFlash("ההתחייבות נוספה");
   revalidatePath("/habits");
   revalidatePath("/");
 }
@@ -114,6 +123,7 @@ export async function setCommitmentStatus(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("commitments").update({ status }).eq("id", id);
+  await setFlash("ההתחייבות עודכנה");
   revalidatePath("/habits");
   revalidatePath("/");
 }
@@ -123,5 +133,6 @@ export async function deleteCommitment(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("commitments").delete().eq("id", id);
+  await setFlash("ההתחייבות נמחקה");
   revalidatePath("/habits");
 }

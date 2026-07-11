@@ -8,10 +8,12 @@ import { LogOut, Menu, X } from "lucide-react";
 const links = [
   { href: "/", label: "בית" },
   { href: "/timeline", label: "ציר זמן" },
+  { href: "/tasks", label: "משימות" },
   { href: "/habits", label: "הרגלים ומטרות" },
   { href: "/relationships", label: "קשרים" },
   { href: "/library", label: "ספריית תוכן" },
 ];
+
 
 export function Nav() {
   const pathname = usePathname();

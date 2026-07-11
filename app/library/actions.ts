@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { setFlash } from "@/lib/flash";
 
 export async function addContentEntry(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
@@ -21,6 +22,7 @@ export async function addContentEntry(formData: FormData) {
     body,
     tags,
   });
+  await setFlash("הרשומה נוספה");
   revalidatePath("/library");
 }
 
@@ -41,6 +43,7 @@ export async function updateContentEntry(formData: FormData) {
     .from("content_entries")
     .update({ title, category: category || "כללי", body, tags, updated_at: new Date().toISOString() })
     .eq("id", id);
+  await setFlash("הרשומה עודכנה");
   revalidatePath("/library");
 }
 
@@ -49,5 +52,6 @@ export async function deleteContentEntry(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("content_entries").delete().eq("id", id);
+  await setFlash("הרשומה נמחקה");
   revalidatePath("/library");
 }
