@@ -9,25 +9,49 @@ import {
   todayIso,
   toTime,
   xFor,
+  yearTicks,
 } from "@/lib/timeline-layout";
 
 const TRACK_H = 26;
+
+export function YearAxis({ min, max, plotW }: { min: number; max: number; plotW: number }) {
+  const ticks = useMemo(() => yearTicks(min, max, plotW), [min, max, plotW]);
+
+  return (
+    <div className="relative mb-1 h-6">
+      {ticks.map(({ year, x }) => (
+        <div
+          key={year}
+          className="absolute top-0 flex -translate-x-1/2 flex-col items-center"
+          style={{ left: x }}
+        >
+          <span className="h-2 w-px bg-border" />
+          <span className="mt-0.5 text-[10px] font-medium text-muted">{year}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function PeriodTracks({
   periods,
   min,
   max,
   plotW,
+  editingId,
+  onEdit,
 }: {
   periods: LifePeriod[];
   min: number;
   max: number;
   plotW: number;
+  editingId: string | null;
+  onEdit: (period: LifePeriod) => void;
 }) {
   const { lanes, laneCount } = useMemo(() => assignPeriodLanes(periods), [periods]);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const hovered = periods.find((p) => p.id === hoverId) || null;
-  const tracksH = laneCount * (TRACK_H + 8) + 28;
+  const tracksH = laneCount * (TRACK_H + 8) + 40;
 
   return (
     <div className="relative mb-2" style={{ height: tracksH }}>
@@ -37,7 +61,9 @@ export function PeriodTracks({
         const x1 = xFor(toTime(p.end_date || todayIso()), min, max, plotW);
         const w = Math.max(x1 - x0, 10);
         const narrow = w < 70;
-        const top = 22 + lane * (TRACK_H + 8);
+        const top = 28 + lane * (TRACK_H + 8);
+        const endLabel = p.end_date ? formatHeDate(p.end_date) : "היום";
+        const selected = editingId === p.id;
 
         return (
           <div key={p.id}>
@@ -49,21 +75,34 @@ export function PeriodTracks({
                 {p.title}
               </div>
             )}
+            <span
+              className="pointer-events-none absolute z-[1] whitespace-nowrap text-[9px] text-muted"
+              style={{ left: x0, top: top + TRACK_H + 2, transform: "translateX(-2px)" }}
+            >
+              {formatHeDate(p.start_date)}
+            </span>
+            <span
+              className="pointer-events-none absolute z-[1] whitespace-nowrap text-[9px] text-muted"
+              style={{ left: x1, top: top + TRACK_H + 2, transform: "translateX(-100%)" }}
+            >
+              {endLabel}
+            </span>
             <button
               type="button"
-              aria-label={p.title}
+              aria-label={`עריכת ${p.title}`}
               onMouseEnter={() => setHoverId(p.id)}
               onMouseLeave={() => setHoverId(null)}
-              onFocus={() => setHoverId(p.id)}
-              onBlur={() => setHoverId(null)}
-              className="absolute flex items-center overflow-hidden rounded-md px-2 text-start text-[11px] font-semibold text-bg shadow-sm outline-none ring-offset-2 transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-accent"
+              onClick={() => onEdit(p)}
+              className={`absolute flex items-center overflow-hidden rounded-md px-2 text-start text-[11px] font-semibold text-bg shadow-sm outline-none ring-offset-2 transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-accent ${
+                selected ? "ring-2 ring-accent" : ""
+              }`}
               style={{
                 left: x0,
                 width: w,
                 top,
                 height: TRACK_H,
                 background: p.color,
-                zIndex: hoverId === p.id ? 5 : 2,
+                zIndex: hoverId === p.id || selected ? 5 : 2,
               }}
             >
               {!narrow && <span className="truncate">{p.title}</span>}
@@ -72,23 +111,18 @@ export function PeriodTracks({
         );
       })}
 
-      {hovered && (
+      {hovered && editingId !== hovered.id && (
         <div
           role="tooltip"
           className="pointer-events-none absolute z-20 rounded-lg border border-border bg-surface px-3 py-2 text-xs shadow-lg"
           style={{
-            left: Math.min(
-              xFor(toTime(hovered.start_date), min, max, plotW),
-              plotW - 180
-            ),
+            left: Math.min(xFor(toTime(hovered.start_date), min, max, plotW), plotW - 200),
             top: 0,
           }}
         >
           <p className="font-semibold text-ink">{hovered.title}</p>
           <p className="mt-0.5 text-muted">{formatPeriodRange(hovered)}</p>
-          {hovered.kind === "relationship" && (
-            <p className="mt-0.5 text-accent">תקופת זוגיות</p>
-          )}
+          <p className="mt-1 text-[10px] text-muted">לחץ לעריכה</p>
         </div>
       )}
     </div>

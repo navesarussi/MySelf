@@ -80,3 +80,26 @@ export function assignEventLanes(items: { id: string; x: number }[], minGap = 88
 export function formatHeDate(iso: string) {
   return new Date(iso).toLocaleDateString("he-IL");
 }
+
+/** Year tick marks along the axis; step adapts to zoom density. */
+export function yearTicks(min: number, max: number, plotW: number) {
+  const minYear = new Date(min).getFullYear();
+  const maxYear = new Date(max).getFullYear();
+  const span = Math.max(maxYear - minYear, 1);
+  const pxPerYear = plotW / span;
+
+  let step = 1;
+  if (pxPerYear < 40) step = 2;
+  if (pxPerYear < 22) step = 5;
+  if (pxPerYear < 12) step = 10;
+  if (pxPerYear < 6) step = 20;
+
+  const ticks: { year: number; x: number }[] = [];
+  const start = Math.floor(minYear / step) * step;
+  for (let y = start; y <= maxYear + step; y += step) {
+    const t = new Date(y, 0, 1).getTime();
+    if (t < min - YEAR_MS || t > max + YEAR_MS) continue;
+    ticks.push({ year: y, x: xFor(t, min, max, plotW) });
+  }
+  return ticks;
+}

@@ -10,10 +10,11 @@ import {
   toTime,
   widthForRange,
   xFor,
+  yearTicks,
 } from "@/lib/timeline-layout";
-import { EventMarks, PeriodTracks } from "./timeline-parts";
+import { EventMarks, PeriodTracks, YearAxis } from "./timeline-parts";
+import { PeriodEditForm } from "./period-edit-form";
 
-/** Zoom unit = pixels per year. Wide range for life-scale timelines. */
 const MIN_PPY = 18;
 const MAX_PPY = 900;
 const DEFAULT_PPY = 120;
@@ -26,6 +27,7 @@ export function TimelineVisual({
   periods: LifePeriod[];
 }) {
   const [pxPerYear, setPxPerYear] = useState(DEFAULT_PPY);
+  const [editing, setEditing] = useState<LifePeriod | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const { min, max } = useMemo(() => timelineBounds(events, periods), [events, periods]);
   const width = widthForRange(min, max, pxPerYear);
@@ -86,7 +88,7 @@ export function TimelineVisual({
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
         <p className="text-xs text-muted">
-          גלול לצדדים · Ctrl/⌘ + גלגלת לזום · העבר עכבר על תקופה לפרטים
+          גלול לצדדים · Ctrl/⌘ + גלגלת לזום · לחץ על תקופה לעריכה
         </p>
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={fitAll} className="rounded-lg border px-2 py-1.5 text-muted hover:text-ink" title="התאם הכל">
@@ -112,16 +114,27 @@ export function TimelineVisual({
         </div>
       </div>
 
-      <div
-        ref={scroller}
-        onWheel={onWheel}
-        className="overflow-x-auto scrollbar-thin"
-        dir="ltr"
-      >
+      <div ref={scroller} onWheel={onWheel} className="overflow-x-auto scrollbar-thin" dir="ltr">
         <div className="relative p-6" style={{ width }}>
-          <PeriodTracks periods={periods} min={min} max={max} plotW={plotW} />
+          <PeriodTracks
+            periods={periods}
+            min={min}
+            max={max}
+            plotW={plotW}
+            editingId={editing?.id ?? null}
+            onEdit={setEditing}
+          />
+
+          <YearAxis min={min} max={max} plotW={plotW} />
 
           <div className="relative h-1.5 rounded-full bg-border">
+            {yearTicks(min, max, plotW).map(({ year, x }) => (
+              <span
+                key={`tick-${year}`}
+                className="absolute bottom-0 top-0 w-px bg-border/80"
+                style={{ left: x }}
+              />
+            ))}
             <div
               className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-accent ring-4 ring-accent/20"
               style={{ left: xFor(Date.now(), min, max, plotW) }}
@@ -132,6 +145,10 @@ export function TimelineVisual({
           <EventMarks items={eventItems} plotW={plotW} />
         </div>
       </div>
+
+      {editing && (
+        <PeriodEditForm period={editing} onClose={() => setEditing(null)} />
+      )}
     </div>
   );
 }

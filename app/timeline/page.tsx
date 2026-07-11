@@ -7,7 +7,7 @@ import type { LifePeriod } from "@/lib/life-periods";
 import { addTimelineEvent, addLifePeriod } from "./actions";
 import { TimelineBoard } from "./timeline-board";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 async function getEvents(): Promise<TimelineEvent[]> {
   const supabase = getSupabase();

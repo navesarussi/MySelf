@@ -24,7 +24,8 @@ Events can be browsed chronologically regardless of period grouping.
 ### FR-TL-03
 Visual timeline: wide zoom range (fit → deep zoom), non-overlapping event labels via lane packing,
 period hover tooltip with full name + date range, readable labels for short periods (external label or hover).
-Default timeline tab is the visual view.
+Year markers along the axis; full start/end dates on each period band.
+Click period to edit or delete with precise dates. Default tab is visual view.
 
 ### FR-TL-02
 Seeded milestones: birth 2002-01-02, enlist 2021-12-23, release 2025-04-19.

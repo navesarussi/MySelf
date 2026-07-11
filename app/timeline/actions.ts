@@ -59,3 +59,40 @@ export async function addLifePeriod(formData: FormData) {
   await setFlash(error ? "שגיאה בהוספת תקופה" : "התקופה נוספה", error ? "error" : "success");
   revalidatePath("/timeline");
 }
+
+export async function updateLifePeriod(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const title = String(formData.get("title") || "").trim();
+  const start_date = String(formData.get("start_date") || "");
+  const end_date = String(formData.get("end_date") || "").trim() || null;
+  const color = String(formData.get("color") || "#7dd3c0");
+  const kind = String(formData.get("kind") || "period");
+
+  if (!id || !title || !start_date) {
+    await setFlash("חסרים שדות חובה לעריכת תקופה", "error");
+    return;
+  }
+  if (end_date && end_date < start_date) {
+    await setFlash("תאריך הסיום חייב להיות אחרי ההתחלה", "error");
+    return;
+  }
+
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("life_periods")
+    .update({ title, start_date, end_date, color, kind })
+    .eq("id", id);
+
+  await setFlash(error ? "שגיאה בעדכון תקופה" : "התקופה עודכנה", error ? "error" : "success");
+  revalidatePath("/timeline");
+}
+
+export async function deleteLifePeriod(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+
+  const supabase = getSupabase();
+  const { error } = await supabase.from("life_periods").delete().eq("id", id);
+  await setFlash(error ? "שגיאה במחיקת תקופה" : "התקופה נמחקה", error ? "error" : "success");
+  revalidatePath("/timeline");
+}
