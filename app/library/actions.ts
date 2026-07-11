@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
-import { setFlash } from "@/lib/flash";
+import { setFlash } from "@/lib/flash-actions";
 
 export async function addContentEntry(formData: FormData) {
   const title = String(formData.get("title") || "").trim();

@@ -1,17 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { FlashPayload } from "@/lib/flash";
+import { useEffect, useRef, useState } from "react";
+import { FLASH_COOKIE, parseFlash, type FlashPayload } from "@/lib/flash";
 
-export function ToastHost({ initial }: { initial: FlashPayload | null }) {
-  const [toast, setToast] = useState<FlashPayload | null>(initial);
+function readClientFlash(): FlashPayload | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${FLASH_COOKIE}=`));
+  if (!match) return null;
+  const raw = decodeURIComponent(match.slice(FLASH_COOKIE.length + 1));
+  return parseFlash(raw);
+}
+
+function clearClientFlash() {
+  document.cookie = `${FLASH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
+export function ToastHost() {
+  const [toast, setToast] = useState<FlashPayload | null>(null);
+  const hideTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!initial) return;
-    setToast(initial);
-    const t = setTimeout(() => setToast(null), 3200);
-    return () => clearTimeout(t);
-  }, [initial]);
+    function show(payload: FlashPayload) {
+      clearClientFlash();
+      setToast(payload);
+      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+      hideTimer.current = window.setTimeout(() => setToast(null), 3200);
+    }
+
+    function tick() {
+      const payload = readClientFlash();
+      if (payload) show(payload);
+    }
+
+    tick();
+    // Server Actions revalidate without remounting layout — poll for flash cookie.
+    const id = window.setInterval(tick, 400);
+    return () => {
+      window.clearInterval(id);
+      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    };
+  }, []);
 
   if (!toast) return null;
 

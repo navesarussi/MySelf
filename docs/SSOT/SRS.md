@@ -18,8 +18,8 @@ After create / update / delete actions, show a short Hebrew toast (נוסף / ע
 
 ### FR-TL-01
 Timeline supports overlapping life periods (`life_periods`) that may nest or overlap in time.
-Events appear under every period whose date range contains the event date.
-Periods are collapsible; active-today periods open by default; expand/collapse all controls.
+Views: (1) chronological list newest-first, (2) visual axis with period bands + zoom, (3) by-period accordion.
+Events can be browsed chronologically regardless of period grouping.
 
 ### FR-TL-02
 Seeded milestones: birth 2002-01-02, enlist 2021-12-23, release 2025-04-19.

@@ -43,7 +43,7 @@ export default async function TimelinePage() {
     <>
       <PageHeader
         title="ציר זמן"
-        subtitle="תקופות שחופפות זו לזו — תיכון בתוך ילדות, זוגיות בתוך צבא, וכו׳"
+        subtitle="כרונולוגי · ציר ויזואלי עם זום · תקופות חופפות"
       />
 
       <form action={addTimelineEvent} className="card mb-4 grid gap-3 p-4 sm:grid-cols-2">

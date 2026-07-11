@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
-import { setFlash } from "@/lib/flash";
+import { setFlash } from "@/lib/flash-actions";
 
 export async function addTimelineEvent(formData: FormData) {
   const event_date = String(formData.get("event_date") || "");

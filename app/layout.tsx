@@ -3,7 +3,6 @@ import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
 import { ToastHost } from "@/components/toast-host";
-import { readFlash } from "@/lib/flash";
 
 const heebo = Heebo({
   subsets: ["hebrew", "latin"],
@@ -17,13 +16,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const flash = await readFlash();
-
   return (
     <html lang="he" dir="rtl" className={heebo.variable}>
       <body className="font-sans antialiased">
@@ -31,7 +28,7 @@ export default async function RootLayout({
           <Nav />
           <main className="mt-6 flex-1">{children}</main>
         </div>
-        <ToastHost initial={flash} />
+        <ToastHost />
       </body>
     </html>
   );

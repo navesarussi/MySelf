@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
-import { setFlash } from "@/lib/flash";
+import { setFlash } from "@/lib/flash-actions";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 

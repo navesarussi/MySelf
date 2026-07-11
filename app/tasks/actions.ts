@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
-import { setFlash } from "@/lib/flash";
+import { setFlash } from "@/lib/flash-actions";
 import type { TaskPriority, TaskProject, TaskStatus } from "@/lib/types";
 
 const PROJECTS: TaskProject[] = ["Digital Scale", "Glowy", "KupaPay", "אישי", "אחר"];

@@ -11,8 +11,66 @@ import {
 } from "@/lib/life-periods";
 import { Badge, EmptyState } from "@/components/ui";
 import { EventCard, UnassignedSection } from "./event-card";
+import { TimelineVisual } from "./timeline-visual";
+
+type Mode = "chrono" | "visual" | "periods";
 
 export function TimelineBoard({
+  events,
+  periods,
+}: {
+  events: TimelineEvent[];
+  periods: LifePeriod[];
+}) {
+  const [mode, setMode] = useState<Mode>("chrono");
+  const chrono = useMemo(
+    () => [...events].sort((a, b) => b.event_date.localeCompare(a.event_date)),
+    [events]
+  );
+
+  if (events.length === 0 && periods.length === 0) {
+    return <EmptyState text="אין עדיין אירועים או תקופות בציר הזמן." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["chrono", "כרונולוגי"],
+            ["visual", "ציר ויזואלי"],
+            ["periods", "לפי תקופות"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setMode(id)}
+            className={`rounded-full px-3 py-1.5 text-xs ${
+              mode === id ? "bg-accent text-bg font-medium" : "bg-border/50 text-muted hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "chrono" && (
+        <ol className="relative space-y-4 border-e-2 border-border pe-5">
+          {chrono.map((ev) => (
+            <EventCard key={ev.id} event={ev} allPeriods={periods} />
+          ))}
+        </ol>
+      )}
+
+      {mode === "visual" && <TimelineVisual events={events} periods={periods} />}
+
+      {mode === "periods" && <PeriodsView events={chrono} periods={periods} />}
+    </div>
+  );
+}
+
+function PeriodsView({
   events,
   periods,
 }: {
@@ -36,32 +94,17 @@ export function TimelineBoard({
     });
   }
 
-  if (events.length === 0 && periods.length === 0) {
-    return <EmptyState text="אין עדיין אירועים או תקופות בציר הזמן." />;
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setOpen(new Set(periods.map((p) => p.id)))}
-          className="rounded-full bg-border/50 px-3 py-1 text-xs text-muted hover:text-ink"
-        >
+        <button type="button" onClick={() => setOpen(new Set(periods.map((p) => p.id)))} className="rounded-full bg-border/50 px-3 py-1 text-xs text-muted hover:text-ink">
           פתח הכל
         </button>
-        <button
-          type="button"
-          onClick={() => setOpen(new Set())}
-          className="rounded-full bg-border/50 px-3 py-1 text-xs text-muted hover:text-ink"
-        >
+        <button type="button" onClick={() => setOpen(new Set())} className="rounded-full bg-border/50 px-3 py-1 text-xs text-muted hover:text-ink">
           סגור הכל
         </button>
-        <span className="self-center text-xs text-muted">
-          תקופות יכולות לחפוף — אותו אירוע יופיע בכמה מקומות
-        </span>
+        <span className="self-center text-xs text-muted">תקופות יכולות לחפוף</span>
       </div>
-
       <div className="space-y-3">
         {roots.map((period) => (
           <PeriodBlock
@@ -76,7 +119,6 @@ export function TimelineBoard({
           />
         ))}
       </div>
-
       <UnassignedSection events={events} periods={periods} />
     </div>
   );
@@ -106,40 +148,24 @@ function PeriodBlock({
 
   return (
     <section className="card overflow-hidden" style={{ marginInlineStart: depth ? depth * 12 : 0 }}>
-      <button
-        type="button"
-        onClick={() => toggle(period.id)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-start hover:bg-border/20"
-      >
+      <button type="button" onClick={() => toggle(period.id)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-start hover:bg-border/20">
         <div className="flex min-w-0 items-center gap-3">
           <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: period.color }} />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-semibold">{period.title}</h2>
               {active && <Badge tone="good">פעילה</Badge>}
-              {period.kind === "relationship" && <Badge tone="accent">זוגיות</Badge>}
             </div>
-            <p className="text-xs text-muted">
-              {formatPeriodRange(period)} · {periodEvents.length} אירועים
-            </p>
+            <p className="text-xs text-muted">{formatPeriodRange(period)} · {periodEvents.length} אירועים</p>
           </div>
         </div>
         {isOpen ? <ChevronDown size={18} className="text-muted" /> : <ChevronLeft size={18} className="text-muted" />}
       </button>
-
       {isOpen && (
         <div className="border-t border-border px-4 pb-4 pt-3">
           {kids.map((child) => (
             <div key={child.id} className="mb-3">
-              <PeriodBlock
-                period={child}
-                depth={depth + 1}
-                open={open}
-                toggle={toggle}
-                childrenOf={childrenOf}
-                events={events}
-                allPeriods={allPeriods}
-              />
+              <PeriodBlock period={child} depth={depth + 1} open={open} toggle={toggle} childrenOf={childrenOf} events={events} allPeriods={allPeriods} />
             </div>
           ))}
           {periodEvents.length === 0 ? (

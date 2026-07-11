@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { differenceInCalendarDays } from "date-fns";
 import { getSupabase } from "@/lib/supabase";
-import { setFlash } from "@/lib/flash";
+import { setFlash } from "@/lib/flash-actions";
 import type { Habit } from "@/lib/types";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
