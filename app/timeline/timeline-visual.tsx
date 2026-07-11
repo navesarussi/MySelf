@@ -10,14 +10,21 @@ import {
   toTime,
   widthForRange,
   xFor,
-  yearTicks,
 } from "@/lib/timeline-layout";
-import { EventMarks, PeriodTracks, YearAxis } from "./timeline-parts";
+import {
+  assignPeriodLanes,
+  EventMarks,
+  PeriodConnectors,
+  PeriodTracks,
+  TimelineAxis,
+  tracksHeight,
+} from "./timeline-parts";
 import { PeriodEditForm } from "./period-edit-form";
 
 const MIN_PPY = 18;
 const MAX_PPY = 900;
 const DEFAULT_PPY = 120;
+const CONNECTOR_H = 28;
 
 export function TimelineVisual({
   events,
@@ -32,6 +39,8 @@ export function TimelineVisual({
   const { min, max } = useMemo(() => timelineBounds(events, periods), [events, periods]);
   const width = widthForRange(min, max, pxPerYear);
   const plotW = width - 48;
+  const { lanes, laneCount } = useMemo(() => assignPeriodLanes(periods), [periods]);
+  const tracksH = tracksHeight(laneCount);
 
   const eventItems = useMemo(() => {
     const placed = [...events]
@@ -43,8 +52,8 @@ export function TimelineVisual({
         date: ev.event_date,
         milestone: ev.category === "אבן דרך",
       }));
-    const { lanes } = assignEventLanes(placed, 90);
-    return placed.map((p) => ({ ...p, lane: lanes.get(p.id) ?? 0 }));
+    const { lanes: evLanes } = assignEventLanes(placed, 90);
+    return placed.map((p) => ({ ...p, lane: evLanes.get(p.id) ?? 0 }));
   }, [events, min, max, plotW]);
 
   const setZoomPreservingCenter = useCallback((next: number) => {
@@ -115,31 +124,29 @@ export function TimelineVisual({
       </div>
 
       <div ref={scroller} onWheel={onWheel} className="overflow-x-auto scrollbar-thin" dir="ltr">
-        <div className="relative p-6" style={{ width }}>
-          <PeriodTracks
-            periods={periods}
-            min={min}
-            max={max}
-            plotW={plotW}
-            editingId={editing?.id ?? null}
-            onEdit={setEditing}
-          />
-
-          <YearAxis min={min} max={max} plotW={plotW} />
-
-          <div className="relative h-1.5 rounded-full bg-border">
-            {yearTicks(min, max, plotW).map(({ year, x }) => (
-              <span
-                key={`tick-${year}`}
-                className="absolute bottom-0 top-0 w-px bg-border/80"
-                style={{ left: x }}
-              />
-            ))}
-            <div
-              className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-accent ring-4 ring-accent/20"
-              style={{ left: xFor(Date.now(), min, max, plotW) }}
-              title="היום"
+        <div className="relative p-6 pb-12" style={{ width }}>
+          <div className="relative" style={{ height: tracksH + CONNECTOR_H + 40, paddingTop: 20 }}>
+            <PeriodTracks
+              periods={periods}
+              min={min}
+              max={max}
+              plotW={plotW}
+              lanes={lanes}
+              editingId={editing?.id ?? null}
+              onEdit={setEditing}
             />
+            <PeriodConnectors
+              periods={periods}
+              lanes={lanes}
+              min={min}
+              max={max}
+              plotW={plotW}
+              tracksH={tracksH}
+              connectorH={CONNECTOR_H}
+            />
+            <div className="absolute inset-x-0" style={{ top: tracksH + CONNECTOR_H }}>
+              <TimelineAxis periods={periods} min={min} max={max} plotW={plotW} />
+            </div>
           </div>
 
           <EventMarks items={eventItems} plotW={plotW} />

@@ -12,32 +12,27 @@ import {
   yearTicks,
 } from "@/lib/timeline-layout";
 
-const TRACK_H = 26;
+export const TRACK_H = 26;
+const LANE_GAP = 8;
+const TRACKS_TOP = 28;
 
-export function YearAxis({ min, max, plotW }: { min: number; max: number; plotW: number }) {
-  const ticks = useMemo(() => yearTicks(min, max, plotW), [min, max, plotW]);
-
-  return (
-    <div className="relative mb-1 h-6">
-      {ticks.map(({ year, x }) => (
-        <div
-          key={year}
-          className="absolute top-0 flex -translate-x-1/2 flex-col items-center"
-          style={{ left: x }}
-        >
-          <span className="h-2 w-px bg-border" />
-          <span className="mt-0.5 text-[10px] font-medium text-muted">{year}</span>
-        </div>
-      ))}
-    </div>
-  );
+export function periodBarGeom(lane: number) {
+  const top = TRACKS_TOP + lane * (TRACK_H + LANE_GAP);
+  return { top, bottom: top + TRACK_H };
 }
+
+export function tracksHeight(laneCount: number) {
+  return TRACKS_TOP + laneCount * (TRACK_H + LANE_GAP);
+}
+
+type LaneMap = Map<string, number>;
 
 export function PeriodTracks({
   periods,
   min,
   max,
   plotW,
+  lanes,
   editingId,
   onEdit,
 }: {
@@ -45,24 +40,24 @@ export function PeriodTracks({
   min: number;
   max: number;
   plotW: number;
+  lanes: LaneMap;
   editingId: string | null;
   onEdit: (period: LifePeriod) => void;
 }) {
-  const { lanes, laneCount } = useMemo(() => assignPeriodLanes(periods), [periods]);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const hovered = periods.find((p) => p.id === hoverId) || null;
-  const tracksH = laneCount * (TRACK_H + 8) + 40;
+  const laneCount = Math.max(...[...lanes.values(), 0]) + 1;
+  const h = tracksHeight(laneCount);
 
   return (
-    <div className="relative mb-2" style={{ height: tracksH }}>
+    <div className="relative" style={{ height: h }}>
       {periods.map((p) => {
         const lane = lanes.get(p.id) ?? 0;
+        const { top } = periodBarGeom(lane);
         const x0 = xFor(toTime(p.start_date), min, max, plotW);
         const x1 = xFor(toTime(p.end_date || todayIso()), min, max, plotW);
         const w = Math.max(x1 - x0, 10);
         const narrow = w < 70;
-        const top = 28 + lane * (TRACK_H + 8);
-        const endLabel = p.end_date ? formatHeDate(p.end_date) : "היום";
         const selected = editingId === p.id;
 
         return (
@@ -70,30 +65,18 @@ export function PeriodTracks({
             {narrow && (
               <div
                 className="pointer-events-none absolute z-[1] max-w-[100px] truncate text-[10px] font-medium text-ink"
-                style={{ left: x0, top: top - 16 }}
+                style={{ left: x0, top: top - 14 }}
               >
                 {p.title}
               </div>
             )}
-            <span
-              className="pointer-events-none absolute z-[1] whitespace-nowrap text-[9px] text-muted"
-              style={{ left: x0, top: top + TRACK_H + 2, transform: "translateX(-2px)" }}
-            >
-              {formatHeDate(p.start_date)}
-            </span>
-            <span
-              className="pointer-events-none absolute z-[1] whitespace-nowrap text-[9px] text-muted"
-              style={{ left: x1, top: top + TRACK_H + 2, transform: "translateX(-100%)" }}
-            >
-              {endLabel}
-            </span>
             <button
               type="button"
               aria-label={`עריכת ${p.title}`}
               onMouseEnter={() => setHoverId(p.id)}
               onMouseLeave={() => setHoverId(null)}
               onClick={() => onEdit(p)}
-              className={`absolute flex items-center overflow-hidden rounded-md px-2 text-start text-[11px] font-semibold text-bg shadow-sm outline-none ring-offset-2 transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-accent ${
+              className={`absolute flex items-center overflow-hidden rounded-md px-2 text-start text-[11px] font-semibold text-bg shadow-sm outline-none transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-accent ${
                 selected ? "ring-2 ring-accent" : ""
               }`}
               style={{
@@ -129,6 +112,137 @@ export function PeriodTracks({
   );
 }
 
+export function PeriodConnectors({
+  periods,
+  lanes,
+  min,
+  max,
+  plotW,
+  tracksH,
+  connectorH,
+}: {
+  periods: LifePeriod[];
+  lanes: LaneMap;
+  min: number;
+  max: number;
+  plotW: number;
+  tracksH: number;
+  connectorH: number;
+}) {
+  const axisLineY = tracksH + connectorH;
+
+  return (
+    <svg
+      className="pointer-events-none absolute left-0 overflow-visible"
+      width={plotW}
+      height={axisLineY}
+      style={{ top: 0 }}
+    >
+      {periods.map((p) => {
+        const lane = lanes.get(p.id) ?? 0;
+        const { bottom } = periodBarGeom(lane);
+        const x0 = xFor(toTime(p.start_date), min, max, plotW);
+        const x1 = xFor(toTime(p.end_date || todayIso()), min, max, plotW);
+
+        return (
+          <g key={p.id} opacity={0.4}>
+            <line x1={x0} y1={bottom} x2={x0} y2={axisLineY} stroke={p.color} strokeWidth={1} strokeDasharray="4 3" />
+            <line x1={x1} y1={bottom} x2={x1} y2={axisLineY} stroke={p.color} strokeWidth={1} strokeDasharray="4 3" />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+type AxisMark = { x: number; date: string; key: string };
+
+function collectAxisMarks(periods: LifePeriod[], min: number, max: number, plotW: number): AxisMark[] {
+  const raw: AxisMark[] = [];
+  for (const p of periods) {
+    raw.push({
+      x: xFor(toTime(p.start_date), min, max, plotW),
+      date: formatHeDate(p.start_date),
+      key: `${p.id}-s`,
+    });
+    raw.push({
+      x: xFor(toTime(p.end_date || todayIso()), min, max, plotW),
+      date: p.end_date ? formatHeDate(p.end_date) : "היום",
+      key: `${p.id}-e`,
+    });
+  }
+  const seen = new Set<string>();
+  return raw.filter((m) => {
+    const k = `${Math.round(m.x)}-${m.date}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+export function TimelineAxis({
+  periods,
+  min,
+  max,
+  plotW,
+}: {
+  periods: LifePeriod[];
+  min: number;
+  max: number;
+  plotW: number;
+}) {
+  const years = useMemo(() => yearTicks(min, max, plotW), [min, max, plotW]);
+  const marks = useMemo(() => collectAxisMarks(periods, min, max, plotW), [periods, min, max, plotW]);
+  const todayX = xFor(Date.now(), min, max, plotW);
+
+  return (
+    <div className="relative pb-6">
+      {/* years above axis */}
+      <div className="pointer-events-none absolute bottom-full left-0 right-0 mb-1 h-5">
+        {years.map(({ year, x }) => (
+          <div
+            key={year}
+            className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
+            style={{ left: x }}
+          >
+            <span className="text-[10px] font-medium text-muted">{year}</span>
+            <span className="mt-0.5 h-2 w-px bg-border" />
+          </div>
+        ))}
+      </div>
+
+      {/* main axis — connectors meet here */}
+      <div className="relative h-1 rounded-full bg-border">
+        {years.map(({ year, x }) => (
+          <span key={`g-${year}`} className="absolute bottom-0 top-0 w-px bg-border/70" style={{ left: x }} />
+        ))}
+        {marks.map((m) => (
+          <span key={`t-${m.key}`} className="absolute bottom-0 top-0 w-px bg-accent/50" style={{ left: m.x }} />
+        ))}
+        <div
+          className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-accent ring-4 ring-accent/20"
+          style={{ left: todayX }}
+          title="היום"
+        />
+      </div>
+
+      {/* period dates on axis */}
+      {marks.map((m) => (
+        <div
+          key={m.key}
+          className="absolute top-full mt-1 flex -translate-x-1/2 flex-col items-center"
+          style={{ left: m.x }}
+        >
+          <span className="h-1.5 w-px bg-accent/60" />
+          <span className="mt-0.5 whitespace-nowrap rounded bg-surface px-1.5 py-0.5 text-[9px] text-ink shadow-sm ring-1 ring-border/50">
+            {m.date}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function EventMarks({
   items,
   plotW,
@@ -149,7 +263,7 @@ export function EventMarks({
   const height = 28 + (maxLane + 1) * 56;
 
   return (
-    <div className="relative mt-3" style={{ height }}>
+    <div className="relative mt-4" style={{ height }}>
       {items.map((ev) => (
         <button
           key={ev.id}
@@ -187,3 +301,5 @@ export function EventMarks({
     </div>
   );
 }
+
+export { assignPeriodLanes };
