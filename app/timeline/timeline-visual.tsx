@@ -1,14 +1,22 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Minus, Plus } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Minus, Plus, Maximize2 } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
-import { assignPeriodLanes, timelineBounds, toTime, todayIso, xFor } from "@/lib/timeline-layout";
+import {
+  assignEventLanes,
+  timelineBounds,
+  toTime,
+  widthForRange,
+  xFor,
+} from "@/lib/timeline-layout";
+import { EventMarks, PeriodTracks } from "./timeline-parts";
 
-const MIN_ZOOM = 0.35;
-const MAX_ZOOM = 4;
-const BASE_WIDTH = 1100;
+/** Zoom unit = pixels per year. Wide range for life-scale timelines. */
+const MIN_PPY = 18;
+const MAX_PPY = 900;
+const DEFAULT_PPY = 120;
 
 export function TimelineVisual({
   events,
@@ -17,90 +25,111 @@ export function TimelineVisual({
   events: TimelineEvent[];
   periods: LifePeriod[];
 }) {
-  const [zoom, setZoom] = useState(1);
+  const [pxPerYear, setPxPerYear] = useState(DEFAULT_PPY);
   const scroller = useRef<HTMLDivElement>(null);
   const { min, max } = useMemo(() => timelineBounds(events, periods), [events, periods]);
-  const { lanes, laneCount } = useMemo(() => assignPeriodLanes(periods), [periods]);
-  const width = BASE_WIDTH * zoom;
-  const trackH = 22;
-  const tracksH = laneCount * (trackH + 6) + 8;
-  const sortedAsc = useMemo(
-    () => [...events].sort((a, b) => a.event_date.localeCompare(b.event_date)),
-    [events]
-  );
+  const width = widthForRange(min, max, pxPerYear);
+  const plotW = width - 48;
+
+  const eventItems = useMemo(() => {
+    const placed = [...events]
+      .sort((a, b) => a.event_date.localeCompare(b.event_date))
+      .map((ev) => ({
+        id: ev.id,
+        x: xFor(toTime(ev.event_date), min, max, plotW),
+        title: ev.title,
+        date: ev.event_date,
+        milestone: ev.category === "אבן דרך",
+      }));
+    const { lanes } = assignEventLanes(placed, 90);
+    return placed.map((p) => ({ ...p, lane: lanes.get(p.id) ?? 0 }));
+  }, [events, min, max, plotW]);
+
+  const setZoomPreservingCenter = useCallback((next: number) => {
+    const el = scroller.current;
+    const clamped = Math.min(MAX_PPY, Math.max(MIN_PPY, next));
+    if (!el) {
+      setPxPerYear(clamped);
+      return;
+    }
+    const oldWidth = widthForRange(min, max, pxPerYear);
+    const centerRatio = (el.scrollLeft + el.clientWidth / 2) / Math.max(oldWidth, 1);
+    setPxPerYear(clamped);
+    requestAnimationFrame(() => {
+      const newWidth = widthForRange(min, max, clamped);
+      el.scrollLeft = centerRatio * newWidth - el.clientWidth / 2;
+    });
+  }, [min, max, pxPerYear]);
 
   function zoomBy(factor: number) {
-    setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((z * factor).toFixed(2)))));
+    setZoomPreservingCenter(pxPerYear * factor);
   }
+
+  function fitAll() {
+    const el = scroller.current;
+    const target = el ? Math.max(MIN_PPY, (el.clientWidth - 64) / ((max - min) / (365.25 * 86400000))) : MIN_PPY;
+    setPxPerYear(Math.min(MAX_PPY, target));
+    requestAnimationFrame(() => {
+      if (scroller.current) scroller.current.scrollLeft = 0;
+    });
+  }
+
+  function onWheel(e: React.WheelEvent) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15);
+  }
+
+  const pct = Math.round(((pxPerYear - MIN_PPY) / (MAX_PPY - MIN_PPY)) * 100);
 
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <p className="text-xs text-muted">ציר ויזואלי — תקופות למעלה, אירועים על הציר. גלול לצדדים.</p>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => zoomBy(1 / 1.25)} className="rounded-lg border p-1.5 text-muted hover:text-ink" title="הקטן">
+        <p className="text-xs text-muted">
+          גלול לצדדים · Ctrl/⌘ + גלגלת לזום · העבר עכבר על תקופה לפרטים
+        </p>
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={fitAll} className="rounded-lg border px-2 py-1.5 text-muted hover:text-ink" title="התאם הכל">
+            <Maximize2 size={15} />
+          </button>
+          <button type="button" onClick={() => zoomBy(1 / 1.35)} className="rounded-lg border p-1.5 text-muted hover:text-ink" title="הקטן">
             <Minus size={16} />
           </button>
-          <span className="w-12 text-center text-xs text-muted">{Math.round(zoom * 100)}%</span>
-          <button type="button" onClick={() => zoomBy(1.25)} className="rounded-lg border p-1.5 text-muted hover:text-ink" title="הגדל">
+          <input
+            type="range"
+            min={MIN_PPY}
+            max={MAX_PPY}
+            step={2}
+            value={pxPerYear}
+            onChange={(e) => setZoomPreservingCenter(Number(e.target.value))}
+            className="w-28 accent-[var(--accent)]"
+            aria-label="רמת זום"
+          />
+          <button type="button" onClick={() => zoomBy(1.35)} className="rounded-lg border p-1.5 text-muted hover:text-ink" title="הגדל">
             <Plus size={16} />
           </button>
+          <span className="w-10 text-center text-[10px] text-muted">{pct}%</span>
         </div>
       </div>
 
-      <div ref={scroller} className="overflow-x-auto scrollbar-thin" dir="ltr">
-        <div className="relative p-4" style={{ width, minWidth: "100%" }}>
-          {/* Period bands */}
-          <div className="relative mb-3" style={{ height: tracksH }}>
-            {periods.map((p) => {
-              const lane = lanes.get(p.id) ?? 0;
-              const x0 = xFor(toTime(p.start_date), min, max, width - 32);
-              const x1 = xFor(toTime(p.end_date || todayIso()), min, max, width - 32);
-              const w = Math.max(x1 - x0, 8);
-              return (
-                <div
-                  key={p.id}
-                  title={`${p.title}`}
-                  className="absolute flex items-center overflow-hidden rounded-md px-2 text-[10px] font-medium text-bg"
-                  style={{
-                    left: x0,
-                    width: w,
-                    top: lane * (trackH + 6),
-                    height: trackH,
-                    background: p.color,
-                    opacity: 0.9,
-                  }}
-                >
-                  <span className="truncate">{p.title}</span>
-                </div>
-              );
-            })}
+      <div
+        ref={scroller}
+        onWheel={onWheel}
+        className="overflow-x-auto scrollbar-thin"
+        dir="ltr"
+      >
+        <div className="relative p-6" style={{ width }}>
+          <PeriodTracks periods={periods} min={min} max={max} plotW={plotW} />
+
+          <div className="relative h-1.5 rounded-full bg-border">
+            <div
+              className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-accent ring-4 ring-accent/20"
+              style={{ left: xFor(Date.now(), min, max, plotW) }}
+              title="היום"
+            />
           </div>
 
-          {/* Axis */}
-          <div className="relative h-2 rounded-full bg-border">
-            <div className="absolute inset-y-0 end-0 w-2 rounded-full bg-accent" title="היום" />
-          </div>
-
-          {/* Event markers */}
-          <div className="relative mt-2" style={{ height: 120 }}>
-            {sortedAsc.map((ev, i) => {
-              const x = xFor(toTime(ev.event_date), min, max, width - 32);
-              const milestone = ev.category === "אבן דרך";
-              const stagger = (i % 2) * 52;
-              return (
-                <div key={ev.id} className="absolute flex flex-col items-center" style={{ left: x, top: stagger, transform: "translateX(-50%)" }}>
-                  <span className={`h-2.5 w-2.5 rounded-full ${milestone ? "bg-accent2 ring-2 ring-accent2/30" : "bg-accent"}`} />
-                  <span className="mt-1 max-w-[72px] text-center text-[10px] leading-tight text-ink">
-                    {ev.title}
-                  </span>
-                  <span className="text-[9px] text-muted">
-                    {new Date(ev.event_date).toLocaleDateString("he-IL")}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <EventMarks items={eventItems} plotW={plotW} />
         </div>
       </div>
     </div>

@@ -21,6 +21,11 @@ Timeline supports overlapping life periods (`life_periods`) that may nest or ove
 Views: (1) chronological list newest-first, (2) visual axis with period bands + zoom, (3) by-period accordion.
 Events can be browsed chronologically regardless of period grouping.
 
+### FR-TL-03
+Visual timeline: wide zoom range (fit → deep zoom), non-overlapping event labels via lane packing,
+period hover tooltip with full name + date range, readable labels for short periods (external label or hover).
+Default timeline tab is the visual view.
+
 ### FR-TL-02
 Seeded milestones: birth 2002-01-02, enlist 2021-12-23, release 2025-04-19.
 Seeded periods include childhood, high school, degree, mechina, Golan, army, relationship (from 2023-07-26 ongoing), post-release, Australia.

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
@@ -11,7 +12,17 @@ import {
 } from "@/lib/life-periods";
 import { Badge, EmptyState } from "@/components/ui";
 import { EventCard, UnassignedSection } from "./event-card";
-import { TimelineVisual } from "./timeline-visual";
+
+const TimelineVisual = dynamic(
+  () => import("./timeline-visual").then((m) => m.TimelineVisual),
+  {
+    loading: () => (
+      <div className="card flex h-48 items-center justify-center text-sm text-muted">
+        טוען ציר ויזואלי…
+      </div>
+    ),
+  }
+);
 
 type Mode = "chrono" | "visual" | "periods";
 
@@ -22,7 +33,7 @@ export function TimelineBoard({
   events: TimelineEvent[];
   periods: LifePeriod[];
 }) {
-  const [mode, setMode] = useState<Mode>("chrono");
+  const [mode, setMode] = useState<Mode>("visual");
   const chrono = useMemo(
     () => [...events].sort((a, b) => b.event_date.localeCompare(a.event_date)),
     [events]
@@ -37,8 +48,8 @@ export function TimelineBoard({
       <div className="flex flex-wrap gap-2">
         {(
           [
-            ["chrono", "כרונולוגי"],
             ["visual", "ציר ויזואלי"],
+            ["chrono", "כרונולוגי"],
             ["periods", "לפי תקופות"],
           ] as const
         ).map(([id, label]) => (
