@@ -7,6 +7,12 @@ import { normalizePhone } from "@/lib/integrations/phone";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+function revalidateRelationshipPaths() {
+  revalidatePath("/relationships");
+  revalidatePath("/projects");
+  revalidatePath("/");
+}
+
 export async function addRelationship(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const group_name = String(formData.get("group_name") || "").trim();
@@ -14,7 +20,12 @@ export async function addRelationship(formData: FormData) {
   const notes = String(formData.get("notes") || "").trim();
   const phoneRaw = String(formData.get("phone") || "").trim();
   const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
+  const project_id = String(formData.get("project_id") || "").trim();
   if (!name) return;
+  if (!project_id) {
+    await setFlash("יש לבחור פרויקט", "error");
+    return;
+  }
 
   const supabase = getSupabase();
   await supabase.from("relationships").insert({
@@ -23,9 +34,10 @@ export async function addRelationship(formData: FormData) {
     reminder_days: reminder_days ? Number(reminder_days) : null,
     notes: notes || null,
     phone,
+    project_id,
   });
   await setFlash("הקשר נוסף");
-  revalidatePath("/relationships");
+  revalidateRelationshipPaths();
 }
 
 export async function markContactedToday(formData: FormData) {
@@ -34,8 +46,7 @@ export async function markContactedToday(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("relationships").update({ last_contact_date: todayISO() }).eq("id", id);
   await setFlash("עודכן תאריך קשר");
-  revalidatePath("/relationships");
-  revalidatePath("/");
+  revalidateRelationshipPaths();
 }
 
 export async function updateRelationshipNotes(formData: FormData) {
@@ -45,7 +56,7 @@ export async function updateRelationshipNotes(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("relationships").update({ notes: notes || null }).eq("id", id);
   await setFlash("ההערות עודכנו");
-  revalidatePath("/relationships");
+  revalidateRelationshipPaths();
 }
 
 export async function deleteRelationship(formData: FormData) {
@@ -54,5 +65,5 @@ export async function deleteRelationship(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("relationships").delete().eq("id", id);
   await setFlash("הקשר נמחק");
-  revalidatePath("/relationships");
+  revalidateRelationshipPaths();
 }

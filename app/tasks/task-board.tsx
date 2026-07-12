@@ -21,15 +21,31 @@ function priorityTone(p: TaskPriority): "warn" | "accent" | "default" {
   return "default";
 }
 
-export function TaskForm() {
+export function TaskForm({
+  projects,
+  fixedProjectId,
+  defaultProjectId,
+}: {
+  projects: { id: string; name: string }[];
+  fixedProjectId?: string;
+  defaultProjectId?: string;
+}) {
+  const selectedId = fixedProjectId ?? defaultProjectId ?? projects[0]?.id;
+
   return (
     <form action={addTask} className="card mb-6 grid gap-3 p-4 sm:grid-cols-2">
       <input type="text" name="title" placeholder="כותרת המשימה" required className={`${inputClass} sm:col-span-2`} />
-      <select name="project" className={inputClass} defaultValue="אישי">
-        {["Digital Scale", "Glowy", "KupaPay", "אישי", "אחר"].map((p) => (
-          <option key={p} value={p}>{p}</option>
-        ))}
-      </select>
+      {fixedProjectId ? (
+        <input type="hidden" name="project_id" value={fixedProjectId} />
+      ) : (
+        <select name="project_id" className={inputClass} defaultValue={selectedId}>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      )}
       <select name="priority" className={inputClass} defaultValue="medium">
         <option value="high">עדיפות גבוהה</option>
         <option value="medium">עדיפות בינונית</option>
@@ -49,7 +65,13 @@ export function TaskForm() {
   );
 }
 
-export function TaskList({ tasks }: { tasks: Task[] }) {
+export function TaskList({
+  tasks,
+  showProjectBadge = true,
+}: {
+  tasks: Task[];
+  showProjectBadge?: boolean;
+}) {
   if (tasks.length === 0) {
     return <EmptyState text="אין משימות להצגה. הוסף משימה למעלה או שנה את הסינון." />;
   }
@@ -63,7 +85,7 @@ export function TaskList({ tasks }: { tasks: Task[] }) {
               <span className={task.status === "done" ? "text-muted line-through" : "font-medium"}>
                 {task.title}
               </span>
-              <Badge>{task.project}</Badge>
+              {showProjectBadge && task.project_name && <Badge>{task.project_name}</Badge>}
               <Badge tone={priorityTone(task.priority)}>{priorityLabel[task.priority]}</Badge>
             </div>
             <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">

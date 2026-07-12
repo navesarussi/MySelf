@@ -3,9 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { setFlash } from "@/lib/flash-actions";
-import type { TaskPriority, TaskProject, TaskStatus } from "@/lib/types";
+import type { TaskPriority, TaskStatus } from "@/lib/types";
 
-const PROJECTS: TaskProject[] = ["Digital Scale", "Glowy", "KupaPay", "אישי", "אחר"];
 const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
 const STATUSES: TaskStatus[] = ["open", "in_progress", "done"];
 
@@ -13,17 +12,28 @@ function pick<T extends string>(value: string, allowed: T[], fallback: T): T {
   return (allowed as string[]).includes(value) ? (value as T) : fallback;
 }
 
+function revalidateTaskPaths() {
+  revalidatePath("/tasks");
+  revalidatePath("/projects");
+  revalidatePath("/");
+}
+
 export async function addTask(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
+  const project_id = String(formData.get("project_id") || "").trim();
   if (!title) {
     await setFlash("חסרה כותרת למשימה", "error");
+    return;
+  }
+  if (!project_id) {
+    await setFlash("יש לבחור פרויקט", "error");
     return;
   }
 
   const supabase = getSupabase();
   const { error } = await supabase.from("tasks").insert({
     title,
-    project: pick(String(formData.get("project") || ""), PROJECTS, "אישי"),
+    project_id,
     priority: pick(String(formData.get("priority") || ""), PRIORITIES, "medium"),
     status: pick(String(formData.get("status") || ""), STATUSES, "open"),
     due_date: String(formData.get("due_date") || "") || null,
@@ -31,8 +41,7 @@ export async function addTask(formData: FormData) {
   });
 
   await setFlash(error ? "שגיאה בהוספת משימה" : "המשימה נוספה", error ? "error" : "success");
-  revalidatePath("/tasks");
-  revalidatePath("/");
+  revalidateTaskPaths();
 }
 
 export async function updateTaskStatus(formData: FormData) {
@@ -47,8 +56,7 @@ export async function updateTaskStatus(formData: FormData) {
     .eq("id", id);
 
   await setFlash(error ? "שגיאה בעדכון" : "המשימה עודכנה", error ? "error" : "success");
-  revalidatePath("/tasks");
-  revalidatePath("/");
+  revalidateTaskPaths();
 }
 
 export async function deleteTask(formData: FormData) {
@@ -57,6 +65,5 @@ export async function deleteTask(formData: FormData) {
   const supabase = getSupabase();
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   await setFlash(error ? "שגיאה במחיקה" : "המשימה נמחקה", error ? "error" : "success");
-  revalidatePath("/tasks");
-  revalidatePath("/");
+  revalidateTaskPaths();
 }

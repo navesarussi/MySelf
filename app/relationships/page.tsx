@@ -1,15 +1,13 @@
-import { differenceInCalendarDays } from "date-fns";
 import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
-import { PageHeader, EmptyState, Badge, SubmitButton, inputClass } from "@/components/ui";
-import type { Relationship } from "@/lib/types";
-import { addRelationship, markContactedToday, updateRelationshipNotes, deleteRelationship } from "./actions";
-import { NotesForm } from "./notes-form";
-import { Trash2, MessageCircle } from "lucide-react";
-import { whatsappUrl } from "@/lib/integrations/phone";
+import { PageHeader, EmptyState } from "@/components/ui";
+import type { Project, Relationship } from "@/lib/types";
+import { RelationshipForm, RelationshipCard } from "./relationship-board";
 
 export const revalidate = 30;
+
+type RelRow = Relationship & { projects: { name: string } | null };
 
 function groupBy<T, K extends string>(items: T[], key: (item: T) => K) {
   const map = new Map<K, T[]>();
@@ -32,25 +30,27 @@ export default async function RelationshipsPage() {
   }
 
   const supabase = getSupabase();
-  const { data } = await supabase.from("relationships").select("*").order("name");
-  const relationships = (data as Relationship[]) || [];
+  const [{ data: projects }, { data }] = await Promise.all([
+    supabase.from("projects").select("*").order("sort_order"),
+    supabase.from("relationships").select("*, projects(name)").order("name"),
+  ]);
+
+  const projectList = (projects || []) as Project[];
+  const relationships = ((data || []) as RelRow[]).map((row) => ({
+    ...row,
+    project_name: row.projects?.name,
+    projects: undefined,
+  }));
   const grouped = groupBy(relationships, (r) => r.group_name || "אחר");
+  const defaultProjectId =
+    projectList.find((p) => p.name === "כללי")?.id ?? projectList[0]?.id;
   const today = new Date();
 
   return (
     <>
       <PageHeader title="ניהול קשרים" subtitle="משפחה, חברים ובת/בן זוג — מי מחכה לשמוע ממך" />
 
-      <form action={addRelationship} className="card mb-8 grid gap-3 p-4 sm:grid-cols-2">
-        <input type="text" name="name" placeholder="שם" required className={inputClass} />
-        <input type="text" name="group_name" placeholder="קבוצה (משפחה / יישוב / תיכון / מכינה / צבא / זוגיות)" className={inputClass} />
-        <input type="number" name="reminder_days" placeholder="תזכורת כל כמה ימים (אופציונלי)" className={inputClass} />
-        <input type="text" name="phone" placeholder="טלפון (לוואטסאפ)" className={inputClass} />
-        <input type="text" name="notes" placeholder="הערה" className={inputClass} />
-        <div className="sm:col-span-2">
-          <SubmitButton>הוספת איש קשר</SubmitButton>
-        </div>
-      </form>
+      <RelationshipForm projects={projectList} defaultProjectId={defaultProjectId} />
 
       {relationships.length === 0 ? (
         <EmptyState text="אין עדיין אנשי קשר. הוסף את הראשון למעלה." />
@@ -60,59 +60,9 @@ export default async function RelationshipsPage() {
             <div key={group}>
               <h2 className="mb-3 text-sm font-semibold text-muted">{group}</h2>
               <div className="grid gap-3 sm:grid-cols-2">
-                {people.map((r) => {
-                  const daysSince = r.last_contact_date
-                    ? differenceInCalendarDays(today, new Date(r.last_contact_date))
-                    : null;
-                  const overdue = r.reminder_days != null && daysSince != null && daysSince >= r.reminder_days;
-                  const neverContacted = daysSince === null;
-                  const wa = r.phone ? whatsappUrl(r.phone) : null;
-
-                  return (
-                    <div key={r.id} className="card p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-medium">{r.name}</span>
-                        <form action={deleteRelationship}>
-                          <input type="hidden" name="id" value={r.id} />
-                          <button className="p-1 text-muted hover:text-warn" title="מחיקה">
-                            <Trash2 size={14} />
-                          </button>
-                        </form>
-                      </div>
-
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                        {neverContacted ? (
-                          <Badge tone="warn">אין עדיין תיעוד קשר</Badge>
-                        ) : (
-                          <Badge tone={overdue ? "warn" : "default"}>
-                            קשר אחרון לפני {daysSince} ימים
-                          </Badge>
-                        )}
-                      </div>
-
-                      <NotesForm id={r.id} defaultNotes={r.notes || ""} action={updateRelationshipNotes} />
-
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <form action={markContactedToday}>
-                          <input type="hidden" name="id" value={r.id} />
-                          <button className="flex items-center gap-1 rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-accent/25">
-                            <MessageCircle size={13} /> יצרתי קשר היום
-                          </button>
-                        </form>
-                        {wa && (
-                          <a
-                            href={wa}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 rounded-lg bg-good/15 px-2.5 py-1.5 text-xs font-medium text-good hover:bg-good/25"
-                          >
-                            <MessageCircle size={13} /> פתיחת וואטסאפ
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                {people.map((r) => (
+                  <RelationshipCard key={r.id} r={r} today={today} />
+                ))}
               </div>
             </div>
           ))}
