@@ -1,17 +1,27 @@
-import { GOOGLE_CALENDAR_SCOPE } from "../google-config";
+import { GOOGLE_CALENDAR_SCOPE, GOOGLE_LOGIN_SCOPES } from "../google-config";
 import type { GoogleEventsListResponse } from "./types";
 
-export function googleAuthUrl(state: string) {
+export function googleAuthUrl(state: string, mode: "login" | "calendar" = "calendar") {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
     response_type: "code",
-    scope: GOOGLE_CALENDAR_SCOPE,
+    scope: mode === "login" ? GOOGLE_LOGIN_SCOPES : GOOGLE_CALENDAR_SCOPE,
     access_type: "offline",
     prompt: "consent",
     state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+export async function fetchGoogleUserEmail(accessToken: string) {
+  const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("userinfo_fetch_failed");
+  const data = (await res.json()) as { email?: string };
+  if (!data.email) throw new Error("userinfo_missing_email");
+  return data.email;
 }
 
 export async function exchangeCode(code: string) {

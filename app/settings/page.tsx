@@ -55,12 +55,14 @@ export default async function SettingsPage() {
 
         {googleReady && !connected && (
           <div className="mt-3">
-            <p className="text-sm text-muted">חבר את יומן Google הראשי שלך לציר הזמן.</p>
+            <p className="text-sm text-muted">
+              התחבר מחדש עם Google כדי לחבר את היומן לציר הזמן.
+            </p>
             <Link
-              href="/api/integrations/google/connect"
+              href="/api/auth/google/login?next=/settings"
               className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg hover:opacity-90"
             >
-              חיבור יומן גוגל
+              כניסה עם Google
             </Link>
           </div>
         )}

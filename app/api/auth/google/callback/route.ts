@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { handleGoogleOAuthCallback } from "@/lib/integrations/google-oauth-callback";
 
-/** @deprecated Use /api/auth/google/callback — kept for existing redirect URIs */
 export async function GET(req: NextRequest) {
   return handleGoogleOAuthCallback(req);
 }

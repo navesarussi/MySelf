@@ -2,7 +2,7 @@
 
 דשבורד אישי פרטי: ציר זמן, הרגלים/משימות/מטרות/חלומות, ניהול קשרים, וספריית תוכן.
 
-Next.js (App Router) + Tailwind + Supabase (Postgres). כל האתר מוגן בסיסמה אחת.
+Next.js (App Router) + Tailwind + Supabase (Postgres). כניסה עם Google (כולל סנכרון יומן).
 
 ## הרצה מקומית
 
@@ -18,20 +18,23 @@ npm run dev
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | כתובת ה-API של פרויקט Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | מפתח ה-service role (סודי, שרת בלבד) |
-| `SITE_PASSWORD` | הסיסמה לכניסה לאתר |
 | `AUTH_SECRET` | מחרוזת אקראית וסודית לחתימת עוגיית ההתחברות (למשל: `openssl rand -hex 32`) |
-| `GOOGLE_CLIENT_ID` | OAuth client ID מ-Google Cloud (יומן גוגל) |
+| `ALLOWED_GOOGLE_EMAIL` | (מומלץ) רק חשבון Google זה יכול להיכנס |
+| `GOOGLE_CLIENT_ID` | OAuth client ID מ-Google Cloud |
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
-| `GOOGLE_REDIRECT_URI` | Callback, למשל `http://localhost:3000/api/integrations/google/callback` |
+| `GOOGLE_REDIRECT_URI` | Callback, למשל `http://localhost:3000/api/auth/google/callback` |
 | `CRON_SECRET` | מחרוזת סודית לאימות סנכרון שבועי (Vercel Cron) |
 
-## יומן גוגל (אופציונלי)
+## Google Sign-In + יומן
 
 1. ב-[Google Cloud Console](https://console.cloud.google.com/) הפעל את **Google Calendar API**.
 2. צור **OAuth 2.0 Client ID** (Web application).
-3. הוסף Redirect URI: `https://<domain>/api/integrations/google/callback` (וגם localhost לפיתוח).
-4. מלא את משתני הסביבה של גוגל.
-5. ב-**הגדרות** באתר לחץ **חיבור יומן גוגל**.
+3. הוסף Redirect URI:
+   - `https://<domain>/api/auth/google/callback`
+   - `http://localhost:3000/api/auth/google/callback` (פיתוח)
+4. ב-OAuth consent screen הוסף **Privacy policy URL**: `https://<domain>/privacy`
+5. מלא את משתני הסביבה של גוגל + `AUTH_SECRET` + `ALLOWED_GOOGLE_EMAIL`.
+6. בדף הכניסה לחץ **כניסה עם Google** — היומן מסתנכרן ברקע אחרי ההתחברות.
 
 ## פריסה ל-Vercel
 

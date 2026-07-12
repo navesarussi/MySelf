@@ -14,7 +14,9 @@ export async function proxy(req: NextRequest) {
 
   if (
     pathname.startsWith("/login") ||
-    pathname.startsWith("/api/login") ||
+    pathname.startsWith("/privacy") ||
+    pathname.startsWith("/api/auth/google") ||
+    pathname.startsWith("/api/integrations/google/callback") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon")
   ) {

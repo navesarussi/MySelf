@@ -6,5 +6,15 @@ export function googleConfigured() {
   );
 }
 
+export function googleAuthConfigured() {
+  return googleConfigured() && Boolean(process.env.AUTH_SECRET);
+}
+
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+export const GOOGLE_LOGIN_SCOPES = [
+  "openid",
+  "email",
+  "profile",
+  GOOGLE_CALENDAR_SCOPE,
+].join(" ");
 export const GOOGLE_PROVIDER = "google_calendar";

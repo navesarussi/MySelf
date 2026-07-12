@@ -23,6 +23,22 @@ export async function makeSessionToken(secret: string) {
   return hmac(secret);
 }
 
+const SESSION_MAX_AGE = 60 * 60 * 24 * 90;
+
+export async function applySessionCookie(
+  res: { cookies: { set: (name: string, value: string, opts: object) => void } },
+  secret: string
+) {
+  const token = await makeSessionToken(secret);
+  res.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  });
+}
+
 let cachedSecret: string | null = null;
 let cachedExpected: string | null = null;
 
