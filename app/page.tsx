@@ -5,7 +5,9 @@ import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { Badge } from "@/components/ui";
 import { effectiveStreak } from "@/lib/habit-stats";
-import type { Habit, Commitment, Relationship, TimelineEvent, Task } from "@/lib/types";
+import { rankGoalsForHome, horizonLabel, achievabilityScore } from "@/lib/goals-rank";
+import { formatEventWhen } from "@/lib/timeline-layout";
+import type { Habit, Goal, Commitment, Relationship, TimelineEvent, Task } from "@/lib/types";
 import {
   Compass,
   Clock,
@@ -16,6 +18,7 @@ import {
   TrendingUp,
   ThumbsUp,
   AlertTriangle,
+  Percent,
 } from "lucide-react";
 
 export const revalidate = 30;
@@ -24,7 +27,7 @@ export default async function HomePage() {
   const configured = dbConfigured();
 
   let habits: Habit[] = [];
-  let activeGoalsCount = 0;
+  let activeGoals: Goal[] = [];
   let doneGoalsCount = 0;
   let pendingCommitments: Commitment[] = [];
   let overdueRelationships: Relationship[] = [];
@@ -37,7 +40,7 @@ export default async function HomePage() {
     const [habitsRes, goalsRes, doneGoalsRes, commitmentsRes, relRes, eventsRes, tasksRes] =
       await Promise.all([
         supabase.from("habits").select("*").eq("archived", false),
-        supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "active"),
+        supabase.from("goals").select("*").eq("status", "active"),
         supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "done"),
         supabase
           .from("commitments")
@@ -46,12 +49,12 @@ export default async function HomePage() {
           .order("commitment_date", { ascending: false })
           .limit(5),
         supabase.from("relationships").select("id, name, last_contact_date, reminder_days"),
-        supabase.from("timeline_events").select("id, title, event_date").order("event_date", { ascending: false }).limit(5),
+        supabase.from("timeline_events").select("*").order("event_date", { ascending: false }).limit(5),
         supabase.from("tasks").select("id, status"),
       ]);
 
     habits = (habitsRes.data as Habit[]) || [];
-    activeGoalsCount = goalsRes.count || 0;
+    activeGoals = (goalsRes.data as Goal[]) || [];
     doneGoalsCount = doneGoalsRes.count || 0;
     pendingCommitments = (commitmentsRes.data as Commitment[]) || [];
     recentEvents = (eventsRes.data as TimelineEvent[]) || [];
@@ -70,11 +73,12 @@ export default async function HomePage() {
     });
   }
 
-  const totalSuccessDays = habits.reduce((s, h) => s + (h.total_success_days ?? 0), 0);
   const totalFailures = habits.reduce((s, h) => s + (h.failure_count ?? 0), 0);
-  const bestStreakOverall = habits.reduce((m, h) => Math.max(m, h.best_streak), 0);
   const activeStreaks = habits.filter((h) => effectiveStreak(h) > 0).length;
   const checkedToday = habits.filter((h) => h.last_checked_on === new Date().toISOString().slice(0, 10)).length;
+  const todayRate = habits.length ? Math.round((checkedToday / habits.length) * 100) : 0;
+  const featuredGoals = rankGoalsForHome(activeGoals, 5);
+  const activeGoalsCount = activeGoals.length;
 
   return (
     <>
@@ -112,10 +116,12 @@ export default async function HomePage() {
             </div>
             <div className="card p-4">
               <div className="flex items-center gap-2 text-sm text-muted">
-                <ThumbsUp size={15} className="text-good" /> ימים חיוביים
+                <Percent size={15} className="text-good" /> ביצוע היום
               </div>
-              <p className="mt-2 text-3xl font-bold">{totalSuccessDays}</p>
-              <p className="mt-1 text-xs text-muted">שיא רצף: {bestStreakOverall} ימים</p>
+              <p className="mt-2 text-3xl font-bold">{todayRate}%</p>
+              <p className="mt-1 text-xs text-muted">
+                {checkedToday} מתוך {habits.length} הרגלים סומנו
+              </p>
             </div>
             <div className="card p-4">
               <div className="flex items-center gap-2 text-sm text-muted">
@@ -179,24 +185,39 @@ export default async function HomePage() {
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
-                  <Target size={16} className="text-accent" /> מטרות וחלומות
+                  <Target size={16} className="text-accent" /> מטרות קרובות וברות השגה
                 </h3>
                 <Link href="/goals" className="text-xs text-accent hover:underline">
                   לרשימה המלאה ←
                 </Link>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-border/20 px-3 py-2">
-                  <p className="text-xs text-muted">פעילים</p>
-                  <p className="text-2xl font-bold">{activeGoalsCount}</p>
-                </div>
-                <div className="rounded-lg bg-border/20 px-3 py-2">
-                  <p className="text-xs text-muted">הושגו</p>
-                  <p className="text-2xl font-bold">{doneGoalsCount}</p>
-                </div>
-              </div>
+              {featuredGoals.length === 0 ? (
+                <p className="text-sm text-muted">אין עדיין יעדים פעילים.</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {featuredGoals.map((g) => (
+                    <li key={g.id} className="rounded-lg bg-border/20 px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-medium">{g.title}</span>
+                        {achievabilityScore(g) >= 3 && (
+                          <Badge tone="good">מוכן לפעולה</Badge>
+                        )}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted">
+                        {g.category && <span>{g.category}</span>}
+                        {horizonLabel(g) && <span>· {horizonLabel(g)}</span>}
+                      </div>
+                      {g.first_step && (
+                        <p className="mt-1 text-xs text-muted">
+                          צעד ראשון: {g.first_step}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {pendingCommitments.length > 0 && (
-                <div className="mt-4">
+                <div className="mt-4 border-t border-border pt-3">
                   <p className="mb-2 text-xs font-medium text-muted">התחייבויות ממתינות</p>
                   <ul className="space-y-1 text-sm">
                     {pendingCommitments.map((c) => (
@@ -248,9 +269,7 @@ export default async function HomePage() {
                   {recentEvents.map((e) => (
                     <li key={e.id} className="flex justify-between gap-2">
                       <span className="truncate">{e.title}</span>
-                      <span className="shrink-0 text-muted">
-                        {new Date(e.event_date).toLocaleDateString("he-IL")}
-                      </span>
+                      <span className="shrink-0 text-muted">{formatEventWhen(e)}</span>
                     </li>
                   ))}
                 </ul>

@@ -1,19 +1,26 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Minus, Plus, Maximize2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Minus, Plus, Maximize2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
 import {
   assignEventLanes,
-  MIN_PPY,
-  MAX_PPY,
-  pxPerDay,
+  eventDateTime,
   timelineBounds,
-  toTime,
-  widthForRange,
   xFor,
 } from "@/lib/timeline-layout";
+import {
+  createViewport,
+  fitViewport,
+  panViewport,
+  sliderToSpan,
+  spanToSlider,
+  viewSpan,
+  zoomLevelLabel,
+  zoomViewport,
+  type TimelineViewport,
+} from "@/lib/timeline-viewport";
 import {
   assignPeriodLanes,
   EventMarks,
@@ -23,29 +30,10 @@ import {
   tracksHeight,
 } from "./timeline-parts";
 import { PeriodEditForm } from "./period-edit-form";
+import { EventEditForm } from "./event-edit-form";
 
-const DEFAULT_PPY = 120;
 const CONNECTOR_H = 28;
-
-function eventTime(isoDate: string) {
-  return toTime(`${isoDate}T12:00:00`);
-}
-
-function ppyToSlider(v: number) {
-  return (Math.log(v / MIN_PPY) / Math.log(MAX_PPY / MIN_PPY)) * 100;
-}
-
-function sliderToPpy(s: number) {
-  return MIN_PPY * Math.pow(MAX_PPY / MIN_PPY, s / 100);
-}
-
-function zoomLabel(pxPerYear: number) {
-  const ppd = pxPerDay(pxPerYear);
-  if (ppd >= 600) return "שעות";
-  if (ppd >= 18) return "ימים";
-  if (ppd >= 2.5) return "חודשים";
-  return "שנים";
-}
+const PLOT_PAD = 48;
 
 export function TimelineVisual({
   events,
@@ -54,78 +42,107 @@ export function TimelineVisual({
   events: TimelineEvent[];
   periods: LifePeriod[];
 }) {
-  const [pxPerYear, setPxPerYear] = useState(DEFAULT_PPY);
-  const [editing, setEditing] = useState<LifePeriod | null>(null);
-  const scroller = useRef<HTMLDivElement>(null);
-  const { min, max } = useMemo(() => timelineBounds(events, periods), [events, periods]);
-  const width = widthForRange(min, max, pxPerYear);
-  const plotW = width - 48;
+  const global = useMemo(() => timelineBounds(events, periods), [events, periods]);
+  const [viewport, setViewport] = useState<TimelineViewport>(() =>
+    createViewport(global.min, global.max)
+  );
+  const [editingPeriod, setEditingPeriod] = useState<LifePeriod | null>(null);
+  const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null);
+  const [plotW, setPlotW] = useState(720);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setViewport((v) => createViewport(global.min, global.max));
+  }, [global.min, global.max]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setPlotW(Math.max(entry.contentRect.width - PLOT_PAD, 280));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { viewMin, viewMax } = viewport;
+  const span = viewSpan(viewport);
+  const globalSpan = global.max - global.min;
   const { lanes, laneCount } = useMemo(() => assignPeriodLanes(periods), [periods]);
   const tracksH = tracksHeight(laneCount);
 
   const eventItems = useMemo(() => {
-    const placed = [...events]
-      .sort((a, b) => a.event_date.localeCompare(b.event_date))
+    const visible = events.filter((ev) => {
+      const t = eventDateTime(ev);
+      return t >= viewMin - span * 0.02 && t <= viewMax + span * 0.02;
+    });
+    const placed = visible
+      .sort((a, b) => eventDateTime(a) - eventDateTime(b))
       .map((ev) => ({
         id: ev.id,
-        x: xFor(eventTime(ev.event_date), min, max, plotW),
+        x: xFor(eventDateTime(ev), viewMin, viewMax, plotW),
         title: ev.title,
         date: ev.event_date,
         milestone: ev.category === "אבן דרך",
       }));
-    const minGap = pxPerDay(pxPerYear) >= 18 ? 40 : 90;
+    const minGap = span <= 3 * 24 * 60 * 60 * 1000 ? 36 : 72;
     const { lanes: evLanes } = assignEventLanes(placed, minGap);
     return placed.map((p) => ({ ...p, lane: evLanes.get(p.id) ?? 0 }));
-  }, [events, min, max, plotW, pxPerYear]);
+  }, [events, viewMin, viewMax, plotW, span]);
 
-  const setZoomPreservingCenter = useCallback((next: number) => {
-    const el = scroller.current;
-    const clamped = Math.min(MAX_PPY, Math.max(MIN_PPY, next));
-    if (!el) {
-      setPxPerYear(clamped);
-      return;
-    }
-    const oldWidth = widthForRange(min, max, pxPerYear);
-    const centerRatio = (el.scrollLeft + el.clientWidth / 2) / Math.max(oldWidth, 1);
-    setPxPerYear(clamped);
-    requestAnimationFrame(() => {
-      const newWidth = widthForRange(min, max, clamped);
-      el.scrollLeft = centerRatio * newWidth - el.clientWidth / 2;
-    });
-  }, [min, max, pxPerYear]);
+  const setZoomAt = useCallback((factor: number, anchor = 0.5) => {
+    setViewport((v) => zoomViewport(v, factor, anchor));
+  }, []);
 
-  function zoomBy(factor: number) {
-    setZoomPreservingCenter(pxPerYear * factor);
-  }
+  const onWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = containerRef.current?.getBoundingClientRect();
+        const anchor = rect ? (e.clientX - rect.left) / rect.width : 0.5;
+        setZoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, anchor);
+        return;
+      }
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        e.preventDefault();
+        const deltaMs = (e.deltaX / plotW) * span;
+        setViewport((v) => panViewport(v, deltaMs));
+      }
+    },
+    [plotW, span, setZoomAt]
+  );
 
-  function fitAll() {
-    const el = scroller.current;
-    const target = el ? Math.max(MIN_PPY, (el.clientWidth - 64) / ((max - min) / (365.25 * 86400000))) : MIN_PPY;
-    setPxPerYear(Math.min(MAX_PPY, target));
-    requestAnimationFrame(() => {
-      if (scroller.current) scroller.current.scrollLeft = 0;
-    });
-  }
-
-  function onWheel(e: React.WheelEvent) {
-    if (!(e.ctrlKey || e.metaKey)) return;
-    e.preventDefault();
-    zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15);
-  }
-
-  const sliderVal = ppyToSlider(pxPerYear);
+  const sliderVal = spanToSlider(span, globalSpan);
 
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
         <p className="text-xs text-muted">
-          גלול לצדדים · Ctrl/⌘ + גלגלת לזום עמוק (עד חלוקה לשעות) · לחץ על תקופה לעריכה
+          גרור לצדדים · Ctrl/⌘+גלגלת לזום · לחץ על אירוע או תקופה לעריכה
         </p>
         <div className="flex items-center gap-1.5">
-          <button type="button" onClick={fitAll} className="rounded-lg border px-2 py-1.5 text-muted hover:text-ink" title="התאם הכל">
+          <button
+            type="button"
+            onClick={() => setViewport((v) => fitViewport(v))}
+            className="rounded-lg border px-2 py-1.5 text-muted hover:text-ink"
+            title="התאם הכל"
+          >
             <Maximize2 size={15} />
           </button>
-          <button type="button" onClick={() => zoomBy(1 / 1.35)} className="rounded-lg border p-1.5 text-muted hover:text-ink" title="הקטן">
+          <button
+            type="button"
+            onClick={() => setViewport((v) => panViewport(v, -span * 0.25))}
+            className="rounded-lg border p-1.5 text-muted hover:text-ink"
+            title="הזז שמאלה"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoomAt(1 / 1.35)}
+            className="rounded-lg border p-1.5 text-muted hover:text-ink"
+            title="הקטן"
+          >
             <Minus size={16} />
           </button>
           <input
@@ -134,49 +151,86 @@ export function TimelineVisual({
             max={100}
             step={0.5}
             value={sliderVal}
-            onChange={(e) => setZoomPreservingCenter(sliderToPpy(Number(e.target.value)))}
+            onChange={(e) => {
+              const nextSpan = sliderToSpan(Number(e.target.value), globalSpan);
+              const center = (viewport.viewMin + viewport.viewMax) / 2;
+              setViewport((v) =>
+                zoomViewport(
+                  { ...v, viewMin: center - nextSpan / 2, viewMax: center + nextSpan / 2 },
+                  1,
+                  0.5
+                )
+              );
+            }}
             className="w-28 accent-[var(--accent)]"
             aria-label="רמת זום"
           />
-          <button type="button" onClick={() => zoomBy(1.35)} className="rounded-lg border p-1.5 text-muted hover:text-ink" title="הגדל">
+          <button
+            type="button"
+            onClick={() => setZoomAt(1.35)}
+            className="rounded-lg border p-1.5 text-muted hover:text-ink"
+            title="הגדל"
+          >
             <Plus size={16} />
           </button>
-          <span className="w-12 text-center text-[10px] text-muted">{zoomLabel(pxPerYear)}</span>
+          <button
+            type="button"
+            onClick={() => setViewport((v) => panViewport(v, span * 0.25))}
+            className="rounded-lg border p-1.5 text-muted hover:text-ink"
+            title="הזז ימינה"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <span className="w-12 text-center text-[10px] text-muted">{zoomLevelLabel(span)}</span>
         </div>
       </div>
 
-      <div ref={scroller} onWheel={onWheel} className="overflow-x-auto scrollbar-thin" dir="ltr">
-        <div className="relative p-6 pb-12" style={{ width }}>
+      <div ref={containerRef} onWheel={onWheel} className="overflow-hidden p-6 pb-12" dir="ltr">
+        <div className="relative" style={{ width: plotW + PLOT_PAD }}>
           <div className="relative" style={{ height: tracksH + CONNECTOR_H + 40, paddingTop: 20 }}>
             <PeriodTracks
               periods={periods}
-              min={min}
-              max={max}
+              min={viewMin}
+              max={viewMax}
               plotW={plotW}
               lanes={lanes}
-              editingId={editing?.id ?? null}
-              onEdit={setEditing}
+              editingId={editingPeriod?.id ?? null}
+              onEdit={setEditingPeriod}
             />
             <PeriodConnectors
               periods={periods}
               lanes={lanes}
-              min={min}
-              max={max}
+              min={viewMin}
+              max={viewMax}
               plotW={plotW}
               tracksH={tracksH}
               connectorH={CONNECTOR_H}
             />
             <div className="absolute inset-x-0" style={{ top: tracksH + CONNECTOR_H }}>
-              <TimelineAxis periods={periods} min={min} max={max} plotW={plotW} pxPerYear={pxPerYear} />
+              <TimelineAxis
+                periods={periods}
+                min={viewMin}
+                max={viewMax}
+                plotW={plotW}
+                showPeriodMarks={span > globalSpan * 0.15}
+              />
             </div>
           </div>
 
-          <EventMarks items={eventItems} plotW={plotW} />
+          <EventMarks
+            items={eventItems}
+            plotW={plotW}
+            onSelect={(id) => setEditingEvent(events.find((e) => e.id === id) ?? null)}
+            editingId={editingEvent?.id ?? null}
+          />
         </div>
       </div>
 
-      {editing && (
-        <PeriodEditForm period={editing} onClose={() => setEditing(null)} />
+      {editingPeriod && (
+        <PeriodEditForm period={editingPeriod} onClose={() => setEditingPeriod(null)} />
+      )}
+      {editingEvent && (
+        <EventEditForm event={editingEvent} onClose={() => setEditingEvent(null)} />
       )}
     </div>
   );

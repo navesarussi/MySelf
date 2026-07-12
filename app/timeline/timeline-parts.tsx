@@ -185,18 +185,17 @@ export function TimelineAxis({
   min,
   max,
   plotW,
-  pxPerYear,
+  showPeriodMarks = true,
 }: {
   periods: LifePeriod[];
   min: number;
   max: number;
   plotW: number;
-  pxPerYear: number;
+  showPeriodMarks?: boolean;
 }) {
-  const ticks = useMemo(() => timelineTicks(min, max, plotW, pxPerYear), [min, max, plotW, pxPerYear]);
+  const ticks = useMemo(() => timelineTicks(min, max, plotW), [min, max, plotW]);
   const marks = useMemo(() => collectAxisMarks(periods, min, max, plotW), [periods, min, max, plotW]);
   const todayX = xFor(Date.now(), min, max, plotW);
-  const showPeriodMarks = pxPerYear < 80_000;
 
   return (
     <div className="relative pb-6">
@@ -254,6 +253,8 @@ export function TimelineAxis({
 export function EventMarks({
   items,
   plotW,
+  onSelect,
+  editingId,
 }: {
   items: {
     id: string;
@@ -264,6 +265,8 @@ export function EventMarks({
     milestone: boolean;
   }[];
   plotW: number;
+  onSelect?: (id: string) => void;
+  editingId?: string | null;
 }) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const hovered = items.find((i) => i.id === hoverId) || null;
@@ -276,10 +279,13 @@ export function EventMarks({
         <button
           key={ev.id}
           type="button"
+          onClick={() => onSelect?.(ev.id)}
           onMouseEnter={() => setHoverId(ev.id)}
           onMouseLeave={() => setHoverId(null)}
-          className="absolute flex w-[84px] -translate-x-1/2 flex-col items-center text-center outline-none"
-          style={{ left: ev.x, top: 8 + ev.lane * 56, zIndex: hoverId === ev.id ? 6 : 1 }}
+          className={`absolute flex w-[84px] -translate-x-1/2 flex-col items-center text-center outline-none ${
+            editingId === ev.id ? "ring-2 ring-accent rounded-lg" : ""
+          }`}
+          style={{ left: ev.x, top: 8 + ev.lane * 56, zIndex: hoverId === ev.id || editingId === ev.id ? 6 : 1 }}
         >
           <span
             className={`h-3 w-3 rounded-full ${
@@ -304,6 +310,7 @@ export function EventMarks({
         >
           <p className="font-semibold">{hovered.title}</p>
           <p className="text-muted">{formatHeDate(hovered.date)}</p>
+          <p className="mt-1 text-[10px] text-muted">לחץ לעריכה</p>
         </div>
       )}
     </div>

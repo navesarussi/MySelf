@@ -6,6 +6,7 @@ import { setFlash } from "@/lib/flash-actions";
 
 export async function addTimelineEvent(formData: FormData) {
   const event_date = String(formData.get("event_date") || "");
+  const event_time = String(formData.get("event_time") || "").trim() || null;
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const category = String(formData.get("category") || "").trim();
@@ -18,6 +19,7 @@ export async function addTimelineEvent(formData: FormData) {
   const supabase = getSupabase();
   const { error } = await supabase.from("timeline_events").insert({
     event_date,
+    event_time,
     title,
     description: description || null,
     category: category || null,
@@ -25,6 +27,37 @@ export async function addTimelineEvent(formData: FormData) {
 
   await setFlash(error ? "שגיאה בהוספת אירוע" : "האירוע נוסף", error ? "error" : "success");
   revalidatePath("/timeline");
+  revalidatePath("/");
+}
+
+export async function updateTimelineEvent(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const event_date = String(formData.get("event_date") || "");
+  const event_time = String(formData.get("event_time") || "").trim() || null;
+  const title = String(formData.get("title") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+  const category = String(formData.get("category") || "").trim();
+
+  if (!id || !event_date || !title) {
+    await setFlash("חסרים שדות חובה", "error");
+    return;
+  }
+
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("timeline_events")
+    .update({
+      event_date,
+      event_time,
+      title,
+      description: description || null,
+      category: category || null,
+    })
+    .eq("id", id);
+
+  await setFlash(error ? "שגיאה בעדכון אירוע" : "האירוע עודכן", error ? "error" : "success");
+  revalidatePath("/timeline");
+  revalidatePath("/");
 }
 
 export async function deleteTimelineEvent(formData: FormData) {
@@ -34,6 +67,7 @@ export async function deleteTimelineEvent(formData: FormData) {
   const { error } = await supabase.from("timeline_events").delete().eq("id", id);
   await setFlash(error ? "שגיאה במחיקה" : "האירוע נמחק", error ? "error" : "success");
   revalidatePath("/timeline");
+  revalidatePath("/");
 }
 
 export async function addLifePeriod(formData: FormData) {

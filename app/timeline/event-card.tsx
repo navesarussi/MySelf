@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
+import { formatEventWhen } from "@/lib/timeline-layout";
 import { type LifePeriod, periodsForEvent } from "@/lib/life-periods";
 import { Badge } from "@/components/ui";
 import { deleteTimelineEvent } from "./actions";
@@ -29,9 +30,7 @@ export function EventCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted">
-                {new Date(event.event_date).toLocaleDateString("he-IL")}
-              </span>
+              <span className="text-sm text-muted">{formatEventWhen(event)}</span>
               {event.category && (
                 <Badge tone={milestone ? "accent" : "default"}>{event.category}</Badge>
               )}

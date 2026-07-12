@@ -48,6 +48,7 @@ export default async function TimelinePage() {
 
       <form action={addTimelineEvent} className="card mb-4 grid gap-3 p-4 sm:grid-cols-2">
         <input type="date" name="event_date" required className={inputClass} />
+        <input type="time" name="event_time" className={inputClass} title="שעה מדויקת (אופציונלי)" />
         <input type="text" name="category" placeholder="קטגוריה (למשל: משפחה, צבא, טיול)" className={inputClass} />
         <input type="text" name="title" placeholder="כותרת האירוע" required className={`${inputClass} sm:col-span-2`} />
         <textarea name="description" placeholder="תיאור (אופציונלי)" rows={2} className={`${inputClass} sm:col-span-2`} />

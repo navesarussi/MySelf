@@ -68,6 +68,41 @@ export async function resetHabit(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function updateHabit(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+
+  const name = String(formData.get("name") || "").trim();
+  const kind = String(formData.get("kind") || "build") as "build" | "quit";
+  const target_note = String(formData.get("target_note") || "").trim();
+  const streak_count = Math.max(0, Number(formData.get("streak_count") || 0));
+  const best_streak = Math.max(0, Number(formData.get("best_streak") || 0));
+  const total_success_days = Math.max(0, Number(formData.get("total_success_days") || 0));
+  const failure_count = Math.max(0, Number(formData.get("failure_count") || 0));
+  const last_checked_raw = String(formData.get("last_checked_on") || "").trim();
+
+  if (!name) return;
+
+  const supabase = getSupabase();
+  await supabase
+    .from("habits")
+    .update({
+      name,
+      kind,
+      target_note: target_note || null,
+      streak_count,
+      best_streak: Math.max(best_streak, streak_count),
+      total_success_days,
+      failure_count,
+      last_checked_on: last_checked_raw || null,
+    })
+    .eq("id", id);
+
+  await setFlash("ההרגל עודכן");
+  revalidatePath("/habits");
+  revalidatePath("/");
+}
+
 export async function deleteHabit(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;

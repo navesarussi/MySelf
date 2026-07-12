@@ -2,6 +2,7 @@ import type { Habit } from "@/lib/types";
 import { Badge, SubmitButton, inputClass } from "@/components/ui";
 import { effectiveStreak, todayISO } from "@/lib/habit-stats";
 import { addHabit, checkInHabit, resetHabit, deleteHabit } from "./actions";
+import { HabitEditForm } from "./habit-edit-form";
 import { Flame, RotateCcw, Trash2, Check, TrendingUp, ThumbsUp, AlertTriangle } from "lucide-react";
 
 export function HabitsSection({ habits }: { habits: Habit[] }) {
@@ -66,6 +67,7 @@ export function HabitsSection({ habits }: { habits: Habit[] }) {
               </div>
 
               <div className="flex items-center justify-end gap-1">
+                <HabitEditForm habit={h} />
                 <form action={resetHabit}>
                   <input type="hidden" name="id" value={h.id} />
                   <button

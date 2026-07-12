@@ -16,6 +16,18 @@ export function toTime(iso: string) {
   return new Date(iso).getTime();
 }
 
+export function eventDateTime(event: { event_date: string; event_time?: string | null }) {
+  const time = (event.event_time || "12:00:00").slice(0, 5);
+  return toTime(`${event.event_date}T${time}:00`);
+}
+
+export function formatEventWhen(event: { event_date: string; event_time?: string | null }) {
+  const d = new Date(eventDateTime(event));
+  const date = d.toLocaleDateString("he-IL");
+  if (!event.event_time) return date;
+  return `${date} ${d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
 export function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -93,19 +105,31 @@ export function formatHeDate(iso: string) {
 /** Adaptive axis ticks: years → months → days → hours based on zoom density. */
 export type TimelineTick = { x: number; label: string; key: string; major?: boolean };
 
-export function timelineTicks(min: number, max: number, plotW: number, pxPerYear: number): TimelineTick[] {
-  const ppd = pxPerDay(pxPerYear);
+export function timelineTicks(viewMin: number, viewMax: number, plotW: number): TimelineTick[] {
+  const span = viewMax - viewMin;
+  const ppd = plotW / (span / DAY_MS);
   const pph = ppd / 24;
+  const pxPerYear = plotW / (span / YEAR_MS);
 
-  if (pph >= 28) return hourTicks(min, max, plotW);
-  if (ppd >= 18) return dayTicks(min, max, plotW);
-  if (ppd >= 2.5) return monthTicks(min, max, plotW);
-  return yearTicks(min, max, plotW).map((t) => ({
-    x: t.x,
-    label: String(t.year),
-    key: `y-${t.year}`,
-    major: true,
-  }));
+  let ticks: TimelineTick[];
+  if (pph >= 28) ticks = hourTicks(viewMin, viewMax, plotW);
+  else if (ppd >= 18) ticks = dayTicks(viewMin, viewMax, plotW);
+  else if (ppd >= 2.5) ticks = monthTicks(viewMin, viewMax, plotW);
+  else {
+    ticks = yearTicks(viewMin, viewMax, plotW).map((t) => ({
+      x: t.x,
+      label: String(t.year),
+      key: `y-${t.year}`,
+      major: true,
+    }));
+  }
+  return capTicks(ticks, 72);
+}
+
+function capTicks(ticks: TimelineTick[], max: number): TimelineTick[] {
+  if (ticks.length <= max) return ticks;
+  const step = Math.ceil(ticks.length / max);
+  return ticks.filter((_, i) => i % step === 0);
 }
 
 function hourTicks(min: number, max: number, plotW: number): TimelineTick[] {
