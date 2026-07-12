@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, Maximize2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
+import { displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import type { LifePeriod } from "@/lib/life-periods";
 import {
   assignEventLanes,
@@ -81,9 +82,10 @@ export function TimelineVisual({
       .map((ev) => ({
         id: ev.id,
         x: xFor(eventDateTime(ev), viewMin, viewMax, plotW),
-        title: ev.title,
+        title: displayTitle(ev),
         date: ev.event_date,
         milestone: ev.category === "אבן דרך",
+        fromGoogle: isGoogleCalendarEvent(ev),
       }));
     const minGap = span <= 3 * 24 * 60 * 60 * 1000 ? 36 : 72;
     const { lanes: evLanes } = assignEventLanes(placed, minGap);

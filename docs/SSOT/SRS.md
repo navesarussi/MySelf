@@ -6,7 +6,22 @@ Personal private dashboard: timeline, habits/goals, relationships, content libra
 ## Requirements
 
 ### FR-NAV-01
-Navigation includes: בית, ציר זמן, משימות, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן.
+Navigation includes: בית, ציר זמן, משימות, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן, הגדרות.
+
+### FR-INT-GCAL-01
+Connect primary Google Calendar via OAuth; sync all historical and future events to timeline.
+
+### FR-INT-GCAL-02
+Calendar-sourced events display with a calendar icon and category `יומן`, indistinguishable from manual events except for the indicator.
+
+### FR-INT-GCAL-03
+User may set local title/description overrides on calendar events; re-sync preserves overrides.
+
+### FR-INT-GCAL-04
+Manual sync on demand plus weekly automatic background sync.
+
+### FR-INT-WA-01
+Optional phone number on relationships; when set, show WhatsApp quick-link via `wa.me`.
 
 ### FR-HABIT-01
 Dedicated Habits tab (`/habits`) separate from goals/dreams (`/goals`).

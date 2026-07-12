@@ -1,4 +1,10 @@
 {
   "framework": "nextjs",
-  "regions": ["syd1"]
+  "regions": ["syd1"],
+  "crons": [
+    {
+      "path": "/api/integrations/google/sync",
+      "schedule": "0 6 * * 0"
+    }
+  ]
 }

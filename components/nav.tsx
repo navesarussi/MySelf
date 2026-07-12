@@ -13,6 +13,7 @@ const links = [
   { href: "/goals", label: "מטרות וחלומות" },
   { href: "/relationships", label: "קשרים" },
   { href: "/library", label: "ספריית תוכן" },
+  { href: "/settings", label: "הגדרות" },
 ];
 
 

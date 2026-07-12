@@ -7,6 +7,7 @@ import type { Relationship } from "@/lib/types";
 import { addRelationship, markContactedToday, updateRelationshipNotes, deleteRelationship } from "./actions";
 import { NotesForm } from "./notes-form";
 import { Trash2, MessageCircle } from "lucide-react";
+import { whatsappUrl } from "@/lib/integrations/phone";
 
 export const revalidate = 30;
 
@@ -44,6 +45,7 @@ export default async function RelationshipsPage() {
         <input type="text" name="name" placeholder="שם" required className={inputClass} />
         <input type="text" name="group_name" placeholder="קבוצה (משפחה / יישוב / תיכון / מכינה / צבא / זוגיות)" className={inputClass} />
         <input type="number" name="reminder_days" placeholder="תזכורת כל כמה ימים (אופציונלי)" className={inputClass} />
+        <input type="text" name="phone" placeholder="טלפון (לוואטסאפ)" className={inputClass} />
         <input type="text" name="notes" placeholder="הערה" className={inputClass} />
         <div className="sm:col-span-2">
           <SubmitButton>הוספת איש קשר</SubmitButton>
@@ -64,6 +66,7 @@ export default async function RelationshipsPage() {
                     : null;
                   const overdue = r.reminder_days != null && daysSince != null && daysSince >= r.reminder_days;
                   const neverContacted = daysSince === null;
+                  const wa = r.phone ? whatsappUrl(r.phone) : null;
 
                   return (
                     <div key={r.id} className="card p-4">
@@ -89,12 +92,24 @@ export default async function RelationshipsPage() {
 
                       <NotesForm id={r.id} defaultNotes={r.notes || ""} action={updateRelationshipNotes} />
 
-                      <form action={markContactedToday} className="mt-2">
-                        <input type="hidden" name="id" value={r.id} />
-                        <button className="flex items-center gap-1 rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-accent/25">
-                          <MessageCircle size={13} /> יצרתי קשר היום
-                        </button>
-                      </form>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <form action={markContactedToday}>
+                          <input type="hidden" name="id" value={r.id} />
+                          <button className="flex items-center gap-1 rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-accent/25">
+                            <MessageCircle size={13} /> יצרתי קשר היום
+                          </button>
+                        </form>
+                        {wa && (
+                          <a
+                            href={wa}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 rounded-lg bg-good/15 px-2.5 py-1.5 text-xs font-medium text-good hover:bg-good/25"
+                          >
+                            <MessageCircle size={13} /> פתיחת וואטסאפ
+                          </a>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

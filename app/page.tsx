@@ -19,7 +19,9 @@ import {
   ThumbsUp,
   AlertTriangle,
   Percent,
+  MessageCircle,
 } from "lucide-react";
+import { whatsappUrl } from "@/lib/integrations/phone";
 
 export const revalidate = 30;
 
@@ -48,7 +50,7 @@ export default async function HomePage() {
           .eq("status", "pending")
           .order("commitment_date", { ascending: false })
           .limit(5),
-        supabase.from("relationships").select("id, name, last_contact_date, reminder_days"),
+        supabase.from("relationships").select("id, name, last_contact_date, reminder_days, phone"),
         supabase.from("timeline_events").select("*").order("event_date", { ascending: false }).limit(5),
         supabase.from("tasks").select("id, status"),
       ]);
@@ -246,9 +248,24 @@ export default async function HomePage() {
                 <p className="text-sm text-muted">אין כרגע קשרים באיחור.</p>
               ) : (
                 <ul className="space-y-1 text-sm">
-                  {overdueRelationships.map((r) => (
-                    <li key={r.id}>{r.name}</li>
-                  ))}
+                  {overdueRelationships.map((r) => {
+                    const wa = r.phone ? whatsappUrl(r.phone) : null;
+                    return (
+                      <li key={r.id} className="flex items-center justify-between gap-2">
+                        <span>{r.name}</span>
+                        {wa && (
+                          <a
+                            href={wa}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex shrink-0 items-center gap-1 text-xs text-good hover:underline"
+                          >
+                            <MessageCircle size={12} /> וואטסאפ
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

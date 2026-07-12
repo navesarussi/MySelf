@@ -1,7 +1,8 @@
-import { Trash2 } from "lucide-react";
+import { Trash2, Calendar } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { type LifePeriod, periodsForEvent } from "@/lib/life-periods";
+import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import { Badge } from "@/components/ui";
 import { deleteTimelineEvent } from "./actions";
 
@@ -31,12 +32,17 @@ export function EventCard({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted">{formatEventWhen(event)}</span>
+              {isGoogleCalendarEvent(event) && (
+                <Calendar size={14} className="text-muted" aria-label="מיומן גוגל" />
+              )}
               {event.category && (
                 <Badge tone={milestone ? "accent" : "default"}>{event.category}</Badge>
               )}
             </div>
-            <h3 className="mt-1 font-semibold">{event.title}</h3>
-            {event.description && <p className="mt-1 text-sm text-muted">{event.description}</p>}
+            <h3 className="mt-1 font-semibold">{displayTitle(event)}</h3>
+            {displayDescription(event) && (
+              <p className="mt-1 text-sm text-muted">{displayDescription(event)}</p>
+            )}
             {tags.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {tags.map((t) => (

@@ -6,6 +6,8 @@ import type { TimelineEvent } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
 import { addTimelineEvent, addLifePeriod } from "./actions";
 import { TimelineBoard } from "./timeline-board";
+import { TimelineSyncBar } from "./sync-bar";
+import { isEventHidden } from "@/lib/timeline-display";
 
 export const revalidate = 30;
 
@@ -38,6 +40,7 @@ export default async function TimelinePage() {
   }
 
   const [events, periods] = await Promise.all([getEvents(), getPeriods()]);
+  const visibleEvents = events.filter((e) => !isEventHidden(e));
 
   return (
     <>
@@ -70,7 +73,9 @@ export default async function TimelinePage() {
         </form>
       </details>
 
-      <TimelineBoard events={events} periods={periods} />
+      <TimelineSyncBar />
+
+      <TimelineBoard events={visibleEvents} periods={periods} />
     </>
   );
 }

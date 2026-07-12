@@ -23,6 +23,7 @@ export async function addTimelineEvent(formData: FormData) {
     title,
     description: description || null,
     category: category || null,
+    source: "manual",
   });
 
   await setFlash(error ? "שגיאה בהוספת אירוע" : "האירוע נוסף", error ? "error" : "success");
@@ -44,18 +45,38 @@ export async function updateTimelineEvent(formData: FormData) {
   }
 
   const supabase = getSupabase();
-  const { error } = await supabase
-    .from("timeline_events")
-    .update({
-      event_date,
-      event_time,
-      title,
-      description: description || null,
-      category: category || null,
-    })
-    .eq("id", id);
+  const { data: existing } = await supabase.from("timeline_events").select("*").eq("id", id).maybeSingle();
+  if (!existing) {
+    await setFlash("אירוע לא נמצא", "error");
+    return;
+  }
 
-  await setFlash(error ? "שגיאה בעדכון אירוע" : "האירוע עודכן", error ? "error" : "success");
+  if (existing.source === "google_calendar") {
+    const { error } = await supabase
+      .from("timeline_events")
+      .update({
+        event_date,
+        event_time,
+        title_override: title === existing.title ? null : title,
+        description_override:
+          (description || null) === (existing.description || null) ? null : description || null,
+      })
+      .eq("id", id);
+    await setFlash(error ? "שגיאה בעדכון אירוע" : "האירוע עודכן", error ? "error" : "success");
+  } else {
+    const { error } = await supabase
+      .from("timeline_events")
+      .update({
+        event_date,
+        event_time,
+        title,
+        description: description || null,
+        category: category || null,
+      })
+      .eq("id", id);
+    await setFlash(error ? "שגיאה בעדכון אירוע" : "האירוע עודכן", error ? "error" : "success");
+  }
+
   revalidatePath("/timeline");
   revalidatePath("/");
 }
@@ -64,8 +85,19 @@ export async function deleteTimelineEvent(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
   const supabase = getSupabase();
-  const { error } = await supabase.from("timeline_events").delete().eq("id", id);
-  await setFlash(error ? "שגיאה במחיקה" : "האירוע נמחק", error ? "error" : "success");
+  const { data: existing } = await supabase.from("timeline_events").select("source").eq("id", id).maybeSingle();
+
+  if (existing?.source === "google_calendar") {
+    const { error } = await supabase
+      .from("timeline_events")
+      .update({ hidden_at: new Date().toISOString() })
+      .eq("id", id);
+    await setFlash(error ? "שגיאה בהסתרה" : "האירוע הוסתר מהציר", error ? "error" : "success");
+  } else {
+    const { error } = await supabase.from("timeline_events").delete().eq("id", id);
+    await setFlash(error ? "שגיאה במחיקה" : "האירוע נמחק", error ? "error" : "success");
+  }
+
   revalidatePath("/timeline");
   revalidatePath("/");
 }

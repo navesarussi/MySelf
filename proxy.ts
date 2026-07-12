@@ -4,6 +4,14 @@ import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  if (pathname === "/api/integrations/google/sync" && req.method === "POST") {
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = req.headers.get("authorization");
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+      return NextResponse.next();
+    }
+  }
+
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/login") ||
