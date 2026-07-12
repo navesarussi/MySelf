@@ -1,3 +1,5 @@
+export type EventSource = "manual" | "google_calendar";
+
 export type TimelineEvent = {
   id: string;
   event_date: string;
@@ -5,6 +7,12 @@ export type TimelineEvent = {
   title: string;
   description: string | null;
   category: string | null;
+  source: EventSource;
+  google_event_id: string | null;
+  title_override: string | null;
+  description_override: string | null;
+  hidden_at: string | null;
+  synced_at: string | null;
   created_at: string;
 };
 
@@ -49,7 +57,17 @@ export type Relationship = {
   last_contact_date: string | null;
   reminder_days: number | null;
   notes: string | null;
+  phone: string | null;
   created_at: string;
+};
+
+export type IntegrationToken = {
+  provider: string;
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+  connected_at: string;
+  last_sync_at: string | null;
 };
 
 export type ContentEntry = {
