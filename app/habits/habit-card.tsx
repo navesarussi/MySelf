@@ -4,14 +4,15 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Habit } from "@/lib/types";
 import { Badge, inputClass, PrimaryActionButton, WarnActionButton, IconEditButton, IconDeleteButton } from "@/components/ui";
-import { effectiveStreak } from "@/lib/habit-stats";
+import { effectiveStreak, normalizeReportTime } from "@/lib/habit-stats";
+import { localeTag } from "@/lib/i18n/core";
 import { checkInHabit, resetHabit, deleteHabit, updateHabit, reportHabitFall } from "./actions";
-import { Flame, RotateCcw, Trash2, Check, TrendingUp, ThumbsUp, AlertTriangle, Pencil } from "lucide-react";
+import { Flame, RotateCcw, Trash2, Check, TrendingUp, ThumbsUp, AlertTriangle, Pencil, Clock } from "lucide-react";
 import { useTranslations } from "@/components/locale-provider";
 
 export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
   const router = useRouter();
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -19,6 +20,20 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
   const currentStreak = effectiveStreak(habit, today);
   const successDays = habit.total_success_days ?? 0;
   const failures = habit.failure_count ?? 0;
+  const reportTime = normalizeReportTime(habit.report_time);
+  const lastReported = habit.last_reported_at
+    ? new Date(habit.last_reported_at).toLocaleString(localeTag(locale), {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : habit.last_checked_on
+      ? new Date(habit.last_checked_on).toLocaleDateString(localeTag(locale), {
+          day: "numeric",
+          month: "short",
+        })
+      : null;
 
   function onEditSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -100,6 +115,17 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
         </div>
       </div>
 
+      <div className="flex items-center gap-1 text-[10px] text-muted">
+        <Clock size={10} />
+        <span>
+          {t("habits.lastReported")}:{" "}
+          {lastReported ?? t("habits.neverReported")}
+        </span>
+        {reportTime !== "00:00" && (
+          <span className="ms-auto">{t("habits.reportOpensAt", { time: reportTime })}</span>
+        )}
+      </div>
+
       {editing && (
         <form onSubmit={onEditSubmit} className="grid gap-1.5 rounded-lg border border-border/60 bg-bg/40 p-2.5 text-xs">
           <input type="hidden" name="id" value={habit.id} />
@@ -127,10 +153,16 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
               <input type="number" name="failure_count" min={0} defaultValue={habit.failure_count ?? 0} className={`${inputClass} mt-0.5`} />
             </label>
           </div>
-          <label className="text-muted">
-            {t("habits.lastCheck")}
-            <input type="date" name="last_checked_on" defaultValue={habit.last_checked_on || ""} className={`${inputClass} mt-0.5`} />
-          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="text-muted">
+              {t("habits.lastCheck")}
+              <input type="date" name="last_checked_on" defaultValue={habit.last_checked_on || ""} className={`${inputClass} mt-0.5`} />
+            </label>
+            <label className="text-muted">
+              {t("habits.reportTime")}
+              <input type="time" name="report_time" defaultValue={reportTime} className={`${inputClass} mt-0.5`} />
+            </label>
+          </div>
           <button
             type="submit"
             disabled={pending}

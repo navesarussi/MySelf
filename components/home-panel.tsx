@@ -21,9 +21,9 @@ export function HomePanel({
   return (
     <div className="card flex flex-col p-3">
       <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 font-semibold">
-          {icon} {title}
-        </h3>
+        <Link href={href} className="flex items-center gap-2 font-semibold transition hover:text-accent">
+          <h3 className="flex items-center gap-2">{icon} {title}</h3>
+        </Link>
         <Link href={href} className="shrink-0 text-xs text-accent hover:underline">
           {linkLabel}
         </Link>

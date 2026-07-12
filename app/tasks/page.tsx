@@ -4,13 +4,15 @@ import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
 import { ALL_FILTER, getTranslations } from "@/lib/i18n";
-import type { Project, Task, TaskStatus } from "@/lib/types";
+import type { Project, Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { TasksPanel } from "./task-board";
 import { isAddTarget } from "@/lib/add-menu";
+import { getLastProject } from "@/lib/last-project";
 
 export const revalidate = 30;
 
 const statuses: Array<TaskStatus | typeof ALL_FILTER> = [ALL_FILTER, "open", "in_progress", "done"];
+const priorities: Array<TaskPriority | typeof ALL_FILTER> = [ALL_FILTER, "high", "medium", "low"];
 
 type TaskRow = Task & { projects: { name: string } | null };
 
@@ -20,7 +22,7 @@ async function getProjects(): Promise<Project[]> {
   return (data || []) as Project[];
 }
 
-async function getTasks(projectId?: string, status?: string): Promise<Task[]> {
+async function getTasks(projectId?: string, status?: string, priority?: string): Promise<Task[]> {
   const supabase = getSupabase();
   let q = supabase
     .from("tasks")
@@ -28,6 +30,7 @@ async function getTasks(projectId?: string, status?: string): Promise<Task[]> {
     .order("created_at", { ascending: false });
   if (projectId && projectId !== ALL_FILTER) q = q.eq("project_id", projectId);
   if (status && status !== ALL_FILTER) q = q.eq("status", status);
+  if (priority && priority !== ALL_FILTER) q = q.eq("priority", priority);
   const { data } = await q;
   return ((data || []) as TaskRow[]).map((row) => ({
     ...row,
@@ -39,7 +42,7 @@ async function getTasks(projectId?: string, status?: string): Promise<Task[]> {
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; status?: string; add?: string }>;
+  searchParams: Promise<{ project?: string; status?: string; priority?: string; add?: string }>;
 }) {
   const { t } = await getTranslations();
 
@@ -56,9 +59,25 @@ export default async function TasksPage({
   const add = isAddTarget(sp.add) ? sp.add : undefined;
   const projectId = sp.project || ALL_FILTER;
   const status = sp.status || ALL_FILTER;
-  const [projects, tasks] = await Promise.all([getProjects(), getTasks(projectId, status)]);
-  const defaultProjectId =
+  const priority = sp.priority || ALL_FILTER;
+  const [projects, tasks, lastProject] = await Promise.all([
+    getProjects(),
+    getTasks(projectId, status, priority),
+    getLastProject("task"),
+  ]);
+  const fallbackProjectId =
     projects.find((p) => p.name === "אישי")?.id ?? projects[0]?.id;
+  const defaultProjectId =
+    (lastProject && projects.some((p) => p.id === lastProject) ? lastProject : undefined) ??
+    fallbackProjectId;
+
+  const withParams = (patch: { project?: string; status?: string; priority?: string }) => {
+    const p = new URLSearchParams();
+    p.set("project", patch.project ?? projectId);
+    p.set("status", patch.status ?? status);
+    p.set("priority", patch.priority ?? priority);
+    return `/tasks?${p.toString()}`;
+  };
 
   const statusLabel = (s: TaskStatus | typeof ALL_FILTER) => {
     if (s === ALL_FILTER) return t("common.all");
@@ -67,41 +86,44 @@ export default async function TasksPage({
     return t("common.done");
   };
 
+  const priorityLabel = (p: TaskPriority | typeof ALL_FILTER) => {
+    if (p === ALL_FILTER) return t("common.all");
+    if (p === "high") return t("common.high");
+    if (p === "medium") return t("common.medium");
+    return t("common.low");
+  };
+
+  const chip = (active: boolean) =>
+    `rounded-full px-3 py-1 text-xs ${
+      active ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
+    }`;
+
   return (
     <>
       <PageHeader title={t("tasks.title")} subtitle={t("tasks.subtitleAlt")} />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Link
-          href={`/tasks?project=${encodeURIComponent(ALL_FILTER)}&status=${encodeURIComponent(status)}`}
-          className={`rounded-full px-3 py-1 text-xs ${
-            projectId === ALL_FILTER ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
-          }`}
-        >
+      <div className="mb-3 flex flex-wrap gap-2">
+        <Link href={withParams({ project: ALL_FILTER })} className={chip(projectId === ALL_FILTER)}>
           {t("common.all")}
         </Link>
         {projects.map((p) => (
-          <Link
-            key={p.id}
-            href={`/tasks?project=${encodeURIComponent(p.id)}&status=${encodeURIComponent(status)}`}
-            className={`rounded-full px-3 py-1 text-xs ${
-              projectId === p.id ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
-            }`}
-          >
+          <Link key={p.id} href={withParams({ project: p.id })} className={chip(projectId === p.id)}>
             {p.name}
           </Link>
         ))}
       </div>
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
         {statuses.map((s) => (
-          <Link
-            key={s}
-            href={`/tasks?project=${encodeURIComponent(projectId)}&status=${encodeURIComponent(s)}`}
-            className={`rounded-full px-3 py-1 text-xs ${
-              status === s ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
-            }`}
-          >
+          <Link key={s} href={withParams({ status: s })} className={chip(status === s)}>
             {statusLabel(s)}
+          </Link>
+        ))}
+      </div>
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted">{t("tasks.priorityFilter")}:</span>
+        {priorities.map((p) => (
+          <Link key={p} href={withParams({ priority: p })} className={chip(priority === p)}>
+            {priorityLabel(p)}
           </Link>
         ))}
       </div>

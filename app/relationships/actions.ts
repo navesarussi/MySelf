@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { setFlash } from "@/lib/flash-actions";
 import { normalizePhone } from "@/lib/integrations/phone";
+import { rememberLastProject } from "@/lib/last-project";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -36,6 +37,7 @@ export async function addRelationship(formData: FormData) {
     phone,
     project_id,
   });
+  await rememberLastProject("contact", project_id);
   await setFlash("flash.relationshipAdded");
   revalidateRelationshipPaths();
 }
@@ -57,6 +59,8 @@ export async function updateRelationship(formData: FormData) {
   const phoneRaw = String(formData.get("phone") || "").trim();
   const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
   const project_id = String(formData.get("project_id") || "").trim();
+  const hasNotes = formData.has("notes");
+  const notes = String(formData.get("notes") || "").trim();
   if (!id || !name) return;
   if (!project_id) {
     await setFlash("flash.projectRequired", "error");
@@ -72,6 +76,7 @@ export async function updateRelationship(formData: FormData) {
       reminder_days: reminder_days ? Number(reminder_days) : null,
       phone,
       project_id,
+      ...(hasNotes ? { notes: notes || null } : {}),
     })
     .eq("id", id);
   await setFlash("flash.relationshipUpdated");

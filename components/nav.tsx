@@ -6,6 +6,7 @@ import { useState } from "react";
 import { LogOut, Menu, X } from "lucide-react";
 import { AppLogo } from "@/components/app-logo";
 import { useTranslations } from "@/components/locale-provider";
+import { SHOW_PROJECTS } from "@/lib/features";
 
 export function Nav() {
   const pathname = usePathname();
@@ -16,7 +17,7 @@ export function Nav() {
     { href: "/", label: t("nav.home") },
     { href: "/timeline", label: t("nav.timeline") },
     { href: "/tasks", label: t("nav.tasks") },
-    { href: "/projects", label: t("nav.projects") },
+    ...(SHOW_PROJECTS ? [{ href: "/projects", label: t("nav.projects") }] : []),
     { href: "/habits", label: t("nav.habits") },
     { href: "/goals", label: t("nav.goals") },
     { href: "/relationships", label: t("nav.relationships") },

@@ -29,6 +29,8 @@ export type Habit = {
   total_success_days: number;
   failure_count: number;
   last_checked_on: string | null;
+  report_time?: string | null;
+  last_reported_at?: string | null;
   archived: boolean;
   created_at: string;
 };

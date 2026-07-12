@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { computeCheckIn, computeFall, dedupeHabits, effectiveStreak } from "../habit-stats";
+import {
+  computeCheckIn,
+  computeFall,
+  dedupeHabits,
+  effectiveStreak,
+  habitReportDay,
+  normalizeReportTime,
+} from "../habit-stats";
 import type { Habit } from "../types";
 
 const base: Habit = {
@@ -71,6 +78,29 @@ describe("computeFall", () => {
     const r = computeFall(habit, "2026-07-12");
     assert.equal(r.failureCount, 5);
     assert.equal(r.streak, 0);
+  });
+});
+
+describe("habitReportDay", () => {
+  it("defaults to the current UTC day at report time 00:00", () => {
+    assert.equal(habitReportDay("00:00", new Date("2026-07-12T00:30:00Z")), "2026-07-12");
+    assert.equal(habitReportDay(null, new Date("2026-07-12T23:59:00Z")), "2026-07-12");
+  });
+
+  it("keeps the previous day before the report time", () => {
+    assert.equal(habitReportDay("06:00", new Date("2026-07-12T05:00:00Z")), "2026-07-11");
+  });
+
+  it("rolls to the new day once the report time passes", () => {
+    assert.equal(habitReportDay("06:00", new Date("2026-07-12T07:00:00Z")), "2026-07-12");
+  });
+});
+
+describe("normalizeReportTime", () => {
+  it("trims seconds and falls back to 00:00", () => {
+    assert.equal(normalizeReportTime("06:30:00"), "06:30");
+    assert.equal(normalizeReportTime(null), "00:00");
+    assert.equal(normalizeReportTime("garbage"), "00:00");
   });
 });
 
