@@ -44,14 +44,17 @@ export function dedupeHabits(habits: Habit[], today = todayISO()): Habit[] {
 
 const HOME_HABIT_LIMIT = 8;
 
-export function selectHomeHabits(habits: Habit[], today = todayISO()): Habit[] {
-  return dedupeHabits(habits, today)
-    .sort((a, b) => {
-      const streakDiff = effectiveStreak(b, today) - effectiveStreak(a, today);
-      if (streakDiff !== 0) return streakDiff;
-      return habitActivityScore(b, today) - habitActivityScore(a, today);
-    })
-    .slice(0, HOME_HABIT_LIMIT);
+export function selectHomeHabits(
+  habits: Habit[],
+  today = todayISO(),
+  limit: number | null = HOME_HABIT_LIMIT,
+): Habit[] {
+  const sorted = dedupeHabits(habits, today).sort((a, b) => {
+    const streakDiff = effectiveStreak(b, today) - effectiveStreak(a, today);
+    if (streakDiff !== 0) return streakDiff;
+    return habitActivityScore(b, today) - habitActivityScore(a, today);
+  });
+  return limit == null ? sorted : sorted.slice(0, limit);
 }
 
 export function computeFall(habit: Habit, today = todayISO()): CheckInResult {

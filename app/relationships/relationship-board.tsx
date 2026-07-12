@@ -21,11 +21,13 @@ export function RelationshipForm({
   fixedProjectId,
   defaultProjectId,
   defaultOpen = false,
+  className = "mb-8",
 }: {
   projects: { id: string; name: string }[];
   fixedProjectId?: string;
   defaultProjectId?: string;
   defaultOpen?: boolean;
+  className?: string;
 }) {
   const { t } = useTranslations();
   const selectedId = fixedProjectId ?? defaultProjectId ?? projects[0]?.id;
@@ -34,7 +36,7 @@ export function RelationshipForm({
     <AddFormToggle
       label={t("relationships.addContact")}
       defaultOpen={defaultOpen}
-      className="mb-8"
+      className={className}
       id="add-form-contact"
     >
       <form action={addRelationship} className="card grid gap-2 p-3 sm:grid-cols-2">

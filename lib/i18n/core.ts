@@ -52,5 +52,12 @@ export function formatLocaleDate(
 
 export function formatLocaleDateTime(locale: Locale, iso: string | null): string {
   if (!iso) return createTranslator(locale)("common.notSyncedYet");
-  return new Date(iso).toLocaleString(localeTag(locale));
+  return new Date(iso).toLocaleString(localeTag(locale), {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

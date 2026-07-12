@@ -1,5 +1,5 @@
 import { GOOGLE_CALENDAR_SCOPE, GOOGLE_LOGIN_SCOPES } from "../google-config";
-import type { GoogleEventsListResponse } from "./types";
+import type { GoogleCalendarEvent, GoogleEventsListResponse } from "./types";
 
 export function googleAuthUrl(state: string, mode: "login" | "calendar" = "calendar") {
   const params = new URLSearchParams({
@@ -59,8 +59,10 @@ export async function refreshAccessToken(refreshToken: string) {
   return res.json() as Promise<{ access_token: string; expires_in: number }>;
 }
 
-export async function fetchAllPrimaryEvents(accessToken: string) {
-  const items = [];
+type FetchRange = { timeMin?: string; timeMax?: string };
+
+export async function fetchPrimaryEvents(accessToken: string, range: FetchRange = {}) {
+  const items: GoogleCalendarEvent[] = [];
   let pageToken: string | undefined;
 
   do {
@@ -69,8 +71,9 @@ export async function fetchAllPrimaryEvents(accessToken: string) {
       orderBy: "startTime",
       maxResults: "2500",
       showDeleted: "false",
-      timeMin: "1990-01-01T00:00:00Z",
     });
+    if (range.timeMin) params.set("timeMin", range.timeMin);
+    if (range.timeMax) params.set("timeMax", range.timeMax);
     if (pageToken) params.set("pageToken", pageToken);
 
     const res = await fetch(
@@ -93,4 +96,23 @@ export async function fetchAllPrimaryEvents(accessToken: string) {
   } while (pageToken);
 
   return items;
+}
+
+/** Recent events first (last 6 years), then older history. */
+export async function fetchAllPrimaryEvents(accessToken: string) {
+  const recentCutoff = new Date();
+  recentCutoff.setFullYear(recentCutoff.getFullYear() - 6);
+  const cutoffIso = recentCutoff.toISOString();
+
+  const recent = await fetchPrimaryEvents(accessToken, { timeMin: cutoffIso });
+  const older = await fetchPrimaryEvents(accessToken, {
+    timeMin: "1990-01-01T00:00:00Z",
+    timeMax: cutoffIso,
+  });
+
+  const byId = new Map<string, GoogleCalendarEvent>();
+  for (const event of [...recent, ...older]) {
+    byId.set(event.id, event);
+  }
+  return [...byId.values()];
 }

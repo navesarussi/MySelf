@@ -1,4 +1,4 @@
-import { after, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { syncGoogleCalendar } from "@/lib/integrations/google-calendar/sync";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
@@ -9,16 +9,6 @@ function isCronRequest(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get("authorization");
   return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
-}
-
-function runSyncInBackground() {
-  after(async () => {
-    try {
-      await syncGoogleCalendar();
-    } catch {
-      // sync status is persisted as failed
-    }
-  });
 }
 
 async function shouldSkipDailySync() {
@@ -39,7 +29,7 @@ async function shouldSkipDailySync() {
   return { skip: false as const, token };
 }
 
-/** Manual sync — returns immediately and runs in the background */
+/** Manual sync — runs to completion and returns result */
 export async function POST() {
   const token = await getIntegrationToken(GOOGLE_PROVIDER);
   if (!token) {
@@ -51,8 +41,14 @@ export async function POST() {
     return NextResponse.json({ ok: true, alreadyRunning: true });
   }
 
-  runSyncInBackground();
-  return NextResponse.json({ ok: true, started: true });
+  try {
+    const { imported, removed } = await syncGoogleCalendar();
+    return NextResponse.json({ ok: true, imported, removed });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "sync_failed";
+    console.error("[google-sync]", message);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }
 
 /** Vercel cron — sync inline, skip if already synced today */
@@ -74,7 +70,9 @@ export async function GET(req: NextRequest) {
   try {
     const { imported, removed } = await syncGoogleCalendar();
     return NextResponse.json({ ok: true, imported, removed });
-  } catch {
-    return NextResponse.json({ ok: false }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "sync_failed";
+    console.error("[google-sync-cron]", message);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

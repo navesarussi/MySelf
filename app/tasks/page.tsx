@@ -5,7 +5,7 @@ import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
 import { ALL_FILTER, getTranslations } from "@/lib/i18n";
 import type { Project, Task, TaskStatus } from "@/lib/types";
-import { TaskForm, TaskList } from "./task-board";
+import { TasksPanel } from "./task-board";
 import { isAddTarget } from "@/lib/add-menu";
 
 export const revalidate = 30;
@@ -70,7 +70,6 @@ export default async function TasksPage({
   return (
     <>
       <PageHeader title={t("tasks.title")} subtitle={t("tasks.subtitleAlt")} />
-      <TaskForm projects={projects} defaultProjectId={defaultProjectId} defaultOpen={add === "task"} />
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
@@ -107,7 +106,12 @@ export default async function TasksPage({
         ))}
       </div>
 
-      <TaskList tasks={tasks} />
+      <TasksPanel
+        tasks={tasks}
+        projects={projects}
+        defaultProjectId={defaultProjectId}
+        defaultOpen={add === "task"}
+      />
     </>
   );
 }

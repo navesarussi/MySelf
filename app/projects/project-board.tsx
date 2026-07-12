@@ -13,6 +13,41 @@ import { addProject, renameProject, deleteProject } from "./actions";
 
 type Tab = "missions" | "connections";
 
+function ProjectAddForm({
+  defaultOpen,
+  labelKey,
+  inputLabelKey,
+}: {
+  defaultOpen: boolean;
+  labelKey: "projects.addProject";
+  inputLabelKey: "projects.projectName" | "projects.newProject";
+}) {
+  const { t } = useTranslations();
+
+  return (
+    <AddFormToggle
+      label={t(labelKey)}
+      defaultOpen={defaultOpen}
+      className="mt-6"
+      id="add-form-project"
+    >
+      <form action={addProject} className="card flex flex-wrap items-end gap-2 p-3">
+        <div className="min-w-[12rem] flex-1">
+          <label className="mb-1 block text-xs text-muted">{t(inputLabelKey)}</label>
+          <input
+            type="text"
+            name="name"
+            placeholder={t("projects.projectNamePlaceholder")}
+            required
+            className={inputClass}
+          />
+        </div>
+        <SubmitButton>{t(labelKey)}</SubmitButton>
+      </form>
+    </AddFormToggle>
+  );
+}
+
 export function ProjectBoard({
   projects,
   selectedProjectId,
@@ -44,23 +79,18 @@ export function ProjectBoard({
   if (projects.length === 0) {
     return (
       <div className="space-y-4">
-        <AddFormToggle
-          label={t("projects.addProject")}
-          defaultOpen={addTarget === "project"}
-          id="add-form-project"
-        >
-          <form action={addProject} className="card flex flex-wrap items-end gap-2 p-3">
-            <div className="min-w-[12rem] flex-1">
-              <label className="mb-1 block text-xs text-muted">{t("projects.projectName")}</label>
-              <input type="text" name="name" placeholder={t("projects.projectNamePlaceholder")} required className={inputClass} />
-            </div>
-            <SubmitButton>{t("projects.addProject")}</SubmitButton>
-          </form>
-        </AddFormToggle>
         <p className="text-sm text-muted">{t("projects.noProjects")}</p>
+        <ProjectAddForm
+          defaultOpen={addTarget === "project"}
+          labelKey="projects.addProject"
+          inputLabelKey="projects.projectName"
+        />
       </div>
     );
   }
+
+  const showMissions = activeTab === "missions";
+  const showConnections = activeTab === "connections";
 
   return (
     <div className="space-y-6">
@@ -77,67 +107,52 @@ export function ProjectBoard({
             {p.name}
           </button>
         ))}
-      </div>
-
-      {selected && (
-        <div className="flex flex-wrap items-center gap-3">
-          {renaming ? (
-            <form
-              action={renameProject}
-              className="flex flex-wrap items-center gap-2"
-              onSubmit={() => setRenaming(false)}
+        {selected && !renaming && (
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => setRenaming(true)}
+              className="p-1.5 text-muted hover:text-ink"
+              title={t("projects.rename")}
             >
+              <Pencil size={14} />
+            </button>
+            <form action={deleteProject}>
               <input type="hidden" name="id" value={selected.id} />
-              <input
-                type="text"
-                name="name"
-                defaultValue={selected.name}
-                required
-                className={`${inputClass} w-40`}
-              />
-              <SubmitButton>{t("common.save")}</SubmitButton>
-              <button type="button" className="text-xs text-muted" onClick={() => setRenaming(false)}>
-                {t("common.cancel")}
+              <button
+                type="submit"
+                className="p-1.5 text-muted hover:text-warn"
+                title={t("projects.deleteProject")}
+              >
+                <Trash2 size={14} />
               </button>
             </form>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setRenaming(true)}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:text-ink"
-              >
-                <Pencil size={13} /> {t("projects.rename")}
-              </button>
-              <form action={deleteProject}>
-                <input type="hidden" name="id" value={selected.id} />
-                <button
-                  type="submit"
-                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:text-warn"
-                >
-                  <Trash2 size={13} /> {t("projects.deleteProject")}
-                </button>
-              </form>
-            </>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
+
+      {selected && renaming && (
+        <form
+          action={renameProject}
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={() => setRenaming(false)}
+        >
+          <input type="hidden" name="id" value={selected.id} />
+          <input
+            type="text"
+            name="name"
+            defaultValue={selected.name}
+            required
+            className={`${inputClass} w-40`}
+          />
+          <SubmitButton>{t("common.save")}</SubmitButton>
+          <button type="button" className="text-xs text-muted" onClick={() => setRenaming(false)}>
+            {t("common.cancel")}
+          </button>
+        </form>
       )}
 
-      <AddFormToggle
-        label={t("projects.addProject")}
-        defaultOpen={addTarget === "project"}
-        id="add-form-project"
-      >
-        <form action={addProject} className="card flex flex-wrap items-end gap-2 p-3">
-          <div className="min-w-[12rem] flex-1">
-            <label className="mb-1 block text-xs text-muted">{t("projects.newProject")}</label>
-            <input type="text" name="name" placeholder={t("projects.projectNamePlaceholder")} required className={inputClass} />
-          </div>
-          <SubmitButton>{t("projects.addProject")}</SubmitButton>
-        </form>
-      </AddFormToggle>
-
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 md:hidden">
         {(
           [
             ["missions", t("projects.tabMissions")],
@@ -157,32 +172,50 @@ export function ProjectBoard({
         ))}
       </div>
 
-      {selected && activeTab === "missions" && (
-        <>
-          <TaskForm
-            projects={projects}
-            fixedProjectId={selected.id}
-            defaultOpen={addTarget === "task"}
-          />
-          <TaskList tasks={filteredTasks} showProjectBadge={false} />
-        </>
+      {selected && (
+        <div className="md:grid md:grid-cols-2 md:gap-6">
+          <section className={showMissions ? "block" : "hidden md:block"}>
+            <h2 className="mb-3 hidden text-sm font-medium text-muted md:block">
+              {t("projects.tabMissions")}
+            </h2>
+            <TaskList
+              tasks={filteredTasks}
+              projects={projects}
+              showProjectBadge={false}
+              showProjectSelect={false}
+            />
+            <TaskForm
+              projects={projects}
+              fixedProjectId={selected.id}
+              defaultOpen={addTarget === "task"}
+            />
+          </section>
+
+          <section className={showConnections ? "block" : "hidden md:block"}>
+            <h2 className="mb-3 hidden text-sm font-medium text-muted md:block">
+              {t("projects.tabConnections")}
+            </h2>
+            <RelationshipList
+              relationships={filteredRels}
+              projects={projects}
+              showProjectBadge={false}
+              showProjectSelect={false}
+            />
+            <RelationshipForm
+              projects={projects}
+              fixedProjectId={selected.id}
+              defaultOpen={addTarget === "contact"}
+              className="mt-6"
+            />
+          </section>
+        </div>
       )}
 
-      {selected && activeTab === "connections" && (
-        <>
-          <RelationshipForm
-            projects={projects}
-            fixedProjectId={selected.id}
-            defaultOpen={addTarget === "contact"}
-          />
-          <RelationshipList
-            relationships={filteredRels}
-            projects={projects}
-            showProjectBadge={false}
-            showProjectSelect={false}
-          />
-        </>
-      )}
+      <ProjectAddForm
+        defaultOpen={addTarget === "project"}
+        labelKey="projects.addProject"
+        inputLabelKey="projects.newProject"
+      />
     </div>
   );
 }

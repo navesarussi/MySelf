@@ -23,7 +23,7 @@ export function TimelineSyncBar({ connected, lastSyncAt, initialSyncStatus }: Pr
 
   if (!connected) {
     return (
-      <p className="mb-4 text-sm text-muted">
+      <p className="mb-3 text-xs text-muted">
         <Link href="/settings" className="text-accent hover:underline">
           {t("timeline.connectGoogle")}
         </Link>{" "}
@@ -33,11 +33,12 @@ export function TimelineSyncBar({ connected, lastSyncAt, initialSyncStatus }: Pr
   }
 
   return (
-    <div className="card mb-3 flex flex-wrap items-center justify-between gap-2 p-2.5 text-sm">
+    <div className="mb-3 flex flex-wrap items-center justify-end gap-3 text-xs">
       <span className="text-muted">
         {t("timeline.lastSynced")}: {formatLocaleDateTime(locale, lastSync)}
       </span>
       <GoogleCalendarSyncButton
+        compact
         initialSyncStatus={initialSyncStatus}
         onStatusUpdate={onStatusUpdate}
       />

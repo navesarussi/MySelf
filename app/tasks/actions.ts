@@ -44,6 +44,37 @@ export async function addTask(formData: FormData) {
   revalidateTaskPaths();
 }
 
+export async function updateTask(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const title = String(formData.get("title") || "").trim();
+  const project_id = String(formData.get("project_id") || "").trim();
+  if (!id || !title) {
+    await setFlash("flash.taskTitleRequired", "error");
+    return;
+  }
+  if (!project_id) {
+    await setFlash("flash.projectRequired", "error");
+    return;
+  }
+
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("tasks")
+    .update({
+      title,
+      project_id,
+      priority: pick(String(formData.get("priority") || ""), PRIORITIES, "medium"),
+      status: pick(String(formData.get("status") || ""), STATUSES, "open"),
+      due_date: String(formData.get("due_date") || "") || null,
+      notes: String(formData.get("notes") || "").trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  await setFlash(error ? "flash.taskUpdateError" : "flash.taskUpdated", error ? "error" : "success");
+  revalidateTaskPaths();
+}
+
 export async function updateTaskStatus(formData: FormData) {
   const id = String(formData.get("id") || "");
   const status = pick(String(formData.get("status") || ""), STATUSES, "open");

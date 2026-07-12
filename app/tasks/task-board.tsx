@@ -1,12 +1,14 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { Search, Pencil, Trash2 } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { formatLocaleDate } from "@/lib/i18n/core";
 import { useTranslations } from "@/components/locale-provider";
 import { Badge, SubmitButton, EmptyState, inputClass } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
 import { addTask, updateTaskStatus, deleteTask } from "./actions";
-import { Trash2 } from "lucide-react";
+import { TaskEditForm } from "./task-edit-form";
 
 function priorityTone(p: TaskPriority): "warn" | "accent" | "default" {
   if (p === "high") return "warn";
@@ -19,11 +21,13 @@ export function TaskForm({
   fixedProjectId,
   defaultProjectId,
   defaultOpen = false,
+  className = "mt-6",
 }: {
   projects: { id: string; name: string }[];
   fixedProjectId?: string;
   defaultProjectId?: string;
   defaultOpen?: boolean;
+  className?: string;
 }) {
   const { t } = useTranslations();
   const selectedId = fixedProjectId ?? defaultProjectId ?? projects[0]?.id;
@@ -32,7 +36,7 @@ export function TaskForm({
     <AddFormToggle
       label={t("tasks.addTask")}
       defaultOpen={defaultOpen}
-      className="mb-6"
+      className={className}
       id="add-form-task"
     >
       <form action={addTask} className="card grid gap-2 p-3 sm:grid-cols-2">
@@ -68,14 +72,69 @@ export function TaskForm({
   );
 }
 
-export function TaskList({
+export function TaskSearchBar({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const { t } = useTranslations();
+
+  return (
+    <div className="relative mb-4">
+      <Search size={16} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-muted" />
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={t("tasks.searchPlaceholder")}
+        className={`${inputClass} ps-9`}
+      />
+    </div>
+  );
+}
+
+export function TasksPanel({
   tasks,
-  showProjectBadge = true,
+  projects,
+  defaultProjectId,
+  defaultOpen = false,
 }: {
   tasks: Task[];
+  projects: { id: string; name: string }[];
+  defaultProjectId?: string;
+  defaultOpen?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return tasks;
+    return tasks.filter((task) => task.title.toLowerCase().includes(q));
+  }, [tasks, query]);
+
+  return (
+    <>
+      <TaskSearchBar value={query} onChange={setQuery} />
+      <TaskList tasks={filtered} projects={projects} />
+      <TaskForm projects={projects} defaultProjectId={defaultProjectId} defaultOpen={defaultOpen} />
+    </>
+  );
+}
+
+export function TaskList({
+  tasks,
+  projects = [],
+  showProjectBadge = true,
+  showProjectSelect = true,
+}: {
+  tasks: Task[];
+  projects?: { id: string; name: string }[];
   showProjectBadge?: boolean;
+  showProjectSelect?: boolean;
 }) {
   const { t, locale } = useTranslations();
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const priorityLabel: Record<TaskPriority, string> = {
     high: t("common.high"),
@@ -96,7 +155,8 @@ export function TaskList({
   return (
     <div className="space-y-2">
       {tasks.map((task) => (
-        <div key={task.id} className="card flex flex-wrap items-center justify-between gap-2 p-2.5">
+        <div key={task.id} className="card p-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className={task.status === "done" ? "text-muted line-through" : "font-medium"}>
@@ -113,6 +173,15 @@ export function TaskList({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setEditingId(editingId === task.id ? null : task.id)}
+              className="p-1.5 text-muted hover:text-accent"
+              title={t("tasks.editTask")}
+              aria-expanded={editingId === task.id}
+            >
+              <Pencil size={14} />
+            </button>
             {(["open", "in_progress", "done"] as const).map((s) => (
               <form key={s} action={updateTaskStatus}>
                 <input type="hidden" name="id" value={task.id} />
@@ -131,6 +200,15 @@ export function TaskList({
               </button>
             </form>
           </div>
+          </div>
+          {editingId === task.id && (
+            <TaskEditForm
+              task={task}
+              projects={projects}
+              showProjectSelect={showProjectSelect}
+              onClose={() => setEditingId(null)}
+            />
+          )}
         </div>
       ))}
     </div>
