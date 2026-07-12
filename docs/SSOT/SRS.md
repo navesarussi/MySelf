@@ -5,8 +5,32 @@ Personal private dashboard: timeline, habits/goals, relationships, content libra
 
 ## Requirements
 
+### FR-AUTH-GOOGLE-01
+Site access via Google Sign-In (openid, email, profile, calendar.readonly). Only `ALLOWED_GOOGLE_EMAIL` may enter when configured.
+
+### FR-AUTH-GOOGLE-02
+After sign-in, calendar sync runs in the background without blocking the redirect.
+
 ### FR-NAV-01
-Navigation includes: בית, ציר זמן, משימות, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן, הגדרות.
+Navigation includes: בית, ציר זמן, משימות, פרויקטים, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן, הגדרות.
+
+### FR-PROJ-01
+Projects are a first-class entity with CRUD. Fields: `name`, `sort_order`.
+
+### FR-PROJ-02
+Delete is blocked when the project has any tasks or connections.
+
+### FR-PROJ-03
+`/projects` shows a project picker and two tabs (משימות | קשרים). Content is scoped to the selected project. Create forms lock `project_id` to the selected project.
+
+### FR-PROJ-04
+`/tasks` shows all tasks from all projects. Dynamic project filter and project badge per task. Task form includes project selector.
+
+### FR-PROJ-05
+`/relationships` shows all connections from all projects. Relationship form includes project selector; cards show project badge.
+
+### FR-PROJ-06
+Migration maps existing `tasks.project` enum values to `projects` rows. Existing relationships without a project assign to default `כללי`.
 
 ### FR-INT-GCAL-01
 Connect primary Google Calendar via OAuth; sync all historical and future events to timeline.
@@ -36,7 +60,7 @@ Visual timeline supports deep zoom down to hourly divisions on a specific date (
 
 ### FR-TASK-01
 Dedicated Tasks tab (`/tasks`) separate from habits/commitments.
-Fields: title, project (Digital Scale | Glowy | KupaPay | אישי | אחר), priority (high|medium|low), status (open|in_progress|done), optional due_date.
+Fields: title, `project_id` (references `projects`), priority (high|medium|low), status (open|in_progress|done), optional due_date.
 Filter by project and status. CRUD supported.
 
 ### FR-TOAST-01
