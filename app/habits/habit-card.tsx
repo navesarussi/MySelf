@@ -44,12 +44,23 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
             <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted">{habit.target_note}</p>
           )}
         </div>
-        <form action={deleteHabit}>
-          <input type="hidden" name="id" value={habit.id} />
-          <button className="rounded-md p-1 text-muted hover:text-warn" title={t("common.delete")}>
-            <Trash2 size={13} />
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            className="rounded-md p-1 text-muted hover:text-accent"
+            title={t("habits.editData")}
+            aria-expanded={editing}
+          >
+            <Pencil size={13} />
           </button>
-        </form>
+          <form action={deleteHabit}>
+            <input type="hidden" name="id" value={habit.id} />
+            <button className="rounded-md p-1 text-muted hover:text-warn" title={t("common.delete")}>
+              <Trash2 size={13} />
+            </button>
+          </form>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-1 text-center">
@@ -124,17 +135,8 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
         </form>
       )}
 
-      <div className="flex items-center gap-0.5 border-t border-border/30 pt-1.5">
-        <button
-          type="button"
-          onClick={() => setEditing((v) => !v)}
-          className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11px] text-muted hover:text-accent"
-          aria-expanded={editing}
-        >
-          <Pencil size={12} />
-          {t("habits.editData")}
-        </button>
-        <form action={resetHabit}>
+      <div className="border-t border-border/30 pt-1.5">
+        <form action={resetHabit} className="inline">
           <input type="hidden" name="id" value={habit.id} />
           <button className="rounded-md p-1 text-muted hover:text-warn" title={t("habits.resetStreak")}>
             <RotateCcw size={13} />
