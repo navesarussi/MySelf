@@ -54,12 +54,18 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
           >
             <Pencil size={13} />
           </button>
-        <form action={deleteHabit}>
-          <input type="hidden" name="id" value={habit.id} />
-          <IconDeleteButton type="submit" title={t("common.delete")}>
-            <Trash2 size={13} />
-          </IconDeleteButton>
-        </form>
+          <form action={resetHabit} className="inline">
+            <input type="hidden" name="id" value={habit.id} />
+            <button className="rounded-md p-1 text-muted hover:text-warn" title={t("habits.resetStreak")}>
+              <RotateCcw size={13} />
+            </button>
+          </form>
+          <form action={deleteHabit}>
+            <input type="hidden" name="id" value={habit.id} />
+            <IconDeleteButton type="submit" title={t("common.delete")}>
+              <Trash2 size={13} />
+            </IconDeleteButton>
+          </form>
         </div>
       </div>
 
@@ -135,14 +141,6 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
         </form>
       )}
 
-      <div className="border-t border-border/30 pt-1.5">
-        <form action={resetHabit} className="inline">
-          <input type="hidden" name="id" value={habit.id} />
-          <button className="rounded-md p-1 text-muted hover:text-warn" title={t("habits.resetStreak")}>
-            <RotateCcw size={13} />
-          </button>
-        </form>
-      </div>
       {!checkedToday && (
         <div className="flex gap-2">
           <form action={checkInHabit} className="flex-1">

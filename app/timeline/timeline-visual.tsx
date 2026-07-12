@@ -8,8 +8,13 @@ import type { LifePeriod } from "@/lib/life-periods";
 import { useTranslations } from "@/components/locale-provider";
 import {
   assignEventLanes,
+  assignVisiblePeriodLanes,
+  axisLineTop,
   eventDateTime,
+  plotBandHeight,
   timelineBounds,
+  TRACKS_PAD_TOP,
+  tracksHeight,
   xFor,
 } from "@/lib/timeline-layout";
 import { isEventVisibleAtZoom } from "@/lib/timeline-zoom";
@@ -25,17 +30,15 @@ import {
   type TimelineViewport,
 } from "@/lib/timeline-viewport";
 import {
-  assignPeriodLanes,
+  AXIS_TICK_RESERVED,
   EventMarks,
   PeriodConnectors,
   PeriodTracks,
   TimelineAxis,
-  tracksHeight,
 } from "./timeline-parts";
 import { PeriodEditForm } from "./period-edit-form";
 import { EventEditForm } from "./event-edit-form";
 
-const CONNECTOR_H = 28;
 const PLOT_PAD = 48;
 
 export function TimelineVisual({
@@ -72,7 +75,10 @@ export function TimelineVisual({
   const { viewMin, viewMax } = viewport;
   const span = viewSpan(viewport);
   const globalSpan = global.max - global.min;
-  const { lanes, laneCount } = useMemo(() => assignPeriodLanes(periods), [periods]);
+  const { lanes, laneCount } = useMemo(
+    () => assignVisiblePeriodLanes(periods, viewMin, viewMax),
+    [periods, viewMin, viewMax]
+  );
   const tracksH = tracksHeight(laneCount);
 
   const eventItems = useMemo(() => {
@@ -196,7 +202,10 @@ export function TimelineVisual({
 
       <div ref={containerRef} className="overflow-hidden p-6 pb-12" dir="ltr">
         <div className="relative" style={{ width: plotW + PLOT_PAD }}>
-          <div className="relative" style={{ height: tracksH + CONNECTOR_H + 40, paddingTop: 20 }}>
+          <div
+            className="relative"
+            style={{ height: plotBandHeight(tracksH), paddingTop: TRACKS_PAD_TOP }}
+          >
             <PeriodTracks
               periods={periods}
               min={viewMin}
@@ -213,9 +222,8 @@ export function TimelineVisual({
               max={viewMax}
               plotW={plotW}
               tracksH={tracksH}
-              connectorH={CONNECTOR_H}
             />
-            <div className="absolute inset-x-0" style={{ top: tracksH + CONNECTOR_H }}>
+            <div className="absolute inset-x-0" style={{ top: axisLineTop(tracksH) }}>
               <TimelineAxis
                 periods={periods}
                 min={viewMin}

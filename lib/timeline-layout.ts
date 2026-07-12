@@ -83,6 +83,71 @@ export function assignPeriodLanes(periods: LifePeriod[]) {
   return { lanes, laneCount: Math.max(laneEnds.length, 1) };
 }
 
+export function periodIntersectsView(
+  period: LifePeriod,
+  viewMin: number,
+  viewMax: number,
+  today = todayIso()
+) {
+  const start = toTime(period.start_date);
+  const end = toTime(period.end_date || today);
+  return end >= viewMin && start <= viewMax;
+}
+
+/** Flip lanes so the newest packed row appears at the top, away from the axis. */
+export function invertPeriodLanes(lanes: Map<string, number>) {
+  if (lanes.size === 0) return { lanes: new Map<string, number>(), laneCount: 1 };
+  const maxLane = Math.max(...lanes.values());
+  const inverted = new Map<string, number>();
+  for (const [id, lane] of lanes) {
+    inverted.set(id, maxLane - lane);
+  }
+  return { lanes: inverted, laneCount: maxLane + 1 };
+}
+
+/** Pack only viewport-visible periods; newest overlap row renders above older rows. */
+export function assignVisiblePeriodLanes(
+  periods: LifePeriod[],
+  viewMin: number,
+  viewMax: number
+) {
+  const visible = periods.filter((p) => periodIntersectsView(p, viewMin, viewMax));
+  const { lanes } = assignPeriodLanes(visible);
+  return invertPeriodLanes(lanes);
+}
+
+export const TRACK_H = 26;
+const LANE_GAP = 8;
+const TRACKS_TOP = 28;
+export const TRACKS_PAD_TOP = 20;
+export const CONNECTOR_H = 24;
+/** Space reserved above the axis line for year/month tick labels. */
+export const AXIS_TICK_RESERVED = 30;
+const AXIS_MARKS_BELOW = 48;
+
+export function periodBarGeom(lane: number) {
+  const top = TRACKS_TOP + lane * (TRACK_H + LANE_GAP);
+  return { top, bottom: top + TRACK_H };
+}
+
+export function tracksHeight(laneCount: number) {
+  return TRACKS_TOP + laneCount * (TRACK_H + LANE_GAP);
+}
+
+export function axisLineTop(tracksH: number) {
+  return TRACKS_PAD_TOP + tracksH + CONNECTOR_H + AXIS_TICK_RESERVED;
+}
+
+export function plotBandHeight(tracksH: number) {
+  return axisLineTop(tracksH) + AXIS_MARKS_BELOW;
+}
+
+export function lowestBarBottom(lanes: Map<string, number>) {
+  if (lanes.size === 0) return TRACKS_TOP + TRACK_H;
+  const maxLane = Math.max(...lanes.values());
+  return periodBarGeom(maxLane).bottom;
+}
+
 /** Stack event labels vertically when their x positions are too close. */
 export function assignEventLanes(items: { id: string; x: number }[], minGap = 88) {
   const sorted = [...items].sort((a, b) => a.x - b.x);

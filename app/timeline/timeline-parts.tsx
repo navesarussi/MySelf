@@ -6,27 +6,32 @@ import { formatPeriodRange } from "@/lib/life-periods";
 import { formatLocaleDate } from "@/lib/i18n/core";
 import { useTranslations } from "@/components/locale-provider";
 import {
-  assignPeriodLanes,
+  periodIntersectsView,
   toTime,
   todayIso,
   xFor,
   timelineTicks,
+  TRACKS_PAD_TOP,
+  TRACK_H,
+  AXIS_TICK_RESERVED,
+  axisLineTop,
+  periodBarGeom,
+  tracksHeight,
 } from "@/lib/timeline-layout";
 
-export const TRACK_H = 26;
-const LANE_GAP = 8;
-const TRACKS_TOP = 28;
-
-export function periodBarGeom(lane: number) {
-  const top = TRACKS_TOP + lane * (TRACK_H + LANE_GAP);
-  return { top, bottom: top + TRACK_H };
-}
-
-export function tracksHeight(laneCount: number) {
-  return TRACKS_TOP + laneCount * (TRACK_H + LANE_GAP);
-}
-
 type LaneMap = Map<string, number>;
+
+export {
+  TRACK_H,
+  TRACKS_PAD_TOP,
+  CONNECTOR_H,
+  AXIS_TICK_RESERVED,
+  periodBarGeom,
+  tracksHeight,
+  axisLineTop,
+  plotBandHeight,
+  lowestBarBottom,
+} from "@/lib/timeline-layout";
 
 export function PeriodTracks({
   periods,
@@ -54,7 +59,9 @@ export function PeriodTracks({
   return (
     <div className="relative" style={{ height: h }}>
       {periods.map((p) => {
-        const lane = lanes.get(p.id) ?? 0;
+        if (!periodIntersectsView(p, min, max)) return null;
+        const lane = lanes.get(p.id);
+        if (lane === undefined) return null;
         const { top } = periodBarGeom(lane);
         const x0 = xFor(toTime(p.start_date), min, max, plotW);
         const x1 = xFor(toTime(p.end_date || todayIso()), min, max, plotW);
@@ -121,7 +128,6 @@ export function PeriodConnectors({
   max,
   plotW,
   tracksH,
-  connectorH,
 }: {
   periods: LifePeriod[];
   lanes: LaneMap;
@@ -129,9 +135,9 @@ export function PeriodConnectors({
   max: number;
   plotW: number;
   tracksH: number;
-  connectorH: number;
+  connectorH?: number;
 }) {
-  const axisLineY = tracksH + connectorH;
+  const axisLineY = axisLineTop(tracksH);
 
   return (
     <svg
@@ -141,15 +147,18 @@ export function PeriodConnectors({
       style={{ top: 0 }}
     >
       {periods.map((p) => {
-        const lane = lanes.get(p.id) ?? 0;
+        if (!periodIntersectsView(p, min, max)) return null;
+        const lane = lanes.get(p.id);
+        if (lane === undefined) return null;
         const { bottom } = periodBarGeom(lane);
+        const barBottomY = TRACKS_PAD_TOP + bottom;
         const x0 = xFor(toTime(p.start_date), min, max, plotW);
         const x1 = xFor(toTime(p.end_date || todayIso()), min, max, plotW);
 
         return (
           <g key={p.id} opacity={0.4}>
-            <line x1={x0} y1={bottom} x2={x0} y2={axisLineY} stroke={p.color} strokeWidth={1} strokeDasharray="4 3" />
-            <line x1={x1} y1={bottom} x2={x1} y2={axisLineY} stroke={p.color} strokeWidth={1} strokeDasharray="4 3" />
+            <line x1={x0} y1={barBottomY} x2={x0} y2={axisLineY} stroke={p.color} strokeWidth={1} strokeDasharray="4 3" />
+            <line x1={x1} y1={barBottomY} x2={x1} y2={axisLineY} stroke={p.color} strokeWidth={1} strokeDasharray="4 3" />
           </g>
         );
       })}
@@ -169,6 +178,7 @@ function collectAxisMarks(
 ): AxisMark[] {
   const raw: AxisMark[] = [];
   for (const p of periods) {
+    if (!periodIntersectsView(p, min, max)) continue;
     raw.push({
       x: xFor(toTime(p.start_date), min, max, plotW),
       date: formatLocaleDate(locale, p.start_date),
@@ -211,8 +221,11 @@ export function TimelineAxis({
   const todayX = xFor(Date.now(), min, max, plotW);
 
   return (
-    <div className="relative pb-6">
-      <div className="pointer-events-none absolute bottom-full left-0 right-0 mb-1 h-5">
+    <div className="relative z-10 pb-6">
+      <div
+        className="pointer-events-none absolute bottom-full left-0 right-0 mb-1"
+        style={{ height: AXIS_TICK_RESERVED }}
+      >
         {ticks.map((tick) => (
           <div
             key={tick.key}
@@ -336,5 +349,3 @@ export function EventMarks({
     </div>
   );
 }
-
-export { assignPeriodLanes };
