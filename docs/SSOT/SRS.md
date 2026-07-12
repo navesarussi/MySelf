@@ -42,7 +42,7 @@ Calendar-sourced events display with a calendar icon and category `יומן`, in
 User may set local title/description overrides on calendar events; re-sync preserves overrides.
 
 ### FR-INT-GCAL-04
-Manual sync on demand plus weekly automatic background sync.
+Manual sync on demand plus daily automatic background sync (skipped if already synced within 24 hours). Sync runs in the background with progress indicator; `last_sync_at` updates only after a full successful sync.
 
 ### FR-INT-WA-01
 Optional phone number on relationships; when set, show WhatsApp quick-link via `wa.me`.

@@ -2,9 +2,14 @@
 
 import { useMemo, useState } from "react";
 import type { Goal } from "@/lib/types";
+import { ALL_FILTER } from "@/lib/i18n/types";
+import { useTranslations } from "@/components/locale-provider";
 import { Badge, SubmitButton, EmptyState, inputClass } from "@/components/ui";
+import { AddFormToggle } from "@/components/add-form-toggle";
 import { addGoal, toggleGoalStatus, deleteGoal } from "./actions";
 import { Target, Trash2, RotateCcw, ChevronDown, Search } from "lucide-react";
+
+const DEFAULT_CATEGORY = "כללי";
 
 function groupBy<T, K extends string>(items: T[], key: (item: T) => K) {
   const map = new Map<K, T[]>();
@@ -16,22 +21,29 @@ function groupBy<T, K extends string>(items: T[], key: (item: T) => K) {
   return map;
 }
 
-export function GoalsSection({ goals }: { goals: Goal[] }) {
+export function GoalsSection({
+  goals,
+  defaultOpen = false,
+}: {
+  goals: Goal[];
+  defaultOpen?: boolean;
+}) {
+  const { t, locale } = useTranslations();
   const active = goals.filter((g) => g.status === "active");
   const done = goals.filter((g) => g.status === "done");
   const categories = useMemo(
-    () => [...new Set(active.map((g) => g.category || "כללי"))].sort((a, b) => a.localeCompare(b, "he")),
-    [active]
+    () => [...new Set(active.map((g) => g.category || DEFAULT_CATEGORY))].sort((a, b) => a.localeCompare(b, locale)),
+    [active, locale]
   );
 
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("הכל");
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_FILTER);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return active.filter((g) => {
-      if (categoryFilter !== "הכל" && (g.category || "כללי") !== categoryFilter) return false;
+      if (categoryFilter !== ALL_FILTER && (g.category || DEFAULT_CATEGORY) !== categoryFilter) return false;
       if (!q) return true;
       const hay = [g.title, g.category, g.horizon, g.first_step, g.definition_of_done]
         .filter(Boolean)
@@ -41,15 +53,24 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
     });
   }, [active, query, categoryFilter]);
 
-  const grouped = groupBy(filtered, (g) => g.category || "כללי");
+  const grouped = groupBy(filtered, (g) => g.category || DEFAULT_CATEGORY);
 
   function toggleCategory(cat: string) {
     setCollapsed((c) => ({ ...c, [cat]: !c[cat] }));
   }
 
+  function categoryLabel(cat: string, items: Goal[]) {
+    if (cat === DEFAULT_CATEGORY) {
+      const anyExplicit = items.some((g) => g.category === DEFAULT_CATEGORY);
+      const anyEmpty = items.some((g) => !g.category);
+      if (anyEmpty && !anyExplicit) return t("common.general");
+    }
+    return cat;
+  }
+
   return (
     <section className="mb-10">
-      <h2 className="mb-3 text-lg font-bold">מטרות וחלומות</h2>
+      <h2 className="mb-3 text-lg font-bold">{t("goals.sectionTitle")}</h2>
 
       <div className="card mb-4 flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
@@ -58,17 +79,17 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="חיפוש מטרה, קטגוריה, אופק…"
+            placeholder={t("goals.searchPlaceholder")}
             className={`${inputClass} ps-9`}
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
-            onClick={() => setCategoryFilter("הכל")}
-            className={`rounded-full px-3 py-1 text-xs ${categoryFilter === "הכל" ? "bg-accent text-bg" : "bg-border/50 text-muted"}`}
+            onClick={() => setCategoryFilter(ALL_FILTER)}
+            className={`rounded-full px-3 py-1 text-xs ${categoryFilter === ALL_FILTER ? "bg-accent text-bg" : "bg-border/50 text-muted"}`}
           >
-            הכל
+            {t("common.all")}
           </button>
           {categories.map((cat) => (
             <button
@@ -77,14 +98,14 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
               onClick={() => setCategoryFilter(cat)}
               className={`rounded-full px-3 py-1 text-xs ${categoryFilter === cat ? "bg-accent text-bg" : "bg-border/50 text-muted"}`}
             >
-              {cat}
+              {categoryLabel(cat, active.filter((g) => (g.category || DEFAULT_CATEGORY) === cat))}
             </button>
           ))}
         </div>
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState text={active.length === 0 ? "אין עדיין יעדים פעילים." : "אין תוצאות לסינון הנוכחי."} />
+        <EmptyState text={active.length === 0 ? t("goals.noActive") : t("goals.noFilterResults")} />
       ) : (
         <div className="space-y-4">
           {Array.from(grouped.entries()).map(([category, items]) => {
@@ -98,7 +119,7 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     <Target size={14} className="text-accent" />
-                    {category}
+                    {categoryLabel(category, items)}
                     <Badge>{items.length}</Badge>
                   </span>
                   <ChevronDown
@@ -118,32 +139,32 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
                               <input type="hidden" name="status" value={g.status} />
                               <button
                                 className="rounded-full bg-good/15 px-2.5 py-1 text-xs font-medium text-good hover:opacity-80"
-                                title="סמן כהושג"
+                                title={t("goals.markDone")}
                               >
-                                ✓ בוצע
+                                {t("goals.markDoneBtn")}
                               </button>
                             </form>
                             <form action={deleteGoal}>
                               <input type="hidden" name="id" value={g.id} />
-                              <button className="p-1.5 text-muted hover:text-warn" title="מחיקה">
+                              <button className="p-1.5 text-muted hover:text-warn" title={t("common.delete")}>
                                 <Trash2 size={14} />
                               </button>
                             </form>
                           </div>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
-                          {g.horizon && <Badge>אופק: {g.horizon}</Badge>}
+                          {g.horizon && <Badge>{t("common.horizon")}: {g.horizon}</Badge>}
                         </div>
                         <div className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
                           {g.first_step && (
                             <p>
-                              <span className="text-muted">צעד ראשון: </span>
+                              <span className="text-muted">{t("common.firstStep")}: </span>
                               {g.first_step}
                             </p>
                           )}
                           {g.definition_of_done && (
                             <p>
-                              <span className="text-muted">בוצע: </span>
+                              <span className="text-muted">{t("common.definitionOfDone")}: </span>
                               {g.definition_of_done}
                             </p>
                           )}
@@ -158,24 +179,28 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
         </div>
       )}
 
-      <details className="mt-4">
-        <summary className="cursor-pointer text-sm text-muted">+ הוספת יעד/חלום חדש</summary>
-        <form action={addGoal} className="card mt-3 grid gap-3 p-4 sm:grid-cols-2">
-          <input type="text" name="title" placeholder="כותרת היעד" required className={`${inputClass} sm:col-span-2`} />
-          <input type="text" name="category" placeholder="קטגוריה" className={inputClass} />
-          <input type="text" name="horizon" placeholder="אופק זמן (למשל: 2026-06 או Q3 2026)" className={inputClass} />
-          <input type="text" name="first_step" placeholder="צעד ראשון" className={inputClass} />
-          <input type="text" name="definition_of_done" placeholder="הגדרת 'בוצע'" className={inputClass} />
+      <AddFormToggle
+        label={t("goals.addNew")}
+        defaultOpen={defaultOpen}
+        className="mt-4"
+        id="add-form-goal"
+      >
+        <form action={addGoal} className="card grid gap-3 p-4 sm:grid-cols-2">
+          <input type="text" name="title" placeholder={t("goals.titlePlaceholder")} required className={`${inputClass} sm:col-span-2`} />
+          <input type="text" name="category" placeholder={t("common.general")} className={inputClass} />
+          <input type="text" name="horizon" placeholder={t("goals.horizonPlaceholder")} className={inputClass} />
+          <input type="text" name="first_step" placeholder={t("goals.firstStepPlaceholder")} className={inputClass} />
+          <input type="text" name="definition_of_done" placeholder={t("goals.doneDefinitionPlaceholder")} className={inputClass} />
           <div className="sm:col-span-2">
-            <SubmitButton>הוספה</SubmitButton>
+            <SubmitButton>{t("common.add")}</SubmitButton>
           </div>
         </form>
-      </details>
+      </AddFormToggle>
 
       {done.length > 0 && (
         <details className="mt-6">
           <summary className="cursor-pointer text-sm font-medium text-muted">
-            ✓ חלומות שהוגשמו ({done.length})
+            {t("goals.fulfilledDreams", { count: done.length })}
           </summary>
           <div className="mt-3 space-y-2">
             {done.map((g) => (
@@ -184,7 +209,7 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
                 <form action={toggleGoalStatus}>
                   <input type="hidden" name="id" value={g.id} />
                   <input type="hidden" name="status" value={g.status} />
-                  <button className="flex items-center gap-1 text-muted hover:text-ink" title="החזר לפעיל">
+                  <button className="flex items-center gap-1 text-muted hover:text-ink" title={t("goals.restoreActive")}>
                     <RotateCcw size={13} />
                   </button>
                 </form>

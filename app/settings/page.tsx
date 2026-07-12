@@ -1,25 +1,36 @@
 import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
-import { PageHeader, SubmitButton } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
+import { getTranslations } from "@/lib/i18n";
 import { googleConfigured } from "@/lib/integrations/google-config";
 import { getIntegrationToken, isGoogleConnected } from "@/lib/integrations/tokens";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
-import { triggerGoogleSync, disconnectGoogle } from "./actions";
+import { disconnectGoogle } from "./actions";
+import { GoogleCalendarSyncPanel } from "./google-calendar-sync";
 import Link from "next/link";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 export const revalidate = 30;
 
-function formatWhen(iso: string | null) {
-  if (!iso) return "טרם סונכרן";
-  return new Date(iso).toLocaleString("he-IL");
-}
-
 export default async function SettingsPage() {
+  const { t } = await getTranslations();
+
+  const languageSection = (
+    <section className="card mb-4 p-4">
+      <h2 className="text-sm font-semibold">{t("language.label")}</h2>
+      <p className="mt-1 text-xs text-muted">{t("language.hint")}</p>
+      <div className="mt-3">
+        <LanguageSwitcher />
+      </div>
+    </section>
+  );
+
   if (!dbConfigured()) {
     return (
       <>
-        <PageHeader title="הגדרות" />
+        <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
+        {languageSection}
         <DbWarning />
       </>
     );
@@ -41,49 +52,36 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="הגדרות" subtitle="חיבורים ואינטגרציות" />
+      <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
+
+      {languageSection}
 
       <section className="card p-4">
-        <h2 className="text-sm font-semibold">יומן גוגל</h2>
+        <h2 className="text-sm font-semibold">{t("settings.googleCalendar")}</h2>
 
         {!googleReady && (
-          <p className="mt-3 text-sm text-muted">
-            חסרים משתני סביבה: <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>,{" "}
-            <code>GOOGLE_REDIRECT_URI</code>. ראה <code>.env.example</code>.
-          </p>
+          <p className="mt-3 text-sm text-muted">{t("settings.missingEnv")}</p>
         )}
 
         {googleReady && !connected && (
           <div className="mt-3">
-            <p className="text-sm text-muted">
-              התחבר מחדש עם Google כדי לחבר את היומן לציר הזמן.
-            </p>
+            <p className="text-sm text-muted">{t("settings.reconnectHint")}</p>
             <Link
               href="/api/auth/google/login?next=/settings"
               className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg hover:opacity-90"
             >
-              כניסה עם Google
+              {t("common.signInGoogle")}
             </Link>
           </div>
         )}
 
         {googleReady && connected && (
-          <div className="mt-3 space-y-3 text-sm">
-            <p className="text-good">מחובר</p>
-            <p className="text-muted">סנכרון אחרון: {formatWhen(token?.last_sync_at ?? null)}</p>
-            <p className="text-muted">אירועים מיובאים: {calendarEventCount}</p>
-            <p className="text-xs text-muted">סנכרון אוטומטי: פעם בשבוע</p>
-
-            <form action={triggerGoogleSync}>
-              <SubmitButton>סנכרון עכשיו</SubmitButton>
-            </form>
-
-            <form action={disconnectGoogle}>
-              <button type="submit" className="text-sm text-warn hover:underline">
-                ניתוק יומן גוגל
-              </button>
-            </form>
-          </div>
+          <GoogleCalendarSyncPanel
+            lastSyncAt={token?.last_sync_at ?? null}
+            calendarEventCount={calendarEventCount}
+            initialSyncStatus={token?.sync_status ?? "idle"}
+            disconnectAction={disconnectGoogle}
+          />
         )}
       </section>
     </>

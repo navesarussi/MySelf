@@ -1,5 +1,6 @@
 import type { LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
+import { createTranslator, localeTag, type Locale } from "@/lib/i18n/core";
 
 export const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -21,11 +22,15 @@ export function eventDateTime(event: { event_date: string; event_time?: string |
   return toTime(`${event.event_date}T${time}:00`);
 }
 
-export function formatEventWhen(event: { event_date: string; event_time?: string | null }) {
+export function formatEventWhen(
+  event: { event_date: string; event_time?: string | null },
+  locale: Locale = "he"
+) {
   const d = new Date(eventDateTime(event));
-  const date = d.toLocaleDateString("he-IL");
+  const tag = localeTag(locale);
+  const date = d.toLocaleDateString(tag);
   if (!event.event_time) return date;
-  return `${date} ${d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}`;
+  return `${date} ${d.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 export function todayIso() {

@@ -1,4 +1,5 @@
 import type { Goal } from "@/lib/types";
+import { createTranslator, type Locale } from "@/lib/i18n/core";
 
 /** Lower = sooner / closer target. Null = unknown horizon sorts last. */
 export function parseHorizonSortKey(horizon: string | null): number | null {
@@ -39,7 +40,7 @@ export function achievabilityScore(goal: Goal): number {
   return s;
 }
 
-export function rankGoalsForHome(goals: Goal[], limit = 5): Goal[] {
+export function rankGoalsForHome(goals: Goal[], limit = 5, locale: Locale = "he"): Goal[] {
   const active = goals.filter((g) => g.status === "active");
 
   return [...active]
@@ -52,19 +53,20 @@ export function rankGoalsForHome(goals: Goal[], limit = 5): Goal[] {
       const aa = achievabilityScore(a);
       const ab = achievabilityScore(b);
       if (aa !== ab) return ab - aa;
-      return a.title.localeCompare(b.title, "he");
+      return a.title.localeCompare(b.title, locale);
     })
     .slice(0, limit);
 }
 
-export function horizonLabel(goal: Goal): string | null {
+export function horizonLabel(goal: Goal, locale: Locale = "he"): string | null {
   if (!goal.horizon?.trim()) return null;
+  const t = createTranslator(locale);
   const k = parseHorizonSortKey(goal.horizon);
   if (k == null) return goal.horizon;
   const days = Math.round((k - Date.now()) / (24 * 60 * 60 * 1000));
-  if (days < 0) return `${goal.horizon} · עבר`;
-  if (days === 0) return `${goal.horizon} · היום`;
-  if (days < 30) return `${goal.horizon} · עוד ${days} ימים`;
-  if (days < 365) return `${goal.horizon} · עוד ${Math.round(days / 30)} חודשים`;
-  return `${goal.horizon} · עוד ${Math.round(days / 365)} שנים`;
+  if (days < 0) return `${goal.horizon} · ${t("common.ago")}`;
+  if (days === 0) return `${goal.horizon} · ${t("common.today")}`;
+  if (days < 30) return `${goal.horizon} · ${t("common.inDays", { count: days })}`;
+  if (days < 365) return `${goal.horizon} · ${t("common.inMonths", { count: Math.round(days / 30) })}`;
+  return `${goal.horizon} · ${t("common.inYears", { count: Math.round(days / 365) })}`;
 }

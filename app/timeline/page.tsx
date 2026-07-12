@@ -1,13 +1,15 @@
 import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
-import { PageHeader, SubmitButton, inputClass } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
+import { getTranslations } from "@/lib/i18n";
 import type { TimelineEvent } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
-import { addTimelineEvent, addLifePeriod } from "./actions";
 import { TimelineBoard } from "./timeline-board";
+import { TimelineAddForms } from "./timeline-add-forms";
 import { TimelineSyncBar } from "./sync-bar";
 import { isEventHidden } from "@/lib/timeline-display";
+import { isAddTarget } from "@/lib/add-menu";
 
 export const revalidate = 30;
 
@@ -29,11 +31,19 @@ async function getPeriods(): Promise<LifePeriod[]> {
   return (data || []) as LifePeriod[];
 }
 
-export default async function TimelinePage() {
+export default async function TimelinePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ add?: string }>;
+}) {
+  const { t } = await getTranslations();
+  const sp = await searchParams;
+  const add = isAddTarget(sp.add) ? sp.add : undefined;
+
   if (!dbConfigured()) {
     return (
       <>
-        <PageHeader title="ציר זמן" subtitle="תקופות חופפות ואבני דרך" />
+        <PageHeader title={t("timeline.title")} subtitle={t("timeline.subtitle")} />
         <DbWarning />
       </>
     );
@@ -44,34 +54,9 @@ export default async function TimelinePage() {
 
   return (
     <>
-      <PageHeader
-        title="ציר זמן"
-        subtitle="כרונולוגי · ציר ויזואלי עם זום · תקופות חופפות"
-      />
+      <PageHeader title={t("timeline.title")} subtitle={t("timeline.subtitleFull")} />
 
-      <form action={addTimelineEvent} className="card mb-4 grid gap-3 p-4 sm:grid-cols-2">
-        <input type="date" name="event_date" required className={inputClass} />
-        <input type="time" name="event_time" className={inputClass} title="שעה מדויקת (אופציונלי)" />
-        <input type="text" name="category" placeholder="קטגוריה (למשל: משפחה, צבא, טיול)" className={inputClass} />
-        <input type="text" name="title" placeholder="כותרת האירוע" required className={`${inputClass} sm:col-span-2`} />
-        <textarea name="description" placeholder="תיאור (אופציונלי)" rows={2} className={`${inputClass} sm:col-span-2`} />
-        <div className="sm:col-span-2">
-          <SubmitButton>הוספת אירוע</SubmitButton>
-        </div>
-      </form>
-
-      <details className="card mb-8 p-4">
-        <summary className="cursor-pointer text-sm font-medium">הוספת תקופת חיים חדשה</summary>
-        <form action={addLifePeriod} className="mt-3 grid gap-3 sm:grid-cols-2">
-          <input type="text" name="title" placeholder="שם התקופה" required className={`${inputClass} sm:col-span-2`} />
-          <input type="date" name="start_date" required className={inputClass} />
-          <input type="date" name="end_date" className={inputClass} title="ריק = נמשך עד היום" />
-          <input type="color" name="color" defaultValue="#7dd3c0" className="h-10 w-full rounded-lg border bg-transparent" />
-          <div className="sm:col-span-2">
-            <SubmitButton>הוספת תקופה</SubmitButton>
-          </div>
-        </form>
-      </details>
+      <TimelineAddForms openEvent={add === "event"} openPeriod={add === "period"} />
 
       <TimelineSyncBar />
 

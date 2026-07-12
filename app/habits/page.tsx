@@ -4,14 +4,24 @@ import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
 import type { Habit } from "@/lib/types";
 import { HabitsSection } from "./habits-section";
+import { getTranslations } from "@/lib/i18n";
+import { isAddTarget } from "@/lib/add-menu";
 
 export const revalidate = 30;
 
-export default async function HabitsPage() {
+export default async function HabitsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ add?: string }>;
+}) {
+  const { t } = await getTranslations();
+  const sp = await searchParams;
+  const add = isAddTarget(sp.add) ? sp.add : undefined;
+
   if (!dbConfigured()) {
     return (
       <>
-        <PageHeader title="הרגלים" />
+        <PageHeader title={t("habits.title")} />
         <DbWarning />
       </>
     );
@@ -26,8 +36,8 @@ export default async function HabitsPage() {
 
   return (
     <>
-      <PageHeader title="הרגלים" subtitle="מעקב יומי, רצפים וסטטיסטיקות" />
-      <HabitsSection habits={(habits as Habit[]) || []} />
+      <PageHeader title={t("habits.title")} subtitle={t("habits.subtitle")} />
+      <HabitsSection habits={(habits as Habit[]) || []} defaultOpen={add === "habit"} />
     </>
   );
 }

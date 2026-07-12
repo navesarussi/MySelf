@@ -1,9 +1,12 @@
+"use client";
+
 import { Trash2, Calendar } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { type LifePeriod, periodsForEvent } from "@/lib/life-periods";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import { Badge } from "@/components/ui";
+import { useTranslations } from "@/components/locale-provider";
 import { deleteTimelineEvent } from "./actions";
 
 export function EventCard({
@@ -13,6 +16,7 @@ export function EventCard({
   event: TimelineEvent;
   allPeriods: LifePeriod[];
 }) {
+  const { t, locale } = useTranslations();
   const tags = periodsForEvent(event, allPeriods);
   const milestone = event.category === "אבן דרך";
 
@@ -31,12 +35,14 @@ export function EventCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted">{formatEventWhen(event)}</span>
+              <span className="text-sm text-muted">{formatEventWhen(event, locale)}</span>
               {isGoogleCalendarEvent(event) && (
-                <Calendar size={14} className="text-muted" aria-label="מיומן גוגל" />
+                <Calendar size={14} className="text-muted" aria-label={t("common.fromGoogleCalendar")} />
               )}
               {event.category && (
-                <Badge tone={milestone ? "accent" : "default"}>{event.category}</Badge>
+                <Badge tone={milestone ? "accent" : "default"}>
+                  {milestone ? t("common.milestone") : event.category}
+                </Badge>
               )}
             </div>
             <h3 className="mt-1 font-semibold">{displayTitle(event)}</h3>
@@ -45,13 +51,13 @@ export function EventCard({
             )}
             {tags.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {tags.map((t) => (
+                {tags.map((tag) => (
                   <span
-                    key={t.id}
+                    key={tag.id}
                     className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                    style={{ background: `${t.color}22`, color: t.color }}
+                    style={{ background: `${tag.color}22`, color: tag.color }}
                   >
-                    {t.title}
+                    {tag.title}
                   </span>
                 ))}
               </div>
@@ -59,7 +65,7 @@ export function EventCard({
           </div>
           <form action={deleteTimelineEvent}>
             <input type="hidden" name="id" value={event.id} />
-            <button className="rounded-lg p-1.5 text-muted hover:text-warn" title="מחיקה">
+            <button className="rounded-lg p-1.5 text-muted hover:text-warn" title={t("common.delete")}>
               <Trash2 size={16} />
             </button>
           </form>
@@ -76,12 +82,13 @@ export function UnassignedSection({
   events: TimelineEvent[];
   periods: LifePeriod[];
 }) {
+  const { t } = useTranslations();
   const orphan = events.filter((e) => periodsForEvent(e, periods).length === 0);
   if (orphan.length === 0) return null;
 
   return (
     <section className="card p-4">
-      <h2 className="mb-3 font-semibold">ללא תקופה משויכת</h2>
+      <h2 className="mb-3 font-semibold">{t("timeline.unassigned")}</h2>
       <ol className="space-y-3">
         {orphan.map((ev) => (
           <EventCard key={ev.id} event={ev} allPeriods={periods} />

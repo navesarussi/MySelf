@@ -1,4 +1,5 @@
 import type { TimelineEvent } from "@/lib/types";
+import { createTranslator, localeTag, type Locale } from "@/lib/i18n/core";
 
 export type LifePeriod = {
   id: string;
@@ -32,10 +33,12 @@ export function eventsForPeriod(events: TimelineEvent[], period: LifePeriod) {
   return events.filter((e) => eventInPeriod(e.event_date, period));
 }
 
-export function formatPeriodRange(period: LifePeriod) {
-  const start = new Date(period.start_date).toLocaleDateString("he-IL");
+export function formatPeriodRange(period: LifePeriod, locale: Locale = "he") {
+  const tag = localeTag(locale);
+  const t = createTranslator(locale);
+  const start = new Date(period.start_date).toLocaleDateString(tag);
   const end = period.end_date
-    ? new Date(period.end_date).toLocaleDateString("he-IL")
-    : "היום";
+    ? new Date(period.end_date).toLocaleDateString(tag)
+    : t("common.today");
   return `${start} – ${end}`;
 }

@@ -3,18 +3,24 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { AppLogo } from "@/components/app-logo";
+import { useTranslations } from "@/components/locale-provider";
 
 function LoginContent() {
   const params = useSearchParams();
+  const { t } = useTranslations();
   const next = params.get("next") || "/";
   const loginHref = `/api/auth/google/login?next=${encodeURIComponent(next)}`;
 
   return (
     <div className="flex min-h-dvh items-center justify-center px-4">
       <div className="card w-full max-w-sm space-y-4 p-6 text-center">
-        <div className="space-y-1">
-          <h1 className="text-xl font-bold">מרכז השליטה</h1>
-          <p className="text-sm text-muted">אזור אישי — כניסה עם Google</p>
+        <div className="flex flex-col items-center space-y-2">
+          <AppLogo size={72} priority />
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold">{t("nav.brand")}</h1>
+            <p className="text-sm text-muted">{t("login.subtitle")}</p>
+          </div>
         </div>
 
         <a
@@ -22,13 +28,13 @@ function LoginContent() {
           className="flex w-full items-center justify-center gap-2 rounded-lg border bg-bg px-3 py-2.5 text-sm font-medium hover:bg-surface"
         >
           <GoogleIcon />
-          כניסה עם Google
+          {t("common.signInGoogle")}
         </a>
 
         <p className="text-xs text-muted">
-          כולל גישה ליומן Google לסנכרון ציר הזמן.{" "}
+          {t("login.calendarNote")}{" "}
           <Link href="/privacy" className="underline hover:text-ink">
-            מדיניות פרטיות
+            {t("common.privacyPolicy")}
           </Link>
         </p>
       </div>

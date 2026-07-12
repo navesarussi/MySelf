@@ -63,6 +63,15 @@ export type Relationship = {
   created_at: string;
 };
 
+export type SyncStatus = "idle" | "running" | "completed" | "failed";
+
+export type SyncProgress = {
+  phase: "fetching" | "upserting" | "cleanup";
+  total: number;
+  processed: number;
+  imported: number;
+};
+
 export type IntegrationToken = {
   provider: string;
   access_token: string;
@@ -70,6 +79,9 @@ export type IntegrationToken = {
   expires_at: string;
   connected_at: string;
   last_sync_at: string | null;
+  sync_status: SyncStatus;
+  sync_progress: SyncProgress | null;
+  sync_started_at: string | null;
 };
 
 export type ContentEntry = {

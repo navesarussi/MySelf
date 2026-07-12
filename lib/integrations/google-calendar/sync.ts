@@ -1,10 +1,19 @@
 import { getSupabase } from "@/lib/supabase";
 import { GOOGLE_PROVIDER } from "../google-config";
-import { getIntegrationToken, saveIntegrationToken, touchLastSync } from "../tokens";
+import {
+  getIntegrationToken,
+  saveIntegrationToken,
+  setSyncCompleted,
+  setSyncFailed,
+  setSyncRunning,
+  updateSyncProgress,
+} from "../tokens";
 import { refreshAccessToken, fetchAllPrimaryEvents } from "./client";
 import { mapGoogleEvent } from "./map";
 import { buildUpsertPayload, shouldRemoveLocal } from "./merge";
 import type { MappedGoogleEvent } from "./types";
+
+const UPSERT_BATCH = 100;
 
 async function getValidAccessToken() {
   const row = await getIntegrationToken(GOOGLE_PROVIDER);
@@ -21,74 +30,91 @@ async function getValidAccessToken() {
     refresh_token: row.refresh_token,
     expires_at,
     last_sync_at: row.last_sync_at,
+    sync_status: row.sync_status,
+    sync_progress: row.sync_progress,
+    sync_started_at: row.sync_started_at,
   });
   return refreshed.access_token;
 }
 
-async function upsertCalendarEvent(
-  supabase: ReturnType<typeof getSupabase>,
-  payload: MappedGoogleEvent & { synced_at: string; title_override?: string; description_override?: string; hidden_at?: string }
-) {
-  const { data: existing } = await supabase
-    .from("timeline_events")
-    .select("id")
-    .eq("google_event_id", payload.google_event_id)
-    .maybeSingle();
-
-  if (existing?.id) {
-    return supabase.from("timeline_events").update(payload).eq("id", existing.id);
-  }
-  return supabase.from("timeline_events").insert(payload);
-}
-
 export async function syncGoogleCalendar(): Promise<{ imported: number; removed: number }> {
-  const accessToken = await getValidAccessToken();
-  const googleEvents = await fetchAllPrimaryEvents(accessToken);
-  const supabase = getSupabase();
+  await setSyncRunning(GOOGLE_PROVIDER);
 
-  const fetchedIds = new Set<string>();
-  let imported = 0;
-  const errors: string[] = [];
+  try {
+    const accessToken = await getValidAccessToken();
+    const googleEvents = await fetchAllPrimaryEvents(accessToken);
+    const supabase = getSupabase();
 
-  for (const g of googleEvents) {
-    const mapped = mapGoogleEvent(g);
-    if (!mapped) continue;
-    fetchedIds.add(mapped.google_event_id);
+    const mappedEvents = googleEvents
+      .map(mapGoogleEvent)
+      .filter((mapped): mapped is MappedGoogleEvent => mapped !== null);
 
-    const { data: existing } = await supabase
+    const fetchedIds = new Set(mappedEvents.map((event) => event.google_event_id));
+
+    const { data: existingRows } = await supabase
       .from("timeline_events")
-      .select("title_override, description_override, hidden_at")
-      .eq("google_event_id", mapped.google_event_id)
-      .maybeSingle();
+      .select("google_event_id, title_override, description_override, hidden_at")
+      .eq("source", "google_calendar");
 
-    if (existing?.hidden_at) continue;
+    const existingById = new Map(
+      (existingRows ?? []).map((row) => [row.google_event_id, row])
+    );
 
-    const payload = buildUpsertPayload(mapped, existing);
-    const { error } = await upsertCalendarEvent(supabase, payload);
-    if (error) {
-      errors.push(error.message);
-      continue;
+    const toUpsert = mappedEvents
+      .filter((mapped) => !existingById.get(mapped.google_event_id)?.hidden_at)
+      .map((mapped) => buildUpsertPayload(mapped, existingById.get(mapped.google_event_id) ?? null));
+
+    await updateSyncProgress(GOOGLE_PROVIDER, {
+      phase: "upserting",
+      total: toUpsert.length,
+      processed: 0,
+      imported: 0,
+    });
+
+    let imported = 0;
+    for (let i = 0; i < toUpsert.length; i += UPSERT_BATCH) {
+      const chunk = toUpsert.slice(i, i + UPSERT_BATCH);
+      const { error } = await supabase
+        .from("timeline_events")
+        .upsert(chunk, { onConflict: "google_event_id" });
+      if (error) throw new Error(`sync_upsert_failed:${error.message}`);
+
+      imported += chunk.length;
+      await updateSyncProgress(GOOGLE_PROVIDER, {
+        phase: "upserting",
+        total: toUpsert.length,
+        processed: imported,
+        imported,
+      });
     }
-    imported++;
-  }
 
-  if (errors.length > 0 && imported === 0) {
-    throw new Error(`sync_upsert_failed:${errors[0]}`);
-  }
+    await updateSyncProgress(GOOGLE_PROVIDER, {
+      phase: "cleanup",
+      total: toUpsert.length,
+      processed: toUpsert.length,
+      imported,
+    });
 
-  const { data: localGoogle } = await supabase
-    .from("timeline_events")
-    .select("id, source, google_event_id, title_override, description_override, hidden_at")
-    .eq("source", "google_calendar");
+    const { data: localGoogle } = await supabase
+      .from("timeline_events")
+      .select("id, source, google_event_id, title_override, description_override, hidden_at")
+      .eq("source", "google_calendar");
 
-  let removed = 0;
-  for (const row of localGoogle ?? []) {
-    if (shouldRemoveLocal(row, fetchedIds)) {
-      await supabase.from("timeline_events").delete().eq("id", row.id);
-      removed++;
+    let removed = 0;
+    const toDelete = (localGoogle ?? [])
+      .filter((row) => shouldRemoveLocal(row, fetchedIds))
+      .map((row) => row.id);
+
+    for (let i = 0; i < toDelete.length; i += UPSERT_BATCH) {
+      const chunk = toDelete.slice(i, i + UPSERT_BATCH);
+      await supabase.from("timeline_events").delete().in("id", chunk);
+      removed += chunk.length;
     }
-  }
 
-  await touchLastSync(GOOGLE_PROVIDER);
-  return { imported, removed };
+    await setSyncCompleted(GOOGLE_PROVIDER);
+    return { imported, removed };
+  } catch (err) {
+    await setSyncFailed(GOOGLE_PROVIDER);
+    throw err;
+  }
 }

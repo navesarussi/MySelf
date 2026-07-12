@@ -5,6 +5,7 @@ import { Minus, Plus, Maximize2, ChevronLeft, ChevronRight } from "lucide-react"
 import type { TimelineEvent } from "@/lib/types";
 import { displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import type { LifePeriod } from "@/lib/life-periods";
+import { useTranslations } from "@/components/locale-provider";
 import {
   assignEventLanes,
   eventDateTime,
@@ -43,6 +44,7 @@ export function TimelineVisual({
   events: TimelineEvent[];
   periods: LifePeriod[];
 }) {
+  const { t } = useTranslations();
   const global = useMemo(() => timelineBounds(events, periods), [events, periods]);
   const [viewport, setViewport] = useState<TimelineViewport>(() =>
     createViewport(global.min, global.max)
@@ -74,8 +76,8 @@ export function TimelineVisual({
 
   const eventItems = useMemo(() => {
     const visible = events.filter((ev) => {
-      const t = eventDateTime(ev);
-      return t >= viewMin - span * 0.02 && t <= viewMax + span * 0.02;
+      const time = eventDateTime(ev);
+      return time >= viewMin - span * 0.02 && time <= viewMax + span * 0.02;
     });
     const placed = visible
       .sort((a, b) => eventDateTime(a) - eventDateTime(b))
@@ -124,15 +126,13 @@ export function TimelineVisual({
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <p className="text-xs text-muted">
-          גרור לצדדים · Ctrl/⌘+גלגלת לזום · לחץ על אירוע או תקופה לעריכה
-        </p>
+        <p className="text-xs text-muted">{t("timeline.dragHint")}</p>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => setViewport((v) => fitViewport(v))}
             className="rounded-lg border px-2 py-1.5 text-muted hover:text-ink"
-            title="התאם הכל"
+            title={t("timeline.fitAll")}
           >
             <Maximize2 size={15} />
           </button>
@@ -140,7 +140,7 @@ export function TimelineVisual({
             type="button"
             onClick={() => setViewport((v) => panViewport(v, -span * 0.25))}
             className="rounded-lg border p-1.5 text-muted hover:text-ink"
-            title="הזז שמאלה"
+            title={t("timeline.panLeft")}
           >
             <ChevronLeft size={16} />
           </button>
@@ -148,7 +148,7 @@ export function TimelineVisual({
             type="button"
             onClick={() => setZoomAt(1 / 1.35)}
             className="rounded-lg border p-1.5 text-muted hover:text-ink"
-            title="הקטן"
+            title={t("timeline.zoomOut")}
           >
             <Minus size={16} />
           </button>
@@ -170,13 +170,13 @@ export function TimelineVisual({
               );
             }}
             className="w-28 accent-[var(--accent)]"
-            aria-label="רמת זום"
+            aria-label={t("timeline.zoomLevel")}
           />
           <button
             type="button"
             onClick={() => setZoomAt(1.35)}
             className="rounded-lg border p-1.5 text-muted hover:text-ink"
-            title="הגדל"
+            title={t("timeline.zoomIn")}
           >
             <Plus size={16} />
           </button>
@@ -184,7 +184,7 @@ export function TimelineVisual({
             type="button"
             onClick={() => setViewport((v) => panViewport(v, span * 0.25))}
             className="rounded-lg border p-1.5 text-muted hover:text-ink"
-            title="הזז ימינה"
+            title={t("timeline.panRight")}
           >
             <ChevronRight size={16} />
           </button>

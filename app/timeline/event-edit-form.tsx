@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TimelineEvent } from "@/lib/types";
 import { inputClass } from "@/components/ui";
+import { useTranslations } from "@/components/locale-provider";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import { deleteTimelineEvent, updateTimelineEvent } from "./actions";
 
@@ -18,6 +19,7 @@ export function EventEditForm({
   event: TimelineEvent;
   onClose: () => void;
 }) {
+  const { t } = useTranslations();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const fromGoogle = isGoogleCalendarEvent(event);
@@ -40,8 +42,8 @@ export function EventEditForm({
 
   function onDelete(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const label = fromGoogle ? "להסתיר" : "למחוק";
-    if (!confirm(`${label} את האירוע "${title}"?`)) return;
+    const action = fromGoogle ? t("timeline.hide") : t("common.delete");
+    if (!confirm(t("timeline.deleteConfirmEvent", { action, title }))) return;
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
       await deleteTimelineEvent(fd);
@@ -52,32 +54,32 @@ export function EventEditForm({
   return (
     <div className="border-t border-border bg-bg/60 px-4 py-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">עריכת אירוע: {title}</h3>
+        <h3 className="text-sm font-semibold">{t("timeline.editEvent")}: {title}</h3>
         <button type="button" onClick={onClose} className="text-xs text-muted hover:text-ink">
-          סגור
+          {t("common.close")}
         </button>
       </div>
       {fromGoogle && (
-        <p className="mb-3 text-xs text-muted">שינוי מקומי בלבד — לא יתעדכן ביומן גוגל</p>
+        <p className="mb-3 text-xs text-muted">{t("timeline.localOnlyNote")}</p>
       )}
       <form onSubmit={onUpdate} className="grid gap-3 sm:grid-cols-2">
         <input type="hidden" name="id" value={event.id} />
         <input type="text" name="title" defaultValue={title} required className={`${inputClass} sm:col-span-2`} />
         <label className="text-xs text-muted">
-          תאריך
+          {t("timeline.date")}
           <input type="date" name="event_date" defaultValue={event.event_date} required className={`${inputClass} mt-1`} />
         </label>
         <label className="text-xs text-muted">
-          שעה (אופציונלי)
+          {t("timeline.time")}
           <input type="time" name="event_time" defaultValue={timeValue(event)} className={`${inputClass} mt-1`} />
         </label>
         {!fromGoogle && (
-          <input type="text" name="category" defaultValue={event.category || ""} placeholder="קטגוריה" className={inputClass} />
+          <input type="text" name="category" defaultValue={event.category || ""} placeholder={t("timeline.categoryPlaceholder")} className={inputClass} />
         )}
         <textarea
           name="description"
           defaultValue={description}
-          placeholder="תיאור"
+          placeholder={t("timeline.description")}
           rows={2}
           className={`${inputClass} sm:col-span-2`}
         />
@@ -87,14 +89,14 @@ export function EventEditForm({
             disabled={pending}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg hover:opacity-90 disabled:opacity-50"
           >
-            {pending ? "שומר…" : "שמירה"}
+            {pending ? t("common.saving") : t("common.save")}
           </button>
         </div>
       </form>
       <form onSubmit={onDelete} className="mt-3">
         <input type="hidden" name="id" value={event.id} />
         <button type="submit" disabled={pending} className="text-sm text-warn hover:underline disabled:opacity-50">
-          {fromGoogle ? "הסתרת אירוע" : "מחיקת אירוע"}
+          {fromGoogle ? t("timeline.hideEvent") : t("timeline.deleteEvent")}
         </button>
       </form>
     </div>

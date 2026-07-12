@@ -11,17 +11,21 @@ import {
   isPeriodActiveToday,
 } from "@/lib/life-periods";
 import { Badge, EmptyState } from "@/components/ui";
+import { useTranslations } from "@/components/locale-provider";
 import { EventCard, UnassignedSection } from "./event-card";
+
+function VisualLoading() {
+  const { t } = useTranslations();
+  return (
+    <div className="card flex h-48 items-center justify-center text-sm text-muted">
+      {t("timeline.loadingVisual")}
+    </div>
+  );
+}
 
 const TimelineVisual = dynamic(
   () => import("./timeline-visual").then((m) => m.TimelineVisual),
-  {
-    loading: () => (
-      <div className="card flex h-48 items-center justify-center text-sm text-muted">
-        טוען ציר ויזואלי…
-      </div>
-    ),
-  }
+  { loading: () => <VisualLoading /> }
 );
 
 type Mode = "chrono" | "visual" | "periods";
@@ -33,6 +37,7 @@ export function TimelineBoard({
   events: TimelineEvent[];
   periods: LifePeriod[];
 }) {
+  const { t } = useTranslations();
   const [mode, setMode] = useState<Mode>("visual");
   const chrono = useMemo(
     () => [...events].sort((a, b) => b.event_date.localeCompare(a.event_date)),
@@ -40,19 +45,19 @@ export function TimelineBoard({
   );
 
   if (events.length === 0 && periods.length === 0) {
-    return <EmptyState text="אין עדיין אירועים או תקופות בציר הזמן." />;
+    return <EmptyState text={t("timeline.empty")} />;
   }
+
+  const modeLabels: Record<Mode, string> = {
+    visual: t("timeline.visualAxis"),
+    chrono: t("timeline.chronological"),
+    periods: t("timeline.byPeriods"),
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["visual", "ציר ויזואלי"],
-            ["chrono", "כרונולוגי"],
-            ["periods", "לפי תקופות"],
-          ] as const
-        ).map(([id, label]) => (
+        {(["visual", "chrono", "periods"] as const).map((id) => (
           <button
             key={id}
             type="button"
@@ -61,7 +66,7 @@ export function TimelineBoard({
               mode === id ? "bg-accent text-bg font-medium" : "bg-border/50 text-muted hover:text-ink"
             }`}
           >
-            {label}
+            {modeLabels[id]}
           </button>
         ))}
       </div>
@@ -88,6 +93,7 @@ function PeriodsView({
   events: TimelineEvent[];
   periods: LifePeriod[];
 }) {
+  const { t } = useTranslations();
   const activeIds = useMemo(
     () => new Set(periods.filter((p) => isPeriodActiveToday(p)).map((p) => p.id)),
     [periods]
@@ -109,12 +115,12 @@ function PeriodsView({
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => setOpen(new Set(periods.map((p) => p.id)))} className="rounded-full bg-border/50 px-3 py-1 text-xs text-muted hover:text-ink">
-          פתח הכל
+          {t("timeline.expandAll")}
         </button>
         <button type="button" onClick={() => setOpen(new Set())} className="rounded-full bg-border/50 px-3 py-1 text-xs text-muted hover:text-ink">
-          סגור הכל
+          {t("timeline.collapseAll")}
         </button>
-        <span className="self-center text-xs text-muted">תקופות יכולות לחפוף</span>
+        <span className="self-center text-xs text-muted">{t("timeline.periodsOverlap")}</span>
       </div>
       <div className="space-y-3">
         {roots.map((period) => (
@@ -152,6 +158,7 @@ function PeriodBlock({
   events: TimelineEvent[];
   allPeriods: LifePeriod[];
 }) {
+  const { t, locale } = useTranslations();
   const isOpen = open.has(period.id);
   const kids = childrenOf(period.id);
   const periodEvents = eventsForPeriod(events, period);
@@ -165,9 +172,11 @@ function PeriodBlock({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-semibold">{period.title}</h2>
-              {active && <Badge tone="good">פעילה</Badge>}
+              {active && <Badge tone="good">{t("common.active")}</Badge>}
             </div>
-            <p className="text-xs text-muted">{formatPeriodRange(period)} · {periodEvents.length} אירועים</p>
+            <p className="text-xs text-muted">
+              {formatPeriodRange(period, locale)} · {t("timeline.eventsCount", { count: periodEvents.length })}
+            </p>
           </div>
         </div>
         {isOpen ? <ChevronDown size={18} className="text-muted" /> : <ChevronLeft size={18} className="text-muted" />}
@@ -180,7 +189,7 @@ function PeriodBlock({
             </div>
           ))}
           {periodEvents.length === 0 ? (
-            <p className="text-sm text-muted">אין אירועים בתקופה הזו עדיין.</p>
+            <p className="text-sm text-muted">{t("timeline.noEventsInPeriod")}</p>
           ) : (
             <ol className="relative space-y-4 border-e-2 border-border pe-5">
               {periodEvents.map((ev) => (

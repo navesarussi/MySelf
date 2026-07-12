@@ -1,5 +1,9 @@
+"use client";
+
 import { differenceInCalendarDays } from "date-fns";
 import { Badge, SubmitButton, EmptyState, inputClass } from "@/components/ui";
+import { AddFormToggle } from "@/components/add-form-toggle";
+import { useTranslations } from "@/components/locale-provider";
 import type { Relationship } from "@/lib/types";
 import {
   addRelationship,
@@ -15,20 +19,29 @@ export function RelationshipForm({
   projects,
   fixedProjectId,
   defaultProjectId,
+  defaultOpen = false,
 }: {
   projects: { id: string; name: string }[];
   fixedProjectId?: string;
   defaultProjectId?: string;
+  defaultOpen?: boolean;
 }) {
+  const { t } = useTranslations();
   const selectedId = fixedProjectId ?? defaultProjectId ?? projects[0]?.id;
 
   return (
-    <form action={addRelationship} className="card mb-8 grid gap-3 p-4 sm:grid-cols-2">
-      <input type="text" name="name" placeholder="שם" required className={inputClass} />
+    <AddFormToggle
+      label={t("relationships.addContact")}
+      defaultOpen={defaultOpen}
+      className="mb-8"
+      id="add-form-contact"
+    >
+      <form action={addRelationship} className="card grid gap-3 p-4 sm:grid-cols-2">
+      <input type="text" name="name" placeholder={t("relationships.namePlaceholder")} required className={inputClass} />
       <input
         type="text"
         name="group_name"
-        placeholder="קבוצה (משפחה / יישוב / תיכון / מכינה / צבא / זוגיות)"
+        placeholder={t("relationships.groupPlaceholder")}
         className={inputClass}
       />
       {fixedProjectId ? (
@@ -45,15 +58,16 @@ export function RelationshipForm({
       <input
         type="number"
         name="reminder_days"
-        placeholder="תזכורת כל כמה ימים (אופציונלי)"
+        placeholder={t("relationships.reminderPlaceholder")}
         className={inputClass}
       />
-      <input type="text" name="phone" placeholder="טלפון (לוואטסאפ)" className={inputClass} />
-      <input type="text" name="notes" placeholder="הערה" className={inputClass} />
+      <input type="text" name="phone" placeholder={t("relationships.phonePlaceholder")} className={inputClass} />
+      <input type="text" name="notes" placeholder={t("relationships.notePlaceholder")} className={inputClass} />
       <div className="sm:col-span-2">
-        <SubmitButton>הוספת איש קשר</SubmitButton>
+        <SubmitButton>{t("relationships.addContact")}</SubmitButton>
       </div>
     </form>
+    </AddFormToggle>
   );
 }
 
@@ -66,6 +80,7 @@ export function RelationshipCard({
   showProjectBadge?: boolean;
   today?: Date;
 }) {
+  const { t } = useTranslations();
   const daysSince = r.last_contact_date
     ? differenceInCalendarDays(today, new Date(r.last_contact_date))
     : null;
@@ -79,7 +94,7 @@ export function RelationshipCard({
         <span className="font-medium">{r.name}</span>
         <form action={deleteRelationship}>
           <input type="hidden" name="id" value={r.id} />
-          <button className="p-1 text-muted hover:text-warn" title="מחיקה">
+          <button className="p-1 text-muted hover:text-warn" title={t("common.delete")}>
             <Trash2 size={14} />
           </button>
         </form>
@@ -88,9 +103,11 @@ export function RelationshipCard({
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
         {showProjectBadge && r.project_name && <Badge>{r.project_name}</Badge>}
         {neverContacted ? (
-          <Badge tone="warn">אין עדיין תיעוד קשר</Badge>
+          <Badge tone="warn">{t("relationships.noContactLogged")}</Badge>
         ) : (
-          <Badge tone={overdue ? "warn" : "default"}>קשר אחרון לפני {daysSince} ימים</Badge>
+          <Badge tone={overdue ? "warn" : "default"}>
+            {t("relationships.lastContactDays", { days: daysSince })}
+          </Badge>
         )}
       </div>
 
@@ -100,7 +117,7 @@ export function RelationshipCard({
         <form action={markContactedToday}>
           <input type="hidden" name="id" value={r.id} />
           <button className="flex items-center gap-1 rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-accent/25">
-            <MessageCircle size={13} /> יצרתי קשר היום
+            <MessageCircle size={13} /> {t("relationships.contactedToday")}
           </button>
         </form>
         {wa && (
@@ -110,7 +127,7 @@ export function RelationshipCard({
             rel="noopener noreferrer"
             className="flex items-center gap-1 rounded-lg bg-good/15 px-2.5 py-1.5 text-xs font-medium text-good hover:bg-good/25"
           >
-            <MessageCircle size={13} /> פתיחת וואטסאפ
+            <MessageCircle size={13} /> {t("common.openWhatsapp")}
           </a>
         )}
       </div>
@@ -125,8 +142,10 @@ export function RelationshipList({
   relationships: Relationship[];
   showProjectBadge?: boolean;
 }) {
+  const { t } = useTranslations();
+
   if (relationships.length === 0) {
-    return <EmptyState text="אין עדיין אנשי קשר. הוסף את הראשון למעלה." />;
+    return <EmptyState text={t("relationships.empty")} />;
   }
 
   const today = new Date();

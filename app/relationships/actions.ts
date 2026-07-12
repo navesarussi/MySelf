@@ -23,7 +23,7 @@ export async function addRelationship(formData: FormData) {
   const project_id = String(formData.get("project_id") || "").trim();
   if (!name) return;
   if (!project_id) {
-    await setFlash("יש לבחור פרויקט", "error");
+    await setFlash("flash.projectRequired", "error");
     return;
   }
 
@@ -36,7 +36,7 @@ export async function addRelationship(formData: FormData) {
     phone,
     project_id,
   });
-  await setFlash("הקשר נוסף");
+  await setFlash("flash.relationshipAdded");
   revalidateRelationshipPaths();
 }
 
@@ -45,7 +45,7 @@ export async function markContactedToday(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("relationships").update({ last_contact_date: todayISO() }).eq("id", id);
-  await setFlash("עודכן תאריך קשר");
+  await setFlash("flash.contactUpdated");
   revalidateRelationshipPaths();
 }
 
@@ -55,7 +55,7 @@ export async function updateRelationshipNotes(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("relationships").update({ notes: notes || null }).eq("id", id);
-  await setFlash("ההערות עודכנו");
+  await setFlash("flash.notesUpdated");
   revalidateRelationshipPaths();
 }
 
@@ -64,6 +64,6 @@ export async function deleteRelationship(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("relationships").delete().eq("id", id);
-  await setFlash("הקשר נמחק");
+  await setFlash("flash.relationshipDeleted");
   revalidateRelationshipPaths();
 }

@@ -12,7 +12,7 @@ export async function addTimelineEvent(formData: FormData) {
   const category = String(formData.get("category") || "").trim();
 
   if (!event_date || !title) {
-    await setFlash("חסרים תאריך או כותרת", "error");
+    await setFlash("flash.eventFieldsRequired", "error");
     return;
   }
 
@@ -26,7 +26,7 @@ export async function addTimelineEvent(formData: FormData) {
     source: "manual",
   });
 
-  await setFlash(error ? "שגיאה בהוספת אירוע" : "האירוע נוסף", error ? "error" : "success");
+  await setFlash(error ? "flash.eventAddError" : "flash.eventAdded", error ? "error" : "success");
   revalidatePath("/timeline");
   revalidatePath("/");
 }
@@ -40,14 +40,14 @@ export async function updateTimelineEvent(formData: FormData) {
   const category = String(formData.get("category") || "").trim();
 
   if (!id || !event_date || !title) {
-    await setFlash("חסרים שדות חובה", "error");
+    await setFlash("flash.requiredFields", "error");
     return;
   }
 
   const supabase = getSupabase();
   const { data: existing } = await supabase.from("timeline_events").select("*").eq("id", id).maybeSingle();
   if (!existing) {
-    await setFlash("אירוע לא נמצא", "error");
+    await setFlash("flash.eventNotFound", "error");
     return;
   }
 
@@ -62,7 +62,7 @@ export async function updateTimelineEvent(formData: FormData) {
           (description || null) === (existing.description || null) ? null : description || null,
       })
       .eq("id", id);
-    await setFlash(error ? "שגיאה בעדכון אירוע" : "האירוע עודכן", error ? "error" : "success");
+    await setFlash(error ? "flash.eventUpdateError" : "flash.eventUpdated", error ? "error" : "success");
   } else {
     const { error } = await supabase
       .from("timeline_events")
@@ -74,7 +74,7 @@ export async function updateTimelineEvent(formData: FormData) {
         category: category || null,
       })
       .eq("id", id);
-    await setFlash(error ? "שגיאה בעדכון אירוע" : "האירוע עודכן", error ? "error" : "success");
+    await setFlash(error ? "flash.eventUpdateError" : "flash.eventUpdated", error ? "error" : "success");
   }
 
   revalidatePath("/timeline");
@@ -92,10 +92,10 @@ export async function deleteTimelineEvent(formData: FormData) {
       .from("timeline_events")
       .update({ hidden_at: new Date().toISOString() })
       .eq("id", id);
-    await setFlash(error ? "שגיאה בהסתרה" : "האירוע הוסתר מהציר", error ? "error" : "success");
+    await setFlash(error ? "flash.eventHideError" : "flash.eventHidden", error ? "error" : "success");
   } else {
     const { error } = await supabase.from("timeline_events").delete().eq("id", id);
-    await setFlash(error ? "שגיאה במחיקה" : "האירוע נמחק", error ? "error" : "success");
+    await setFlash(error ? "flash.eventDeleteError" : "flash.eventDeleted", error ? "error" : "success");
   }
 
   revalidatePath("/timeline");
@@ -108,7 +108,7 @@ export async function addLifePeriod(formData: FormData) {
   const end_date = String(formData.get("end_date") || "") || null;
   const color = String(formData.get("color") || "#7dd3c0");
   if (!title || !start_date) {
-    await setFlash("חסרים שם או תאריך התחלה לתקופה", "error");
+    await setFlash("flash.periodFieldsRequired", "error");
     return;
   }
 
@@ -122,7 +122,7 @@ export async function addLifePeriod(formData: FormData) {
     sort_order: 100,
   });
 
-  await setFlash(error ? "שגיאה בהוספת תקופה" : "התקופה נוספה", error ? "error" : "success");
+  await setFlash(error ? "flash.periodAddError" : "flash.periodAdded", error ? "error" : "success");
   revalidatePath("/timeline");
 }
 
@@ -135,11 +135,11 @@ export async function updateLifePeriod(formData: FormData) {
   const kind = String(formData.get("kind") || "period");
 
   if (!id || !title || !start_date) {
-    await setFlash("חסרים שדות חובה לעריכת תקופה", "error");
+    await setFlash("flash.periodEditRequired", "error");
     return;
   }
   if (end_date && end_date < start_date) {
-    await setFlash("תאריך הסיום חייב להיות אחרי ההתחלה", "error");
+    await setFlash("flash.periodEndInvalid", "error");
     return;
   }
 
@@ -149,7 +149,7 @@ export async function updateLifePeriod(formData: FormData) {
     .update({ title, start_date, end_date, color, kind })
     .eq("id", id);
 
-  await setFlash(error ? "שגיאה בעדכון תקופה" : "התקופה עודכנה", error ? "error" : "success");
+  await setFlash(error ? "flash.periodUpdateError" : "flash.periodUpdated", error ? "error" : "success");
   revalidatePath("/timeline");
 }
 
@@ -159,6 +159,6 @@ export async function deleteLifePeriod(formData: FormData) {
 
   const supabase = getSupabase();
   const { error } = await supabase.from("life_periods").delete().eq("id", id);
-  await setFlash(error ? "שגיאה במחיקת תקופה" : "התקופה נמחקה", error ? "error" : "success");
+  await setFlash(error ? "flash.periodDeleteError" : "flash.periodDeleted", error ? "error" : "success");
   revalidatePath("/timeline");
 }

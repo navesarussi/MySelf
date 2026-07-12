@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui";
 import { effectiveStreak } from "@/lib/habit-stats";
 import { rankGoalsForHome, horizonLabel, achievabilityScore } from "@/lib/goals-rank";
 import { formatEventWhen } from "@/lib/timeline-layout";
+import { formatLocaleDate, getTranslations } from "@/lib/i18n";
 import type { Habit, Goal, Commitment, Relationship, TimelineEvent, Task } from "@/lib/types";
 import {
   Compass,
@@ -26,6 +27,7 @@ import { whatsappUrl } from "@/lib/integrations/phone";
 export const revalidate = 30;
 
 export default async function HomePage() {
+  const { t, locale } = await getTranslations();
   const configured = dbConfigured();
 
   let habits: Habit[] = [];
@@ -62,8 +64,8 @@ export default async function HomePage() {
     recentEvents = (eventsRes.data as TimelineEvent[]) || [];
 
     const tasks = (tasksRes.data as Pick<Task, "status">[]) || [];
-    openTasksCount = tasks.filter((t) => t.status === "open").length;
-    inProgressTasksCount = tasks.filter((t) => t.status === "in_progress").length;
+    openTasksCount = tasks.filter((task) => task.status === "open").length;
+    inProgressTasksCount = tasks.filter((task) => task.status === "in_progress").length;
 
     const today = new Date();
     overdueRelationships = ((relRes.data as Relationship[]) || []).filter((r) => {
@@ -79,7 +81,7 @@ export default async function HomePage() {
   const activeStreaks = habits.filter((h) => effectiveStreak(h) > 0).length;
   const checkedToday = habits.filter((h) => h.last_checked_on === new Date().toISOString().slice(0, 10)).length;
   const todayRate = habits.length ? Math.round((checkedToday / habits.length) * 100) : 0;
-  const featuredGoals = rankGoalsForHome(activeGoals, 5);
+  const featuredGoals = rankGoalsForHome(activeGoals, 5, locale);
   const activeGoalsCount = activeGoals.length;
 
   return (
@@ -87,15 +89,10 @@ export default async function HomePage() {
       <div className="card mb-8 p-6">
         <div className="flex items-center gap-2 text-accent">
           <Compass size={18} />
-          <span className="text-sm font-medium">המצפן שלי</span>
+          <span className="text-sm font-medium">{t("home.compass")}</span>
         </div>
-        <p className="mt-3 text-lg font-medium leading-relaxed">
-          &quot;לשאוף ליותר, להסתפק בפחות, ולחיות עוד יום על מי מנוחות.&quot;
-        </p>
-        <p className="mt-2 text-sm text-muted leading-relaxed">
-          ללמוד להרים את הראש בלי להרים את האף, להילחם כל יום בגבולות של עצמי ולחלום להציב את
-          הרף. שאיפה מרכזית: לעשות הרבה כדי לתת הרבה — בכסף, בידע ובאהבה.
-        </p>
+        <p className="mt-3 text-lg font-medium leading-relaxed">&quot;{t("home.quote")}&quot;</p>
+        <p className="mt-2 text-sm text-muted leading-relaxed">{t("home.mission")}</p>
       </div>
 
       {!configured && (
@@ -109,35 +106,35 @@ export default async function HomePage() {
           <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="card p-4">
               <div className="flex items-center gap-2 text-sm text-muted">
-                <Flame size={15} className="text-accent2" /> הרגלים פעילים
+                <Flame size={15} className="text-accent2" /> {t("home.activeHabits")}
               </div>
               <p className="mt-2 text-3xl font-bold">{habits.length}</p>
               <p className="mt-1 text-xs text-muted">
-                {checkedToday}/{habits.length} סומנו היום · {activeStreaks} ברצף
+                {t("home.checkedToday", { checked: checkedToday, total: habits.length, streaks: activeStreaks })}
               </p>
             </div>
             <div className="card p-4">
               <div className="flex items-center gap-2 text-sm text-muted">
-                <Percent size={15} className="text-good" /> ביצוע היום
+                <Percent size={15} className="text-good" /> {t("home.todayPerformance")}
               </div>
               <p className="mt-2 text-3xl font-bold">{todayRate}%</p>
               <p className="mt-1 text-xs text-muted">
-                {checkedToday} מתוך {habits.length} הרגלים סומנו
+                {t("home.habitsChecked", { checked: checkedToday, total: habits.length })}
               </p>
             </div>
             <div className="card p-4">
               <div className="flex items-center gap-2 text-sm text-muted">
-                <Target size={15} className="text-accent" /> יעדים פעילים
+                <Target size={15} className="text-accent" /> {t("home.activeGoals")}
               </div>
               <p className="mt-2 text-3xl font-bold">{activeGoalsCount}</p>
-              <p className="mt-1 text-xs text-muted">{doneGoalsCount} הושגו</p>
+              <p className="mt-1 text-xs text-muted">{t("home.goalsAchieved", { count: doneGoalsCount })}</p>
             </div>
             <div className="card p-4">
               <div className="flex items-center gap-2 text-sm text-muted">
-                <CheckSquare size={15} className="text-accent" /> משימות פתוחות
+                <CheckSquare size={15} className="text-accent" /> {t("home.openTasks")}
               </div>
               <p className="mt-2 text-3xl font-bold">{openTasksCount + inProgressTasksCount}</p>
-              <p className="mt-1 text-xs text-muted">{inProgressTasksCount} בתהליך</p>
+              <p className="mt-1 text-xs text-muted">{t("home.tasksInProgress", { count: inProgressTasksCount })}</p>
             </div>
           </div>
 
@@ -145,14 +142,14 @@ export default async function HomePage() {
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
-                  <Flame size={16} className="text-accent2" /> מעקב הרגלים
+                  <Flame size={16} className="text-accent2" /> {t("home.habitTracking")}
                 </h3>
                 <Link href="/habits" className="text-xs text-accent hover:underline">
-                  לכל ההרגלים ←
+                  {t("home.allHabits")}
                 </Link>
               </div>
               {habits.length === 0 ? (
-                <p className="text-sm text-muted">אין עדיין הרגלים במעקב.</p>
+                <p className="text-sm text-muted">{t("home.noHabits")}</p>
               ) : (
                 <ul className="space-y-3 text-sm">
                   {habits.map((h) => {
@@ -161,17 +158,19 @@ export default async function HomePage() {
                       <li key={h.id} className="rounded-lg bg-border/20 px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">{h.name}</span>
-                          <Badge tone={streak > 0 ? "good" : "default"}>{streak} ברצף</Badge>
+                          <Badge tone={streak > 0 ? "good" : "default"}>
+                            {streak} {t("common.streak")}
+                          </Badge>
                         </div>
                         <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-muted">
                           <span className="flex items-center gap-1">
-                            <TrendingUp size={11} /> שיא {h.best_streak}
+                            <TrendingUp size={11} /> {t("common.peak")} {h.best_streak}
                           </span>
                           <span className="flex items-center gap-1">
-                            <ThumbsUp size={11} /> {h.total_success_days ?? 0} חיוביים
+                            <ThumbsUp size={11} /> {h.total_success_days ?? 0} {t("common.positives")}
                           </span>
                           <span className="flex items-center gap-1">
-                            <AlertTriangle size={11} /> {h.failure_count ?? 0} נפילות
+                            <AlertTriangle size={11} /> {h.failure_count ?? 0} {t("common.failures")}
                           </span>
                         </div>
                       </li>
@@ -180,38 +179,38 @@ export default async function HomePage() {
                 </ul>
               )}
               {totalFailures > 0 && (
-                <p className="mt-3 text-xs text-muted">סה״כ נפילות במערכת: {totalFailures}</p>
+                <p className="mt-3 text-xs text-muted">
+                  {t("common.totalFailures")}: {totalFailures}
+                </p>
               )}
             </div>
 
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
-                  <Target size={16} className="text-accent" /> מטרות קרובות וברות השגה
+                  <Target size={16} className="text-accent" /> {t("home.nearbyGoals")}
                 </h3>
                 <Link href="/goals" className="text-xs text-accent hover:underline">
-                  לרשימה המלאה ←
+                  {t("home.fullList")}
                 </Link>
               </div>
               {featuredGoals.length === 0 ? (
-                <p className="text-sm text-muted">אין עדיין יעדים פעילים.</p>
+                <p className="text-sm text-muted">{t("home.noActiveGoals")}</p>
               ) : (
                 <ul className="space-y-2 text-sm">
                   {featuredGoals.map((g) => (
                     <li key={g.id} className="rounded-lg bg-border/20 px-3 py-2">
                       <div className="flex items-start justify-between gap-2">
                         <span className="font-medium">{g.title}</span>
-                        {achievabilityScore(g) >= 3 && (
-                          <Badge tone="good">מוכן לפעולה</Badge>
-                        )}
+                        {achievabilityScore(g) >= 3 && <Badge tone="good">{t("common.readyToAct")}</Badge>}
                       </div>
                       <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted">
                         {g.category && <span>{g.category}</span>}
-                        {horizonLabel(g) && <span>· {horizonLabel(g)}</span>}
+                        {horizonLabel(g, locale) && <span>· {horizonLabel(g, locale)}</span>}
                       </div>
                       {g.first_step && (
                         <p className="mt-1 text-xs text-muted">
-                          צעד ראשון: {g.first_step}
+                          {t("common.firstStep")}: {g.first_step}
                         </p>
                       )}
                     </li>
@@ -220,13 +219,13 @@ export default async function HomePage() {
               )}
               {pendingCommitments.length > 0 && (
                 <div className="mt-4 border-t border-border pt-3">
-                  <p className="mb-2 text-xs font-medium text-muted">התחייבויות ממתינות</p>
+                  <p className="mb-2 text-xs font-medium text-muted">{t("home.pendingCommitments")}</p>
                   <ul className="space-y-1 text-sm">
                     {pendingCommitments.map((c) => (
                       <li key={c.id} className="flex justify-between gap-2">
                         <span className="truncate">{c.text}</span>
                         <span className="shrink-0 text-muted">
-                          {new Date(c.commitment_date).toLocaleDateString("he-IL")}
+                          {formatLocaleDate(locale, c.commitment_date)}
                         </span>
                       </li>
                     ))}
@@ -238,14 +237,14 @@ export default async function HomePage() {
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
-                  <AlertCircle size={16} className="text-warn" /> קשרים שמחכים לתשומת לב
+                  <AlertCircle size={16} className="text-warn" /> {t("home.relationshipsWaiting")}
                 </h3>
                 <Link href="/relationships" className="text-xs text-accent hover:underline">
-                  לניהול קשרים ←
+                  {t("home.manageRelationships")}
                 </Link>
               </div>
               {overdueRelationships.length === 0 ? (
-                <p className="text-sm text-muted">אין כרגע קשרים באיחור.</p>
+                <p className="text-sm text-muted">{t("home.noOverdueRelationships")}</p>
               ) : (
                 <ul className="space-y-1 text-sm">
                   {overdueRelationships.map((r) => {
@@ -260,7 +259,7 @@ export default async function HomePage() {
                             rel="noopener noreferrer"
                             className="flex shrink-0 items-center gap-1 text-xs text-good hover:underline"
                           >
-                            <MessageCircle size={12} /> וואטסאפ
+                            <MessageCircle size={12} /> {t("common.whatsapp")}
                           </a>
                         )}
                       </li>
@@ -273,20 +272,20 @@ export default async function HomePage() {
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
-                  <Clock size={16} className="text-accent" /> אירועים אחרונים
+                  <Clock size={16} className="text-accent" /> {t("home.recentEvents")}
                 </h3>
                 <Link href="/timeline" className="text-xs text-accent hover:underline">
-                  לציר הזמן ←
+                  {t("home.toTimeline")}
                 </Link>
               </div>
               {recentEvents.length === 0 ? (
-                <p className="text-sm text-muted">אין עדיין אירועים.</p>
+                <p className="text-sm text-muted">{t("home.noEvents")}</p>
               ) : (
                 <ul className="space-y-1 text-sm">
                   {recentEvents.map((e) => (
                     <li key={e.id} className="flex justify-between gap-2">
                       <span className="truncate">{e.title}</span>
-                      <span className="shrink-0 text-muted">{formatEventWhen(e)}</span>
+                      <span className="shrink-0 text-muted">{formatEventWhen(e, locale)}</span>
                     </li>
                   ))}
                 </ul>

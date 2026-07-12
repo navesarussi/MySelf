@@ -14,7 +14,7 @@ export async function addHabit(formData: FormData) {
 
   const supabase = getSupabase();
   await supabase.from("habits").insert({ name, kind, target_note: target_note || null });
-  await setFlash("ההרגל נוסף");
+  await setFlash("flash.habitAdded");
   revalidatePath("/habits");
 }
 
@@ -41,7 +41,7 @@ export async function checkInHabit(formData: FormData) {
     })
     .eq("id", id);
 
-  await setFlash("צ׳ק־אין נרשם");
+  await setFlash("flash.checkInRecorded");
   revalidatePath("/habits");
   revalidatePath("/");
 }
@@ -63,7 +63,7 @@ export async function resetHabit(formData: FormData) {
     })
     .eq("id", id);
 
-  await setFlash("הרצף אופס");
+  await setFlash("flash.streakReset");
   revalidatePath("/habits");
   revalidatePath("/");
 }
@@ -98,7 +98,7 @@ export async function updateHabit(formData: FormData) {
     })
     .eq("id", id);
 
-  await setFlash("ההרגל עודכן");
+  await setFlash("flash.habitUpdated");
   revalidatePath("/habits");
   revalidatePath("/");
 }
@@ -108,7 +108,7 @@ export async function deleteHabit(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("habits").delete().eq("id", id);
-  await setFlash("ההרגל נמחק");
+  await setFlash("flash.habitDeleted");
   revalidatePath("/habits");
   revalidatePath("/");
 }

@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import type { LifePeriod } from "@/lib/life-periods";
 import { formatPeriodRange } from "@/lib/life-periods";
+import { formatLocaleDate } from "@/lib/i18n/core";
+import { useTranslations } from "@/components/locale-provider";
 import {
   assignPeriodLanes,
-  formatHeDate,
-  todayIso,
   toTime,
+  todayIso,
   xFor,
   timelineTicks,
 } from "@/lib/timeline-layout";
@@ -44,6 +45,7 @@ export function PeriodTracks({
   editingId: string | null;
   onEdit: (period: LifePeriod) => void;
 }) {
+  const { t, locale } = useTranslations();
   const [hoverId, setHoverId] = useState<string | null>(null);
   const hovered = periods.find((p) => p.id === hoverId) || null;
   const laneCount = Math.max(...[...lanes.values(), 0]) + 1;
@@ -72,7 +74,7 @@ export function PeriodTracks({
             )}
             <button
               type="button"
-              aria-label={`עריכת ${p.title}`}
+              aria-label={t("timeline.editPeriodAria", { title: p.title })}
               onMouseEnter={() => setHoverId(p.id)}
               onMouseLeave={() => setHoverId(null)}
               onClick={() => onEdit(p)}
@@ -104,8 +106,8 @@ export function PeriodTracks({
           }}
         >
           <p className="font-semibold text-ink">{hovered.title}</p>
-          <p className="mt-0.5 text-muted">{formatPeriodRange(hovered)}</p>
-          <p className="mt-1 text-[10px] text-muted">לחץ לעריכה</p>
+          <p className="mt-0.5 text-muted">{formatPeriodRange(hovered, locale)}</p>
+          <p className="mt-1 text-[10px] text-muted">{t("timeline.clickToEdit")}</p>
         </div>
       )}
     </div>
@@ -157,17 +159,24 @@ export function PeriodConnectors({
 
 type AxisMark = { x: number; date: string; key: string };
 
-function collectAxisMarks(periods: LifePeriod[], min: number, max: number, plotW: number): AxisMark[] {
+function collectAxisMarks(
+  periods: LifePeriod[],
+  min: number,
+  max: number,
+  plotW: number,
+  locale: import("@/lib/i18n").Locale,
+  todayLabel: string
+): AxisMark[] {
   const raw: AxisMark[] = [];
   for (const p of periods) {
     raw.push({
       x: xFor(toTime(p.start_date), min, max, plotW),
-      date: formatHeDate(p.start_date),
+      date: formatLocaleDate(locale, p.start_date),
       key: `${p.id}-s`,
     });
     raw.push({
       x: xFor(toTime(p.end_date || todayIso()), min, max, plotW),
-      date: p.end_date ? formatHeDate(p.end_date) : "היום",
+      date: p.end_date ? formatLocaleDate(locale, p.end_date) : todayLabel,
       key: `${p.id}-e`,
     });
   }
@@ -193,33 +202,37 @@ export function TimelineAxis({
   plotW: number;
   showPeriodMarks?: boolean;
 }) {
+  const { t, locale } = useTranslations();
   const ticks = useMemo(() => timelineTicks(min, max, plotW), [min, max, plotW]);
-  const marks = useMemo(() => collectAxisMarks(periods, min, max, plotW), [periods, min, max, plotW]);
+  const marks = useMemo(
+    () => collectAxisMarks(periods, min, max, plotW, locale, t("common.today")),
+    [periods, min, max, plotW, locale, t]
+  );
   const todayX = xFor(Date.now(), min, max, plotW);
 
   return (
     <div className="relative pb-6">
       <div className="pointer-events-none absolute bottom-full left-0 right-0 mb-1 h-5">
-        {ticks.map((t) => (
+        {ticks.map((tick) => (
           <div
-            key={t.key}
+            key={tick.key}
             className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
-            style={{ left: t.x }}
+            style={{ left: tick.x }}
           >
-            <span className={`text-[10px] font-medium ${t.major ? "text-ink" : "text-muted"}`}>
-              {t.label}
+            <span className={`text-[10px] font-medium ${tick.major ? "text-ink" : "text-muted"}`}>
+              {tick.label}
             </span>
-            <span className={`mt-0.5 w-px bg-border ${t.major ? "h-2.5" : "h-1.5"}`} />
+            <span className={`mt-0.5 w-px bg-border ${tick.major ? "h-2.5" : "h-1.5"}`} />
           </div>
         ))}
       </div>
 
       <div className="relative h-1 rounded-full bg-border">
-        {ticks.map((t) => (
+        {ticks.map((tick) => (
           <span
-            key={`g-${t.key}`}
-            className={`absolute bottom-0 top-0 w-px ${t.major ? "bg-border" : "bg-border/50"}`}
-            style={{ left: t.x }}
+            key={`g-${tick.key}`}
+            className={`absolute bottom-0 top-0 w-px ${tick.major ? "bg-border" : "bg-border/50"}`}
+            style={{ left: tick.x }}
           />
         ))}
         {showPeriodMarks &&
@@ -229,7 +242,7 @@ export function TimelineAxis({
         <div
           className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-accent ring-4 ring-accent/20"
           style={{ left: todayX }}
-          title="היום"
+          title={t("common.today")}
         />
       </div>
 
@@ -268,6 +281,7 @@ export function EventMarks({
   onSelect?: (id: string) => void;
   editingId?: string | null;
 }) {
+  const { t, locale } = useTranslations();
   const [hoverId, setHoverId] = useState<string | null>(null);
   const hovered = items.find((i) => i.id === hoverId) || null;
   const maxLane = items.reduce((m, i) => Math.max(m, i.lane), 0);
@@ -295,7 +309,7 @@ export function EventMarks({
           <span className="mt-1 line-clamp-2 text-[10px] font-medium leading-tight text-ink">
             {ev.title}
           </span>
-          <span className="text-[9px] text-muted">{formatHeDate(ev.date)}</span>
+          <span className="text-[9px] text-muted">{formatLocaleDate(locale, ev.date)}</span>
         </button>
       ))}
 
@@ -309,8 +323,8 @@ export function EventMarks({
           }}
         >
           <p className="font-semibold">{hovered.title}</p>
-          <p className="text-muted">{formatHeDate(hovered.date)}</p>
-          <p className="mt-1 text-[10px] text-muted">לחץ לעריכה</p>
+          <p className="text-muted">{formatLocaleDate(locale, hovered.date)}</p>
+          <p className="mt-1 text-[10px] text-muted">{t("timeline.clickToEdit")}</p>
         </div>
       )}
     </div>

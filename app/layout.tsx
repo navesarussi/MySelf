@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
+import { GlobalAddMenu } from "@/components/global-add-menu";
 import { ToastLoader } from "@/components/toast-loader";
+import { LocaleProvider } from "@/components/locale-provider";
+import { getLocale, getMessages, isRtl } from "@/lib/i18n";
 
 const heebo = Heebo({
   subsets: ["hebrew", "latin"],
@@ -10,25 +13,39 @@ const heebo = Heebo({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "מרכז השליטה | נוה סרוסי",
-  description: "בסיס הידע האישי — ציר זמן, משימות, הרגלים ומטרות, קשרים, ספריית תוכן",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const m = getMessages(locale);
+  return {
+    title: m.meta.title,
+    description: m.meta.description,
+    robots: { index: false, follow: false },
+    icons: {
+      icon: "/logo.png",
+      apple: "/logo.png",
+    },
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLocale();
+  const dir = isRtl(locale) ? "rtl" : "ltr";
+
   return (
-    <html lang="he" dir="rtl" className={heebo.variable}>
+    <html lang={locale} dir={dir} className={heebo.variable}>
       <body className="font-sans antialiased">
-        <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 pb-16 pt-6 sm:px-6">
-          <Nav />
-          <main className="mt-6 flex-1">{children}</main>
-        </div>
-        <ToastLoader />
+        <LocaleProvider locale={locale}>
+          <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 pb-16 pt-6 sm:px-6">
+            <Nav />
+            <main className="mt-6 flex-1">{children}</main>
+          </div>
+          <ToastLoader />
+          <GlobalAddMenu />
+        </LocaleProvider>
       </body>
     </html>
   );

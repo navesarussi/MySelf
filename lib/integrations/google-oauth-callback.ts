@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { cookies } from "next/headers";
 import {
   exchangeCode,
@@ -10,6 +10,7 @@ import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import {
   getIntegrationToken,
   saveIntegrationToken,
+  tryStartSync,
 } from "@/lib/integrations/tokens";
 import { consumeOAuthNext, consumeOAuthState } from "@/lib/integrations/oauth-state";
 import { applySessionCookie } from "@/lib/auth";
@@ -63,7 +64,15 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
     const res = NextResponse.redirect(new URL(next, url.origin));
     await applySessionCookie(res, secret);
     setFlashCookie(jar, "מחובר — מסנכרן יומן ברקע");
-    syncGoogleCalendar().catch(() => {});
+    if (await tryStartSync(GOOGLE_PROVIDER)) {
+      after(async () => {
+        try {
+          await syncGoogleCalendar();
+        } catch {
+          // sync status is persisted as failed
+        }
+      });
+    }
     return res;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";

@@ -22,11 +22,11 @@ export async function addTask(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const project_id = String(formData.get("project_id") || "").trim();
   if (!title) {
-    await setFlash("חסרה כותרת למשימה", "error");
+    await setFlash("flash.taskTitleRequired", "error");
     return;
   }
   if (!project_id) {
-    await setFlash("יש לבחור פרויקט", "error");
+    await setFlash("flash.projectRequired", "error");
     return;
   }
 
@@ -40,7 +40,7 @@ export async function addTask(formData: FormData) {
     notes: String(formData.get("notes") || "").trim() || null,
   });
 
-  await setFlash(error ? "שגיאה בהוספת משימה" : "המשימה נוספה", error ? "error" : "success");
+  await setFlash(error ? "flash.taskAddError" : "flash.taskAdded", error ? "error" : "success");
   revalidateTaskPaths();
 }
 
@@ -55,7 +55,7 @@ export async function updateTaskStatus(formData: FormData) {
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", id);
 
-  await setFlash(error ? "שגיאה בעדכון" : "המשימה עודכנה", error ? "error" : "success");
+  await setFlash(error ? "flash.taskUpdateError" : "flash.taskUpdated", error ? "error" : "success");
   revalidateTaskPaths();
 }
 
@@ -64,6 +64,6 @@ export async function deleteTask(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   const { error } = await supabase.from("tasks").delete().eq("id", id);
-  await setFlash(error ? "שגיאה במחיקה" : "המשימה נמחקה", error ? "error" : "success");
+  await setFlash(error ? "flash.taskDeleteError" : "flash.taskDeleted", error ? "error" : "success");
   revalidateTaskPaths();
 }

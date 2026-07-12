@@ -14,7 +14,7 @@ function revalidateAll() {
 export async function addProject(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) {
-    await setFlash("חסר שם לפרויקט", "error");
+    await setFlash("flash.projectNameRequired", "error");
     return;
   }
 
@@ -25,7 +25,7 @@ export async function addProject(formData: FormData) {
     .eq("name", name)
     .maybeSingle();
   if (existing) {
-    await setFlash("פרויקט בשם זה כבר קיים", "error");
+    await setFlash("flash.projectExists", "error");
     return;
   }
 
@@ -38,7 +38,7 @@ export async function addProject(formData: FormData) {
   const sort_order = (maxRow?.sort_order ?? 0) + 10;
 
   const { error } = await supabase.from("projects").insert({ name, sort_order });
-  await setFlash(error ? "שגיאה" : "נוסף", error ? "error" : "success");
+  await setFlash(error ? "flash.genericError" : "flash.projectAdded", error ? "error" : "success");
   revalidateAll();
 }
 
@@ -46,7 +46,7 @@ export async function renameProject(formData: FormData) {
   const id = String(formData.get("id") || "");
   const name = String(formData.get("name") || "").trim();
   if (!id || !name) {
-    await setFlash("חסר שם לפרויקט", "error");
+    await setFlash("flash.projectNameRequired", "error");
     return;
   }
 
@@ -58,12 +58,12 @@ export async function renameProject(formData: FormData) {
     .neq("id", id)
     .maybeSingle();
   if (dupe) {
-    await setFlash("פרויקט בשם זה כבר קיים", "error");
+    await setFlash("flash.projectExists", "error");
     return;
   }
 
   const { error } = await supabase.from("projects").update({ name }).eq("id", id);
-  await setFlash(error ? "שגיאה" : "עודכן", error ? "error" : "success");
+  await setFlash(error ? "flash.genericError" : "flash.projectUpdated", error ? "error" : "success");
   revalidateAll();
 }
 
@@ -78,11 +78,11 @@ export async function deleteProject(formData: FormData) {
   ]);
 
   if (canDeleteProject(taskCount ?? 0, relCount ?? 0) === "blocked") {
-    await setFlash("לא ניתן למחוק — יש משימות או קשרים בפרויקט", "error");
+    await setFlash("flash.projectDeleteBlocked", "error");
     return;
   }
 
   const { error } = await supabase.from("projects").delete().eq("id", id);
-  await setFlash(error ? "שגיאה" : "נמחק", error ? "error" : "success");
+  await setFlash(error ? "flash.genericError" : "flash.projectDeleted", error ? "error" : "success");
   revalidateAll();
 }

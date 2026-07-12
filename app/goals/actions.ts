@@ -21,7 +21,7 @@ export async function addGoal(formData: FormData) {
     first_step: first_step || null,
     definition_of_done: definition_of_done || null,
   });
-  await setFlash("המטרה נוספה");
+  await setFlash("flash.goalAdded");
   revalidatePath("/goals");
   revalidatePath("/");
 }
@@ -35,7 +35,7 @@ export async function toggleGoalStatus(formData: FormData) {
     .from("goals")
     .update({ status: status === "active" ? "done" : "active" })
     .eq("id", id);
-  await setFlash("המטרה עודכנה");
+  await setFlash("flash.goalUpdated");
   revalidatePath("/goals");
   revalidatePath("/");
 }
@@ -45,7 +45,7 @@ export async function deleteGoal(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("goals").delete().eq("id", id);
-  await setFlash("המטרה נמחקה");
+  await setFlash("flash.goalDeleted");
   revalidatePath("/goals");
   revalidatePath("/");
 }
@@ -56,7 +56,7 @@ export async function addCommitment(formData: FormData) {
   if (!text) return;
   const supabase = getSupabase();
   await supabase.from("commitments").insert({ text, commitment_date });
-  await setFlash("ההתחייבות נוספה");
+  await setFlash("flash.commitmentAdded");
   revalidatePath("/goals");
   revalidatePath("/");
 }
@@ -67,7 +67,7 @@ export async function setCommitmentStatus(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("commitments").update({ status }).eq("id", id);
-  await setFlash("ההתחייבות עודכנה");
+  await setFlash("flash.commitmentUpdated");
   revalidatePath("/goals");
   revalidatePath("/");
 }
@@ -77,7 +77,7 @@ export async function deleteCommitment(formData: FormData) {
   if (!id) return;
   const supabase = getSupabase();
   await supabase.from("commitments").delete().eq("id", id);
-  await setFlash("ההתחייבות נמחקה");
+  await setFlash("flash.commitmentDeleted");
   revalidatePath("/goals");
   revalidatePath("/");
 }

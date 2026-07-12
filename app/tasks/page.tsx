@@ -3,12 +3,14 @@ import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
+import { ALL_FILTER, getTranslations } from "@/lib/i18n";
 import type { Project, Task, TaskStatus } from "@/lib/types";
 import { TaskForm, TaskList } from "./task-board";
+import { isAddTarget } from "@/lib/add-menu";
 
 export const revalidate = 30;
 
-const statuses: Array<TaskStatus | "הכל"> = ["הכל", "open", "in_progress", "done"];
+const statuses: Array<TaskStatus | typeof ALL_FILTER> = [ALL_FILTER, "open", "in_progress", "done"];
 
 type TaskRow = Task & { projects: { name: string } | null };
 
@@ -24,8 +26,8 @@ async function getTasks(projectId?: string, status?: string): Promise<Task[]> {
     .from("tasks")
     .select("*, projects(name)")
     .order("created_at", { ascending: false });
-  if (projectId && projectId !== "הכל") q = q.eq("project_id", projectId);
-  if (status && status !== "הכל") q = q.eq("status", status);
+  if (projectId && projectId !== ALL_FILTER) q = q.eq("project_id", projectId);
+  if (status && status !== ALL_FILTER) q = q.eq("status", status);
   const { data } = await q;
   return ((data || []) as TaskRow[]).map((row) => ({
     ...row,
@@ -37,37 +39,47 @@ async function getTasks(projectId?: string, status?: string): Promise<Task[]> {
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; status?: string }>;
+  searchParams: Promise<{ project?: string; status?: string; add?: string }>;
 }) {
+  const { t } = await getTranslations();
+
   if (!dbConfigured()) {
     return (
       <>
-        <PageHeader title="משימות" subtitle="משימות לפי פרויקט ועדיפות" />
+        <PageHeader title={t("tasks.title")} subtitle={t("tasks.subtitle")} />
         <DbWarning />
       </>
     );
   }
 
   const sp = await searchParams;
-  const projectId = sp.project || "הכל";
-  const status = sp.status || "הכל";
+  const add = isAddTarget(sp.add) ? sp.add : undefined;
+  const projectId = sp.project || ALL_FILTER;
+  const status = sp.status || ALL_FILTER;
   const [projects, tasks] = await Promise.all([getProjects(), getTasks(projectId, status)]);
   const defaultProjectId =
     projects.find((p) => p.name === "אישי")?.id ?? projects[0]?.id;
 
+  const statusLabel = (s: TaskStatus | typeof ALL_FILTER) => {
+    if (s === ALL_FILTER) return t("common.all");
+    if (s === "open") return t("common.open");
+    if (s === "in_progress") return t("common.inProgress");
+    return t("common.done");
+  };
+
   return (
     <>
-      <PageHeader title="משימות" subtitle="נפרד מהרגלים — עדיפות, פרויקט וסטטוס" />
-      <TaskForm projects={projects} defaultProjectId={defaultProjectId} />
+      <PageHeader title={t("tasks.title")} subtitle={t("tasks.subtitleAlt")} />
+      <TaskForm projects={projects} defaultProjectId={defaultProjectId} defaultOpen={add === "task"} />
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
-          href={`/tasks?project=${encodeURIComponent("הכל")}&status=${encodeURIComponent(status)}`}
+          href={`/tasks?project=${encodeURIComponent(ALL_FILTER)}&status=${encodeURIComponent(status)}`}
           className={`rounded-full px-3 py-1 text-xs ${
-            projectId === "הכל" ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
+            projectId === ALL_FILTER ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
           }`}
         >
-          הכל
+          {t("common.all")}
         </Link>
         {projects.map((p) => (
           <Link
@@ -90,7 +102,7 @@ export default async function TasksPage({
               status === s ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
             }`}
           >
-            {s === "הכל" ? "הכל" : s === "open" ? "פתוח" : s === "in_progress" ? "בתהליך" : "בוצע"}
+            {statusLabel(s)}
           </Link>
         ))}
       </div>
