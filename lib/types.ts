@@ -58,6 +58,8 @@ export type Relationship = {
   reminder_days: number | null;
   notes: string | null;
   phone: string | null;
+  project_id: string;
+  project_name?: string;
   created_at: string;
 };
 
@@ -80,14 +82,21 @@ export type ContentEntry = {
   updated_at: string;
 };
 
-export type TaskProject = "Digital Scale" | "Glowy" | "KupaPay" | "אישי" | "אחר";
+export type Project = {
+  id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+};
+
 export type TaskPriority = "high" | "medium" | "low";
 export type TaskStatus = "open" | "in_progress" | "done";
 
 export type Task = {
   id: string;
   title: string;
-  project: TaskProject;
+  project_id: string;
+  project_name?: string;
   priority: TaskPriority;
   status: TaskStatus;
   due_date: string | null;
