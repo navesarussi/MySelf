@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Goal } from "@/lib/types";
 import { inputClass } from "@/components/ui";
+import { actionButton } from "@/components/ui/theme";
 import { updateGoal } from "./actions";
 import { useTranslations } from "@/components/locale-provider";
 
@@ -68,7 +69,7 @@ export function GoalEditForm({ goal, onClose }: { goal: Goal; onClose: () => voi
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-accent px-2.5 py-1 font-medium text-bg hover:opacity-90 disabled:opacity-50"
+          className={`${actionButton.primary} px-2.5 py-1`}
         >
           {pending ? t("common.saving") : t("goals.saveChanges")}
         </button>

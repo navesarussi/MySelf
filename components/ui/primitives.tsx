@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { badgeTone, inputClass, submitButton } from "./theme";
 
 export function PageHeader({
   title,
@@ -26,15 +27,15 @@ export function EmptyState({ text }: { text: string }) {
   );
 }
 
-export function Badge({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "accent" | "warn" | "good" }) {
-  const tones: Record<string, string> = {
-    default: "bg-border/60 text-muted",
-    accent: "bg-accent/15 text-accent",
-    warn: "bg-warn/15 text-warn",
-    good: "bg-good/15 text-good",
-  };
+export function Badge({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: keyof typeof badgeTone;
+}) {
   return (
-    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]}`}>
+    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeTone[tone]}`}>
       {children}
     </span>
   );
@@ -42,10 +43,7 @@ export function Badge({ children, tone = "default" }: { children: ReactNode; ton
 
 export function SubmitButton({ children }: { children: ReactNode }) {
   return (
-    <button
-      type="submit"
-      className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg transition hover:opacity-90"
-    >
+    <button type="submit" className={submitButton}>
       {children}
     </button>
   );
@@ -68,5 +66,4 @@ export function IconButton({
   );
 }
 
-export const inputClass =
-  "w-full rounded-lg border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent";
+export { inputClass };

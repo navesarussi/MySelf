@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Habit } from "@/lib/types";
-import { Badge, inputClass } from "@/components/ui";
+import { Badge, inputClass, PrimaryActionButton, WarnActionButton, IconEditButton, IconDeleteButton } from "@/components/ui";
 import { effectiveStreak } from "@/lib/habit-stats";
 import { checkInHabit, resetHabit, deleteHabit, updateHabit, reportHabitFall } from "./actions";
 import { Flame, RotateCcw, Trash2, Check, TrendingUp, ThumbsUp, AlertTriangle, Pencil } from "lucide-react";
@@ -54,12 +54,12 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
           >
             <Pencil size={13} />
           </button>
-          <form action={deleteHabit}>
-            <input type="hidden" name="id" value={habit.id} />
-            <button className="rounded-md p-1 text-muted hover:text-warn" title={t("common.delete")}>
-              <Trash2 size={13} />
-            </button>
-          </form>
+        <form action={deleteHabit}>
+          <input type="hidden" name="id" value={habit.id} />
+          <IconDeleteButton type="submit" title={t("common.delete")}>
+            <Trash2 size={13} />
+          </IconDeleteButton>
+        </form>
         </div>
       </div>
 
@@ -147,23 +147,17 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
         <div className="flex gap-2">
           <form action={checkInHabit} className="flex-1">
             <input type="hidden" name="id" value={habit.id} />
-            <button
-              type="submit"
-              className="flex w-full items-center justify-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-bg transition hover:opacity-90"
-            >
+            <PrimaryActionButton fullWidth>
               <Check size={12} />
               {t("habits.checkInToday")}
-            </button>
+            </PrimaryActionButton>
           </form>
           <form action={reportHabitFall} className="flex-1">
             <input type="hidden" name="id" value={habit.id} />
-            <button
-              type="submit"
-              className="flex w-full items-center justify-center gap-1 rounded-md bg-warn/15 px-2 py-1 text-[11px] font-medium text-warn transition hover:bg-warn/25"
-            >
+            <WarnActionButton fullWidth>
               <AlertTriangle size={12} />
               {t("habits.reportFall")}
-            </button>
+            </WarnActionButton>
           </form>
         </div>
       )}
