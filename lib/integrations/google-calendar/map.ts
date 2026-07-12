@@ -20,6 +20,7 @@ function parseStart(start: GoogleCalendarEvent["start"]) {
 
 export function mapGoogleEvent(event: GoogleCalendarEvent): MappedGoogleEvent | null {
   if (event.status === "cancelled") return null;
+  if (event.eventType === "birthday") return null;
   const parsed = parseStart(event.start);
   if (!parsed) return null;
 

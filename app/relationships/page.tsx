@@ -84,9 +84,9 @@ export default async function RelationshipsPage({
           {Array.from(grouped.entries()).map(([group, people]) => (
             <div key={group}>
               <h2 className="mb-3 text-sm font-semibold text-muted">{groupLabel(group, people)}</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {people.map((r) => (
-                  <RelationshipCard key={r.id} r={r} today={today} />
+                  <RelationshipCard key={r.id} r={r} projects={projectList} today={today} />
                 ))}
               </div>
             </div>

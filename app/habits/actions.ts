@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { setFlash } from "@/lib/flash-actions";
-import { computeCheckIn, todayISO } from "@/lib/habit-stats";
+import { computeCheckIn, computeFall, todayISO } from "@/lib/habit-stats";
 import type { Habit } from "@/lib/types";
 
 export async function addHabit(formData: FormData) {
@@ -16,6 +16,7 @@ export async function addHabit(formData: FormData) {
   await supabase.from("habits").insert({ name, kind, target_note: target_note || null });
   await setFlash("flash.habitAdded");
   revalidatePath("/habits");
+  revalidatePath("/");
 }
 
 export async function checkInHabit(formData: FormData) {
@@ -42,6 +43,34 @@ export async function checkInHabit(formData: FormData) {
     .eq("id", id);
 
   await setFlash("flash.checkInRecorded");
+  revalidatePath("/habits");
+  revalidatePath("/");
+}
+
+export async function reportHabitFall(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+  const supabase = getSupabase();
+
+  const { data: habit } = await supabase.from("habits").select("*").eq("id", id).single<Habit>();
+  if (!habit) return;
+
+  const today = todayISO();
+  const result = computeFall(habit, today);
+  if (habit.last_checked_on === today) return;
+
+  await supabase
+    .from("habits")
+    .update({
+      streak_count: result.streak,
+      best_streak: result.bestStreak,
+      total_success_days: result.totalSuccessDays,
+      failure_count: result.failureCount,
+      last_checked_on: today,
+    })
+    .eq("id", id);
+
+  await setFlash("flash.fallRecorded");
   revalidatePath("/habits");
   revalidatePath("/");
 }

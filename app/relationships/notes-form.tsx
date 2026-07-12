@@ -15,14 +15,14 @@ export function NotesForm({
   const { t } = useTranslations();
 
   return (
-    <form action={action} className="mt-2">
+    <form action={action} className="mt-1">
       <input type="hidden" name="id" value={id} />
       <textarea
         name="notes"
         defaultValue={defaultNotes}
         placeholder={t("relationships.notesPlaceholder")}
-        rows={2}
-        className={`${inputClass} text-xs`}
+        rows={1}
+        className={`${inputClass} min-h-[2rem] text-xs`}
         onBlur={(e) => e.currentTarget.form?.requestSubmit()}
       />
     </form>

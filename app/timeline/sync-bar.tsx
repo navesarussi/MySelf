@@ -1,12 +1,25 @@
-import Link from "next/link";
-import { getIntegrationToken, isGoogleConnected } from "@/lib/integrations/tokens";
-import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
-import { GoogleCalendarSyncButton } from "@/components/google-calendar-sync-button";
-import { formatLocaleDateTime, getTranslations } from "@/lib/i18n";
+"use client";
 
-export async function TimelineSyncBar() {
-  const { locale, t } = await getTranslations();
-  const connected = await isGoogleConnected();
+import Link from "next/link";
+import { useCallback, useState } from "react";
+import { GoogleCalendarSyncButton } from "@/components/google-calendar-sync-button";
+import { useTranslations } from "@/components/locale-provider";
+import { formatLocaleDateTime } from "@/lib/i18n/core";
+import type { SyncStatus } from "@/lib/types";
+
+type Props = {
+  connected: boolean;
+  lastSyncAt: string | null;
+  initialSyncStatus: SyncStatus;
+};
+
+export function TimelineSyncBar({ connected, lastSyncAt, initialSyncStatus }: Props) {
+  const { locale, t } = useTranslations();
+  const [lastSync, setLastSync] = useState(lastSyncAt);
+
+  const onStatusUpdate = useCallback((data: { lastSyncAt: string | null }) => {
+    if (data.lastSyncAt) setLastSync(data.lastSyncAt);
+  }, []);
 
   if (!connected) {
     return (
@@ -19,14 +32,15 @@ export async function TimelineSyncBar() {
     );
   }
 
-  const token = await getIntegrationToken(GOOGLE_PROVIDER);
-
   return (
-    <div className="card mb-4 flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
+    <div className="card mb-3 flex flex-wrap items-center justify-between gap-2 p-2.5 text-sm">
       <span className="text-muted">
-        {t("timeline.lastSynced")}: {formatLocaleDateTime(locale, token?.last_sync_at ?? null)}
+        {t("timeline.lastSynced")}: {formatLocaleDateTime(locale, lastSync)}
       </span>
-      <GoogleCalendarSyncButton initialSyncStatus={token?.sync_status ?? "idle"} />
+      <GoogleCalendarSyncButton
+        initialSyncStatus={initialSyncStatus}
+        onStatusUpdate={onStatusUpdate}
+      />
     </div>
   );
 }

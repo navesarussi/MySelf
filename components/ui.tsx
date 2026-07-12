@@ -22,7 +22,7 @@ export function PageHeader({
 
 export function EmptyState({ text }: { text: string }) {
   return (
-    <div className="card border-dashed p-8 text-center text-sm text-muted">{text}</div>
+    <div className="card border-dashed p-6 text-center text-sm text-muted">{text}</div>
   );
 }
 

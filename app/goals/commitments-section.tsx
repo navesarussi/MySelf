@@ -25,7 +25,7 @@ export async function CommitmentsSection({
         className="mb-4"
         id="add-form-commitment"
       >
-        <form action={addCommitment} className="card grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto]">
+        <form action={addCommitment} className="card grid gap-2 p-3 sm:grid-cols-[1fr_auto_auto]">
           <input type="text" name="text" placeholder={t("goals.commitmentPlaceholder")} required className={inputClass} />
           <input type="date" name="commitment_date" defaultValue={new Date().toISOString().slice(0, 10)} className={inputClass} />
           <SubmitButton>{t("common.add")}</SubmitButton>
@@ -37,7 +37,7 @@ export async function CommitmentsSection({
       ) : (
         <div className="space-y-2">
           {commitments.map((c) => (
-            <div key={c.id} className="card flex flex-wrap items-center justify-between gap-2 p-3">
+            <div key={c.id} className="card flex flex-wrap items-center justify-between gap-2 p-2.5">
               <div className="flex items-center gap-3">
                 <span className="text-xs text-muted">
                   {formatLocaleDate(locale, c.commitment_date)}

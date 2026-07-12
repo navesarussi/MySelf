@@ -1,6 +1,7 @@
 export type GoogleCalendarEvent = {
   id: string;
   status: string;
+  eventType?: string;
   summary?: string;
   description?: string;
   start: { dateTime?: string; date?: string; timeZone?: string };

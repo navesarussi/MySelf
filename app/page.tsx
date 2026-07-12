@@ -4,7 +4,8 @@ import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { Badge } from "@/components/ui";
-import { effectiveStreak } from "@/lib/habit-stats";
+import { dedupeHabits, effectiveStreak, selectHomeHabits, todayISO } from "@/lib/habit-stats";
+import { HomeHabitRow } from "@/app/habits/home-habit-row";
 import { rankGoalsForHome, horizonLabel, achievabilityScore } from "@/lib/goals-rank";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { formatLocaleDate, getTranslations } from "@/lib/i18n";
@@ -16,9 +17,6 @@ import {
   Flame,
   AlertCircle,
   CheckSquare,
-  TrendingUp,
-  ThumbsUp,
-  AlertTriangle,
   Percent,
   MessageCircle,
 } from "lucide-react";
@@ -77,16 +75,18 @@ export default async function HomePage() {
     });
   }
 
-  const totalFailures = habits.reduce((s, h) => s + (h.failure_count ?? 0), 0);
-  const activeStreaks = habits.filter((h) => effectiveStreak(h) > 0).length;
-  const checkedToday = habits.filter((h) => h.last_checked_on === new Date().toISOString().slice(0, 10)).length;
-  const todayRate = habits.length ? Math.round((checkedToday / habits.length) * 100) : 0;
+  const today = todayISO();
+  const uniqueHabits = dedupeHabits(habits, today);
+  const homeHabits = selectHomeHabits(habits, today);
+  const activeStreaks = uniqueHabits.filter((h) => effectiveStreak(h, today) > 0).length;
+  const checkedToday = uniqueHabits.filter((h) => h.last_checked_on === today).length;
+  const todayRate = uniqueHabits.length ? Math.round((checkedToday / uniqueHabits.length) * 100) : 0;
   const featuredGoals = rankGoalsForHome(activeGoals, 5, locale);
   const activeGoalsCount = activeGoals.length;
 
   return (
     <>
-      <div className="card mb-8 p-6">
+      <div className="card mb-6 p-4">
         <div className="flex items-center gap-2 text-accent">
           <Compass size={18} />
           <span className="text-sm font-medium">{t("home.compass")}</span>
@@ -104,32 +104,32 @@ export default async function HomePage() {
       {configured && (
         <>
           <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="card p-4">
+            <div className="card p-3">
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Flame size={15} className="text-accent2" /> {t("home.activeHabits")}
               </div>
-              <p className="mt-2 text-3xl font-bold">{habits.length}</p>
+              <p className="mt-2 text-3xl font-bold">{uniqueHabits.length}</p>
               <p className="mt-1 text-xs text-muted">
-                {t("home.checkedToday", { checked: checkedToday, total: habits.length, streaks: activeStreaks })}
+                {t("home.checkedToday", { checked: checkedToday, total: uniqueHabits.length, streaks: activeStreaks })}
               </p>
             </div>
-            <div className="card p-4">
+            <div className="card p-3">
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Percent size={15} className="text-good" /> {t("home.todayPerformance")}
               </div>
               <p className="mt-2 text-3xl font-bold">{todayRate}%</p>
               <p className="mt-1 text-xs text-muted">
-                {t("home.habitsChecked", { checked: checkedToday, total: habits.length })}
+                {t("home.habitsChecked", { checked: checkedToday, total: uniqueHabits.length })}
               </p>
             </div>
-            <div className="card p-4">
+            <div className="card p-3">
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Target size={15} className="text-accent" /> {t("home.activeGoals")}
               </div>
               <p className="mt-2 text-3xl font-bold">{activeGoalsCount}</p>
               <p className="mt-1 text-xs text-muted">{t("home.goalsAchieved", { count: doneGoalsCount })}</p>
             </div>
-            <div className="card p-4">
+            <div className="card p-3">
               <div className="flex items-center gap-2 text-sm text-muted">
                 <CheckSquare size={15} className="text-accent" /> {t("home.openTasks")}
               </div>
@@ -138,8 +138,8 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="card p-4">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="card p-3">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
                   <Flame size={16} className="text-accent2" /> {t("home.habitTracking")}
@@ -148,44 +148,28 @@ export default async function HomePage() {
                   {t("home.allHabits")}
                 </Link>
               </div>
-              {habits.length === 0 ? (
+              {homeHabits.length === 0 ? (
                 <p className="text-sm text-muted">{t("home.noHabits")}</p>
               ) : (
                 <ul className="space-y-3 text-sm">
-                  {habits.map((h) => {
-                    const streak = effectiveStreak(h);
-                    return (
-                      <li key={h.id} className="rounded-lg bg-border/20 px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium">{h.name}</span>
-                          <Badge tone={streak > 0 ? "good" : "default"}>
-                            {streak} {t("common.streak")}
-                          </Badge>
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-muted">
-                          <span className="flex items-center gap-1">
-                            <TrendingUp size={11} /> {t("common.peak")} {h.best_streak}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <ThumbsUp size={11} /> {h.total_success_days ?? 0} {t("common.positives")}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <AlertTriangle size={11} /> {h.failure_count ?? 0} {t("common.failures")}
-                          </span>
-                        </div>
-                      </li>
-                    );
-                  })}
+                  {homeHabits.map((h) => (
+                    <HomeHabitRow key={h.id} habit={h} today={today} />
+                  ))}
                 </ul>
               )}
-              {totalFailures > 0 && (
+              {uniqueHabits.length > homeHabits.length && (
+                <p className="mt-2 text-xs text-muted">
+                  {t("home.moreHabits", { count: uniqueHabits.length - homeHabits.length })}
+                </p>
+              )}
+              {uniqueHabits.some((h) => (h.failure_count ?? 0) > 0) && (
                 <p className="mt-3 text-xs text-muted">
-                  {t("common.totalFailures")}: {totalFailures}
+                  {t("common.totalFailures")}: {uniqueHabits.reduce((s, h) => s + (h.failure_count ?? 0), 0)}
                 </p>
               )}
             </div>
 
-            <div className="card p-4">
+            <div className="card p-3">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
                   <Target size={16} className="text-accent" /> {t("home.nearbyGoals")}
@@ -199,7 +183,7 @@ export default async function HomePage() {
               ) : (
                 <ul className="space-y-2 text-sm">
                   {featuredGoals.map((g) => (
-                    <li key={g.id} className="rounded-lg bg-border/20 px-3 py-2">
+                    <li key={g.id} className="rounded-lg bg-border/20 px-2.5 py-1.5">
                       <div className="flex items-start justify-between gap-2">
                         <span className="font-medium">{g.title}</span>
                         {achievabilityScore(g) >= 3 && <Badge tone="good">{t("common.readyToAct")}</Badge>}
@@ -234,7 +218,7 @@ export default async function HomePage() {
               )}
             </div>
 
-            <div className="card p-4">
+            <div className="card p-3">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
                   <AlertCircle size={16} className="text-warn" /> {t("home.relationshipsWaiting")}
@@ -269,7 +253,7 @@ export default async function HomePage() {
               )}
             </div>
 
-            <div className="card p-4">
+            <div className="card p-3">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
                   <Clock size={16} className="text-accent" /> {t("home.recentEvents")}

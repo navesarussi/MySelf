@@ -72,7 +72,7 @@ export function GoalsSection({
     <section className="mb-10">
       <h2 className="mb-3 text-lg font-bold">{t("goals.sectionTitle")}</h2>
 
-      <div className="card mb-4 flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+      <div className="card mb-3 flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-muted" />
           <input
@@ -107,38 +107,38 @@ export function GoalsSection({
       {filtered.length === 0 ? (
         <EmptyState text={active.length === 0 ? t("goals.noActive") : t("goals.noFilterResults")} />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {Array.from(grouped.entries()).map(([category, items]) => {
             const isCollapsed = collapsed[category] ?? false;
             return (
-              <div key={category} className="card overflow-hidden">
+              <div key={category}>
                 <button
                   type="button"
                   onClick={() => toggleCategory(category)}
-                  className="flex w-full items-center justify-between gap-2 px-4 py-3 text-start hover:bg-border/20"
+                  className="mb-2 flex w-full items-center justify-between gap-2 rounded-lg px-0.5 py-1 text-start hover:bg-border/15"
                 >
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    <Target size={14} className="text-accent" />
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-muted">
+                    <Target size={13} className="text-accent" />
                     {categoryLabel(category, items)}
                     <Badge>{items.length}</Badge>
                   </span>
                   <ChevronDown
-                    size={16}
+                    size={15}
                     className={`shrink-0 text-muted transition ${isCollapsed ? "-rotate-90" : ""}`}
                   />
                 </button>
                 {!isCollapsed && (
-                  <div className="space-y-2 border-t border-border px-4 py-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {items.map((g) => (
-                      <div key={g.id} className="rounded-lg bg-border/15 p-4">
+                      <div key={g.id} className="card p-2.5">
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-medium">{g.title}</h4>
-                          <div className="flex shrink-0 items-center gap-1">
+                          <h4 className="text-sm font-medium leading-snug">{g.title}</h4>
+                          <div className="flex shrink-0 items-center gap-0.5">
                             <form action={toggleGoalStatus}>
                               <input type="hidden" name="id" value={g.id} />
                               <input type="hidden" name="status" value={g.status} />
                               <button
-                                className="rounded-full bg-good/15 px-2.5 py-1 text-xs font-medium text-good hover:opacity-80"
+                                className="rounded-md bg-good/15 px-2 py-0.5 text-[11px] font-medium text-good hover:opacity-80"
                                 title={t("goals.markDone")}
                               >
                                 {t("goals.markDoneBtn")}
@@ -146,29 +146,34 @@ export function GoalsSection({
                             </form>
                             <form action={deleteGoal}>
                               <input type="hidden" name="id" value={g.id} />
-                              <button className="p-1.5 text-muted hover:text-warn" title={t("common.delete")}>
-                                <Trash2 size={14} />
+                              <button className="p-1 text-muted hover:text-warn" title={t("common.delete")}>
+                                <Trash2 size={13} />
                               </button>
                             </form>
                           </div>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
-                          {g.horizon && <Badge>{t("common.horizon")}: {g.horizon}</Badge>}
-                        </div>
-                        <div className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
-                          {g.first_step && (
-                            <p>
-                              <span className="text-muted">{t("common.firstStep")}: </span>
-                              {g.first_step}
-                            </p>
-                          )}
-                          {g.definition_of_done && (
-                            <p>
-                              <span className="text-muted">{t("common.definitionOfDone")}: </span>
-                              {g.definition_of_done}
-                            </p>
-                          )}
-                        </div>
+                        {(g.horizon || g.first_step || g.definition_of_done) && (
+                          <div className="mt-1.5 space-y-0.5 text-xs leading-relaxed text-muted">
+                            {g.horizon && (
+                              <p>
+                                <span className="text-muted/70">{t("common.horizon")}: </span>
+                                {g.horizon}
+                              </p>
+                            )}
+                            {g.first_step && (
+                              <p>
+                                <span className="text-muted/70">{t("common.firstStep")}: </span>
+                                {g.first_step}
+                              </p>
+                            )}
+                            {g.definition_of_done && (
+                              <p>
+                                <span className="text-muted/70">{t("common.definitionOfDone")}: </span>
+                                {g.definition_of_done}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -185,7 +190,7 @@ export function GoalsSection({
         className="mt-4"
         id="add-form-goal"
       >
-        <form action={addGoal} className="card grid gap-3 p-4 sm:grid-cols-2">
+        <form action={addGoal} className="card grid gap-2 p-3 sm:grid-cols-2">
           <input type="text" name="title" placeholder={t("goals.titlePlaceholder")} required className={`${inputClass} sm:col-span-2`} />
           <input type="text" name="category" placeholder={t("common.general")} className={inputClass} />
           <input type="text" name="horizon" placeholder={t("goals.horizonPlaceholder")} className={inputClass} />
@@ -204,7 +209,7 @@ export function GoalsSection({
           </summary>
           <div className="mt-3 space-y-2">
             {done.map((g) => (
-              <div key={g.id} className="card flex items-center justify-between p-3 text-sm">
+              <div key={g.id} className="card flex items-center justify-between p-2.5 text-sm">
                 <span>{g.title}</span>
                 <form action={toggleGoalStatus}>
                   <input type="hidden" name="id" value={g.id} />

@@ -285,10 +285,15 @@ export function EventMarks({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const hovered = items.find((i) => i.id === hoverId) || null;
   const maxLane = items.reduce((m, i) => Math.max(m, i.lane), 0);
-  const height = 28 + (maxLane + 1) * 56;
+  const contentHeight = 28 + (maxLane + 1) * 56;
+  const maxStripHeight = 280;
 
   return (
-    <div className="relative mt-4" style={{ height }}>
+    <div
+      className="relative mt-4 overflow-y-auto"
+      style={{ maxHeight: maxStripHeight, height: Math.min(contentHeight, maxStripHeight) }}
+    >
+      <div className="relative" style={{ height: contentHeight, minHeight: "100%" }}>
       {items.map((ev) => (
         <button
           key={ev.id}
@@ -327,6 +332,7 @@ export function EventMarks({
           <p className="mt-1 text-[10px] text-muted">{t("timeline.clickToEdit")}</p>
         </div>
       )}
+      </div>
     </div>
   );
 }

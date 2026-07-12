@@ -16,12 +16,14 @@ type SyncStatusResponse = {
 type Props = {
   initialSyncStatus?: SyncStatus;
   onComplete?: () => void;
+  onStatusUpdate?: (data: SyncStatusResponse) => void;
   className?: string;
 };
 
 export function GoogleCalendarSyncButton({
   initialSyncStatus = "idle",
   onComplete,
+  onStatusUpdate,
   className = "",
 }: Props) {
   const { t } = useTranslations();
@@ -32,8 +34,9 @@ export function GoogleCalendarSyncButton({
   const applyStatus = useCallback((data: SyncStatusResponse) => {
     setProgress(data.syncProgress);
     setSyncing(data.syncStatus === "running");
+    onStatusUpdate?.(data);
     return data.syncStatus;
-  }, []);
+  }, [onStatusUpdate]);
 
   const pollStatus = useCallback(async () => {
     const res = await fetch("/api/integrations/google/sync/status");
@@ -55,7 +58,7 @@ export function GoogleCalendarSyncButton({
       const status = await pollStatus();
       if (status !== "running") {
         clearInterval(id);
-        if (status === "completed") {
+        if (status === "completed" || status === "failed") {
           onComplete?.();
           router.refresh();
         }

@@ -62,7 +62,8 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
 
     const toUpsert = mappedEvents
       .filter((mapped) => !existingById.get(mapped.google_event_id)?.hidden_at)
-      .map((mapped) => buildUpsertPayload(mapped, existingById.get(mapped.google_event_id) ?? null));
+      .map((mapped) => buildUpsertPayload(mapped, existingById.get(mapped.google_event_id) ?? null))
+      .sort((a, b) => b.event_date.localeCompare(a.event_date) || (b.event_time ?? "").localeCompare(a.event_time ?? ""));
 
     await updateSyncProgress(GOOGLE_PROVIDER, {
       phase: "upserting",

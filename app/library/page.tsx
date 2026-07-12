@@ -79,7 +79,7 @@ export default async function LibraryPage({
         className="mb-8"
         id="add-form-entry"
       >
-        <form action={addContentEntry} className="card grid gap-3 p-4">
+        <form action={addContentEntry} className="card grid gap-2 p-3">
           <input type="text" name="title" placeholder={t("library.entryTitle")} required className={inputClass} />
           <div className="grid gap-3 sm:grid-cols-2">
             <input type="text" name="category" placeholder={t("library.categoryPlaceholder")} className={inputClass} />
@@ -97,7 +97,7 @@ export default async function LibraryPage({
       ) : (
         <div className="space-y-3">
           {filtered.map((e) => (
-            <details key={e.id} className="card p-4">
+            <details key={e.id} className="card p-3">
               <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">{e.title}</span>
                 <div className="flex items-center gap-2">
@@ -110,7 +110,7 @@ export default async function LibraryPage({
 
               <div className="mt-3 whitespace-pre-wrap text-sm text-muted">{e.body}</div>
 
-              <form action={updateContentEntry} className="card mt-4 grid gap-3 border-dashed p-3">
+              <form action={updateContentEntry} className="card mt-3 grid gap-2 border-dashed p-2.5">
                 <input type="hidden" name="id" value={e.id} />
                 <input type="text" name="title" defaultValue={e.title} className={inputClass} />
                 <div className="grid gap-3 sm:grid-cols-2">

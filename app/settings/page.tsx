@@ -11,13 +11,13 @@ import { GoogleCalendarSyncPanel } from "./google-calendar-sync";
 import Link from "next/link";
 import { LanguageSwitcher } from "@/components/language-switcher";
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const { t } = await getTranslations();
 
   const languageSection = (
-    <section className="card mb-4 p-4">
+    <section className="card mb-3 p-3">
       <h2 className="text-sm font-semibold">{t("language.label")}</h2>
       <p className="mt-1 text-xs text-muted">{t("language.hint")}</p>
       <div className="mt-3">
@@ -56,7 +56,7 @@ export default async function SettingsPage() {
 
       {languageSection}
 
-      <section className="card p-4">
+      <section className="card p-3">
         <h2 className="text-sm font-semibold">{t("settings.googleCalendar")}</h2>
 
         {!googleReady && (

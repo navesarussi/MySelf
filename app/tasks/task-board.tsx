@@ -35,7 +35,7 @@ export function TaskForm({
       className="mb-6"
       id="add-form-task"
     >
-      <form action={addTask} className="card grid gap-3 p-4 sm:grid-cols-2">
+      <form action={addTask} className="card grid gap-2 p-3 sm:grid-cols-2">
       <input type="text" name="title" placeholder={t("tasks.titlePlaceholder")} required className={`${inputClass} sm:col-span-2`} />
       {fixedProjectId ? (
         <input type="hidden" name="project_id" value={fixedProjectId} />
@@ -96,7 +96,7 @@ export function TaskList({
   return (
     <div className="space-y-2">
       {tasks.map((task) => (
-        <div key={task.id} className="card flex flex-wrap items-center justify-between gap-3 p-3">
+        <div key={task.id} className="card flex flex-wrap items-center justify-between gap-2 p-2.5">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className={task.status === "done" ? "text-muted line-through" : "font-medium"}>

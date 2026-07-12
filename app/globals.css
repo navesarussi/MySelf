@@ -50,7 +50,7 @@ body {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: 0.75rem;
 }
 
 .scrollbar-thin::-webkit-scrollbar {

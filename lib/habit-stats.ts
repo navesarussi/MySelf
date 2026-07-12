@@ -20,6 +20,58 @@ export type CheckInResult = {
   failureCount: number;
 };
 
+export function habitActivityScore(habit: Habit, today = todayISO()): number {
+  return (
+    (habit.total_success_days ?? 0) +
+    (habit.failure_count ?? 0) +
+    effectiveStreak(habit, today) * 2 +
+    (habit.best_streak ?? 0)
+  );
+}
+
+/** Keep the most active record when duplicate habit names exist in the database. */
+export function dedupeHabits(habits: Habit[], today = todayISO()): Habit[] {
+  const byName = new Map<string, Habit>();
+  for (const habit of habits) {
+    const key = habit.name.trim().toLowerCase();
+    const existing = byName.get(key);
+    if (!existing || habitActivityScore(habit, today) > habitActivityScore(existing, today)) {
+      byName.set(key, habit);
+    }
+  }
+  return Array.from(byName.values());
+}
+
+const HOME_HABIT_LIMIT = 8;
+
+export function selectHomeHabits(habits: Habit[], today = todayISO()): Habit[] {
+  return dedupeHabits(habits, today)
+    .sort((a, b) => {
+      const streakDiff = effectiveStreak(b, today) - effectiveStreak(a, today);
+      if (streakDiff !== 0) return streakDiff;
+      return habitActivityScore(b, today) - habitActivityScore(a, today);
+    })
+    .slice(0, HOME_HABIT_LIMIT);
+}
+
+export function computeFall(habit: Habit, today = todayISO()): CheckInResult {
+  if (habit.last_checked_on === today) {
+    return {
+      streak: habit.streak_count,
+      bestStreak: habit.best_streak,
+      totalSuccessDays: habit.total_success_days,
+      failureCount: habit.failure_count,
+    };
+  }
+
+  return {
+    streak: 0,
+    bestStreak: habit.best_streak,
+    totalSuccessDays: habit.total_success_days,
+    failureCount: habit.failure_count + 1,
+  };
+}
+
 export function computeCheckIn(habit: Habit, today = todayISO()): CheckInResult {
   if (habit.last_checked_on === today) {
     return {

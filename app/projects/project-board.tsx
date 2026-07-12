@@ -49,7 +49,7 @@ export function ProjectBoard({
           defaultOpen={addTarget === "project"}
           id="add-form-project"
         >
-          <form action={addProject} className="card flex flex-wrap items-end gap-3 p-4">
+          <form action={addProject} className="card flex flex-wrap items-end gap-2 p-3">
             <div className="min-w-[12rem] flex-1">
               <label className="mb-1 block text-xs text-muted">{t("projects.projectName")}</label>
               <input type="text" name="name" placeholder={t("projects.projectNamePlaceholder")} required className={inputClass} />
@@ -128,7 +128,7 @@ export function ProjectBoard({
         defaultOpen={addTarget === "project"}
         id="add-form-project"
       >
-        <form action={addProject} className="card flex flex-wrap items-end gap-3 p-4">
+        <form action={addProject} className="card flex flex-wrap items-end gap-2 p-3">
           <div className="min-w-[12rem] flex-1">
             <label className="mb-1 block text-xs text-muted">{t("projects.newProject")}</label>
             <input type="text" name="name" placeholder={t("projects.projectNamePlaceholder")} required className={inputClass} />
@@ -175,7 +175,12 @@ export function ProjectBoard({
             fixedProjectId={selected.id}
             defaultOpen={addTarget === "contact"}
           />
-          <RelationshipList relationships={filteredRels} showProjectBadge={false} />
+          <RelationshipList
+            relationships={filteredRels}
+            projects={projects}
+            showProjectBadge={false}
+            showProjectSelect={false}
+          />
         </>
       )}
     </div>

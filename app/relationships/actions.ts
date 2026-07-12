@@ -49,6 +49,35 @@ export async function markContactedToday(formData: FormData) {
   revalidateRelationshipPaths();
 }
 
+export async function updateRelationship(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const name = String(formData.get("name") || "").trim();
+  const group_name = String(formData.get("group_name") || "").trim();
+  const reminder_days = String(formData.get("reminder_days") || "").trim();
+  const phoneRaw = String(formData.get("phone") || "").trim();
+  const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
+  const project_id = String(formData.get("project_id") || "").trim();
+  if (!id || !name) return;
+  if (!project_id) {
+    await setFlash("flash.projectRequired", "error");
+    return;
+  }
+
+  const supabase = getSupabase();
+  await supabase
+    .from("relationships")
+    .update({
+      name,
+      group_name: group_name || null,
+      reminder_days: reminder_days ? Number(reminder_days) : null,
+      phone,
+      project_id,
+    })
+    .eq("id", id);
+  await setFlash("flash.relationshipUpdated");
+  revalidateRelationshipPaths();
+}
+
 export async function updateRelationshipNotes(formData: FormData) {
   const id = String(formData.get("id") || "");
   const notes = String(formData.get("notes") || "").trim();

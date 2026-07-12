@@ -68,7 +68,8 @@ export async function fetchAllPrimaryEvents(accessToken: string) {
       singleEvents: "true",
       orderBy: "startTime",
       maxResults: "2500",
-      timeMin: "1970-01-01T00:00:00Z",
+      showDeleted: "false",
+      timeMin: "1990-01-01T00:00:00Z",
     });
     if (pageToken) params.set("pageToken", pageToken);
 

@@ -12,6 +12,7 @@ import {
   deleteRelationship,
 } from "./actions";
 import { NotesForm } from "./notes-form";
+import { RelationshipEditForm } from "./relationship-edit-form";
 import { Trash2, MessageCircle } from "lucide-react";
 import { whatsappUrl } from "@/lib/integrations/phone";
 
@@ -36,7 +37,7 @@ export function RelationshipForm({
       className="mb-8"
       id="add-form-contact"
     >
-      <form action={addRelationship} className="card grid gap-3 p-4 sm:grid-cols-2">
+      <form action={addRelationship} className="card grid gap-2 p-3 sm:grid-cols-2">
       <input type="text" name="name" placeholder={t("relationships.namePlaceholder")} required className={inputClass} />
       <input
         type="text"
@@ -73,11 +74,15 @@ export function RelationshipForm({
 
 export function RelationshipCard({
   r,
+  projects = [],
   showProjectBadge = true,
+  showProjectSelect = true,
   today = new Date(),
 }: {
   r: Relationship;
+  projects?: { id: string; name: string }[];
   showProjectBadge?: boolean;
+  showProjectSelect?: boolean;
   today?: Date;
 }) {
   const { t } = useTranslations();
@@ -89,35 +94,44 @@ export function RelationshipCard({
   const wa = r.phone ? whatsappUrl(r.phone) : null;
 
   return (
-    <div className="card p-4">
+    <div className="card flex flex-col gap-1.5 p-2.5">
       <div className="flex items-start justify-between gap-2">
-        <span className="font-medium">{r.name}</span>
+        <div className="min-w-0 flex-1">
+          <span className="text-sm font-medium">{r.name}</span>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px]">
+            {showProjectBadge && r.project_name && <Badge>{r.project_name}</Badge>}
+            {neverContacted ? (
+              <Badge tone="warn">{t("relationships.noContactLogged")}</Badge>
+            ) : (
+              <Badge tone={overdue ? "warn" : "default"}>
+                {t("relationships.lastContactDays", { days: daysSince })}
+              </Badge>
+            )}
+          </div>
+        </div>
         <form action={deleteRelationship}>
           <input type="hidden" name="id" value={r.id} />
-          <button className="p-1 text-muted hover:text-warn" title={t("common.delete")}>
-            <Trash2 size={14} />
+          <button className="rounded-md p-1 text-muted hover:text-warn" title={t("common.delete")}>
+            <Trash2 size={13} />
           </button>
         </form>
       </div>
 
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-        {showProjectBadge && r.project_name && <Badge>{r.project_name}</Badge>}
-        {neverContacted ? (
-          <Badge tone="warn">{t("relationships.noContactLogged")}</Badge>
-        ) : (
-          <Badge tone={overdue ? "warn" : "default"}>
-            {t("relationships.lastContactDays", { days: daysSince })}
-          </Badge>
-        )}
-      </div>
+      {projects.length > 0 && (
+        <RelationshipEditForm
+          relationship={r}
+          projects={projects}
+          showProjectSelect={showProjectSelect}
+        />
+      )}
 
       <NotesForm id={r.id} defaultNotes={r.notes || ""} action={updateRelationshipNotes} />
 
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1 border-t border-border/30 pt-1.5">
         <form action={markContactedToday}>
           <input type="hidden" name="id" value={r.id} />
-          <button className="flex items-center gap-1 rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-accent/25">
-            <MessageCircle size={13} /> {t("relationships.contactedToday")}
+          <button className="flex items-center gap-1 rounded-md bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent hover:bg-accent/25">
+            <MessageCircle size={11} /> {t("relationships.contactedToday")}
           </button>
         </form>
         {wa && (
@@ -125,9 +139,9 @@ export function RelationshipCard({
             href={wa}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 rounded-lg bg-good/15 px-2.5 py-1.5 text-xs font-medium text-good hover:bg-good/25"
+            className="flex items-center gap-1 rounded-md bg-good/15 px-2 py-0.5 text-[11px] font-medium text-good hover:bg-good/25"
           >
-            <MessageCircle size={13} /> {t("common.openWhatsapp")}
+            <MessageCircle size={11} /> {t("common.openWhatsapp")}
           </a>
         )}
       </div>
@@ -137,10 +151,14 @@ export function RelationshipCard({
 
 export function RelationshipList({
   relationships,
+  projects = [],
   showProjectBadge = true,
+  showProjectSelect = true,
 }: {
   relationships: Relationship[];
+  projects?: { id: string; name: string }[];
   showProjectBadge?: boolean;
+  showProjectSelect?: boolean;
 }) {
   const { t } = useTranslations();
 
@@ -150,9 +168,16 @@ export function RelationshipList({
 
   const today = new Date();
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-2 sm:grid-cols-2">
       {relationships.map((r) => (
-        <RelationshipCard key={r.id} r={r} showProjectBadge={showProjectBadge} today={today} />
+        <RelationshipCard
+          key={r.id}
+          r={r}
+          projects={projects}
+          showProjectBadge={showProjectBadge}
+          showProjectSelect={showProjectSelect}
+          today={today}
+        />
       ))}
     </div>
   );

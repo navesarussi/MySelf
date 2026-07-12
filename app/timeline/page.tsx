@@ -6,19 +6,22 @@ import { getTranslations } from "@/lib/i18n";
 import type { TimelineEvent } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
 import { TimelineBoard } from "./timeline-board";
-import { TimelineAddForms } from "./timeline-add-forms";
+import { TimelineAddModal } from "./timeline-add-modal";
 import { TimelineSyncBar } from "./sync-bar";
 import { isEventHidden } from "@/lib/timeline-display";
 import { isAddTarget } from "@/lib/add-menu";
+import { getIntegrationToken, isGoogleConnected } from "@/lib/integrations/tokens";
+import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
 
 async function getEvents(): Promise<TimelineEvent[]> {
   const supabase = getSupabase();
   const { data } = await supabase
     .from("timeline_events")
     .select("*")
-    .order("event_date", { ascending: false });
+    .order("event_date", { ascending: false })
+    .limit(10000);
   return (data || []) as TimelineEvent[];
 }
 
@@ -51,14 +54,21 @@ export default async function TimelinePage({
 
   const [events, periods] = await Promise.all([getEvents(), getPeriods()]);
   const visibleEvents = events.filter((e) => !isEventHidden(e));
+  const connected = await isGoogleConnected();
+  const token = connected ? await getIntegrationToken(GOOGLE_PROVIDER) : null;
 
   return (
     <>
       <PageHeader title={t("timeline.title")} subtitle={t("timeline.subtitleFull")} />
 
-      <TimelineAddForms openEvent={add === "event"} openPeriod={add === "period"} />
+      {add === "event" && <TimelineAddModal kind="event" />}
+      {add === "period" && <TimelineAddModal kind="period" />}
 
-      <TimelineSyncBar />
+      <TimelineSyncBar
+        connected={connected}
+        lastSyncAt={token?.last_sync_at ?? null}
+        initialSyncStatus={token?.sync_status ?? "idle"}
+      />
 
       <TimelineBoard events={visibleEvents} periods={periods} />
     </>

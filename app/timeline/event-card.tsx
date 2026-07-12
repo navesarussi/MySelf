@@ -1,6 +1,7 @@
 "use client";
 
-import { Trash2, Calendar } from "lucide-react";
+import { useState } from "react";
+import { Pencil, Trash2, Calendar } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { type LifePeriod, periodsForEvent } from "@/lib/life-periods";
@@ -8,15 +9,19 @@ import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/t
 import { Badge } from "@/components/ui";
 import { useTranslations } from "@/components/locale-provider";
 import { deleteTimelineEvent } from "./actions";
+import { EventEditForm } from "./event-edit-form";
 
 export function EventCard({
   event,
   allPeriods,
+  defaultEditing = false,
 }: {
   event: TimelineEvent;
   allPeriods: LifePeriod[];
+  defaultEditing?: boolean;
 }) {
   const { t, locale } = useTranslations();
+  const [editing, setEditing] = useState(defaultEditing);
   const tags = periodsForEvent(event, allPeriods);
   const milestone = event.category === "אבן דרך";
 
@@ -28,11 +33,11 @@ export function EventCard({
         }`}
       />
       <div
-        className={`rounded-xl border p-3 ${
+        className={`rounded-lg border ${
           milestone ? "border-accent2/40 bg-accent2/5" : "border-border bg-bg/40"
         }`}
       >
-        <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2 p-2.5">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted">{formatEventWhen(event, locale)}</span>
@@ -63,13 +68,25 @@ export function EventCard({
               </div>
             )}
           </div>
-          <form action={deleteTimelineEvent}>
-            <input type="hidden" name="id" value={event.id} />
-            <button className="rounded-lg p-1.5 text-muted hover:text-warn" title={t("common.delete")}>
-              <Trash2 size={16} />
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setEditing((v) => !v)}
+              className="rounded-lg p-1.5 text-muted hover:text-accent"
+              title={t("common.edit")}
+              aria-expanded={editing}
+            >
+              <Pencil size={16} />
             </button>
-          </form>
+            <form action={deleteTimelineEvent}>
+              <input type="hidden" name="id" value={event.id} />
+              <button className="rounded-lg p-1.5 text-muted hover:text-warn" title={t("common.delete")}>
+                <Trash2 size={16} />
+              </button>
+            </form>
+          </div>
         </div>
+        {editing && <EventEditForm event={event} onClose={() => setEditing(false)} />}
       </div>
     </li>
   );
@@ -87,7 +104,7 @@ export function UnassignedSection({
   if (orphan.length === 0) return null;
 
   return (
-    <section className="card p-4">
+    <section className="card p-3">
       <h2 className="mb-3 font-semibold">{t("timeline.unassigned")}</h2>
       <ol className="space-y-3">
         {orphan.map((ev) => (
