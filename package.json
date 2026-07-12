@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --test lib/__tests__/phone.test.ts lib/__tests__/google-calendar-map.test.ts lib/__tests__/google-calendar-merge.test.ts lib/__tests__/life-periods.test.ts"
+    "test": "node --import tsx --test lib/__tests__/phone.test.ts lib/__tests__/google-calendar-map.test.ts lib/__tests__/google-calendar-merge.test.ts lib/__tests__/life-periods.test.ts lib/__tests__/google-auth.test.ts lib/__tests__/delete-guard.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
