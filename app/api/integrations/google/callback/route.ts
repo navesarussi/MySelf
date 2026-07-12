@@ -37,8 +37,17 @@ export async function GET(req: NextRequest) {
 
     const { imported } = await syncGoogleCalendar();
     setFlashCookie(jar, `יומן גוגל מחובר — סונכרנו ${imported} אירועים`);
-  } catch {
-    setFlashCookie(jar, "שגיאה בחיבור יומן גוגל", "error");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown";
+    if (msg === "missing_refresh_token") {
+      setFlashCookie(jar, "חיבור נכשל — נסה שוב (נדרש אישור מלא)", "error");
+    } else if (msg.startsWith("token_exchange_failed")) {
+      setFlashCookie(jar, "שגיאה בחיבור — בדוק Redirect URI ב-Google Console", "error");
+    } else if (msg.startsWith("sync_") || msg.startsWith("calendar_fetch_failed")) {
+      setFlashCookie(jar, "יומן מחובר אך הסנכרון נכשל — נסה סנכרון ידני", "error");
+    } else {
+      setFlashCookie(jar, "שגיאה בחיבור יומן גוגל", "error");
+    }
   }
 
   return NextResponse.redirect(new URL("/settings", url.origin));

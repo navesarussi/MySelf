@@ -96,12 +96,15 @@ export function TimelineVisual({
     setViewport((v) => zoomViewport(v, factor, anchor));
   }, []);
 
-  const onWheel = useCallback(
-    (e: React.WheelEvent) => {
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const rect = containerRef.current?.getBoundingClientRect();
-        const anchor = rect ? (e.clientX - rect.left) / rect.width : 0.5;
+        const rect = el.getBoundingClientRect();
+        const anchor = rect.width ? (e.clientX - rect.left) / rect.width : 0.5;
         setZoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, anchor);
         return;
       }
@@ -110,9 +113,11 @@ export function TimelineVisual({
         const deltaMs = (e.deltaX / plotW) * span;
         setViewport((v) => panViewport(v, deltaMs));
       }
-    },
-    [plotW, span, setZoomAt]
-  );
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [plotW, span, setZoomAt]);
 
   const sliderVal = spanToSlider(span, globalSpan);
 
@@ -187,7 +192,7 @@ export function TimelineVisual({
         </div>
       </div>
 
-      <div ref={containerRef} onWheel={onWheel} className="overflow-hidden p-6 pb-12" dir="ltr">
+      <div ref={containerRef} className="overflow-hidden p-6 pb-12" dir="ltr">
         <div className="relative" style={{ width: plotW + PLOT_PAD }}>
           <div className="relative" style={{ height: tracksH + CONNECTOR_H + 40, paddingTop: 20 }}>
             <PeriodTracks

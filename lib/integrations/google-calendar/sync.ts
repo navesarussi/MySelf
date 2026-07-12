@@ -4,6 +4,7 @@ import { getIntegrationToken, saveIntegrationToken, touchLastSync } from "../tok
 import { refreshAccessToken, fetchAllPrimaryEvents } from "./client";
 import { mapGoogleEvent } from "./map";
 import { buildUpsertPayload, shouldRemoveLocal } from "./merge";
+import type { MappedGoogleEvent } from "./types";
 
 async function getValidAccessToken() {
   const row = await getIntegrationToken(GOOGLE_PROVIDER);
@@ -24,6 +25,22 @@ async function getValidAccessToken() {
   return refreshed.access_token;
 }
 
+async function upsertCalendarEvent(
+  supabase: ReturnType<typeof getSupabase>,
+  payload: MappedGoogleEvent & { synced_at: string; title_override?: string; description_override?: string; hidden_at?: string }
+) {
+  const { data: existing } = await supabase
+    .from("timeline_events")
+    .select("id")
+    .eq("google_event_id", payload.google_event_id)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return supabase.from("timeline_events").update(payload).eq("id", existing.id);
+  }
+  return supabase.from("timeline_events").insert(payload);
+}
+
 export async function syncGoogleCalendar(): Promise<{ imported: number; removed: number }> {
   const accessToken = await getValidAccessToken();
   const googleEvents = await fetchAllPrimaryEvents(accessToken);
@@ -31,6 +48,7 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
 
   const fetchedIds = new Set<string>();
   let imported = 0;
+  const errors: string[] = [];
 
   for (const g of googleEvents) {
     const mapped = mapGoogleEvent(g);
@@ -46,10 +64,16 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
     if (existing?.hidden_at) continue;
 
     const payload = buildUpsertPayload(mapped, existing);
-    const { error } = await supabase.from("timeline_events").upsert(payload, {
-      onConflict: "google_event_id",
-    });
-    if (!error) imported++;
+    const { error } = await upsertCalendarEvent(supabase, payload);
+    if (error) {
+      errors.push(error.message);
+      continue;
+    }
+    imported++;
+  }
+
+  if (errors.length > 0 && imported === 0) {
+    throw new Error(`sync_upsert_failed:${errors[0]}`);
   }
 
   const { data: localGoogle } = await supabase

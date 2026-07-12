@@ -58,6 +58,7 @@ export async function fetchAllPrimaryEvents(accessToken: string) {
       singleEvents: "true",
       orderBy: "startTime",
       maxResults: "2500",
+      timeMin: "1970-01-01T00:00:00Z",
     });
     if (pageToken) params.set("pageToken", pageToken);
 
@@ -70,7 +71,10 @@ export async function fetchAllPrimaryEvents(accessToken: string) {
       await new Promise((r) => setTimeout(r, 2000));
       continue;
     }
-    if (!res.ok) throw new Error(`calendar_fetch_failed:${res.status}`);
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`calendar_fetch_failed:${res.status}:${body.slice(0, 200)}`);
+    }
 
     const data = (await res.json()) as GoogleEventsListResponse;
     items.push(...(data.items ?? []));
