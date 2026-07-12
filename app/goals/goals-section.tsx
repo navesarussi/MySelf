@@ -7,7 +7,8 @@ import { useTranslations } from "@/components/locale-provider";
 import { Badge, SubmitButton, EmptyState, inputClass } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
 import { addGoal, toggleGoalStatus, deleteGoal } from "./actions";
-import { Target, Trash2, RotateCcw, ChevronDown, Search } from "lucide-react";
+import { GoalEditForm } from "./goal-edit-form";
+import { Target, Trash2, RotateCcw, ChevronDown, Search, Pencil } from "lucide-react";
 
 const DEFAULT_CATEGORY = "כללי";
 
@@ -39,6 +40,7 @@ export function GoalsSection({
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_FILTER);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -134,6 +136,15 @@ export function GoalsSection({
                         <div className="flex items-start justify-between gap-2">
                           <h4 className="text-sm font-medium leading-snug">{g.title}</h4>
                           <div className="flex shrink-0 items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditingId(editingId === g.id ? null : g.id)}
+                              className="rounded-md p-1 text-muted hover:text-accent"
+                              title={t("goals.editGoal")}
+                              aria-expanded={editingId === g.id}
+                            >
+                              <Pencil size={13} />
+                            </button>
                             <form action={toggleGoalStatus}>
                               <input type="hidden" name="id" value={g.id} />
                               <input type="hidden" name="status" value={g.status} />
@@ -174,6 +185,9 @@ export function GoalsSection({
                             )}
                           </div>
                         )}
+                        {editingId === g.id && (
+                          <GoalEditForm goal={g} onClose={() => setEditingId(null)} />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -209,15 +223,31 @@ export function GoalsSection({
           </summary>
           <div className="mt-3 space-y-2">
             {done.map((g) => (
-              <div key={g.id} className="card flex items-center justify-between p-2.5 text-sm">
-                <span>{g.title}</span>
-                <form action={toggleGoalStatus}>
-                  <input type="hidden" name="id" value={g.id} />
-                  <input type="hidden" name="status" value={g.status} />
-                  <button className="flex items-center gap-1 text-muted hover:text-ink" title={t("goals.restoreActive")}>
-                    <RotateCcw size={13} />
-                  </button>
-                </form>
+              <div key={g.id} className="card p-2.5 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span>{g.title}</span>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(editingId === g.id ? null : g.id)}
+                      className="rounded-md p-1 text-muted hover:text-accent"
+                      title={t("goals.editGoal")}
+                      aria-expanded={editingId === g.id}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <form action={toggleGoalStatus}>
+                      <input type="hidden" name="id" value={g.id} />
+                      <input type="hidden" name="status" value={g.status} />
+                      <button className="flex items-center gap-1 text-muted hover:text-ink" title={t("goals.restoreActive")}>
+                        <RotateCcw size={13} />
+                      </button>
+                    </form>
+                  </div>
+                </div>
+                {editingId === g.id && (
+                  <GoalEditForm goal={g} onClose={() => setEditingId(null)} />
+                )}
               </div>
             ))}
           </div>

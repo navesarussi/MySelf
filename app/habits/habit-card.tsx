@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Habit } from "@/lib/types";
 import { Badge, inputClass } from "@/components/ui";
 import { effectiveStreak } from "@/lib/habit-stats";
-import { checkInHabit, resetHabit, deleteHabit, updateHabit } from "./actions";
+import { checkInHabit, resetHabit, deleteHabit, updateHabit, reportHabitFall } from "./actions";
 import { Flame, RotateCcw, Trash2, Check, TrendingUp, ThumbsUp, AlertTriangle, Pencil } from "lucide-react";
 import { useTranslations } from "@/components/locale-provider";
 
@@ -124,37 +124,47 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
         </form>
       )}
 
-      <div className="flex items-center justify-between gap-1 border-t border-border/30 pt-1.5">
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11px] text-muted hover:text-accent"
-            aria-expanded={editing}
-          >
-            <Pencil size={12} />
-            {t("habits.editData")}
-          </button>
-          <form action={resetHabit}>
-            <input type="hidden" name="id" value={habit.id} />
-            <button className="rounded-md p-1 text-muted hover:text-warn" title={t("habits.resetStreak")}>
-              <RotateCcw size={13} />
-            </button>
-          </form>
-        </div>
-        <form action={checkInHabit}>
+      <div className="flex items-center gap-0.5 border-t border-border/30 pt-1.5">
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11px] text-muted hover:text-accent"
+          aria-expanded={editing}
+        >
+          <Pencil size={12} />
+          {t("habits.editData")}
+        </button>
+        <form action={resetHabit}>
           <input type="hidden" name="id" value={habit.id} />
-          <button
-            disabled={checkedToday}
-            className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition ${
-              checkedToday ? "bg-good/15 text-good" : "bg-accent text-bg hover:opacity-90"
-            }`}
-          >
-            <Check size={12} />
-            {checkedToday ? t("habits.checkedToday") : t("habits.checkInToday")}
+          <button className="rounded-md p-1 text-muted hover:text-warn" title={t("habits.resetStreak")}>
+            <RotateCcw size={13} />
           </button>
         </form>
       </div>
+      {!checkedToday && (
+        <div className="flex gap-2">
+          <form action={checkInHabit} className="flex-1">
+            <input type="hidden" name="id" value={habit.id} />
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-bg transition hover:opacity-90"
+            >
+              <Check size={12} />
+              {t("habits.checkInToday")}
+            </button>
+          </form>
+          <form action={reportHabitFall} className="flex-1">
+            <input type="hidden" name="id" value={habit.id} />
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-1 rounded-md bg-warn/15 px-2 py-1 text-[11px] font-medium text-warn transition hover:bg-warn/25"
+            >
+              <AlertTriangle size={12} />
+              {t("habits.reportFall")}
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

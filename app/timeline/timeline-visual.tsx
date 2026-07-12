@@ -12,6 +12,7 @@ import {
   timelineBounds,
   xFor,
 } from "@/lib/timeline-layout";
+import { isEventVisibleAtZoom } from "@/lib/timeline-zoom";
 import {
   createViewport,
   fitViewport,
@@ -76,6 +77,7 @@ export function TimelineVisual({
 
   const eventItems = useMemo(() => {
     const visible = events.filter((ev) => {
+      if (!isEventVisibleAtZoom(ev.min_zoom, span)) return false;
       const time = eventDateTime(ev);
       return time >= viewMin - span * 0.02 && time <= viewMax + span * 0.02;
     });

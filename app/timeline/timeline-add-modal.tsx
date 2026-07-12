@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { SubmitButton, inputClass } from "@/components/ui";
 import { useTranslations } from "@/components/locale-provider";
 import { addTimelineEvent, addLifePeriod } from "./actions";
+import { ZoomLevelField } from "./zoom-level-field";
 
 type AddKind = "event" | "period";
 
@@ -52,6 +53,7 @@ export function TimelineAddModal({ kind }: { kind: AddKind }) {
             <input type="date" name="event_date" required className={inputClass} />
             <input type="time" name="event_time" className={inputClass} title={t("timeline.timeOptional")} />
             <input type="text" name="category" placeholder={t("timeline.categoryPlaceholder")} className={inputClass} />
+            <ZoomLevelField className="sm:col-span-2" />
             <input
               type="text"
               name="title"

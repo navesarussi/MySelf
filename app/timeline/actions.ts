@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { setFlash } from "@/lib/flash-actions";
+import { parseMinZoom } from "@/lib/timeline-zoom";
 
 export async function addTimelineEvent(formData: FormData) {
   const event_date = String(formData.get("event_date") || "");
@@ -10,6 +11,7 @@ export async function addTimelineEvent(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const category = String(formData.get("category") || "").trim();
+  const min_zoom = parseMinZoom(String(formData.get("min_zoom") || ""));
 
   if (!event_date || !title) {
     await setFlash("flash.eventFieldsRequired", "error");
@@ -23,6 +25,7 @@ export async function addTimelineEvent(formData: FormData) {
     title,
     description: description || null,
     category: category || null,
+    min_zoom,
     source: "manual",
   });
 
@@ -38,6 +41,7 @@ export async function updateTimelineEvent(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const category = String(formData.get("category") || "").trim();
+  const min_zoom = parseMinZoom(String(formData.get("min_zoom") || ""));
 
   if (!id || !event_date || !title) {
     await setFlash("flash.requiredFields", "error");
@@ -57,6 +61,7 @@ export async function updateTimelineEvent(formData: FormData) {
       .update({
         event_date,
         event_time,
+        min_zoom,
         title_override: title === existing.title ? null : title,
         description_override:
           (description || null) === (existing.description || null) ? null : description || null,
@@ -72,6 +77,7 @@ export async function updateTimelineEvent(formData: FormData) {
         title,
         description: description || null,
         category: category || null,
+        min_zoom,
       })
       .eq("id", id);
     await setFlash(error ? "flash.eventUpdateError" : "flash.eventUpdated", error ? "error" : "success");

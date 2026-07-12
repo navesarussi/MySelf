@@ -1,3 +1,5 @@
+import type { TimelineZoomLevel } from "@/lib/timeline-zoom";
+
 export type EventSource = "manual" | "google_calendar";
 
 export type TimelineEvent = {
@@ -7,6 +9,7 @@ export type TimelineEvent = {
   title: string;
   description: string | null;
   category: string | null;
+  min_zoom: TimelineZoomLevel;
   source: EventSource;
   google_event_id: string | null;
   title_override: string | null;

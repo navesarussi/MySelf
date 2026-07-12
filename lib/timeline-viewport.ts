@@ -1,4 +1,5 @@
-import { DAY_MS, HOUR_MS, YEAR_MS } from "@/lib/timeline-layout";
+import { DAY_MS, HOUR_MS } from "@/lib/timeline-layout";
+import { spanToZoomLevel } from "@/lib/timeline-zoom";
 
 export const MIN_VIEW_SPAN_MS = 4 * HOUR_MS;
 
@@ -58,13 +59,8 @@ export function fitViewport(vp: TimelineViewport): TimelineViewport {
 }
 
 export function zoomLevelLabel(spanMs: number): string {
-  const hours = spanMs / HOUR_MS;
-  if (hours <= 30) return "שעות";
-  const days = spanMs / DAY_MS;
-  if (days <= 45) return "ימים";
-  const years = spanMs / YEAR_MS;
-  if (years <= 3) return "חודשים";
-  return "שנים";
+  const labels = { years: "שנים", months: "חודשים", days: "ימים", hours: "שעות" } as const;
+  return labels[spanToZoomLevel(spanMs)];
 }
 
 /** 0 = full zoom out, 100 = max zoom in */

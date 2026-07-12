@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { HomePanel } from "@/components/home-panel";
 import { Badge } from "@/components/ui";
-import { HomeHabitRow } from "@/app/habits/home-habit-row";
+import { HabitCard } from "@/app/habits/habit-card";
 import { HomeRelationshipRow } from "@/app/home/home-relationship-row";
 import { HomeTaskRow } from "@/app/home/home-task-row";
 import { rankGoalsForHome, horizonLabel, achievabilityScore } from "@/lib/goals-rank";
@@ -150,9 +150,11 @@ export function HomeDashboard({
           {allHabits.length === 0 ? (
             <p className="text-sm text-muted">{t("home.noHabits")}</p>
           ) : (
-            <ul className="space-y-3 pe-1 text-sm">
+            <ul className="space-y-2 pe-1 text-sm">
               {allHabits.map((h) => (
-                <HomeHabitRow key={h.id} habit={h} today={today} />
+                <li key={h.id}>
+                  <HabitCard habit={h} today={today} />
+                </li>
               ))}
             </ul>
           )}

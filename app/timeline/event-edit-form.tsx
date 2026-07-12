@@ -6,7 +6,9 @@ import type { TimelineEvent } from "@/lib/types";
 import { inputClass } from "@/components/ui";
 import { useTranslations } from "@/components/locale-provider";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
+import { parseMinZoom } from "@/lib/timeline-zoom";
 import { deleteTimelineEvent, updateTimelineEvent } from "./actions";
+import { ZoomLevelField } from "./zoom-level-field";
 
 function timeValue(event: TimelineEvent) {
   return event.event_time?.slice(0, 5) || "";
@@ -76,6 +78,7 @@ export function EventEditForm({
         {!fromGoogle && (
           <input type="text" name="category" defaultValue={event.category || ""} placeholder={t("timeline.categoryPlaceholder")} className={inputClass} />
         )}
+        <ZoomLevelField defaultValue={parseMinZoom(event.min_zoom)} className="sm:col-span-2" />
         <textarea
           name="description"
           defaultValue={description}

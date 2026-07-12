@@ -26,6 +26,31 @@ export async function addGoal(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function updateGoal(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const title = String(formData.get("title") || "").trim();
+  const category = String(formData.get("category") || "").trim();
+  const horizon = String(formData.get("horizon") || "").trim();
+  const first_step = String(formData.get("first_step") || "").trim();
+  const definition_of_done = String(formData.get("definition_of_done") || "").trim();
+  if (!id || !title) return;
+
+  const supabase = getSupabase();
+  await supabase
+    .from("goals")
+    .update({
+      title,
+      category: category || null,
+      horizon: horizon || null,
+      first_step: first_step || null,
+      definition_of_done: definition_of_done || null,
+    })
+    .eq("id", id);
+  await setFlash("flash.goalUpdated");
+  revalidatePath("/goals");
+  revalidatePath("/");
+}
+
 export async function toggleGoalStatus(formData: FormData) {
   const id = String(formData.get("id") || "");
   const status = String(formData.get("status") || "active");
