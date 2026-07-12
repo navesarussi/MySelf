@@ -9,7 +9,8 @@ const links = [
   { href: "/", label: "בית" },
   { href: "/timeline", label: "ציר זמן" },
   { href: "/tasks", label: "משימות" },
-  { href: "/habits", label: "הרגלים ומטרות" },
+  { href: "/habits", label: "הרגלים" },
+  { href: "/goals", label: "מטרות וחלומות" },
   { href: "/relationships", label: "קשרים" },
   { href: "/library", label: "ספריית תוכן" },
 ];

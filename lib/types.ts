@@ -14,6 +14,8 @@ export type Habit = {
   target_note: string | null;
   streak_count: number;
   best_streak: number;
+  total_success_days: number;
+  failure_count: number;
   last_checked_on: string | null;
   archived: boolean;
   created_at: string;

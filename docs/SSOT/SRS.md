@@ -6,7 +6,18 @@ Personal private dashboard: timeline, habits/goals, relationships, content libra
 ## Requirements
 
 ### FR-NAV-01
-Navigation includes: בית, ציר זמן, משימות, הרגלים ומטרות, קשרים, ספריית תוכן.
+Navigation includes: בית, ציר זמן, משימות, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן.
+
+### FR-HABIT-01
+Dedicated Habits tab (`/habits`) separate from goals/dreams (`/goals`).
+Habit stats: current streak, best streak, total successful days, failure count (streak breaks).
+Successful days and best streak persist after a missed day.
+
+### FR-HOME-01
+Home page is a data dashboard (no module shortcut cards). Shows aggregated stats for habits, goals, tasks, relationships, timeline.
+
+### FR-TL-04
+Visual timeline supports deep zoom down to hourly divisions on a specific date (log-scale zoom control, adaptive axis ticks).
 
 ### FR-TASK-01
 Dedicated Tasks tab (`/tasks`) separate from habits/commitments.

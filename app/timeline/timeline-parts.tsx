@@ -9,7 +9,7 @@ import {
   todayIso,
   toTime,
   xFor,
-  yearTicks,
+  timelineTicks,
 } from "@/lib/timeline-layout";
 
 export const TRACK_H = 26;
@@ -185,40 +185,48 @@ export function TimelineAxis({
   min,
   max,
   plotW,
+  pxPerYear,
 }: {
   periods: LifePeriod[];
   min: number;
   max: number;
   plotW: number;
+  pxPerYear: number;
 }) {
-  const years = useMemo(() => yearTicks(min, max, plotW), [min, max, plotW]);
+  const ticks = useMemo(() => timelineTicks(min, max, plotW, pxPerYear), [min, max, plotW, pxPerYear]);
   const marks = useMemo(() => collectAxisMarks(periods, min, max, plotW), [periods, min, max, plotW]);
   const todayX = xFor(Date.now(), min, max, plotW);
+  const showPeriodMarks = pxPerYear < 80_000;
 
   return (
     <div className="relative pb-6">
-      {/* years above axis */}
       <div className="pointer-events-none absolute bottom-full left-0 right-0 mb-1 h-5">
-        {years.map(({ year, x }) => (
+        {ticks.map((t) => (
           <div
-            key={year}
+            key={t.key}
             className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
-            style={{ left: x }}
+            style={{ left: t.x }}
           >
-            <span className="text-[10px] font-medium text-muted">{year}</span>
-            <span className="mt-0.5 h-2 w-px bg-border" />
+            <span className={`text-[10px] font-medium ${t.major ? "text-ink" : "text-muted"}`}>
+              {t.label}
+            </span>
+            <span className={`mt-0.5 w-px bg-border ${t.major ? "h-2.5" : "h-1.5"}`} />
           </div>
         ))}
       </div>
 
-      {/* main axis — connectors meet here */}
       <div className="relative h-1 rounded-full bg-border">
-        {years.map(({ year, x }) => (
-          <span key={`g-${year}`} className="absolute bottom-0 top-0 w-px bg-border/70" style={{ left: x }} />
+        {ticks.map((t) => (
+          <span
+            key={`g-${t.key}`}
+            className={`absolute bottom-0 top-0 w-px ${t.major ? "bg-border" : "bg-border/50"}`}
+            style={{ left: t.x }}
+          />
         ))}
-        {marks.map((m) => (
-          <span key={`t-${m.key}`} className="absolute bottom-0 top-0 w-px bg-accent/50" style={{ left: m.x }} />
-        ))}
+        {showPeriodMarks &&
+          marks.map((m) => (
+            <span key={`t-${m.key}`} className="absolute bottom-0 top-0 w-px bg-accent/50" style={{ left: m.x }} />
+          ))}
         <div
           className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-accent ring-4 ring-accent/20"
           style={{ left: todayX }}
@@ -226,19 +234,19 @@ export function TimelineAxis({
         />
       </div>
 
-      {/* period dates on axis */}
-      {marks.map((m) => (
-        <div
-          key={m.key}
-          className="absolute top-full mt-1 flex -translate-x-1/2 flex-col items-center"
-          style={{ left: m.x }}
-        >
-          <span className="h-1.5 w-px bg-accent/60" />
-          <span className="mt-0.5 whitespace-nowrap rounded bg-surface px-1.5 py-0.5 text-[9px] text-ink shadow-sm ring-1 ring-border/50">
-            {m.date}
-          </span>
-        </div>
-      ))}
+      {showPeriodMarks &&
+        marks.map((m) => (
+          <div
+            key={m.key}
+            className="absolute top-full mt-1 flex -translate-x-1/2 flex-col items-center"
+            style={{ left: m.x }}
+          >
+            <span className="h-1.5 w-px bg-accent/60" />
+            <span className="mt-0.5 whitespace-nowrap rounded bg-surface px-1.5 py-0.5 text-[9px] text-ink shadow-sm ring-1 ring-border/50">
+              {m.date}
+            </span>
+          </div>
+        ))}
     </div>
   );
 }

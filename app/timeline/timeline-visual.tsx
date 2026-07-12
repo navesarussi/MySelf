@@ -6,6 +6,9 @@ import type { TimelineEvent } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
 import {
   assignEventLanes,
+  MIN_PPY,
+  MAX_PPY,
+  pxPerDay,
   timelineBounds,
   toTime,
   widthForRange,
@@ -21,10 +24,28 @@ import {
 } from "./timeline-parts";
 import { PeriodEditForm } from "./period-edit-form";
 
-const MIN_PPY = 18;
-const MAX_PPY = 900;
 const DEFAULT_PPY = 120;
 const CONNECTOR_H = 28;
+
+function eventTime(isoDate: string) {
+  return toTime(`${isoDate}T12:00:00`);
+}
+
+function ppyToSlider(v: number) {
+  return (Math.log(v / MIN_PPY) / Math.log(MAX_PPY / MIN_PPY)) * 100;
+}
+
+function sliderToPpy(s: number) {
+  return MIN_PPY * Math.pow(MAX_PPY / MIN_PPY, s / 100);
+}
+
+function zoomLabel(pxPerYear: number) {
+  const ppd = pxPerDay(pxPerYear);
+  if (ppd >= 600) return "שעות";
+  if (ppd >= 18) return "ימים";
+  if (ppd >= 2.5) return "חודשים";
+  return "שנים";
+}
 
 export function TimelineVisual({
   events,
@@ -47,14 +68,15 @@ export function TimelineVisual({
       .sort((a, b) => a.event_date.localeCompare(b.event_date))
       .map((ev) => ({
         id: ev.id,
-        x: xFor(toTime(ev.event_date), min, max, plotW),
+        x: xFor(eventTime(ev.event_date), min, max, plotW),
         title: ev.title,
         date: ev.event_date,
         milestone: ev.category === "אבן דרך",
       }));
-    const { lanes: evLanes } = assignEventLanes(placed, 90);
+    const minGap = pxPerDay(pxPerYear) >= 18 ? 40 : 90;
+    const { lanes: evLanes } = assignEventLanes(placed, minGap);
     return placed.map((p) => ({ ...p, lane: evLanes.get(p.id) ?? 0 }));
-  }, [events, min, max, plotW]);
+  }, [events, min, max, plotW, pxPerYear]);
 
   const setZoomPreservingCenter = useCallback((next: number) => {
     const el = scroller.current;
@@ -91,13 +113,13 @@ export function TimelineVisual({
     zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15);
   }
 
-  const pct = Math.round(((pxPerYear - MIN_PPY) / (MAX_PPY - MIN_PPY)) * 100);
+  const sliderVal = ppyToSlider(pxPerYear);
 
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
         <p className="text-xs text-muted">
-          גלול לצדדים · Ctrl/⌘ + גלגלת לזום · לחץ על תקופה לעריכה
+          גלול לצדדים · Ctrl/⌘ + גלגלת לזום עמוק (עד חלוקה לשעות) · לחץ על תקופה לעריכה
         </p>
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={fitAll} className="rounded-lg border px-2 py-1.5 text-muted hover:text-ink" title="התאם הכל">
@@ -108,18 +130,18 @@ export function TimelineVisual({
           </button>
           <input
             type="range"
-            min={MIN_PPY}
-            max={MAX_PPY}
-            step={2}
-            value={pxPerYear}
-            onChange={(e) => setZoomPreservingCenter(Number(e.target.value))}
+            min={0}
+            max={100}
+            step={0.5}
+            value={sliderVal}
+            onChange={(e) => setZoomPreservingCenter(sliderToPpy(Number(e.target.value)))}
             className="w-28 accent-[var(--accent)]"
             aria-label="רמת זום"
           />
           <button type="button" onClick={() => zoomBy(1.35)} className="rounded-lg border p-1.5 text-muted hover:text-ink" title="הגדל">
             <Plus size={16} />
           </button>
-          <span className="w-10 text-center text-[10px] text-muted">{pct}%</span>
+          <span className="w-12 text-center text-[10px] text-muted">{zoomLabel(pxPerYear)}</span>
         </div>
       </div>
 
@@ -145,7 +167,7 @@ export function TimelineVisual({
               connectorH={CONNECTOR_H}
             />
             <div className="absolute inset-x-0" style={{ top: tracksH + CONNECTOR_H }}>
-              <TimelineAxis periods={periods} min={min} max={max} plotW={plotW} />
+              <TimelineAxis periods={periods} min={min} max={max} plotW={plotW} pxPerYear={pxPerYear} />
             </div>
           </div>
 

@@ -4,48 +4,77 @@ import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { Badge } from "@/components/ui";
-import type { Habit, Goal, Commitment, Relationship, TimelineEvent } from "@/lib/types";
-import { Compass, Clock, Target, Users, BookOpen, Flame, AlertCircle } from "lucide-react";
+import { effectiveStreak } from "@/lib/habit-stats";
+import type { Habit, Commitment, Relationship, TimelineEvent, Task } from "@/lib/types";
+import {
+  Compass,
+  Clock,
+  Target,
+  Flame,
+  AlertCircle,
+  CheckSquare,
+  TrendingUp,
+  ThumbsUp,
+  AlertTriangle,
+} from "lucide-react";
 
 export const revalidate = 30;
-
-const modules = [
-  { href: "/timeline", label: "ציר זמן", icon: Clock, desc: "האירועים החשובים בחיים שלך" },
-  { href: "/habits", label: "הרגלים ומטרות", icon: Target, desc: "הרגלים, משימות, מטרות וחלומות" },
-  { href: "/relationships", label: "ניהול קשרים", icon: Users, desc: "משפחה, חברים, בת/בן זוג" },
-  { href: "/library", label: "ספריית תוכן", icon: BookOpen, desc: "פסיכולוגיה, פחדים, קשרים, סיפורים" },
-];
 
 export default async function HomePage() {
   const configured = dbConfigured();
 
   let habits: Habit[] = [];
   let activeGoalsCount = 0;
+  let doneGoalsCount = 0;
   let pendingCommitments: Commitment[] = [];
   let overdueRelationships: Relationship[] = [];
   let recentEvents: TimelineEvent[] = [];
+  let openTasksCount = 0;
+  let inProgressTasksCount = 0;
 
   if (configured) {
     const supabase = getSupabase();
-    const [habitsRes, goalsRes, commitmentsRes, relRes, eventsRes] = await Promise.all([
-      supabase.from("habits").select("id, name, streak_count").eq("archived", false),
-      supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "active"),
-      supabase.from("commitments").select("id, text, commitment_date").eq("status", "pending").order("commitment_date", { ascending: false }).limit(5),
-      supabase.from("relationships").select("id, name, last_contact_date, reminder_days"),
-      supabase.from("timeline_events").select("id, title, event_date").order("event_date", { ascending: false }).limit(3),
-    ]);
+    const [habitsRes, goalsRes, doneGoalsRes, commitmentsRes, relRes, eventsRes, tasksRes] =
+      await Promise.all([
+        supabase.from("habits").select("*").eq("archived", false),
+        supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "active"),
+        supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "done"),
+        supabase
+          .from("commitments")
+          .select("id, text, commitment_date")
+          .eq("status", "pending")
+          .order("commitment_date", { ascending: false })
+          .limit(5),
+        supabase.from("relationships").select("id, name, last_contact_date, reminder_days"),
+        supabase.from("timeline_events").select("id, title, event_date").order("event_date", { ascending: false }).limit(5),
+        supabase.from("tasks").select("id, status"),
+      ]);
+
     habits = (habitsRes.data as Habit[]) || [];
     activeGoalsCount = goalsRes.count || 0;
+    doneGoalsCount = doneGoalsRes.count || 0;
     pendingCommitments = (commitmentsRes.data as Commitment[]) || [];
     recentEvents = (eventsRes.data as TimelineEvent[]) || [];
+
+    const tasks = (tasksRes.data as Pick<Task, "status">[]) || [];
+    openTasksCount = tasks.filter((t) => t.status === "open").length;
+    inProgressTasksCount = tasks.filter((t) => t.status === "in_progress").length;
 
     const today = new Date();
     overdueRelationships = ((relRes.data as Relationship[]) || []).filter((r) => {
       if (r.reminder_days == null) return false;
-      const days = r.last_contact_date ? differenceInCalendarDays(today, new Date(r.last_contact_date)) : Infinity;
+      const days = r.last_contact_date
+        ? differenceInCalendarDays(today, new Date(r.last_contact_date))
+        : Infinity;
       return days >= r.reminder_days;
     });
   }
+
+  const totalSuccessDays = habits.reduce((s, h) => s + (h.total_success_days ?? 0), 0);
+  const totalFailures = habits.reduce((s, h) => s + (h.failure_count ?? 0), 0);
+  const bestStreakOverall = habits.reduce((m, h) => Math.max(m, h.best_streak), 0);
+  const activeStreaks = habits.filter((h) => effectiveStreak(h) > 0).length;
+  const checkedToday = habits.filter((h) => h.last_checked_on === new Date().toISOString().slice(0, 10)).length;
 
   return (
     <>
@@ -55,7 +84,7 @@ export default async function HomePage() {
           <span className="text-sm font-medium">המצפן שלי</span>
         </div>
         <p className="mt-3 text-lg font-medium leading-relaxed">
-          "לשאוף ליותר, להסתפק בפחות, ולחיות עוד יום על מי מנוחות."
+          &quot;לשאוף ליותר, להסתפק בפחות, ולחיות עוד יום על מי מנוחות.&quot;
         </p>
         <p className="mt-2 text-sm text-muted leading-relaxed">
           ללמוד להרים את הראש בלי להרים את האף, להילחם כל יום בגבולות של עצמי ולחלום להציב את
@@ -63,96 +92,172 @@ export default async function HomePage() {
         </p>
       </div>
 
-      {!configured && <div className="mb-8"><DbWarning /></div>}
-
-      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {modules.map((m) => (
-          <Link key={m.href} href={m.href} className="card group p-4 transition hover:border-accent/50">
-            <m.icon size={20} className="text-accent" />
-            <h3 className="mt-3 font-semibold">{m.label}</h3>
-            <p className="mt-1 text-xs text-muted">{m.desc}</p>
-          </Link>
-        ))}
-      </div>
+      {!configured && (
+        <div className="mb-8">
+          <DbWarning />
+        </div>
+      )}
 
       {configured && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="card p-4">
-            <h3 className="mb-3 flex items-center gap-2 font-semibold">
-              <Flame size={16} className="text-accent2" /> הרגלים פעילים
-            </h3>
-            {habits.length === 0 ? (
-              <p className="text-sm text-muted">אין עדיין הרגלים במעקב.</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {habits.map((h) => (
-                  <li key={h.id} className="flex items-center justify-between">
-                    <span>{h.name}</span>
-                    <Badge tone={h.streak_count > 0 ? "good" : "default"}>{h.streak_count} ימים</Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="card p-4">
-            <h3 className="mb-3 flex items-center gap-2 font-semibold">
-              <Target size={16} className="text-accent" /> יעדים פעילים
-            </h3>
-            <p className="text-2xl font-bold">{activeGoalsCount}</p>
-            <p className="text-sm text-muted">יעדים וחלומות בעבודה כרגע</p>
-            <Link href="/habits" className="mt-2 inline-block text-sm text-accent hover:underline">
-              לצפייה ברשימה המלאה ←
-            </Link>
-          </div>
-
-          <div className="card p-4">
-            <h3 className="mb-3 flex items-center gap-2 font-semibold">
-              <AlertCircle size={16} className="text-warn" /> קשרים שמחכים לתשומת לב
-            </h3>
-            {overdueRelationships.length === 0 ? (
-              <p className="text-sm text-muted">אין כרגע קשרים באיחור.</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {overdueRelationships.map((r) => (
-                  <li key={r.id}>{r.name}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="card p-4">
-            <h3 className="mb-3 flex items-center gap-2 font-semibold">
-              <Clock size={16} className="text-accent" /> אירועים אחרונים בציר הזמן
-            </h3>
-            {recentEvents.length === 0 ? (
-              <p className="text-sm text-muted">אין עדיין אירועים.</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {recentEvents.map((e) => (
-                  <li key={e.id} className="flex justify-between">
-                    <span>{e.title}</span>
-                    <span className="text-muted">{new Date(e.event_date).toLocaleDateString("he-IL")}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {pendingCommitments.length > 0 && (
-            <div className="card p-4 lg:col-span-2">
-              <h3 className="mb-3 font-semibold">התחייבויות ממתינות</h3>
-              <ul className="space-y-1 text-sm">
-                {pendingCommitments.map((c) => (
-                  <li key={c.id} className="flex justify-between">
-                    <span>{c.text}</span>
-                    <span className="text-muted">{new Date(c.commitment_date).toLocaleDateString("he-IL")}</span>
-                  </li>
-                ))}
-              </ul>
+        <>
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="card p-4">
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Flame size={15} className="text-accent2" /> הרגלים פעילים
+              </div>
+              <p className="mt-2 text-3xl font-bold">{habits.length}</p>
+              <p className="mt-1 text-xs text-muted">
+                {checkedToday}/{habits.length} סומנו היום · {activeStreaks} ברצף
+              </p>
             </div>
-          )}
-        </div>
+            <div className="card p-4">
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <ThumbsUp size={15} className="text-good" /> ימים חיוביים
+              </div>
+              <p className="mt-2 text-3xl font-bold">{totalSuccessDays}</p>
+              <p className="mt-1 text-xs text-muted">שיא רצף: {bestStreakOverall} ימים</p>
+            </div>
+            <div className="card p-4">
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Target size={15} className="text-accent" /> יעדים פעילים
+              </div>
+              <p className="mt-2 text-3xl font-bold">{activeGoalsCount}</p>
+              <p className="mt-1 text-xs text-muted">{doneGoalsCount} הושגו</p>
+            </div>
+            <div className="card p-4">
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <CheckSquare size={15} className="text-accent" /> משימות פתוחות
+              </div>
+              <p className="mt-2 text-3xl font-bold">{openTasksCount + inProgressTasksCount}</p>
+              <p className="mt-1 text-xs text-muted">{inProgressTasksCount} בתהליך</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <Flame size={16} className="text-accent2" /> מעקב הרגלים
+                </h3>
+                <Link href="/habits" className="text-xs text-accent hover:underline">
+                  לכל ההרגלים ←
+                </Link>
+              </div>
+              {habits.length === 0 ? (
+                <p className="text-sm text-muted">אין עדיין הרגלים במעקב.</p>
+              ) : (
+                <ul className="space-y-3 text-sm">
+                  {habits.map((h) => {
+                    const streak = effectiveStreak(h);
+                    return (
+                      <li key={h.id} className="rounded-lg bg-border/20 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">{h.name}</span>
+                          <Badge tone={streak > 0 ? "good" : "default"}>{streak} ברצף</Badge>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-muted">
+                          <span className="flex items-center gap-1">
+                            <TrendingUp size={11} /> שיא {h.best_streak}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <ThumbsUp size={11} /> {h.total_success_days ?? 0} חיוביים
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <AlertTriangle size={11} /> {h.failure_count ?? 0} נפילות
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {totalFailures > 0 && (
+                <p className="mt-3 text-xs text-muted">סה״כ נפילות במערכת: {totalFailures}</p>
+              )}
+            </div>
+
+            <div className="card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <Target size={16} className="text-accent" /> מטרות וחלומות
+                </h3>
+                <Link href="/goals" className="text-xs text-accent hover:underline">
+                  לרשימה המלאה ←
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-border/20 px-3 py-2">
+                  <p className="text-xs text-muted">פעילים</p>
+                  <p className="text-2xl font-bold">{activeGoalsCount}</p>
+                </div>
+                <div className="rounded-lg bg-border/20 px-3 py-2">
+                  <p className="text-xs text-muted">הושגו</p>
+                  <p className="text-2xl font-bold">{doneGoalsCount}</p>
+                </div>
+              </div>
+              {pendingCommitments.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-medium text-muted">התחייבויות ממתינות</p>
+                  <ul className="space-y-1 text-sm">
+                    {pendingCommitments.map((c) => (
+                      <li key={c.id} className="flex justify-between gap-2">
+                        <span className="truncate">{c.text}</span>
+                        <span className="shrink-0 text-muted">
+                          {new Date(c.commitment_date).toLocaleDateString("he-IL")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div className="card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <AlertCircle size={16} className="text-warn" /> קשרים שמחכים לתשומת לב
+                </h3>
+                <Link href="/relationships" className="text-xs text-accent hover:underline">
+                  לניהול קשרים ←
+                </Link>
+              </div>
+              {overdueRelationships.length === 0 ? (
+                <p className="text-sm text-muted">אין כרגע קשרים באיחור.</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {overdueRelationships.map((r) => (
+                    <li key={r.id}>{r.name}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <Clock size={16} className="text-accent" /> אירועים אחרונים
+                </h3>
+                <Link href="/timeline" className="text-xs text-accent hover:underline">
+                  לציר הזמן ←
+                </Link>
+              </div>
+              {recentEvents.length === 0 ? (
+                <p className="text-sm text-muted">אין עדיין אירועים.</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {recentEvents.map((e) => (
+                    <li key={e.id} className="flex justify-between gap-2">
+                      <span className="truncate">{e.title}</span>
+                      <span className="shrink-0 text-muted">
+                        {new Date(e.event_date).toLocaleDateString("he-IL")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </>
   );
