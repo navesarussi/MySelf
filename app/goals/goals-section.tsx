@@ -8,7 +8,7 @@ import { Badge, SubmitButton, EmptyState, inputClass } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
 import { addGoal, toggleGoalStatus, deleteGoal } from "./actions";
 import { GoalEditForm } from "./goal-edit-form";
-import { Target, Trash2, RotateCcw, ChevronDown, Search, Pencil } from "lucide-react";
+import { Target, Trash2, RotateCcw, ChevronDown, Search, Pencil, Check } from "lucide-react";
 
 const DEFAULT_CATEGORY = "כללי";
 
@@ -133,36 +133,7 @@ export function GoalsSection({
                   <div className="grid gap-2 sm:grid-cols-2">
                     {items.map((g) => (
                       <div key={g.id} className="card p-2.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-medium leading-snug">{g.title}</h4>
-                          <div className="flex shrink-0 items-center gap-0.5">
-                            <button
-                              type="button"
-                              onClick={() => setEditingId(editingId === g.id ? null : g.id)}
-                              className="rounded-md p-1 text-muted hover:text-accent"
-                              title={t("goals.editGoal")}
-                              aria-expanded={editingId === g.id}
-                            >
-                              <Pencil size={13} />
-                            </button>
-                            <form action={toggleGoalStatus}>
-                              <input type="hidden" name="id" value={g.id} />
-                              <input type="hidden" name="status" value={g.status} />
-                              <button
-                                className="rounded-md bg-good/15 px-2 py-0.5 text-[11px] font-medium text-good hover:opacity-80"
-                                title={t("goals.markDone")}
-                              >
-                                {t("goals.markDoneBtn")}
-                              </button>
-                            </form>
-                            <form action={deleteGoal}>
-                              <input type="hidden" name="id" value={g.id} />
-                              <button className="p-1 text-muted hover:text-warn" title={t("common.delete")}>
-                                <Trash2 size={13} />
-                              </button>
-                            </form>
-                          </div>
-                        </div>
+                        <h4 className="text-sm font-medium leading-snug">{g.title}</h4>
                         {(g.horizon || g.first_step || g.definition_of_done) && (
                           <div className="mt-1.5 space-y-0.5 text-xs leading-relaxed text-muted">
                             {g.horizon && (
@@ -185,6 +156,37 @@ export function GoalsSection({
                             )}
                           </div>
                         )}
+                        <div className="mt-2 flex items-center gap-2 border-t border-border/30 pt-1.5">
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditingId(editingId === g.id ? null : g.id)}
+                              className="rounded-md p-1 text-muted hover:text-accent"
+                              title={t("goals.editGoal")}
+                              aria-expanded={editingId === g.id}
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <form action={deleteGoal}>
+                              <input type="hidden" name="id" value={g.id} />
+                              <button className="rounded-md p-1 text-muted hover:text-warn" title={t("common.delete")}>
+                                <Trash2 size={13} />
+                              </button>
+                            </form>
+                          </div>
+                          <form action={toggleGoalStatus}>
+                            <input type="hidden" name="id" value={g.id} />
+                            <input type="hidden" name="status" value={g.status} />
+                            <button
+                              type="submit"
+                              className="flex items-center gap-1 rounded-md border border-good/40 bg-good/10 px-2.5 py-1 text-[11px] font-medium text-good transition hover:border-good/60 hover:bg-good/20"
+                              title={t("goals.markDone")}
+                            >
+                              <Check size={12} />
+                              {t("goals.markDoneBtn")}
+                            </button>
+                          </form>
+                        </div>
                         {editingId === g.id && (
                           <GoalEditForm goal={g} onClose={() => setEditingId(null)} />
                         )}
@@ -226,15 +228,15 @@ export function GoalsSection({
               <div key={g.id} className="card p-2.5 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span>{g.title}</span>
-                  <div className="flex shrink-0 items-center gap-0.5">
+                  <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setEditingId(editingId === g.id ? null : g.id)}
-                      className="rounded-md p-1 text-muted hover:text-accent"
-                      title={t("goals.editGoal")}
+                      className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11px] text-muted hover:text-accent"
                       aria-expanded={editingId === g.id}
                     >
-                      <Pencil size={13} />
+                      <Pencil size={12} />
+                      {t("goals.editGoal")}
                     </button>
                     <form action={toggleGoalStatus}>
                       <input type="hidden" name="id" value={g.id} />

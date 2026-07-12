@@ -15,7 +15,8 @@ import { Badge } from "@/components/ui";
 import { HabitCard } from "@/app/habits/habit-card";
 import { HomeRelationshipRow } from "@/app/home/home-relationship-row";
 import { HomeTaskRow } from "@/app/home/home-task-row";
-import { rankGoalsForHome, horizonLabel, achievabilityScore } from "@/lib/goals-rank";
+import { HomeGoalRow } from "@/app/home/home-goal-row";
+import { rankGoalsForHome } from "@/lib/goals-rank";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { formatLocaleDate, type Locale, type Translator } from "@/lib/i18n";
 import type {
@@ -177,21 +178,7 @@ export function HomeDashboard({
           ) : (
             <ul className="space-y-2 pe-1 text-sm">
               {rankedGoals.map((g) => (
-                <li key={g.id} className="rounded-lg bg-border/20 px-2.5 py-1.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-medium">{g.title}</span>
-                    {achievabilityScore(g) >= 3 && <Badge tone="good">{t("common.readyToAct")}</Badge>}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted">
-                    {g.category && <span>{g.category}</span>}
-                    {horizonLabel(g, locale) && <span>· {horizonLabel(g, locale)}</span>}
-                  </div>
-                  {g.first_step && (
-                    <p className="mt-1 text-xs text-muted">
-                      {t("common.firstStep")}: {g.first_step}
-                    </p>
-                  )}
-                </li>
+                <HomeGoalRow key={g.id} goal={g} locale={locale} />
               ))}
             </ul>
           )}
