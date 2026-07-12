@@ -1,3 +1,5 @@
+import type { TimelineZoomLevel } from "@/lib/timeline-zoom";
+
 export type GoogleCalendarEvent = {
   id: string;
   status: string;
@@ -19,6 +21,7 @@ export type MappedGoogleEvent = {
   description: string | null;
   event_date: string;
   event_time: string | null;
+  min_zoom: TimelineZoomLevel;
   category: "יומן";
   source: "google_calendar";
 };

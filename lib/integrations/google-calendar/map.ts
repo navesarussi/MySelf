@@ -1,3 +1,5 @@
+import type { TimelineZoomLevel } from "@/lib/timeline-zoom";
+import { DAY_MS } from "@/lib/timeline-layout";
 import type { GoogleCalendarEvent, MappedGoogleEvent } from "./types";
 
 function parseStart(start: GoogleCalendarEvent["start"]) {
@@ -18,6 +20,31 @@ function parseStart(start: GoogleCalendarEvent["start"]) {
   return null;
 }
 
+function parseInstant(field: { dateTime?: string; date?: string }) {
+  if (field.date) {
+    return { ms: new Date(`${field.date}T00:00:00`).getTime(), allDay: true };
+  }
+  if (field.dateTime) {
+    return { ms: new Date(field.dateTime).getTime(), allDay: false };
+  }
+  return null;
+}
+
+/** All-day → days; timed under 24h → hours; longer timed spans → days. */
+export function minZoomForGoogleEvent(
+  event: Pick<GoogleCalendarEvent, "start" | "end">
+): TimelineZoomLevel {
+  if (event.start.date) return "days";
+
+  const start = parseInstant(event.start);
+  if (!start || start.allDay) return "days";
+
+  const end = event.end ? parseInstant(event.end) : null;
+  if (!end) return "hours";
+
+  return end.ms - start.ms >= DAY_MS ? "days" : "hours";
+}
+
 export function mapGoogleEvent(event: GoogleCalendarEvent): MappedGoogleEvent | null {
   if (event.status === "cancelled") return null;
   if (event.eventType === "birthday") return null;
@@ -30,6 +57,7 @@ export function mapGoogleEvent(event: GoogleCalendarEvent): MappedGoogleEvent | 
     description: event.description?.trim() || null,
     event_date: parsed.event_date,
     event_time: parsed.event_time,
+    min_zoom: minZoomForGoogleEvent(event),
     category: "יומן",
     source: "google_calendar",
   };
