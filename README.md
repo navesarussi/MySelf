@@ -46,3 +46,11 @@ npm run dev
 
 הסכימה נמצאת ב-`supabase/migrations/`. ה-DB רץ תחת schema נפרד בשם `myself` באותו פרויקט
 Supabase, כדי לא להתערבב עם נתונים של פרויקטים אחרים.
+
+אחרי שינוי סכימה, הרץ מיגרציות על ה-DB המרוחק:
+
+```bash
+npm run db:apply
+```
+
+(דורש Supabase CLI מחובר לפרויקט: `supabase link --project-ref roeefqpdbftlndzsvhfj`)

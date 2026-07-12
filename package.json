@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "db:apply": "bash scripts/db-apply.sh",
     "test": "node --import tsx --test lib/__tests__/phone.test.ts lib/__tests__/google-calendar-map.test.ts lib/__tests__/google-calendar-merge.test.ts lib/__tests__/life-periods.test.ts lib/__tests__/google-auth.test.ts lib/__tests__/delete-guard.test.ts"
   },
   "dependencies": {

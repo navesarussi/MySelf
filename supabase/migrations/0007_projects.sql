@@ -56,3 +56,5 @@ alter table myself.relationships
 
 create index if not exists relationships_project_id_idx
   on myself.relationships (project_id);
+
+grant all on myself.projects to anon, authenticated, service_role;
