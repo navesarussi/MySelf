@@ -5,7 +5,7 @@ import {
   fetchGoogleUserEmail,
 } from "@/lib/integrations/google-calendar/client";
 import { syncGoogleCalendar } from "@/lib/integrations/google-calendar/sync";
-import { isAllowedGoogleEmail } from "@/lib/integrations/google-auth";
+import { isAllowedGoogleEmail, isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import {
   getIntegrationToken,
@@ -49,29 +49,38 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
       return NextResponse.redirect(new URL("/login", url.origin));
     }
 
-    const existing = await getIntegrationToken(GOOGLE_PROVIDER);
-    const refreshToken = tokens.refresh_token ?? existing?.refresh_token;
-    if (!refreshToken) throw new Error("missing_refresh_token");
+    const isPrimary = isPrimaryGoogleEmail(email);
 
-    await saveIntegrationToken({
-      provider: GOOGLE_PROVIDER,
-      access_token: tokens.access_token,
-      refresh_token: refreshToken,
-      expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-      last_sync_at: existing?.last_sync_at ?? null,
-    });
+    if (isPrimary) {
+      const existing = await getIntegrationToken(GOOGLE_PROVIDER);
+      const refreshToken = tokens.refresh_token ?? existing?.refresh_token;
+      if (!refreshToken) throw new Error("missing_refresh_token");
+
+      await saveIntegrationToken({
+        provider: GOOGLE_PROVIDER,
+        access_token: tokens.access_token,
+        refresh_token: refreshToken,
+        expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+        last_sync_at: existing?.last_sync_at ?? null,
+      });
+    }
 
     const res = NextResponse.redirect(new URL(next, url.origin));
     await applySessionCookie(res, secret);
-    setFlashCookie(jar, "מחובר — מסנכרן יומן ברקע");
-    if (await tryStartSync(GOOGLE_PROVIDER)) {
-      after(async () => {
-        try {
-          await syncGoogleCalendar();
-        } catch {
-          // sync status is persisted as failed
-        }
-      });
+
+    if (isPrimary) {
+      setFlashCookie(jar, "מחובר — מסנכרן יומן ברקע");
+      if (await tryStartSync(GOOGLE_PROVIDER)) {
+        after(async () => {
+          try {
+            await syncGoogleCalendar();
+          } catch {
+            // sync status is persisted as failed
+          }
+        });
+      }
+    } else {
+      setFlashCookie(jar, "מחובר");
     }
     return res;
   } catch (err) {
