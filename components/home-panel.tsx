@@ -19,7 +19,7 @@ export function HomePanel({
   maxHeight = "max-h-80",
 }: HomePanelProps) {
   return (
-    <div className="card flex flex-col p-3">
+    <div className="card flex min-w-0 flex-col p-3">
       <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
         <Link href={href} className="flex items-center gap-2 font-semibold transition hover:text-accent">
           <h3 className="flex items-center gap-2">{icon} {title}</h3>
@@ -28,7 +28,7 @@ export function HomePanel({
           {linkLabel}
         </Link>
       </div>
-      <div className={`scrollbar-thin ${maxHeight} overflow-y-auto`}>{children}</div>
+      <div className={`scrollbar-thin ${maxHeight} min-w-0 overflow-y-auto`}>{children}</div>
     </div>
   );
 }

@@ -190,7 +190,7 @@ export function HomeDashboard({
               <ul className="space-y-1 text-sm">
                 {pendingCommitments.map((c) => (
                   <li key={c.id} className="flex justify-between gap-2">
-                    <span className="truncate">{c.text}</span>
+                    <span className="min-w-0 flex-1 truncate">{c.text}</span>
                     <span className="shrink-0 text-muted">
                       {formatLocaleDate(locale, c.commitment_date)}
                     </span>
@@ -233,10 +233,10 @@ export function HomeDashboard({
                   <li key={p.id}>
                     <Link
                       href={`/projects?project=${p.id}`}
-                      className="flex items-center justify-between rounded-lg bg-border/20 px-2.5 py-1.5 hover:bg-border/35"
+                      className="flex items-center justify-between gap-2 rounded-lg bg-border/20 px-2.5 py-1.5 hover:bg-border/35"
                     >
-                      <span className="font-medium">{p.name}</span>
-                      <span className="text-xs text-muted">
+                      <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                      <span className="shrink-0 text-xs text-muted">
                         {t("home.projectCounts", {
                           tasks: projectTaskCounts[p.id] ?? 0,
                           rels: projectRelCounts[p.id] ?? 0,
@@ -279,7 +279,7 @@ export function HomeDashboard({
             <ul className="space-y-1 pe-1 text-sm">
               {recentEvents.map((e) => (
                 <li key={e.id} className="flex justify-between gap-2 rounded-lg bg-border/20 px-2.5 py-1.5">
-                  <span className="truncate">{e.title}</span>
+                  <span className="min-w-0 flex-1 truncate">{e.title}</span>
                   <span className="shrink-0 text-muted">{formatEventWhen(e, locale)}</span>
                 </li>
               ))}
@@ -301,8 +301,10 @@ export function HomeDashboard({
               {libraryEntries.map((entry) => (
                 <li key={entry.id} className="rounded-lg bg-border/20 px-2.5 py-1.5">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-medium">{entry.title}</span>
-                    <Badge>{entry.category}</Badge>
+                    <span className="min-w-0 flex-1 break-words font-medium">{entry.title}</span>
+                    <span className="shrink-0">
+                      <Badge>{entry.category}</Badge>
+                    </span>
                   </div>
                   {entry.body && (
                     <p className="mt-1 line-clamp-2 text-xs text-muted">{entry.body}</p>

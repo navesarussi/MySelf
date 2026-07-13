@@ -7,6 +7,7 @@ import {
   effectiveStreak,
   habitReportDay,
   normalizeReportTime,
+  sortHabitsByReportUrgency,
 } from "../habit-stats";
 import type { Habit } from "../types";
 
@@ -101,6 +102,31 @@ describe("normalizeReportTime", () => {
     assert.equal(normalizeReportTime("06:30:00"), "06:30");
     assert.equal(normalizeReportTime(null), "00:00");
     assert.equal(normalizeReportTime("garbage"), "00:00");
+  });
+});
+
+describe("sortHabitsByReportUrgency", () => {
+  const now = new Date("2026-07-13T10:00:00Z"); // 10:00 UTC
+
+  it("puts unreported habits before already-reported ones", () => {
+    const reported = { ...base, id: "reported", last_checked_on: "2026-07-13", report_time: "00:00" };
+    const unreported = { ...base, id: "unreported", last_checked_on: "2026-07-12", report_time: "00:00" };
+    const sorted = sortHabitsByReportUrgency([reported, unreported], now);
+    assert.deepEqual(sorted.map((h) => h.id), ["unreported", "reported"]);
+  });
+
+  it("orders unreported habits by soonest report-window reset first", () => {
+    const soon = { ...base, id: "soon", last_checked_on: "2026-07-11", report_time: "11:00" }; // resets in 1h
+    const later = { ...base, id: "later", last_checked_on: "2026-07-11", report_time: "20:00" }; // resets in 10h
+    const sorted = sortHabitsByReportUrgency([later, soon], now);
+    assert.deepEqual(sorted.map((h) => h.id), ["soon", "later"]);
+  });
+
+  it("keeps already-reported habits in their original order", () => {
+    const a = { ...base, id: "a", last_checked_on: "2026-07-13" };
+    const b = { ...base, id: "b", last_checked_on: "2026-07-13" };
+    const sorted = sortHabitsByReportUrgency([a, b], now);
+    assert.deepEqual(sorted.map((h) => h.id), ["a", "b"]);
   });
 });
 
