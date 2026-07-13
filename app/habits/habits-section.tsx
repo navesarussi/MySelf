@@ -1,7 +1,7 @@
 import type { Habit } from "@/lib/types";
 import { SubmitButton, inputClass } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
-import { habitReportDay } from "@/lib/habit-stats";
+import { habitReportDay, sortHabitsByReportUrgency } from "@/lib/habit-stats";
 import { addHabit } from "./actions";
 import { HabitCard } from "./habit-card";
 import { getTranslations } from "@/lib/i18n";
@@ -14,13 +14,14 @@ export async function HabitsSection({
   defaultOpen?: boolean;
 }) {
   const { t } = await getTranslations();
+  const sortedHabits = sortHabitsByReportUrgency(habits);
 
   return (
     <section className="mb-10">
       <h2 className="mb-3 text-lg font-bold">{t("habits.sectionTitle")}</h2>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        {habits.map((h) => (
+        {sortedHabits.map((h) => (
           <HabitCard key={h.id} habit={h} today={habitReportDay(h.report_time)} />
         ))}
       </div>

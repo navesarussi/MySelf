@@ -16,15 +16,19 @@ export function HomeGoalRow({ goal, locale }: { goal: Goal; locale: Locale }) {
   return (
     <li className="rounded-lg bg-border/20 px-2.5 py-1.5">
       <div className="flex items-start justify-between gap-2">
-        <span className="font-medium">{goal.title}</span>
-        {achievabilityScore(goal) >= 3 && <Badge tone="good">{t("common.readyToAct")}</Badge>}
+        <span className="min-w-0 flex-1 break-words font-medium">{goal.title}</span>
+        {achievabilityScore(goal) >= 3 && (
+          <span className="shrink-0">
+            <Badge tone="good">{t("common.readyToAct")}</Badge>
+          </span>
+        )}
       </div>
       <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted">
         {goal.category && <span>{goal.category}</span>}
         {horizonLabel(goal, locale) && <span>· {horizonLabel(goal, locale)}</span>}
       </div>
       {goal.first_step && (
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-1 break-words text-xs text-muted">
           {t("common.firstStep")}: {goal.first_step}
         </p>
       )}

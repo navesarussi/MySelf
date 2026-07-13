@@ -51,6 +51,35 @@ export function habitActivityScore(habit: Habit, today = todayISO()): number {
   );
 }
 
+/** Minutes remaining until the habit's next report-window reset, on the UTC clock. */
+function minutesUntilReportReset(reportTime: string | null | undefined, now: Date): number {
+  const [h = 0, m = 0] = (reportTime || "00:00").split(":").map(Number);
+  const threshold = (h || 0) * 60 + (m || 0);
+  const minutesNow = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const minutes = (threshold - minutesNow + 1440) % 1440;
+  return minutes === 0 ? 1440 : minutes;
+}
+
+/**
+ * Habits page order: habits still waiting on today's report float to the top,
+ * with the one closest to missing its report window (soonest reset) first.
+ * Already-reported habits stay below, in their original order.
+ */
+export function sortHabitsByReportUrgency(habits: Habit[], now = new Date()): Habit[] {
+  return habits
+    .map((habit) => ({
+      habit,
+      reported: habit.last_checked_on === habitReportDay(habit.report_time, now),
+      minutesUntilReset: minutesUntilReportReset(habit.report_time, now),
+    }))
+    .sort((a, b) => {
+      if (a.reported !== b.reported) return a.reported ? 1 : -1;
+      if (!a.reported) return a.minutesUntilReset - b.minutesUntilReset;
+      return 0;
+    })
+    .map((entry) => entry.habit);
+}
+
 /** Keep the most active record when duplicate habit names exist in the database. */
 export function dedupeHabits(habits: Habit[], today = todayISO()): Habit[] {
   const byName = new Map<string, Habit>();
