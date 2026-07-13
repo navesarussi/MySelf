@@ -147,13 +147,18 @@ export function TaskList({
     done: t("common.done"),
   };
 
+  const sortedTasks = useMemo(
+    () => [...tasks].sort((a, b) => Number(a.status === "done") - Number(b.status === "done")),
+    [tasks]
+  );
+
   if (tasks.length === 0) {
     return <EmptyState text={t("tasks.empty")} />;
   }
 
   return (
     <div className="space-y-2">
-      {tasks.map((task) => (
+      {sortedTasks.map((task) => (
         <div key={task.id} className="card p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
