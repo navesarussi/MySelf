@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
@@ -13,6 +13,15 @@ const heebo = Heebo({
   variable: "--font-heebo",
   display: "swap",
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#0b0c10",
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
@@ -38,9 +47,9 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} dir={dir} className={heebo.variable}>
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased overflow-x-hidden">
         <LocaleProvider locale={locale}>
-          <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 pb-24 pt-6 sm:px-6 sm:pb-16">
+          <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 pb-24 pt-6 sm:px-6 sm:pb-16">
             <Nav />
             <main className="mt-6 flex-1">{children}</main>
           </div>

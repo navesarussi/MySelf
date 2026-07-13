@@ -3,6 +3,20 @@
 export const inputClass =
   "w-full rounded-lg border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent";
 
+/** Consistent select styling — same footprint as inputs, auto width in toolbars. */
+export const selectClass =
+  "rounded-lg border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent";
+
+/** Canonical filter-chip look, shared by every discrete filter in the app. */
+export function chipClass(active: boolean): string {
+  return `rounded-full px-3 py-1.5 text-xs font-medium transition ${
+    active ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
+  }`;
+}
+
+/** Standard card padding so every card in the app matches. */
+export const cardClass = "card p-3";
+
 export const actionButton = {
   /** Primary positive action — habit check-in, mark goal achieved, form submit */
   primary:

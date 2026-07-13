@@ -1,9 +1,9 @@
 import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
-import { PageHeader, EmptyState, Badge, SubmitButton, inputClass } from "@/components/ui";
+import { PageHeader, EmptyState, Badge, SubmitButton, inputClass, FilterBar, FilterChips, SearchInput, type ChipOption } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
-import { getTranslations } from "@/lib/i18n";
+import { ALL_FILTER, getTranslations } from "@/lib/i18n";
 import { isAddTarget } from "@/lib/add-menu";
 import type { ContentEntry } from "@/lib/types";
 import { addContentEntry, updateContentEntry, deleteContentEntry } from "./actions";
@@ -50,28 +50,35 @@ export default async function LibraryPage({
   const { data: categoryRows } = await supabase.from("content_entries").select("category");
   const categories = Array.from(new Set((categoryRows || []).map((e) => e.category))).sort();
 
+  const categoryOptions: ChipOption[] = [
+    { value: ALL_FILTER, label: t("library.allCategories") },
+    ...categories.map((c) => ({ value: c, label: c })),
+  ];
+  const categoryHref = (value: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (value !== ALL_FILTER) params.set("category", value);
+    const qs = params.toString();
+    return qs ? `/library?${qs}` : "/library";
+  };
+
   return (
     <>
       <PageHeader title={t("library.title")} subtitle={t("library.subtitle")} />
 
-      <form className="mb-4 flex flex-wrap gap-2" action="/library">
-        <input
-          type="text"
-          name="q"
-          defaultValue={resolvedSearchParams.q}
-          placeholder={t("library.searchPlaceholder")}
-          className={`${inputClass} max-w-xs`}
-        />
-        <select name="category" defaultValue={category} className={`${inputClass} max-w-[200px]`}>
-          <option value="">{t("library.allCategories")}</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <button className="rounded-lg border px-4 py-2 text-sm hover:bg-border/30">{t("common.filter")}</button>
-      </form>
+      <FilterBar>
+        <form action="/library" className="flex-1">
+          {category && <input type="hidden" name="category" value={category} />}
+          <SearchInput name="q" defaultValue={resolvedSearchParams.q} placeholder={t("library.searchPlaceholder")} />
+        </form>
+        <div className="w-full">
+          <FilterChips
+            options={categoryOptions}
+            value={category || ALL_FILTER}
+            hrefFor={categoryHref}
+          />
+        </div>
+      </FilterBar>
 
       <AddFormToggle
         label={t("library.addEntry")}

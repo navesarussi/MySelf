@@ -2,9 +2,22 @@
 
 import { useMemo, useState } from "react";
 import { differenceInCalendarDays } from "date-fns";
-import { Badge, SubmitButton, EmptyState, inputClass } from "@/components/ui";
+import {
+  Badge,
+  SubmitButton,
+  EmptyState,
+  inputClass,
+  selectClass,
+  FilterBar,
+  FilterChips,
+  SearchInput,
+  IconEditButton,
+  IconDeleteButton,
+  type ChipOption,
+} from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
 import { useTranslations } from "@/components/locale-provider";
+import { ALL_FILTER } from "@/lib/i18n/types";
 import { formatLocaleDate } from "@/lib/i18n/core";
 import type { Relationship } from "@/lib/types";
 import {
@@ -13,7 +26,7 @@ import {
   deleteRelationship,
 } from "./actions";
 import { RelationshipEditForm } from "./relationship-edit-form";
-import { Trash2, MessageCircle, Pencil, Search } from "lucide-react";
+import { Trash2, MessageCircle, Pencil } from "lucide-react";
 import { whatsappUrl } from "@/lib/integrations/phone";
 
 function daysSinceContact(r: Relationship, today: Date): number | null {
@@ -103,7 +116,7 @@ export function RelationshipCard({
   const wa = r.phone ? whatsappUrl(r.phone) : null;
 
   return (
-    <div className="card flex flex-col gap-1 p-2">
+    <div className="card flex flex-col gap-1.5 p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
           <span className="truncate text-sm font-medium">{r.name}</span>
@@ -111,20 +124,18 @@ export function RelationshipCard({
           {showProjectBadge && r.project_name && <Badge>{r.project_name}</Badge>}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            className="rounded-md p-1 text-muted hover:text-accent"
+          <IconEditButton
             title={t("relationships.editContact")}
             aria-expanded={editing}
+            onClick={() => setEditing((v) => !v)}
           >
             <Pencil size={13} />
-          </button>
+          </IconEditButton>
           <form action={deleteRelationship}>
             <input type="hidden" name="id" value={r.id} />
-            <button className="rounded-md p-1 text-muted hover:text-warn" title={t("common.delete")}>
+            <IconDeleteButton type="submit" title={t("common.delete")}>
               <Trash2 size={13} />
-            </button>
+            </IconDeleteButton>
           </form>
         </div>
       </div>
@@ -265,41 +276,37 @@ export function RelationshipsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relationships, query, projectFilter, sort, today]);
 
+  const projectOptions: ChipOption[] = [
+    { value: ALL_FILTER, label: t("relationships.allProjects") },
+    ...projects.map((p) => ({ value: p.id, label: p.name })),
+  ];
+
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[10rem] flex-1">
-          <Search size={16} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("relationships.searchNamePlaceholder")}
-            className={`${inputClass} ps-9`}
-          />
-        </div>
-        <select
-          value={projectFilter}
-          onChange={(e) => setProjectFilter(e.target.value)}
-          className={`${inputClass} w-auto`}
-        >
-          <option value="">{t("relationships.allProjects")}</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+      <FilterBar>
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder={t("relationships.searchNamePlaceholder")}
+        />
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortMode)}
-          className={`${inputClass} w-auto`}
+          className={`${selectClass} w-full sm:w-auto`}
         >
           <option value="urgency">{t("relationships.sortUrgency")}</option>
           <option value="longestSince">{t("relationships.sortLongestSince")}</option>
           <option value="name">{t("relationships.sortName")}</option>
         </select>
-      </div>
+        <div className="w-full">
+          <FilterChips
+            label={t("nav.projects")}
+            options={projectOptions}
+            value={projectFilter || ALL_FILTER}
+            onChange={(v) => setProjectFilter(v === ALL_FILTER ? "" : v)}
+          />
+        </div>
+      </FilterBar>
 
       {filtered.length === 0 ? (
         <EmptyState text={t("relationships.noFilterResults")} />
