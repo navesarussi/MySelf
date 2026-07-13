@@ -19,7 +19,7 @@ npm run dev
 | `NEXT_PUBLIC_SUPABASE_URL` | כתובת ה-API של פרויקט Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | מפתח ה-service role (סודי, שרת בלבד) |
 | `AUTH_SECRET` | מחרוזת אקראית וסודית לחתימת עוגיית ההתחברות (למשל: `openssl rand -hex 32`) |
-| `ALLOWED_GOOGLE_EMAIL` | (מומלץ) רק חשבון Google זה יכול להיכנס |
+| `ALLOWED_GOOGLE_EMAIL` | (מומלץ) רק חשבונות Google אלה יכולים להיכנס (אימייל בודד, או כמה מופרדים בפסיק) |
 | `GOOGLE_CLIENT_ID` | OAuth client ID מ-Google Cloud |
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
 | `GOOGLE_REDIRECT_URI` | Callback, למשל `http://localhost:3000/api/auth/google/callback` |
