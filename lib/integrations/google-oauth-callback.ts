@@ -44,12 +44,12 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
     const tokens = await exchangeCode(code);
     const email = await fetchGoogleUserEmail(tokens.access_token);
 
-    if (!isAllowedGoogleEmail(email)) {
+    if (!(await isAllowedGoogleEmail(email))) {
       setFlashCookie(jar, "חשבון Google זה אינו מורשה", "error");
       return NextResponse.redirect(new URL("/login", url.origin));
     }
 
-    const isPrimary = isPrimaryGoogleEmail(email);
+    const isPrimary = await isPrimaryGoogleEmail(email);
 
     if (isPrimary) {
       const existing = await getIntegrationToken(GOOGLE_PROVIDER);

@@ -10,24 +10,24 @@ describe("isAllowedGoogleEmail", () => {
     else process.env.ALLOWED_GOOGLE_EMAIL = prev;
   });
 
-  it("allows any email when ALLOWED_GOOGLE_EMAIL is unset", () => {
+  it("allows any email when ALLOWED_GOOGLE_EMAIL is unset", async () => {
     delete process.env.ALLOWED_GOOGLE_EMAIL;
-    assert.equal(isAllowedGoogleEmail("anyone@example.com"), true);
+    assert.equal(await isAllowedGoogleEmail("anyone@example.com"), true);
   });
 
-  it("allows only the configured email", () => {
+  it("allows only the configured email", async () => {
     process.env.ALLOWED_GOOGLE_EMAIL = "owner@example.com";
-    assert.equal(isAllowedGoogleEmail("owner@example.com"), true);
-    assert.equal(isAllowedGoogleEmail("Owner@Example.com"), true);
-    assert.equal(isAllowedGoogleEmail("other@example.com"), false);
+    assert.equal(await isAllowedGoogleEmail("owner@example.com"), true);
+    assert.equal(await isAllowedGoogleEmail("Owner@Example.com"), true);
+    assert.equal(await isAllowedGoogleEmail("other@example.com"), false);
   });
 
-  it("allows any email in a comma-separated list", () => {
+  it("allows any email in a comma-separated list", async () => {
     process.env.ALLOWED_GOOGLE_EMAIL = "owner@example.com, second@example.com";
-    assert.equal(isAllowedGoogleEmail("owner@example.com"), true);
-    assert.equal(isAllowedGoogleEmail("second@example.com"), true);
-    assert.equal(isAllowedGoogleEmail("Second@Example.com"), true);
-    assert.equal(isAllowedGoogleEmail("other@example.com"), false);
+    assert.equal(await isAllowedGoogleEmail("owner@example.com"), true);
+    assert.equal(await isAllowedGoogleEmail("second@example.com"), true);
+    assert.equal(await isAllowedGoogleEmail("Second@Example.com"), true);
+    assert.equal(await isAllowedGoogleEmail("other@example.com"), false);
   });
 });
 
@@ -39,15 +39,15 @@ describe("isPrimaryGoogleEmail", () => {
     else process.env.ALLOWED_GOOGLE_EMAIL = prev;
   });
 
-  it("treats any email as primary when ALLOWED_GOOGLE_EMAIL is unset", () => {
+  it("treats any email as primary when ALLOWED_GOOGLE_EMAIL is unset", async () => {
     delete process.env.ALLOWED_GOOGLE_EMAIL;
-    assert.equal(isPrimaryGoogleEmail("anyone@example.com"), true);
+    assert.equal(await isPrimaryGoogleEmail("anyone@example.com"), true);
   });
 
-  it("only the first email in the list is primary", () => {
+  it("only the first email in the list is primary", async () => {
     process.env.ALLOWED_GOOGLE_EMAIL = "owner@example.com, second@example.com";
-    assert.equal(isPrimaryGoogleEmail("owner@example.com"), true);
-    assert.equal(isPrimaryGoogleEmail("Owner@Example.com"), true);
-    assert.equal(isPrimaryGoogleEmail("second@example.com"), false);
+    assert.equal(await isPrimaryGoogleEmail("owner@example.com"), true);
+    assert.equal(await isPrimaryGoogleEmail("Owner@Example.com"), true);
+    assert.equal(await isPrimaryGoogleEmail("second@example.com"), false);
   });
 });
