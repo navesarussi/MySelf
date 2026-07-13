@@ -26,6 +26,20 @@ export async function proxy(req: NextRequest) {
   const secret = process.env.AUTH_SECRET;
   const token = req.cookies.get(SESSION_COOKIE)?.value;
 
+  // REST API for the mobile app: same session token, sent as a Bearer header
+  // (or the regular cookie). Unauthorized calls get JSON 401, not a redirect.
+  if (pathname.startsWith("/api/v1")) {
+    const authHeader = req.headers.get("authorization");
+    const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+    if (
+      secret &&
+      ((await isValidSessionToken(bearer, secret)) || (await isValidSessionToken(token, secret)))
+    ) {
+      return NextResponse.next();
+    }
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   if (secret && (await isValidSessionToken(token, secret))) {
     return NextResponse.next();
   }
