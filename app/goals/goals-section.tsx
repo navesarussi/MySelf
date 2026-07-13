@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 import type { Goal } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
 import { useTranslations } from "@/components/locale-provider";
-import { Badge, SubmitButton, EmptyState, inputClass, PrimaryActionButton, IconEditButton, IconDeleteButton } from "@/components/ui";
+import { Badge, SubmitButton, EmptyState, inputClass, PrimaryActionButton, IconEditButton, IconDeleteButton, FilterBar, FilterChips, SearchInput, type ChipOption } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
 import { addGoal, toggleGoalStatus, deleteGoal } from "./actions";
 import { GoalEditForm } from "./goal-edit-form";
-import { Target, Trash2, RotateCcw, ChevronDown, Search, Pencil, Check } from "lucide-react";
+import { Target, Trash2, RotateCcw, ChevronDown, Pencil, Check } from "lucide-react";
 
 const DEFAULT_CATEGORY = "כללי";
 
@@ -70,41 +70,28 @@ export function GoalsSection({
     return cat;
   }
 
+  const categoryOptions: ChipOption[] = [
+    { value: ALL_FILTER, label: t("common.all") },
+    ...categories.map((cat) => ({
+      value: cat,
+      label: categoryLabel(cat, active.filter((g) => (g.category || DEFAULT_CATEGORY) === cat)),
+    })),
+  ];
+
   return (
     <section className="mb-10">
       <h2 className="mb-3 text-lg font-bold">{t("goals.sectionTitle")}</h2>
 
-      <div className="card mb-3 flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("goals.searchPlaceholder")}
-            className={`${inputClass} ps-9`}
+      <FilterBar>
+        <SearchInput value={query} onChange={setQuery} placeholder={t("goals.searchPlaceholder")} />
+        <div className="w-full">
+          <FilterChips
+            options={categoryOptions}
+            value={categoryFilter}
+            onChange={setCategoryFilter}
           />
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => setCategoryFilter(ALL_FILTER)}
-            className={`rounded-full px-3 py-1 text-xs ${categoryFilter === ALL_FILTER ? "bg-accent text-bg" : "bg-border/50 text-muted"}`}
-          >
-            {t("common.all")}
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setCategoryFilter(cat)}
-              className={`rounded-full px-3 py-1 text-xs ${categoryFilter === cat ? "bg-accent text-bg" : "bg-border/50 text-muted"}`}
-            >
-              {categoryLabel(cat, active.filter((g) => (g.category || DEFAULT_CATEGORY) === cat))}
-            </button>
-          ))}
-        </div>
-      </div>
+      </FilterBar>
 
       {filtered.length === 0 ? (
         <EmptyState text={active.length === 0 ? t("goals.noActive") : t("goals.noFilterResults")} />
@@ -132,7 +119,7 @@ export function GoalsSection({
                 {!isCollapsed && (
                   <div className="grid gap-2 sm:grid-cols-2">
                     {items.map((g) => (
-                      <div key={g.id} className="card p-2.5">
+                      <div key={g.id} className="card p-3">
                         <div className="flex items-start justify-between gap-2">
                           <h4 className="min-w-0 flex-1 text-sm font-medium leading-snug">{g.title}</h4>
                           <div className="flex shrink-0 items-center gap-2">
@@ -221,7 +208,7 @@ export function GoalsSection({
           </summary>
           <div className="mt-3 space-y-2">
             {done.map((g) => (
-              <div key={g.id} className="card p-2.5 text-sm">
+              <div key={g.id} className="card p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span>{g.title}</span>
                   <div className="flex shrink-0 items-center gap-1">

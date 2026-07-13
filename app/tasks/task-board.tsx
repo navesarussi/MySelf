@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { formatLocaleDate } from "@/lib/i18n/core";
 import { useTranslations } from "@/components/locale-provider";
-import { Badge, SubmitButton, EmptyState, inputClass } from "@/components/ui";
+import { Badge, SubmitButton, EmptyState, inputClass, SearchInput, IconEditButton, IconDeleteButton } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
 import { addTask, updateTaskStatus, deleteTask } from "./actions";
 import { TaskEditForm } from "./task-edit-form";
@@ -88,15 +88,8 @@ export function TaskSearchBar({
   const { t } = useTranslations();
 
   return (
-    <div className="relative mb-4">
-      <Search size={16} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-muted" />
-      <input
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={t("tasks.searchPlaceholder")}
-        className={`${inputClass} ps-9`}
-      />
+    <div className="mb-4">
+      <SearchInput value={value} onChange={onChange} placeholder={t("tasks.searchPlaceholder")} />
     </div>
   );
 }
@@ -161,7 +154,7 @@ export function TaskList({
   return (
     <div className="space-y-2">
       {tasks.map((task) => (
-        <div key={task.id} className="card p-2.5">
+        <div key={task.id} className="card p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -179,15 +172,6 @@ export function TaskList({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setEditingId(editingId === task.id ? null : task.id)}
-              className="p-1.5 text-muted hover:text-accent"
-              title={t("tasks.editTask")}
-              aria-expanded={editingId === task.id}
-            >
-              <Pencil size={14} />
-            </button>
             <form action={updateTaskStatus}>
               <input type="hidden" name="id" value={task.id} />
               <input type="hidden" name="status" value={STATUS_CYCLE[task.status]} />
@@ -197,11 +181,18 @@ export function TaskList({
                 </Badge>
               </button>
             </form>
+            <IconEditButton
+              title={t("tasks.editTask")}
+              aria-expanded={editingId === task.id}
+              onClick={() => setEditingId(editingId === task.id ? null : task.id)}
+            >
+              <Pencil size={14} />
+            </IconEditButton>
             <form action={deleteTask}>
               <input type="hidden" name="id" value={task.id} />
-              <button className="p-1.5 text-muted hover:text-warn" title={t("common.delete")}>
+              <IconDeleteButton type="submit" title={t("common.delete")}>
                 <Trash2 size={14} />
-              </button>
+              </IconDeleteButton>
             </form>
           </div>
           </div>

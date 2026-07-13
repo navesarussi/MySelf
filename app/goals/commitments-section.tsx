@@ -1,6 +1,6 @@
 import type { Commitment } from "@/lib/types";
 import { formatLocaleDate, getTranslations } from "@/lib/i18n";
-import { Badge, SubmitButton, EmptyState, inputClass } from "@/components/ui";
+import { Badge, SubmitButton, EmptyState, inputClass, IconDeleteButton } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
 import { addCommitment, setCommitmentStatus, deleteCommitment } from "./actions";
 import { Trash2 } from "lucide-react";
@@ -37,7 +37,7 @@ export async function CommitmentsSection({
       ) : (
         <div className="space-y-2">
           {commitments.map((c) => (
-            <div key={c.id} className="card flex flex-wrap items-center justify-between gap-2 p-2.5">
+            <div key={c.id} className="card flex flex-wrap items-center justify-between gap-2 p-3">
               <div className="flex items-center gap-3">
                 <span className="text-xs text-muted">
                   {formatLocaleDate(locale, c.commitment_date)}
@@ -58,9 +58,9 @@ export async function CommitmentsSection({
                 ))}
                 <form action={deleteCommitment}>
                   <input type="hidden" name="id" value={c.id} />
-                  <button className="p-1 text-muted hover:text-warn" title={t("common.delete")}>
+                  <IconDeleteButton type="submit" title={t("common.delete")}>
                     <Trash2 size={14} />
-                  </button>
+                  </IconDeleteButton>
                 </form>
               </div>
             </div>

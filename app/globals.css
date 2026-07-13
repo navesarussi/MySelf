@@ -36,10 +36,24 @@ html,
 body {
   background: var(--bg);
   color: var(--ink);
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: pan-x pan-y;
 }
 
 body {
   min-height: 100dvh;
+}
+
+/* Media never forces the layout wider than the screen */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
 }
 
 ::selection {

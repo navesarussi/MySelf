@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, FilterBar, FilterChips, type ChipOption } from "@/components/ui";
 import { ALL_FILTER, getTranslations } from "@/lib/i18n";
 import type { Project, Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { TasksPanel } from "./task-board";
@@ -93,40 +92,43 @@ export default async function TasksPage({
     return t("common.low");
   };
 
-  const chip = (active: boolean) =>
-    `rounded-full px-3 py-1 text-xs ${
-      active ? "bg-accent text-bg" : "bg-border/50 text-muted hover:text-ink"
-    }`;
+  const projectOptions: ChipOption[] = [
+    { value: ALL_FILTER, label: t("common.all") },
+    ...projects.map((p) => ({ value: p.id, label: p.name })),
+  ];
+  const statusOptions: ChipOption[] = statuses.map((s) => ({ value: s, label: statusLabel(s) }));
+  const priorityOptions: ChipOption[] = priorities.map((p) => ({ value: p, label: priorityLabel(p) }));
 
   return (
     <>
       <PageHeader title={t("tasks.title")} subtitle={t("tasks.subtitleAlt")} />
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Link href={withParams({ project: ALL_FILTER })} className={chip(projectId === ALL_FILTER)}>
-          {t("common.all")}
-        </Link>
-        {projects.map((p) => (
-          <Link key={p.id} href={withParams({ project: p.id })} className={chip(projectId === p.id)}>
-            {p.name}
-          </Link>
-        ))}
-      </div>
-      <div className="mb-3 flex flex-wrap gap-2">
-        {statuses.map((s) => (
-          <Link key={s} href={withParams({ status: s })} className={chip(status === s)}>
-            {statusLabel(s)}
-          </Link>
-        ))}
-      </div>
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted">{t("tasks.priorityFilter")}:</span>
-        {priorities.map((p) => (
-          <Link key={p} href={withParams({ priority: p })} className={chip(priority === p)}>
-            {priorityLabel(p)}
-          </Link>
-        ))}
-      </div>
+      <FilterBar>
+        <div className="w-full">
+          <FilterChips
+            label={t("nav.projects")}
+            options={projectOptions}
+            value={projectId}
+            hrefFor={(v) => withParams({ project: v })}
+          />
+        </div>
+        <div className="w-full">
+          <FilterChips
+            label={t("common.status")}
+            options={statusOptions}
+            value={status}
+            hrefFor={(v) => withParams({ status: v })}
+          />
+        </div>
+        <div className="w-full">
+          <FilterChips
+            label={t("tasks.priorityFilter")}
+            options={priorityOptions}
+            value={priority}
+            hrefFor={(v) => withParams({ priority: v })}
+          />
+        </div>
+      </FilterBar>
 
       <TasksPanel
         tasks={tasks}

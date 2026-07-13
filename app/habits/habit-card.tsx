@@ -46,7 +46,7 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
   }
 
   return (
-    <div className="card flex flex-col gap-1.5 p-2.5">
+    <div className="card flex flex-col gap-1.5 p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -60,18 +60,16 @@ export function HabitCard({ habit, today }: { habit: Habit; today: string }) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            className="rounded-md p-1 text-muted hover:text-accent"
+          <IconEditButton
             title={t("habits.editData")}
             aria-expanded={editing}
+            onClick={() => setEditing((v) => !v)}
           >
             <Pencil size={13} />
-          </button>
+          </IconEditButton>
           <form action={resetHabit} className="inline">
             <input type="hidden" name="id" value={habit.id} />
-            <button className="rounded-md p-1 text-muted hover:text-warn" title={t("habits.resetStreak")}>
+            <button className="rounded-md p-1 text-muted transition hover:text-warn" title={t("habits.resetStreak")}>
               <RotateCcw size={13} />
             </button>
           </form>
