@@ -5,6 +5,28 @@ export function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * The habit's current reporting day (YYYY-MM-DD). A fresh reporting window
+ * opens every day at `report_time` (default "00:00"); before that time the
+ * previous day's window is still the active one. Computed on the UTC clock so
+ * that server actions and the (client-rendered) card agree, matching the
+ * app-wide UTC day handling used by todayISO().
+ */
+export function habitReportDay(reportTime?: string | null, now = new Date()): string {
+  const [h = 0, m = 0] = (reportTime || "00:00").split(":").map(Number);
+  const minutesNow = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const threshold = (h || 0) * 60 + (m || 0);
+  const d = new Date(now);
+  if (minutesNow < threshold) d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Normalize a stored time ("HH:MM" or "HH:MM:SS") to an input-friendly "HH:MM". */
+export function normalizeReportTime(reportTime?: string | null): string {
+  const value = (reportTime || "00:00").slice(0, 5);
+  return /^\d{2}:\d{2}$/.test(value) ? value : "00:00";
+}
+
 /** Current streak — 0 if the habit was not checked in today or yesterday. */
 export function effectiveStreak(habit: Habit, today = todayISO()): number {
   if (!habit.last_checked_on) return 0;

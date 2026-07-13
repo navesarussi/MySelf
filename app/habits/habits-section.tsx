@@ -1,7 +1,7 @@
 import type { Habit } from "@/lib/types";
 import { SubmitButton, inputClass } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
-import { todayISO } from "@/lib/habit-stats";
+import { habitReportDay } from "@/lib/habit-stats";
 import { addHabit } from "./actions";
 import { HabitCard } from "./habit-card";
 import { getTranslations } from "@/lib/i18n";
@@ -14,7 +14,6 @@ export async function HabitsSection({
   defaultOpen?: boolean;
 }) {
   const { t } = await getTranslations();
-  const today = todayISO();
 
   return (
     <section className="mb-10">
@@ -22,7 +21,7 @@ export async function HabitsSection({
 
       <div className="grid gap-2 sm:grid-cols-2">
         {habits.map((h) => (
-          <HabitCard key={h.id} habit={h} today={today} />
+          <HabitCard key={h.id} habit={h} today={habitReportDay(h.report_time)} />
         ))}
       </div>
 
@@ -44,6 +43,10 @@ export async function HabitsSection({
             placeholder={t("habits.targetNotePlaceholder")}
             className={`${inputClass} sm:col-span-2`}
           />
+          <label className="flex flex-col gap-1 text-xs text-muted sm:col-span-2">
+            {t("habits.reportTimeHint")}
+            <input type="time" name="report_time" defaultValue="00:00" className={inputClass} />
+          </label>
           <div className="sm:col-span-2">
             <SubmitButton>{t("common.add")}</SubmitButton>
           </div>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { setFlash } from "@/lib/flash-actions";
+import { rememberLastProject } from "@/lib/last-project";
 import type { TaskPriority, TaskStatus } from "@/lib/types";
 
 const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
@@ -40,6 +41,7 @@ export async function addTask(formData: FormData) {
     notes: String(formData.get("notes") || "").trim() || null,
   });
 
+  if (!error) await rememberLastProject("task", project_id);
   await setFlash(error ? "flash.taskAddError" : "flash.taskAdded", error ? "error" : "success");
   revalidateTaskPaths();
 }

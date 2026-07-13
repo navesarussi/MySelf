@@ -2,7 +2,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { getSupabase } from "@/lib/supabase";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
-import { dedupeHabits, effectiveStreak, selectHomeHabits, todayISO } from "@/lib/habit-stats";
+import { dedupeHabits, effectiveStreak, habitReportDay, selectHomeHabits, todayISO } from "@/lib/habit-stats";
 import { getTranslations } from "@/lib/i18n";
 import type { Habit, Goal, Commitment, Relationship, TimelineEvent, Task, Project, ContentEntry } from "@/lib/types";
 import { HomeDashboard } from "@/app/home/dashboard";
@@ -116,8 +116,12 @@ export default async function HomePage() {
   const todayDate = new Date();
   const uniqueHabits = dedupeHabits(habits, today);
   const allHabits = selectHomeHabits(habits, today, null);
-  const activeStreaks = uniqueHabits.filter((h) => effectiveStreak(h, today) > 0).length;
-  const checkedToday = uniqueHabits.filter((h) => h.last_checked_on === today).length;
+  const activeStreaks = uniqueHabits.filter(
+    (h) => effectiveStreak(h, habitReportDay(h.report_time)) > 0,
+  ).length;
+  const checkedToday = uniqueHabits.filter(
+    (h) => h.last_checked_on === habitReportDay(h.report_time),
+  ).length;
   const overdueRelationships = filterOverdueRelationships(relationships, todayDate);
 
   return (

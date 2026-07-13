@@ -3,6 +3,7 @@ import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
 import { GlobalAddMenu } from "@/components/global-add-menu";
+import { MobileNav } from "@/components/mobile-nav";
 import { ToastLoader } from "@/components/toast-loader";
 import { LocaleProvider } from "@/components/locale-provider";
 import { getLocale, getMessages, isRtl } from "@/lib/i18n";
@@ -39,12 +40,13 @@ export default async function RootLayout({
     <html lang={locale} dir={dir} className={heebo.variable}>
       <body className="font-sans antialiased">
         <LocaleProvider locale={locale}>
-          <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 pb-16 pt-6 sm:px-6">
+          <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 pb-24 pt-6 sm:px-6 sm:pb-16">
             <Nav />
             <main className="mt-6 flex-1">{children}</main>
           </div>
           <ToastLoader />
           <GlobalAddMenu />
+          <MobileNav />
         </LocaleProvider>
       </body>
     </html>

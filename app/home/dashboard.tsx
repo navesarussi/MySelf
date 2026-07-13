@@ -17,6 +17,8 @@ import { HomeRelationshipRow } from "@/app/home/home-relationship-row";
 import { HomeTaskRow } from "@/app/home/home-task-row";
 import { HomeGoalRow } from "@/app/home/home-goal-row";
 import { rankGoalsForHome } from "@/lib/goals-rank";
+import { habitReportDay } from "@/lib/habit-stats";
+import { SHOW_PROJECTS } from "@/lib/features";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { formatLocaleDate, type Locale, type Translator } from "@/lib/i18n";
 import type {
@@ -99,7 +101,7 @@ export function HomeDashboard({
   return (
     <>
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="card p-3">
+        <Link href="/habits" className="card p-3 transition hover:border-accent/60">
           <div className="flex items-center gap-2 text-sm text-muted">
             <Flame size={15} className="text-accent2" /> {t("home.activeHabits")}
           </div>
@@ -111,8 +113,8 @@ export function HomeDashboard({
               streaks: activeStreaks,
             })}
           </p>
-        </div>
-        <div className="card p-3">
+        </Link>
+        <Link href="/relationships" className="card p-3 transition hover:border-accent/60">
           <div className="flex items-center gap-2 text-sm text-muted">
             <Users size={15} className="text-warn" /> {t("home.relationshipsOverdue")}
           </div>
@@ -122,15 +124,15 @@ export function HomeDashboard({
               ? t("home.relationshipsNeedAttention", { count: overdueRelationships.length })
               : t("home.allRelationshipsUpToDate")}
           </p>
-        </div>
-        <div className="card p-3">
+        </Link>
+        <Link href="/goals" className="card p-3 transition hover:border-accent/60">
           <div className="flex items-center gap-2 text-sm text-muted">
             <Target size={15} className="text-accent" /> {t("home.activeGoals")}
           </div>
           <p className="mt-2 text-3xl font-bold">{activeGoalsCount}</p>
           <p className="mt-1 text-xs text-muted">{t("home.goalsAchieved", { count: doneGoalsCount })}</p>
-        </div>
-        <div className="card p-3">
+        </Link>
+        <Link href="/tasks" className="card p-3 transition hover:border-accent/60">
           <div className="flex items-center gap-2 text-sm text-muted">
             <CheckSquare size={15} className="text-accent" /> {t("home.openTasks")}
           </div>
@@ -138,7 +140,7 @@ export function HomeDashboard({
           <p className="mt-1 text-xs text-muted">
             {t("home.tasksInProgress", { count: inProgressTasksCount })}
           </p>
-        </div>
+        </Link>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -154,7 +156,7 @@ export function HomeDashboard({
             <ul className="space-y-2 pe-1 text-sm">
               {allHabits.map((h) => (
                 <li key={h.id}>
-                  <HabitCard habit={h} today={today} />
+                  <HabitCard habit={h} today={habitReportDay(h.report_time)} />
                 </li>
               ))}
             </ul>
@@ -216,35 +218,37 @@ export function HomeDashboard({
           )}
         </HomePanel>
 
-        <HomePanel
-          title={t("home.projectsSection")}
-          icon={<FolderKanban size={16} className="text-accent" />}
-          href="/projects"
-          linkLabel={t("home.toProjects")}
-        >
-          {projects.length === 0 ? (
-            <p className="text-sm text-muted">{t("home.noProjects")}</p>
-          ) : (
-            <ul className="space-y-2 pe-1 text-sm">
-              {projects.map((p) => (
-                <li key={p.id}>
-                  <Link
-                    href={`/projects?project=${p.id}`}
-                    className="flex items-center justify-between rounded-lg bg-border/20 px-2.5 py-1.5 hover:bg-border/35"
-                  >
-                    <span className="font-medium">{p.name}</span>
-                    <span className="text-xs text-muted">
-                      {t("home.projectCounts", {
-                        tasks: projectTaskCounts[p.id] ?? 0,
-                        rels: projectRelCounts[p.id] ?? 0,
-                      })}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </HomePanel>
+        {SHOW_PROJECTS && (
+          <HomePanel
+            title={t("home.projectsSection")}
+            icon={<FolderKanban size={16} className="text-accent" />}
+            href="/projects"
+            linkLabel={t("home.toProjects")}
+          >
+            {projects.length === 0 ? (
+              <p className="text-sm text-muted">{t("home.noProjects")}</p>
+            ) : (
+              <ul className="space-y-2 pe-1 text-sm">
+                {projects.map((p) => (
+                  <li key={p.id}>
+                    <Link
+                      href={`/projects?project=${p.id}`}
+                      className="flex items-center justify-between rounded-lg bg-border/20 px-2.5 py-1.5 hover:bg-border/35"
+                    >
+                      <span className="font-medium">{p.name}</span>
+                      <span className="text-xs text-muted">
+                        {t("home.projectCounts", {
+                          tasks: projectTaskCounts[p.id] ?? 0,
+                          rels: projectRelCounts[p.id] ?? 0,
+                        })}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </HomePanel>
+        )}
 
         <HomePanel
           title={t("home.relationshipsWaiting")}

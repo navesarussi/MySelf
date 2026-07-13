@@ -9,6 +9,12 @@ function priorityTone(p: TaskPriority): "warn" | "accent" | "default" {
   return "default";
 }
 
+const STATUS_CYCLE: Record<TaskStatus, TaskStatus> = {
+  open: "in_progress",
+  in_progress: "done",
+  done: "open",
+};
+
 export async function HomeTaskRow({ task }: { task: Task }) {
   const { t, locale } = await getTranslations();
 
@@ -41,17 +47,15 @@ export async function HomeTaskRow({ task }: { task: Task }) {
         </div>
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
-        {(["open", "in_progress", "done"] as const).map((s) => (
-          <form key={s} action={updateTaskStatus}>
-            <input type="hidden" name="id" value={task.id} />
-            <input type="hidden" name="status" value={s} />
-            <button type="submit">
-              <Badge tone={task.status === s ? (s === "done" ? "good" : "accent") : "default"}>
-                {statusLabel[s]}
-              </Badge>
-            </button>
-          </form>
-        ))}
+        <form action={updateTaskStatus}>
+          <input type="hidden" name="id" value={task.id} />
+          <input type="hidden" name="status" value={STATUS_CYCLE[task.status]} />
+          <button type="submit" title={t("tasks.advanceStatus")}>
+            <Badge tone={task.status === "done" ? "good" : "accent"}>
+              {statusLabel[task.status]}
+            </Badge>
+          </button>
+        </form>
       </div>
     </li>
   );

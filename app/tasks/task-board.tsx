@@ -16,6 +16,12 @@ function priorityTone(p: TaskPriority): "warn" | "accent" | "default" {
   return "default";
 }
 
+const STATUS_CYCLE: Record<TaskStatus, TaskStatus> = {
+  open: "in_progress",
+  in_progress: "done",
+  done: "open",
+};
+
 export function TaskForm({
   projects,
   fixedProjectId,
@@ -182,17 +188,15 @@ export function TaskList({
             >
               <Pencil size={14} />
             </button>
-            {(["open", "in_progress", "done"] as const).map((s) => (
-              <form key={s} action={updateTaskStatus}>
-                <input type="hidden" name="id" value={task.id} />
-                <input type="hidden" name="status" value={s} />
-                <button type="submit">
-                  <Badge tone={task.status === s ? (s === "done" ? "good" : "accent") : "default"}>
-                    {statusLabel[s]}
-                  </Badge>
-                </button>
-              </form>
-            ))}
+            <form action={updateTaskStatus}>
+              <input type="hidden" name="id" value={task.id} />
+              <input type="hidden" name="status" value={STATUS_CYCLE[task.status]} />
+              <button type="submit" title={t("tasks.advanceStatus")}>
+                <Badge tone={task.status === "done" ? "good" : "accent"}>
+                  {statusLabel[task.status]}
+                </Badge>
+              </button>
+            </form>
             <form action={deleteTask}>
               <input type="hidden" name="id" value={task.id} />
               <button className="p-1.5 text-muted hover:text-warn" title={t("common.delete")}>
