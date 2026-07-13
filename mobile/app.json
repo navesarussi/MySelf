@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "מרכז השליטה",
+    "slug": "myself",
+    "version": "1.0.0",
+    "scheme": "myself",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "backgroundColor": "#0b0c10",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.navesarussi.myself"
+    },
+    "android": {
+      "package": "com.navesarussi.myself",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-web-browser"],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "extra": {
+      "supportsRTL": true
+    }
+  }
+}

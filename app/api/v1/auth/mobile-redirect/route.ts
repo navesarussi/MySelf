@@ -15,5 +15,10 @@ export async function GET(req: NextRequest) {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return unauthorized();
   const token = await makeSessionToken(secret);
+  // ?format=json lets the app's web build (different origin, no deep links)
+  // show the token for copy-paste sign-in.
+  if (req.nextUrl.searchParams.get("format") === "json") {
+    return NextResponse.json({ token });
+  }
   return NextResponse.redirect(`${APP_SCHEME}://auth?token=${encodeURIComponent(token)}`);
 }

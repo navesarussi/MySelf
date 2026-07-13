@@ -37,13 +37,14 @@ export async function POST(req: NextRequest) {
   if (!project_id) return badRequest("project_required");
 
   const phoneRaw = str(body.phone);
-  const reminder = str(body.reminder_days);
+  const reminder =
+    typeof body.reminder_days === "number" ? body.reminder_days : Number(str(body.reminder_days)) || null;
   const { data, error } = await getSupabase()
     .from("relationships")
     .insert({
       name,
       group_name: optStr(body.group_name),
-      reminder_days: reminder ? Number(reminder) : null,
+      reminder_days: reminder,
       notes: optStr(body.notes),
       phone: phoneRaw ? normalizePhone(phoneRaw) : null,
       project_id,

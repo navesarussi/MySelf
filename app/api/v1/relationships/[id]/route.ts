@@ -33,8 +33,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
   if ("group_name" in body) patch.group_name = optStr(body.group_name);
   if ("reminder_days" in body) {
-    const reminder = str(body.reminder_days);
-    patch.reminder_days = reminder ? Number(reminder) : null;
+    patch.reminder_days =
+      typeof body.reminder_days === "number" ? body.reminder_days : Number(str(body.reminder_days)) || null;
   }
   if ("phone" in body) {
     const phoneRaw = str(body.phone);

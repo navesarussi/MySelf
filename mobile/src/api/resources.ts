@@ -1,0 +1,142 @@
+import { apiFetch, type ApiConfig } from "./client";
+import type {
+  Commitment,
+  ContentEntry,
+  Goal,
+  Habit,
+  Project,
+  Relationship,
+  Task,
+  TimelineEvent,
+} from "@/lib/types";
+import type { LifePeriod } from "@/lib/life-periods";
+
+export type HomePayload = {
+  habits: Habit[];
+  activeGoals: Goal[];
+  doneGoalsCount: number;
+  pendingCommitments: Commitment[];
+  relationships: Pick<
+    Relationship,
+    "id" | "name" | "last_contact_date" | "reminder_days" | "phone"
+  >[];
+  recentEvents: TimelineEvent[];
+  openTasks: Task[];
+  projects: Project[];
+  libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "updated_at">[];
+  openTasksCount: number;
+  inProgressTasksCount: number;
+};
+
+export type SyncStatusPayload = {
+  connected: boolean;
+  syncStatus?: "idle" | "running" | "completed" | "failed";
+  syncProgress?: { total: number; processed: number } | null;
+  lastSyncAt?: string | null;
+  eventCount?: number;
+};
+
+export const api = {
+  checkSession: (c: ApiConfig) => apiFetch<{ ok: boolean }>(c, "/session"),
+  home: (c: ApiConfig) => apiFetch<HomePayload>(c, "/home"),
+
+  projects: (c: ApiConfig) => apiFetch<Project[]>(c, "/projects"),
+  createProject: (c: ApiConfig, body: { name: string }) =>
+    apiFetch<Project>(c, "/projects", { method: "POST", body }),
+  renameProject: (c: ApiConfig, id: string, name: string) =>
+    apiFetch<Project>(c, `/projects/${id}`, { method: "PATCH", body: { name } }),
+  deleteProject: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/projects/${id}`, { method: "DELETE" }),
+
+  tasks: (c: ApiConfig, params?: { project?: string; status?: string; priority?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.project) sp.set("project", params.project);
+    if (params?.status) sp.set("status", params.status);
+    if (params?.priority) sp.set("priority", params.priority);
+    const qs = sp.toString();
+    return apiFetch<Task[]>(c, `/tasks${qs ? `?${qs}` : ""}`);
+  },
+  createTask: (c: ApiConfig, body: Partial<Task>) =>
+    apiFetch<Task>(c, "/tasks", { method: "POST", body }),
+  updateTask: (c: ApiConfig, id: string, body: Partial<Task>) =>
+    apiFetch<Task>(c, `/tasks/${id}`, { method: "PATCH", body }),
+  deleteTask: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/tasks/${id}`, { method: "DELETE" }),
+
+  habits: (c: ApiConfig) => apiFetch<Habit[]>(c, "/habits"),
+  createHabit: (c: ApiConfig, body: Partial<Habit>) =>
+    apiFetch<Habit>(c, "/habits", { method: "POST", body }),
+  updateHabit: (c: ApiConfig, id: string, body: Partial<Habit>) =>
+    apiFetch<Habit>(c, `/habits/${id}`, { method: "PATCH", body }),
+  deleteHabit: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/habits/${id}`, { method: "DELETE" }),
+  reportHabit: (c: ApiConfig, id: string, type: "check_in" | "fall" | "reset") =>
+    apiFetch<Habit>(c, `/habits/${id}/report`, { method: "POST", body: { type } }),
+
+  goals: (c: ApiConfig) => apiFetch<Goal[]>(c, "/goals"),
+  createGoal: (c: ApiConfig, body: Partial<Goal>) =>
+    apiFetch<Goal>(c, "/goals", { method: "POST", body }),
+  updateGoal: (c: ApiConfig, id: string, body: Partial<Goal> & { toggle_status?: boolean }) =>
+    apiFetch<Goal>(c, `/goals/${id}`, { method: "PATCH", body }),
+  deleteGoal: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/goals/${id}`, { method: "DELETE" }),
+
+  commitments: (c: ApiConfig) => apiFetch<Commitment[]>(c, "/commitments"),
+  createCommitment: (c: ApiConfig, body: { text: string; commitment_date?: string }) =>
+    apiFetch<Commitment>(c, "/commitments", { method: "POST", body }),
+  setCommitmentStatus: (c: ApiConfig, id: string, status: Commitment["status"]) =>
+    apiFetch<Commitment>(c, `/commitments/${id}`, { method: "PATCH", body: { status } }),
+  deleteCommitment: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/commitments/${id}`, { method: "DELETE" }),
+
+  relationships: (c: ApiConfig) => apiFetch<Relationship[]>(c, "/relationships"),
+  createRelationship: (c: ApiConfig, body: Partial<Relationship>) =>
+    apiFetch<Relationship>(c, "/relationships", { method: "POST", body }),
+  updateRelationship: (c: ApiConfig, id: string, body: Partial<Relationship>) =>
+    apiFetch<Relationship>(c, `/relationships/${id}`, { method: "PATCH", body }),
+  deleteRelationship: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/relationships/${id}`, { method: "DELETE" }),
+
+  library: (c: ApiConfig, params?: { q?: string; category?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.q) sp.set("q", params.q);
+    if (params?.category) sp.set("category", params.category);
+    const qs = sp.toString();
+    return apiFetch<ContentEntry[]>(c, `/library${qs ? `?${qs}` : ""}`);
+  },
+  createEntry: (c: ApiConfig, body: Partial<Omit<ContentEntry, "tags">> & { tags?: string | string[] }) =>
+    apiFetch<ContentEntry>(c, "/library", { method: "POST", body }),
+  updateEntry: (
+    c: ApiConfig,
+    id: string,
+    body: Partial<Omit<ContentEntry, "tags">> & { tags?: string | string[] }
+  ) => apiFetch<ContentEntry>(c, `/library/${id}`, { method: "PATCH", body }),
+  deleteEntry: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/library/${id}`, { method: "DELETE" }),
+
+  timelineEvents: (c: ApiConfig) => apiFetch<TimelineEvent[]>(c, "/timeline/events"),
+  createEvent: (c: ApiConfig, body: Partial<TimelineEvent>) =>
+    apiFetch<TimelineEvent>(c, "/timeline/events", { method: "POST", body }),
+  updateEvent: (c: ApiConfig, id: string, body: Partial<TimelineEvent>) =>
+    apiFetch<TimelineEvent>(c, `/timeline/events/${id}`, { method: "PATCH", body }),
+  deleteEvent: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean; hidden?: boolean }>(c, `/timeline/events/${id}`, {
+      method: "DELETE",
+    }),
+
+  periods: (c: ApiConfig) => apiFetch<LifePeriod[]>(c, "/timeline/periods"),
+  createPeriod: (c: ApiConfig, body: Partial<LifePeriod>) =>
+    apiFetch<LifePeriod>(c, "/timeline/periods", { method: "POST", body }),
+  updatePeriod: (c: ApiConfig, id: string, body: Partial<LifePeriod>) =>
+    apiFetch<LifePeriod>(c, `/timeline/periods/${id}`, { method: "PATCH", body }),
+  deletePeriod: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/timeline/periods/${id}`, { method: "DELETE" }),
+
+  syncStatus: (c: ApiConfig) => apiFetch<SyncStatusPayload>(c, "/sync/status"),
+  runSync: (c: ApiConfig) =>
+    apiFetch<{ ok: boolean; imported?: number; removed?: number; alreadyRunning?: boolean }>(
+      c,
+      "/sync",
+      { method: "POST", body: {} }
+    ),
+};
