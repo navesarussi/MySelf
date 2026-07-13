@@ -25,18 +25,21 @@ export function FilterChips({
   onChange,
   hrefFor,
   label,
+  isActive,
 }: {
   options: ChipOption[];
   value: string;
   onChange?: (value: string) => void;
   hrefFor?: (value: string) => string;
   label?: string;
+  /** Override the default single-value equality check, e.g. for multi-select chips. */
+  isActive?: (value: string) => boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {label && <span className="me-0.5 text-xs text-muted">{label}</span>}
       {options.map((opt) => {
-        const active = value === opt.value;
+        const active = isActive ? isActive(opt.value) : value === opt.value;
         if (hrefFor) {
           return (
             <Link key={opt.value} href={hrefFor(opt.value)} className={chipClass(active)}>
