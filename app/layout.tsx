@@ -4,6 +4,7 @@ import "./globals.css";
 import { Nav } from "@/components/nav";
 import { GlobalAddMenu } from "@/components/global-add-menu";
 import { MobileNav } from "@/components/mobile-nav";
+import { NoZoom } from "@/components/no-zoom";
 import { ToastLoader } from "@/components/toast-loader";
 import { LocaleProvider } from "@/components/locale-provider";
 import { getLocale, getMessages, isRtl } from "@/lib/i18n";
@@ -56,6 +57,7 @@ export default async function RootLayout({
           <ToastLoader />
           <GlobalAddMenu />
           <MobileNav />
+          <NoZoom />
         </LocaleProvider>
       </body>
     </html>
