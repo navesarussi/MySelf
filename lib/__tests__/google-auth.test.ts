@@ -21,4 +21,12 @@ describe("isAllowedGoogleEmail", () => {
     assert.equal(isAllowedGoogleEmail("Owner@Example.com"), true);
     assert.equal(isAllowedGoogleEmail("other@example.com"), false);
   });
+
+  it("allows any email in a comma-separated list", () => {
+    process.env.ALLOWED_GOOGLE_EMAIL = "owner@example.com, second@example.com";
+    assert.equal(isAllowedGoogleEmail("owner@example.com"), true);
+    assert.equal(isAllowedGoogleEmail("second@example.com"), true);
+    assert.equal(isAllowedGoogleEmail("Second@Example.com"), true);
+    assert.equal(isAllowedGoogleEmail("other@example.com"), false);
+  });
 });
