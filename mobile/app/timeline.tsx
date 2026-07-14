@@ -9,6 +9,7 @@ import {
   Badge,
   Btn,
   Card,
+  Chip,
   EmptyState,
   ErrorNote,
   Input,
@@ -20,6 +21,7 @@ import {
   confirmDelete,
 } from "../src/components/ui";
 import { FormModal } from "../src/components/form-modal";
+import { TimelineVisual } from "../src/components/timeline-visual";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import { formatPeriodRange, type LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
@@ -59,6 +61,7 @@ export default function TimelineScreen() {
   const [eventForm, setEventForm] = useState<EventForm | null>(null);
   const [periodForm, setPeriodForm] = useState<PeriodForm | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"visual" | "list">("visual");
 
   useEffect(() => {
     if (params.add === "event") setEventForm(emptyEvent);
@@ -166,6 +169,29 @@ export default function TimelineScreen() {
 
   const loading = eventsQ.loading || periodsQ.loading;
 
+  function openEventForm(ev: TimelineEvent) {
+    setEventForm({
+      id: ev.id,
+      event_date: ev.event_date,
+      event_time: ev.event_time ?? "",
+      title: displayTitle(ev),
+      description: displayDescription(ev) ?? "",
+      category: ev.category ?? "",
+      isGoogle: isGoogleCalendarEvent(ev),
+    });
+  }
+
+  function openPeriodForm(p: LifePeriod) {
+    setPeriodForm({
+      id: p.id,
+      title: p.title,
+      start_date: p.start_date,
+      end_date: p.end_date ?? "",
+      color: p.color,
+      kind: p.kind,
+    });
+  }
+
   return (
     <Screen
       title={t("timeline.title")}
@@ -213,23 +239,31 @@ export default function TimelineScreen() {
         </Card>
       ) : null}
 
-      {periods.length > 0 ? (
+      <Row style={{ marginBottom: 12 }}>
+        <Chip label={t("timeline.visualAxis")} active={viewMode === "visual"} onPress={() => setViewMode("visual")} />
+        <Chip label={t("timeline.chronological")} active={viewMode === "list"} onPress={() => setViewMode("list")} />
+      </Row>
+
+      {eventsQ.error ? <ErrorNote message={eventsQ.error} onRetry={eventsQ.refresh} /> : null}
+      {loading && !eventsQ.data ? <Loading /> : null}
+      {eventsQ.data && events.length === 0 && periods.length === 0 ? (
+        <EmptyState text={t("timeline.empty")} />
+      ) : null}
+
+      {viewMode === "visual" && (events.length > 0 || periods.length > 0) ? (
+        <TimelineVisual
+          events={events}
+          periods={periods}
+          onEventPress={openEventForm}
+          onPeriodPress={openPeriodForm}
+        />
+      ) : null}
+
+      {viewMode === "list" && periods.length > 0 ? (
         <>
           <SectionTitle>{t("timeline.byPeriods")}</SectionTitle>
           {periods.map((p) => (
-            <Pressable
-              key={p.id}
-              onPress={() =>
-                setPeriodForm({
-                  id: p.id,
-                  title: p.title,
-                  start_date: p.start_date,
-                  end_date: p.end_date ?? "",
-                  color: p.color,
-                  kind: p.kind,
-                })
-              }
-            >
+            <Pressable key={p.id} onPress={() => openPeriodForm(p)}>
               <Card style={{ borderColor: p.color, borderStartWidth: 4 }}>
                 <Row>
                   <View style={{ flex: 1 }}>
@@ -246,31 +280,15 @@ export default function TimelineScreen() {
         </>
       ) : null}
 
-      <SectionTitle>{t("timeline.chronological")}</SectionTitle>
-      {eventsQ.error ? <ErrorNote message={eventsQ.error} onRetry={eventsQ.refresh} /> : null}
-      {loading && !eventsQ.data ? <Loading /> : null}
-      {eventsQ.data && events.length === 0 ? <EmptyState text={t("timeline.empty")} /> : null}
+      {viewMode === "list" ? <SectionTitle>{t("timeline.chronological")}</SectionTitle> : null}
 
-      {byYear.map(([year, list]) => (
+      {viewMode === "list" && byYear.map(([year, list]) => (
         <View key={year}>
           <Text style={{ color: c.accent, fontWeight: "700", fontSize: 15, textAlign: "right", marginVertical: 6 }}>
             {year}
           </Text>
           {list.map((ev) => (
-            <Pressable
-              key={ev.id}
-              onPress={() =>
-                setEventForm({
-                  id: ev.id,
-                  event_date: ev.event_date,
-                  event_time: ev.event_time ?? "",
-                  title: displayTitle(ev),
-                  description: displayDescription(ev) ?? "",
-                  category: ev.category ?? "",
-                  isGoogle: isGoogleCalendarEvent(ev),
-                })
-              }
-            >
+            <Pressable key={ev.id} onPress={() => openEventForm(ev)}>
               <Card>
                 <Row>
                   <View style={{ flex: 1 }}>

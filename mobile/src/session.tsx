@@ -8,7 +8,7 @@ import * as SecureStore from "expo-secure-store";
 const TOKEN_KEY = "myself.session_token";
 const SERVER_KEY = "myself.server_url";
 
-const DEFAULT_SERVER = process.env.EXPO_PUBLIC_API_URL || "";
+const DEFAULT_SERVER = process.env.EXPO_PUBLIC_API_URL || "https://myselfapp.xyz";
 
 async function storeGet(key: string): Promise<string | null> {
   if (Platform.OS === "web") {
