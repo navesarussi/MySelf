@@ -7,6 +7,7 @@ import { LogOut, Menu, X } from "lucide-react";
 import { AppLogo } from "@/components/app-logo";
 import { useTranslations } from "@/components/locale-provider";
 import { SHOW_PROJECTS } from "@/lib/features";
+import { APP_VERSION } from "@/lib/version";
 
 export function Nav() {
   const pathname = usePathname();
@@ -34,7 +35,10 @@ export function Nav() {
     <header className="flex items-center justify-between gap-4">
       <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
         <AppLogo size={28} priority />
-        <span>{t("nav.brand")}</span>
+        <span className="flex flex-col leading-tight">
+          <span>{t("nav.brand")}</span>
+          <span className="text-[10px] font-normal text-muted">v{APP_VERSION}</span>
+        </span>
       </Link>
 
       <nav className="hidden items-center gap-1 sm:flex">
