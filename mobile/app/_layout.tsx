@@ -11,6 +11,7 @@ import { I18nProvider, useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { ThemeProvider, useColors } from "../src/theme";
 import { ToastProvider } from "../src/toast";
+import { ErrorBoundary } from "../src/components/error-boundary";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -69,7 +70,9 @@ export default function RootLayout() {
         <I18nProvider>
           <SessionProvider>
             <ToastProvider>
-              <AppStack />
+              <ErrorBoundary>
+                <AppStack />
+              </ErrorBoundary>
             </ToastProvider>
           </SessionProvider>
         </I18nProvider>

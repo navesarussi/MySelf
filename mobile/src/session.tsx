@@ -18,7 +18,11 @@ async function storeGet(key: string): Promise<string | null> {
       return null;
     }
   }
-  return SecureStore.getItemAsync(key);
+  try {
+    return await SecureStore.getItemAsync(key);
+  } catch {
+    return null;
+  }
 }
 
 async function storeSet(key: string, value: string | null) {
@@ -29,8 +33,12 @@ async function storeSet(key: string, value: string | null) {
     } catch {}
     return;
   }
-  if (value === null) await SecureStore.deleteItemAsync(key);
-  else await SecureStore.setItemAsync(key, value);
+  try {
+    if (value === null) await SecureStore.deleteItemAsync(key);
+    else await SecureStore.setItemAsync(key, value);
+  } catch {
+    // Keychain unavailable — session won't persist but app should still open.
+  }
 }
 
 type SessionValue = {

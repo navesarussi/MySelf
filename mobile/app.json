@@ -7,14 +7,15 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "backgroundColor": "#0b0c10",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.navesarussi.myself",
       "infoPlist": {
         "CFBundleDevelopmentRegion": "he",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "RCTNewArchEnabled": false
       }
     },
     "android": {
