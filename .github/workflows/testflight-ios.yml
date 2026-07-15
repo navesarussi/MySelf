@@ -15,9 +15,6 @@ on:
     paths:
       - 'mobile/**'
       - '.github/workflows/testflight-ios.yml'
-    paths-ignore:
-      - 'mobile/app.json'
-      - 'mobile/package.json'
   workflow_dispatch:
 
 concurrency:
@@ -54,7 +51,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add ../package.json package.json app.json
-          git diff --staged --quiet || git commit -m "chore(mobile): bump version for TestFlight"
+          git diff --staged --quiet || git commit -m "chore(mobile): bump version for TestFlight [skip ci]"
           git push || true
 
       - name: Install dependencies
