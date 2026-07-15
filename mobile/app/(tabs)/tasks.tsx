@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
 import { useApi, useMutate } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
+import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
 import {
   Badge,
@@ -53,6 +54,7 @@ const emptyForm = (projectId: string): FormState => ({
 export default function TasksScreen() {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart, textLtr } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy } = useMutate();
@@ -194,7 +196,7 @@ export default function TasksScreen() {
               <Text
                 style={{
                   color: c.ink,
-                  textAlign: "right",
+                  textAlign: textStart,
                   fontWeight: "600",
                   textDecorationLine: task.status === "done" ? "line-through" : "none",
                 }}
@@ -210,7 +212,7 @@ export default function TasksScreen() {
                 {task.due_date ? <Badge label={`${t("common.due")}: ${task.due_date}`} /> : null}
               </Row>
               {task.notes ? (
-                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 4 }}>
+                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
                   {task.notes}
                 </Text>
               ) : null}
@@ -287,7 +289,7 @@ export default function TasksScreen() {
               onChangeText={(v) => setForm({ ...form, due_date: v })}
               placeholder="2026-12-31"
               autoCapitalize="none"
-              style={{ textAlign: "left" }}
+              style={{ textAlign: textLtr }}
             />
             <Input
               value={form.notes}

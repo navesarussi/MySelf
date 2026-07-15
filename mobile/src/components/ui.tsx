@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useColors, tokens } from "../theme";
 import { useI18n } from "../i18n";
+import { useLayoutDir } from "../layout-dir";
 
 export function Screen({
   title,
@@ -32,10 +33,11 @@ export function Screen({
   headerRight?: React.ReactNode;
 }) {
   const c = useColors();
+  const { direction, textStart } = useLayoutDir();
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: c.bg }}
-      contentContainerStyle={{ padding: tokens.padLg, paddingBottom: 48 }}
+      style={{ flex: 1, backgroundColor: c.bg, direction }}
+      contentContainerStyle={{ padding: tokens.padLg, paddingBottom: 48, direction }}
       refreshControl={
         onRefresh ? (
           <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.accent} />
@@ -44,11 +46,11 @@ export function Screen({
     >
       <View style={[styles.headerRow]}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: c.ink, fontSize: tokens.title, fontWeight: "700", textAlign: "right" }}>
+          <Text style={{ color: c.ink, fontSize: tokens.title, fontWeight: "700", textAlign: textStart }}>
             {title}
           </Text>
           {subtitle ? (
-            <Text style={{ color: c.muted, fontSize: tokens.subtitle, marginTop: 2, textAlign: "right" }}>
+            <Text style={{ color: c.muted, fontSize: tokens.subtitle, marginTop: 2, textAlign: textStart }}>
               {subtitle}
             </Text>
           ) : null}
@@ -62,6 +64,7 @@ export function Screen({
 
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
   const c = useColors();
+  const { direction } = useLayoutDir();
   return (
     <View
       style={[
@@ -72,6 +75,7 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
           borderRadius: tokens.radius,
           padding: tokens.pad,
           marginBottom: 10,
+          direction,
         },
         style,
       ]}
@@ -90,10 +94,11 @@ export function Row({
   style?: ViewStyle;
   wrap?: boolean;
 }) {
+  const { row } = useLayoutDir();
   return (
     <View
       style={[
-        { flexDirection: "row-reverse", alignItems: "center", gap: 8 },
+        row, { gap: 8 },
         wrap ? { flexWrap: "wrap" } : null,
         style,
       ]}
@@ -170,6 +175,7 @@ export function Btn({
 
 export function Input(props: TextInputProps) {
   const c = useColors();
+  const { textStart } = useLayoutDir();
   return (
     <TextInput
       placeholderTextColor={c.muted}
@@ -183,7 +189,7 @@ export function Input(props: TextInputProps) {
           paddingVertical: 9,
           color: c.ink,
           fontSize: tokens.text,
-          textAlign: "right",
+          textAlign: textStart,
           marginBottom: 8,
         },
         props.style,
@@ -194,8 +200,9 @@ export function Input(props: TextInputProps) {
 
 export function Label({ children }: { children: string }) {
   const c = useColors();
+  const { textStart } = useLayoutDir();
   return (
-    <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 4, textAlign: "right" }}>
+    <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 4, textAlign: textStart }}>
       {children}
     </Text>
   );
@@ -246,11 +253,12 @@ export function Loading() {
 export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart } = useLayoutDir();
   return (
     <Card style={{ borderColor: c.warn }}>
-      <Text style={{ color: c.warn, textAlign: "right" }}>{message}</Text>
+      <Text style={{ color: c.warn, textAlign: textStart }}>{message}</Text>
       {onRetry ? (
-        <View style={{ marginTop: 8, alignItems: "flex-start" }}>
+        <View style={{ marginTop: 8, alignSelf: "flex-start" }}>
           <Btn small variant="ghost" label={t("common.loading")} onPress={onRetry} />
         </View>
       ) : null}
@@ -260,6 +268,7 @@ export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () 
 
 export function SectionTitle({ children }: { children: string }) {
   const c = useColors();
+  const { textStart } = useLayoutDir();
   return (
     <Text
       style={{
@@ -268,7 +277,7 @@ export function SectionTitle({ children }: { children: string }) {
         fontWeight: "700",
         marginTop: 14,
         marginBottom: 8,
-        textAlign: "right",
+        textAlign: textStart,
       }}
     >
       {children}
@@ -291,7 +300,7 @@ export function confirmDelete(title: string, onConfirm: () => void, confirmLabel
 
 const styles = StyleSheet.create({
   headerRow: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginBottom: 14,

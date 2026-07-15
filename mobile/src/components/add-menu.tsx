@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { addTargetHref, type AddTarget } from "@/lib/add-menu";
 import { SHOW_PROJECTS } from "@/lib/features";
 import { useI18n } from "../i18n";
+import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
 
 const MENU_ITEMS: { target: AddTarget; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -22,6 +23,7 @@ const MENU_ITEMS: { target: AddTarget; icon: keyof typeof Ionicons.glyphMap }[] 
 export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart, row, menuAnchor } = useLayoutDir();
   const router = useRouter();
   const items = MENU_ITEMS.filter((i) => SHOW_PROJECTS || i.target !== "project");
 
@@ -49,7 +51,7 @@ export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: 
                   color: c.muted,
                   fontSize: tokens.textXs,
                   fontWeight: "600",
-                  textAlign: "right",
+                  textAlign: textStart,
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                 }}
@@ -61,8 +63,7 @@ export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: 
                   key={target}
                   onPress={() => select(target)}
                   style={({ pressed }) => ({
-                    flexDirection: "row-reverse",
-                    alignItems: "center",
+                    ...row,
                     gap: 10,
                     paddingHorizontal: 12,
                     paddingVertical: 12,
@@ -70,7 +71,7 @@ export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: 
                   })}
                 >
                   <Ionicons name={icon} size={16} color={c.accent} />
-                  <Text style={{ color: c.ink, fontSize: tokens.textSm, flex: 1, textAlign: "right" }}>
+                  <Text style={{ color: c.ink, fontSize: tokens.textSm, flex: 1, textAlign: textStart }}>
                     {t(`addMenu.${target}`)}
                   </Text>
                 </Pressable>

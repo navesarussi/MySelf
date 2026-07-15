@@ -5,6 +5,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { api } from "../../src/api/resources";
 import { useApi, useMutate, todayLocalISO } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
+import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
 import {
   Badge,
@@ -57,6 +58,7 @@ function isOverdue(r: Relationship, today: Date): boolean {
 export default function RelationshipsScreen() {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart, textLtr } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy } = useMutate();
@@ -181,21 +183,21 @@ export default function RelationshipsScreen() {
                 }
               >
                 <Row style={{ justifyContent: "flex-start" }} wrap>
-                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: "right" }}>{r.name}</Text>
+                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart }}>{r.name}</Text>
                   {r.group_name ? <Badge label={r.group_name} /> : null}
                 </Row>
                 <Text
                   style={{
                     color: overdue ? c.warn : c.muted,
                     fontSize: tokens.textXs,
-                    textAlign: "right",
+                    textAlign: textStart,
                     marginTop: 2,
                   }}
                 >
                   {days === null ? t("relationships.noContactLogged") : t("relationships.lastContactDays", { days })}
                 </Text>
                 {r.notes ? (
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 4 }}>
+                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
                     {r.notes}
                   </Text>
                 ) : null}
@@ -246,7 +248,7 @@ export default function RelationshipsScreen() {
               onChangeText={(v) => setForm({ ...form, phone: v })}
               placeholder={t("relationships.phonePlaceholder")}
               keyboardType="phone-pad"
-              style={{ textAlign: "left" }}
+              style={{ textAlign: textLtr }}
             />
             <Input
               value={form.notes}

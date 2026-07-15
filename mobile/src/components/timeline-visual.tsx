@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, Text, View } from "react-native";
 import { useColors, tokens } from "../theme";
 import { useI18n } from "../i18n";
+import { useLayoutDir } from "../layout-dir";
 import { Btn, Row } from "./ui";
 import {
   assignEventLanes,
@@ -42,6 +43,7 @@ export function TimelineVisual({
 }) {
   const c = useColors();
   const { t, locale } = useI18n();
+  const { textStart } = useLayoutDir();
   const [plotW, setPlotW] = useState(0);
 
   const bounds = useMemo(() => timelineBounds(events, periods), [events, periods]);
@@ -328,7 +330,7 @@ export function TimelineVisual({
         ) : null}
       </View>
 
-      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 6 }}>
+      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 6 }}>
         {t("timeline.clickToEdit")} · {t("timeline.minZoomHint")}
       </Text>
     </View>

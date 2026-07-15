@@ -5,6 +5,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { api } from "../../src/api/resources";
 import { useApi, useMutate, todayLocalISO } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
+import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
 import { Badge, Btn, Card, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
 import {
@@ -31,14 +32,15 @@ function StatCard({
   onPress: () => void;
 }) {
   const c = useColors();
+  const { textStart } = useLayoutDir();
   return (
     <Pressable onPress={onPress} style={{ flex: 1, minWidth: 150 }}>
       <Card>
-        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right" }}>{title}</Text>
-        <Text style={{ color: c.ink, fontSize: 20, fontWeight: "700", textAlign: "right", marginTop: 2 }}>
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart }}>{title}</Text>
+        <Text style={{ color: c.ink, fontSize: 20, fontWeight: "700", textAlign: textStart, marginTop: 2 }}>
           {main}
         </Text>
-        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
           {sub}
         </Text>
       </Card>
@@ -64,6 +66,7 @@ function sortRelationships(relationships: Relationship[], today: Date): Relation
 export default function HomeScreen() {
   const c = useColors();
   const { t, locale } = useI18n();
+  const { textStart, textLtr } = useLayoutDir();
   const router = useRouter();
   const { data, loading, error, refresh } = useApi(api.home);
   const { run } = useMutate();
@@ -109,13 +112,13 @@ export default function HomeScreen() {
   return (
     <Screen title={t("nav.brand")} refreshing={loading} onRefresh={refresh}>
       <Card>
-        <Text style={{ color: c.accent, fontSize: tokens.textSm, fontWeight: "600", textAlign: "right" }}>
+        <Text style={{ color: c.accent, fontSize: tokens.textSm, fontWeight: "600", textAlign: textStart }}>
           {t("home.compass")}
         </Text>
-        <Text style={{ color: c.ink, fontSize: 15, lineHeight: 24, textAlign: "right", marginTop: 6 }}>
+        <Text style={{ color: c.ink, fontSize: 15, lineHeight: 24, textAlign: textStart, marginTop: 6 }}>
           &quot;{t("home.quote")}&quot;
         </Text>
-        <Text style={{ color: c.muted, fontSize: tokens.textSm, lineHeight: 20, textAlign: "right", marginTop: 6 }}>
+        <Text style={{ color: c.muted, fontSize: tokens.textSm, lineHeight: 20, textAlign: textStart, marginTop: 6 }}>
           {t("home.mission")}
         </Text>
       </Card>
@@ -165,7 +168,7 @@ export default function HomeScreen() {
           <SectionTitle>{t("home.habitTracking")}</SectionTitle>
           {uniqueHabits.length === 0 ? (
             <Card>
-              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noHabits")}</Text>
+              <Text style={{ color: c.muted, textAlign: textStart }}>{t("home.noHabits")}</Text>
             </Card>
           ) : (
             uniqueHabits.map((h) => {
@@ -175,8 +178,8 @@ export default function HomeScreen() {
                 <Card key={h.id}>
                   <Row>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: c.ink, fontWeight: "600", textAlign: "right" }}>{h.name}</Text>
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                      <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart }}>{h.name}</Text>
+                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
                         {t("common.streak")}: {effectiveStreak(h, day)} · {t("common.peak")}: {h.best_streak}
                       </Text>
                     </View>
@@ -191,7 +194,7 @@ export default function HomeScreen() {
             })
           )}
           {uniqueHabits.some((h) => (h.failure_count ?? 0) > 0) ? (
-            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginBottom: 8 }}>
+            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginBottom: 8 }}>
               {t("common.totalFailures")}:{" "}
               {uniqueHabits.reduce((s, h) => s + (h.failure_count ?? 0), 0)}
             </Text>
@@ -200,19 +203,19 @@ export default function HomeScreen() {
           <SectionTitle>{t("home.nearbyGoals")}</SectionTitle>
           {rankedGoals.length === 0 ? (
             <Card>
-              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noActiveGoals")}</Text>
+              <Text style={{ color: c.muted, textAlign: textStart }}>{t("home.noActiveGoals")}</Text>
             </Card>
           ) : (
             rankedGoals.map((g) => (
               <Card key={g.id}>
                 <Row>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: "right" }}>{g.title}</Text>
-                    <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart }}>{g.title}</Text>
+                    <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
                       {[g.category, horizonLabel(g, locale)].filter(Boolean).join(" · ")}
                     </Text>
                     {g.first_step ? (
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
                         {t("common.firstStep")}: {g.first_step}
                       </Text>
                     ) : null}
@@ -224,12 +227,12 @@ export default function HomeScreen() {
           )}
           {data.pendingCommitments.length > 0 ? (
             <Card>
-              <Text style={{ color: c.muted, fontSize: tokens.textXs, fontWeight: "600", textAlign: "right", marginBottom: 6 }}>
+              <Text style={{ color: c.muted, fontSize: tokens.textXs, fontWeight: "600", textAlign: textStart, marginBottom: 6 }}>
                 {t("home.pendingCommitments")}
               </Text>
               {data.pendingCommitments.map((cm) => (
                 <Row key={cm.id} style={{ marginBottom: 4 }}>
-                  <Text style={{ color: c.ink, flex: 1, textAlign: "right" }}>{cm.text}</Text>
+                  <Text style={{ color: c.ink, flex: 1, textAlign: textStart }}>{cm.text}</Text>
                   <Btn
                     small
                     label={t("common.done")}
@@ -248,16 +251,16 @@ export default function HomeScreen() {
           <SectionTitle>{t("home.tasksSection")}</SectionTitle>
           {data.openTasks.length === 0 ? (
             <Card>
-              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noOpenTasks")}</Text>
+              <Text style={{ color: c.muted, textAlign: textStart }}>{t("home.noOpenTasks")}</Text>
             </Card>
           ) : (
             data.openTasks.map((task) => (
               <Card key={task.id}>
                 <Row>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, textAlign: "right" }}>{task.title}</Text>
+                    <Text style={{ color: c.ink, textAlign: textStart }}>{task.title}</Text>
                     {task.project_name ? (
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
                         {task.project_name}
                       </Text>
                     ) : null}
@@ -274,7 +277,7 @@ export default function HomeScreen() {
           <SectionTitle>{t("home.relationshipsWaiting")}</SectionTitle>
           {sortedRelationships.length === 0 ? (
             <Card>
-              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noRelationships")}</Text>
+              <Text style={{ color: c.muted, textAlign: textStart }}>{t("home.noRelationships")}</Text>
             </Card>
           ) : (
             sortedRelationships.map((r) => {
@@ -288,12 +291,12 @@ export default function HomeScreen() {
                 <Card key={r.id}>
                   <Row>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: c.ink, fontWeight: "600", textAlign: "right" }}>{r.name}</Text>
+                      <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart }}>{r.name}</Text>
                       <Text
                         style={{
                           color: isLate ? c.warn : c.muted,
                           fontSize: tokens.textXs,
-                          textAlign: "right",
+                          textAlign: textStart,
                           marginTop: 2,
                         }}
                       >
@@ -328,13 +331,13 @@ export default function HomeScreen() {
           <SectionTitle>{t("home.recentEvents")}</SectionTitle>
           {data.recentEvents.length === 0 ? (
             <Card>
-              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noEvents")}</Text>
+              <Text style={{ color: c.muted, textAlign: textStart }}>{t("home.noEvents")}</Text>
             </Card>
           ) : (
             data.recentEvents.slice(0, 10).map((ev) => (
               <Card key={ev.id}>
                 <Row>
-                  <Text style={{ color: c.ink, flex: 1, textAlign: "right" }}>{displayTitle(ev)}</Text>
+                  <Text style={{ color: c.ink, flex: 1, textAlign: textStart }}>{displayTitle(ev)}</Text>
                   <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
                     {formatEventWhen(ev, locale)}
                   </Text>
@@ -346,13 +349,13 @@ export default function HomeScreen() {
           <SectionTitle>{t("home.librarySection")}</SectionTitle>
           {data.libraryEntries.length === 0 ? (
             <Card>
-              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noLibraryEntries")}</Text>
+              <Text style={{ color: c.muted, textAlign: textStart }}>{t("home.noLibraryEntries")}</Text>
             </Card>
           ) : (
             data.libraryEntries.slice(0, 8).map((entry) => (
               <Card key={entry.id}>
                 <Row>
-                  <Text style={{ color: c.ink, fontWeight: "600", flex: 1, textAlign: "right" }}>
+                  <Text style={{ color: c.ink, fontWeight: "600", flex: 1, textAlign: textStart }}>
                     {entry.title}
                   </Text>
                   <Badge label={entry.category} />
@@ -362,13 +365,13 @@ export default function HomeScreen() {
           )}
 
           <View style={{ marginTop: 16 }}>
-            <Link href="/timeline" style={{ color: c.accent, textAlign: "right", padding: 6 }}>
+            <Link href="/timeline" style={{ color: c.accent, textAlign: textStart, padding: 6 }}>
               {t("home.toTimeline")}
             </Link>
-            <Link href="/goals" style={{ color: c.accent, textAlign: "right", padding: 6 }}>
+            <Link href="/goals" style={{ color: c.accent, textAlign: textStart, padding: 6 }}>
               {t("home.fullList")}
             </Link>
-            <Link href="/library" style={{ color: c.accent, textAlign: "right", padding: 6 }}>
+            <Link href="/library" style={{ color: c.accent, textAlign: textStart, padding: 6 }}>
               {t("home.toLibrary")}
             </Link>
           </View>

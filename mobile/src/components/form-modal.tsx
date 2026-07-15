@@ -2,6 +2,7 @@ import React from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useColors, tokens } from "../theme";
 import { useI18n } from "../i18n";
+import { useLayoutDir } from "../layout-dir";
 import { Btn, Row } from "./ui";
 
 /** Bottom-sheet style modal used by every add/edit form in the app. */
@@ -28,6 +29,7 @@ export function FormModal({
 }) {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart, row, menuAnchor } = useLayoutDir();
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
@@ -51,7 +53,7 @@ export function FormModal({
                 color: c.ink,
                 fontSize: 17,
                 fontWeight: "700",
-                textAlign: "right",
+                textAlign: textStart,
                 marginBottom: 12,
               }}
             >

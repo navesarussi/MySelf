@@ -4,15 +4,19 @@ import * as WebBrowser from "expo-web-browser";
 import { api } from "../src/api/resources";
 import { useApi, useMutate } from "../src/hooks";
 import { useI18n } from "../src/i18n";
+import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { useSession, API_URL } from "../src/session";
 import { Btn, Card, Chip, Row, Screen, SectionTitle, confirmDelete } from "../src/components/ui";
+import { getAppVersion } from "../src/version";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SettingsScreen() {
   const c = useColors();
   const { t, locale, setLocale } = useI18n();
+  const { textStart, textLtr } = useLayoutDir();
+  const version = getAppVersion();
   const { signOut } = useSession();
   const { run, busy } = useMutate();
   const syncQ = useApi(api.syncStatus);
@@ -47,7 +51,7 @@ export default function SettingsScreen() {
     <Screen title={t("settings.title")} subtitle={t("settings.subtitle")} refreshing={syncQ.loading} onRefresh={syncQ.refresh}>
       <SectionTitle>{t("language.label")}</SectionTitle>
       <Card>
-        <Text style={{ color: c.muted, fontSize: tokens.textSm, textAlign: "right", marginBottom: 8 }}>
+        <Text style={{ color: c.muted, fontSize: tokens.textSm, textAlign: textStart, marginBottom: 8 }}>
           {t("language.hint")}
         </Text>
         <Row>
@@ -56,20 +60,27 @@ export default function SettingsScreen() {
         </Row>
       </Card>
 
+      <SectionTitle>{t("settings.appVersion")}</SectionTitle>
+      <Card>
+        <Text style={{ color: c.ink, fontSize: tokens.text, fontWeight: "600", textAlign: textStart }}>
+          {t("settings.versionValue", { version })}
+        </Text>
+      </Card>
+
       <SectionTitle>{t("settings.googleCalendar")}</SectionTitle>
       <Card>
         {syncQ.data?.connected ? (
           <>
-            <Text style={{ color: c.good, textAlign: "right" }}>
+            <Text style={{ color: c.good, textAlign: textStart }}>
               ✓ {t("settings.connected")} · {syncQ.data.eventCount ?? 0} {t("settings.importedEvents")}
             </Text>
-            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 4 }}>
+            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
               {t("settings.lastSync")}:{" "}
               {syncQ.data.lastSyncAt
                 ? new Date(syncQ.data.lastSyncAt).toLocaleString(locale === "he" ? "he-IL" : "en-US")
                 : t("common.notSyncedYet")}
             </Text>
-            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
               {t("settings.autoSync")}
             </Text>
             <Row style={{ marginTop: 10 }}>
@@ -78,14 +89,14 @@ export default function SettingsScreen() {
           </>
         ) : (
           <>
-            <Text style={{ color: c.muted, textAlign: "right" }}>{t("settings.reconnectHint")}</Text>
+            <Text style={{ color: c.muted, textAlign: textStart }}>{t("settings.reconnectHint")}</Text>
             <Row style={{ marginTop: 10 }}>
               <Btn small label={t("common.signInGoogle")} onPress={connectGoogle} />
             </Row>
           </>
         )}
         {syncMessage ? (
-          <Text style={{ color: c.accent, fontSize: tokens.textXs, textAlign: "right", marginTop: 8 }}>
+          <Text style={{ color: c.accent, fontSize: tokens.textXs, textAlign: textStart, marginTop: 8 }}>
             {syncMessage}
           </Text>
         ) : null}

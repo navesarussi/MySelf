@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
 import { useApi, useMutate } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
+import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
 import {
   Badge,
@@ -51,6 +52,7 @@ const emptyForm: FormState = {
 export default function HabitsScreen() {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart, textLtr } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { data, loading, error, refresh } = useApi(api.habits);
@@ -171,15 +173,15 @@ export default function HabitsScreen() {
                 }
               >
                 <Row style={{ justifyContent: "flex-start" }}>
-                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: "right" }}>{h.name}</Text>
+                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart }}>{h.name}</Text>
                   <Badge label={h.kind === "build" ? t("habits.build") : t("habits.quit")} tone={h.kind === "build" ? "accent" : "warn"} />
                 </Row>
                 {h.target_note ? (
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
                     {h.target_note}
                   </Text>
                 ) : null}
-                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 4 }}>
+                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
                   {t("common.streak")}: {streak} · {t("common.peak")}: {h.best_streak} · {t("common.positives")}: {h.total_success_days} · {t("common.failures")}: {h.failure_count}
                 </Text>
               </Pressable>
@@ -235,7 +237,7 @@ export default function HabitsScreen() {
               onChangeText={(v) => setForm({ ...form, report_time: v })}
               placeholder="00:00"
               autoCapitalize="none"
-              style={{ textAlign: "left" }}
+              style={{ textAlign: textLtr }}
             />
             {form.id ? (
               <>
@@ -257,7 +259,7 @@ export default function HabitsScreen() {
                   onChangeText={(v) => setForm({ ...form, last_checked_on: v })}
                   placeholder="2026-07-13"
                   autoCapitalize="none"
-                  style={{ textAlign: "left" }}
+                  style={{ textAlign: textLtr }}
                 />
               </>
             ) : null}

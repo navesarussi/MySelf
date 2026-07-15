@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../src/api/resources";
 import { useApi, useMutate } from "../src/hooks";
 import { useI18n } from "../src/i18n";
+import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import {
   Badge,
@@ -36,6 +37,7 @@ const emptyGoal: GoalForm = { title: "", category: "", horizon: "", first_step: 
 export default function GoalsScreen() {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart, textLtr } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy } = useMutate();
@@ -135,17 +137,17 @@ export default function GoalsScreen() {
         }
       >
         <Row wrap style={{ justifyContent: "flex-start" }}>
-          <Text style={{ color: c.ink, fontWeight: "700", textAlign: "right" }}>{goal.title}</Text>
+          <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart }}>{goal.title}</Text>
           {goal.category ? <Badge label={goal.category} tone="accent" /> : null}
           {goal.horizon ? <Badge label={`${t("common.horizon")}: ${goal.horizon}`} /> : null}
         </Row>
         {goal.first_step ? (
-          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 4 }}>
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
             {t("common.firstStep")}: {goal.first_step}
           </Text>
         ) : null}
         {goal.definition_of_done ? (
-          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
             {t("common.definitionOfDone")}: {goal.definition_of_done}
           </Text>
         ) : null}
@@ -186,7 +188,7 @@ export default function GoalsScreen() {
       ) : null}
 
       <SectionTitle>{t("goals.commitmentsTitle")}</SectionTitle>
-      <Text style={{ color: c.muted, fontSize: tokens.textSm, textAlign: "right", marginBottom: 8 }}>
+      <Text style={{ color: c.muted, fontSize: tokens.textSm, textAlign: textStart, marginBottom: 8 }}>
         {t("goals.commitmentsHint")}
       </Text>
       <Card>
@@ -202,8 +204,8 @@ export default function GoalsScreen() {
       {commitmentsQ.data && commitments.length === 0 ? <EmptyState text={t("goals.noCommitments")} /> : null}
       {[...pending, ...resolved].map((cm) => (
         <Card key={cm.id} style={cm.status !== "pending" ? { opacity: 0.6 } : undefined}>
-          <Text style={{ color: c.ink, textAlign: "right" }}>{cm.text}</Text>
-          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+          <Text style={{ color: c.ink, textAlign: textStart }}>{cm.text}</Text>
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
             {cm.commitment_date}
           </Text>
           <Row style={{ marginTop: 8 }}>

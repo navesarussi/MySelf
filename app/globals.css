@@ -46,6 +46,11 @@ body {
 
 body {
   min-height: 100dvh;
+  text-align: start;
+}
+
+html[dir="rtl"] body {
+  line-height: 1.7;
 }
 
 /* Media never forces the layout wider than the screen */

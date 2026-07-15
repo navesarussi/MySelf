@@ -10,6 +10,7 @@ import { disconnectGoogle } from "./actions";
 import { GoogleCalendarSyncPanel } from "./google-calendar-sync";
 import Link from "next/link";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { APP_VERSION } from "@/lib/version";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,19 @@ export default async function SettingsPage() {
     </section>
   );
 
+  const versionSection = (
+    <section className="card mb-3 p-3">
+      <h2 className="text-sm font-semibold">{t("settings.appVersion")}</h2>
+      <p className="mt-2 text-sm font-medium">{t("settings.versionValue", { version: APP_VERSION })}</p>
+    </section>
+  );
+
   if (!dbConfigured()) {
     return (
       <>
         <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
         {languageSection}
+        {versionSection}
         <DbWarning />
       </>
     );
@@ -55,6 +64,7 @@ export default async function SettingsPage() {
       <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
 
       {languageSection}
+      {versionSection}
 
       <section className="card p-3">
         <h2 className="text-sm font-semibold">{t("settings.googleCalendar")}</h2>

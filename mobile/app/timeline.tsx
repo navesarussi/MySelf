@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../src/api/resources";
 import { useApi, useMutate } from "../src/hooks";
 import { useI18n } from "../src/i18n";
+import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import {
   Badge,
@@ -51,6 +52,7 @@ const emptyPeriod: PeriodForm = { title: "", start_date: "", end_date: "", color
 export default function TimelineScreen() {
   const c = useColors();
   const { t, locale } = useI18n();
+  const { textStart, textLtr } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy } = useMutate();
@@ -216,11 +218,11 @@ export default function TimelineScreen() {
             <View style={{ flex: 1 }}>
               {syncQ.data.connected ? (
                 <>
-                  <Text style={{ color: c.ink, fontSize: tokens.textSm, textAlign: "right" }}>
+                  <Text style={{ color: c.ink, fontSize: tokens.textSm, textAlign: textStart }}>
                     {t("settings.googleCalendar")}: {t("settings.connected")} · {syncQ.data.eventCount ?? 0}{" "}
                     {t("common.events")}
                   </Text>
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
                     {t("timeline.lastSynced")}:{" "}
                     {syncQ.data.lastSyncAt
                       ? new Date(syncQ.data.lastSyncAt).toLocaleString(locale === "he" ? "he-IL" : "en-US")
@@ -228,12 +230,12 @@ export default function TimelineScreen() {
                   </Text>
                 </>
               ) : (
-                <Text style={{ color: c.muted, fontSize: tokens.textSm, textAlign: "right" }}>
+                <Text style={{ color: c.muted, fontSize: tokens.textSm, textAlign: textStart }}>
                   {t("timeline.connectGoogle")} — {t("timeline.importHint")}
                 </Text>
               )}
               {syncMessage ? (
-                <Text style={{ color: c.accent, fontSize: tokens.textXs, textAlign: "right", marginTop: 4 }}>
+                <Text style={{ color: c.accent, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
                   {syncMessage}
                 </Text>
               ) : null}
@@ -273,8 +275,8 @@ export default function TimelineScreen() {
               <Card style={{ borderColor: p.color, borderStartWidth: 4 }}>
                 <Row>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: "right" }}>{p.title}</Text>
-                    <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart }}>{p.title}</Text>
+                    <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
                       {formatPeriodRange(p, locale)}
                     </Text>
                   </View>
@@ -290,7 +292,7 @@ export default function TimelineScreen() {
 
       {viewMode === "list" && byYear.map(([year, list]) => (
         <View key={year}>
-          <Text style={{ color: c.accent, fontWeight: "700", fontSize: 15, textAlign: "right", marginVertical: 6 }}>
+          <Text style={{ color: c.accent, fontWeight: "700", fontSize: 15, textAlign: textStart, marginVertical: 6 }}>
             {year}
           </Text>
           {list.map((ev) => (
@@ -298,9 +300,9 @@ export default function TimelineScreen() {
               <Card>
                 <Row>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: "right" }}>{displayTitle(ev)}</Text>
+                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart }}>{displayTitle(ev)}</Text>
                     {displayDescription(ev) ? (
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
                         {displayDescription(ev)}
                       </Text>
                     ) : null}
@@ -340,7 +342,7 @@ export default function TimelineScreen() {
         {eventForm ? (
           <View>
             {eventForm.isGoogle ? (
-              <Text style={{ color: c.accent2, fontSize: tokens.textXs, textAlign: "right", marginBottom: 8 }}>
+              <Text style={{ color: c.accent2, fontSize: tokens.textXs, textAlign: textStart, marginBottom: 8 }}>
                 {t("timeline.localOnlyNote")}
               </Text>
             ) : null}
@@ -351,7 +353,7 @@ export default function TimelineScreen() {
               onChangeText={(v) => setEventForm({ ...eventForm, event_date: v })}
               placeholder="2026-07-13"
               autoCapitalize="none"
-              style={{ textAlign: "left" }}
+              style={{ textAlign: textLtr }}
             />
             <Label>{`${t("timeline.time")} (HH:MM)`}</Label>
             <Input
@@ -359,7 +361,7 @@ export default function TimelineScreen() {
               onChangeText={(v) => setEventForm({ ...eventForm, event_time: v })}
               placeholder="18:30"
               autoCapitalize="none"
-              style={{ textAlign: "left" }}
+              style={{ textAlign: textLtr }}
             />
             <Input
               value={eventForm.description}
@@ -404,7 +406,7 @@ export default function TimelineScreen() {
               onChangeText={(v) => setPeriodForm({ ...periodForm, start_date: v })}
               placeholder="2020-01-01"
               autoCapitalize="none"
-              style={{ textAlign: "left" }}
+              style={{ textAlign: textLtr }}
             />
             <Label>{`${t("timeline.end")} (${t("timeline.endDateHint")})`}</Label>
             <Input
@@ -412,7 +414,7 @@ export default function TimelineScreen() {
               onChangeText={(v) => setPeriodForm({ ...periodForm, end_date: v })}
               placeholder="2023-01-01"
               autoCapitalize="none"
-              style={{ textAlign: "left" }}
+              style={{ textAlign: textLtr }}
             />
             <Label>{t("timeline.kind")}</Label>
             <Row wrap style={{ marginBottom: 8 }}>

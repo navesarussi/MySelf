@@ -15,6 +15,7 @@ import * as Linking from "expo-linking";
 import { AntDesign } from "@expo/vector-icons";
 import { useSession, API_URL } from "../src/session";
 import { useI18n } from "../src/i18n";
+import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { Loading } from "../src/components/ui";
 
@@ -22,13 +23,13 @@ WebBrowser.maybeCompleteAuthSession();
 
 function GoogleSignInButton({ onPress, busy, label }: { onPress: () => void; busy: boolean; label: string }) {
   const c = useColors();
+  const { row } = useLayoutDir();
   return (
     <Pressable
       onPress={onPress}
       disabled={busy}
       style={({ pressed }) => ({
-        flexDirection: "row-reverse",
-        alignItems: "center",
+        ...row,
         justifyContent: "center",
         gap: 10,
         backgroundColor: c.surface,
@@ -76,6 +77,7 @@ function DecoBlob({ color, size, top, right, opacity }: { color: string; size: n
 export default function LoginScreen() {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart, textLtr } = useLayoutDir();
   const router = useRouter();
   const { ready, token, signIn } = useSession();
   const [error, setError] = useState<string | null>(null);

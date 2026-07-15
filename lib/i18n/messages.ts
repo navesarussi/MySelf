@@ -337,6 +337,8 @@ export const messages = {
       syncProgress: "{processed} מתוך {total} אירועים",
       syncFailed: "סנכרון נכשל — נסה שוב",
       disconnect: "ניתוק יומן גוגל",
+      appVersion: "גרסת האפליקציה",
+      versionValue: "v{version}",
     },
     privacy: {
       title: "Privacy Policy — מרכז השליטה",
@@ -767,6 +769,8 @@ export const messages = {
       syncProgress: "{processed} of {total} events",
       syncFailed: "Sync failed — try again",
       disconnect: "Disconnect Google Calendar",
+      appVersion: "App version",
+      versionValue: "v{version}",
     },
     privacy: {
       title: "Privacy Policy — Command Center",

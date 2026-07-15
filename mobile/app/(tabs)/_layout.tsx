@@ -60,13 +60,13 @@ export default function TabsLayout() {
                 onPress={() => setAddOpen((v) => !v)}
                 accessibilityRole="button"
                 accessibilityLabel={addOpen ? t("common.close") : t("addMenu.title")}
-                style={{ flex: 1, alignItems: "center", justifyContent: "center", top: -14 }}
+                style={{ flex: 1, alignItems: "center", justifyContent: "center", top: -4 }}
               >
                 <View
                   style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
                     backgroundColor: c.accent,
                     alignItems: "center",
                     justifyContent: "center",
@@ -76,7 +76,7 @@ export default function TabsLayout() {
                     elevation: 6,
                   }}
                 >
-                  <Ionicons name={addOpen ? "close" : "add"} size={24} color={c.bg} />
+                  <Ionicons name={addOpen ? "close" : "add"} size={22} color={c.bg} />
                 </View>
               </Pressable>
             ),

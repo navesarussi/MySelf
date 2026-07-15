@@ -3,6 +3,7 @@ import { Modal, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n } from "../i18n";
+import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
 import { confirmDelete } from "./ui";
 import { useSession } from "../session";
@@ -16,6 +17,7 @@ const MENU_ITEMS = [
 export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
   const { t } = useI18n();
+  const { textStart, row, menuAnchor } = useLayoutDir();
   const router = useRouter();
   const { signOut } = useSession();
 
@@ -32,7 +34,7 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)" }} onPress={onClose}>
-        <View style={{ paddingTop: 56, paddingHorizontal: 16, alignItems: "flex-end" }}>
+        <View style={{ paddingTop: 56, paddingHorizontal: 16, ...menuAnchor }}>
           <Pressable onPress={(e) => e.stopPropagation()}>
             <View
               style={{
@@ -49,7 +51,7 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                   color: c.muted,
                   fontSize: tokens.textXs,
                   fontWeight: "600",
-                  textAlign: "right",
+                  textAlign: textStart,
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                 }}
@@ -61,8 +63,7 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                   key={href}
                   onPress={() => navigate(href)}
                   style={({ pressed }) => ({
-                    flexDirection: "row-reverse",
-                    alignItems: "center",
+                    ...row,
                     gap: 10,
                     paddingHorizontal: 12,
                     paddingVertical: 12,
@@ -70,7 +71,7 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                   })}
                 >
                   <Ionicons name={icon} size={18} color={c.accent} />
-                  <Text style={{ color: c.ink, fontSize: tokens.textSm, flex: 1, textAlign: "right" }}>
+                  <Text style={{ color: c.ink, fontSize: tokens.textSm, flex: 1, textAlign: textStart }}>
                     {t(labelKey)}
                   </Text>
                 </Pressable>
@@ -78,8 +79,7 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
               <Pressable
                 onPress={logout}
                 style={({ pressed }) => ({
-                  flexDirection: "row-reverse",
-                  alignItems: "center",
+                  ...row,
                   gap: 10,
                   paddingHorizontal: 12,
                   paddingVertical: 12,
@@ -89,7 +89,7 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                 })}
               >
                 <Ionicons name="log-out-outline" size={18} color={c.warn} />
-                <Text style={{ color: c.warn, fontSize: tokens.textSm, flex: 1, textAlign: "right" }}>
+                <Text style={{ color: c.warn, fontSize: tokens.textSm, flex: 1, textAlign: textStart }}>
                   {t("nav.logout")}
                 </Text>
               </Pressable>

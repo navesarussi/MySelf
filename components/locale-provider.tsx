@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo } from "react";
+import { DirSync } from "@/components/dir-sync";
 import { createTranslator, getMessages, type Locale, type Messages, type Translator } from "@/lib/i18n/core";
 
 type LocaleContextValue = {
@@ -27,7 +28,12 @@ export function LocaleProvider({
     [locale]
   );
 
-  return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
+  return (
+    <LocaleContext.Provider value={value}>
+      <DirSync />
+      {children}
+    </LocaleContext.Provider>
+  );
 }
 
 export function useTranslations() {

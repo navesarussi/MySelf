@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Platform } from "react-native";
+import { View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -15,17 +15,14 @@ import { ErrorBoundary } from "../src/components/error-boundary";
 
 SplashScreen.preventAutoHideAsync();
 
+function DirectionRoot({ children }: { children: React.ReactNode }) {
+  const { direction } = useLayoutDir();
+  return <View style={{ flex: 1, direction }}>{children}</View>;
+}
+
 function AppStack() {
   const c = useColors();
-  const { t, rtl } = useI18n();
-  const { textStart, textLtr } = useLayoutDir();
-
-  useEffect(() => {
-    if (Platform.OS === "web" && typeof document !== "undefined") {
-      document.documentElement.dir = rtl ? "rtl" : "ltr";
-      document.documentElement.lang = rtl ? "he" : "en";
-    }
-  }, [rtl]);
+  const { t } = useI18n();
 
   return (
     <>
@@ -68,13 +65,15 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider>
         <I18nProvider>
-          <SessionProvider>
-            <ToastProvider>
-              <ErrorBoundary>
-                <AppStack />
-              </ErrorBoundary>
-            </ToastProvider>
-          </SessionProvider>
+          <DirectionRoot>
+            <SessionProvider>
+              <ToastProvider>
+                <ErrorBoundary>
+                  <AppStack />
+                </ErrorBoundary>
+              </ToastProvider>
+            </SessionProvider>
+          </DirectionRoot>
         </I18nProvider>
       </ThemeProvider>
     </SafeAreaProvider>
