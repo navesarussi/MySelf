@@ -1,35 +1,64 @@
-import React from "react";
-import { Text, View } from "react-native";
+import React, { useMemo } from "react";
+import { Linking, Pressable, Text, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { differenceInCalendarDays } from "date-fns";
 import { api } from "../../src/api/resources";
 import { useApi, useMutate, todayLocalISO } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useColors, tokens } from "../../src/theme";
-import { Badge, Btn, Card, Chip, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
+import { Badge, Btn, Card, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
 import {
   dedupeHabits,
   effectiveStreak,
   habitReportDay,
-  selectHomeHabits,
   todayISO,
 } from "@/lib/habit-stats";
+import { achievabilityScore, horizonLabel, rankGoalsForHome } from "@/lib/goals-rank";
 import { displayTitle } from "@/lib/timeline-display";
-import type { Habit } from "@/lib/types";
+import { formatEventWhen } from "@/lib/timeline-layout";
+import { whatsappUrl } from "@/lib/integrations/phone";
+import type { Habit, Relationship } from "@/lib/types";
 
-function StatCard({ title, main, sub }: { title: string; main: string; sub: string }) {
+function StatCard({
+  title,
+  main,
+  sub,
+  onPress,
+}: {
+  title: string;
+  main: string;
+  sub: string;
+  onPress: () => void;
+}) {
   const c = useColors();
   return (
-    <Card style={{ flex: 1, minWidth: 150 }}>
-      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right" }}>{title}</Text>
-      <Text style={{ color: c.ink, fontSize: 20, fontWeight: "700", textAlign: "right", marginTop: 2 }}>
-        {main}
-      </Text>
-      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
-        {sub}
-      </Text>
-    </Card>
+    <Pressable onPress={onPress} style={{ flex: 1, minWidth: 150 }}>
+      <Card>
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right" }}>{title}</Text>
+        <Text style={{ color: c.ink, fontSize: 20, fontWeight: "700", textAlign: "right", marginTop: 2 }}>
+          {main}
+        </Text>
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+          {sub}
+        </Text>
+      </Card>
+    </Pressable>
   );
+}
+
+function sortRelationships(relationships: Relationship[], today: Date): Relationship[] {
+  return [...relationships].sort((a, b) => {
+    const overdueScore = (r: Relationship) => {
+      if (r.reminder_days == null) return 0;
+      const days = r.last_contact_date
+        ? differenceInCalendarDays(today, new Date(r.last_contact_date))
+        : Infinity;
+      return days >= r.reminder_days ? 1 : 0;
+    };
+    const diff = overdueScore(b) - overdueScore(a);
+    if (diff !== 0) return diff;
+    return a.name.localeCompare(b.name, "he");
+  });
 }
 
 export default function HomeScreen() {
@@ -44,7 +73,6 @@ export default function HomeScreen() {
 
   const habits = data?.habits ?? [];
   const uniqueHabits = dedupeHabits(habits, today);
-  const homeHabits = selectHomeHabits(habits, today, 4);
   const activeStreaks = uniqueHabits.filter(
     (h) => effectiveStreak(h, habitReportDay(h.report_time)) > 0
   ).length;
@@ -52,7 +80,13 @@ export default function HomeScreen() {
     (h) => h.last_checked_on === habitReportDay(h.report_time)
   ).length;
 
-  const overdue = (data?.relationships ?? []).filter((r) => {
+  const relationships = data?.relationships ?? [];
+  const sortedRelationships = useMemo(
+    () => sortRelationships(relationships as Relationship[], todayDate),
+    [relationships, todayDate]
+  );
+
+  const overdue = sortedRelationships.filter((r) => {
     if (r.reminder_days == null) return false;
     const days = r.last_contact_date
       ? differenceInCalendarDays(todayDate, new Date(r.last_contact_date))
@@ -60,8 +94,15 @@ export default function HomeScreen() {
     return days >= r.reminder_days;
   });
 
+  const rankedGoals = useMemo(
+    () => rankGoalsForHome(data?.activeGoals ?? [], 5, locale),
+    [data?.activeGoals, locale]
+  );
+
   async function checkIn(habit: Habit) {
-    await run((config) => api.reportHabit(config, habit.id, "check_in"));
+    await run((config) => api.reportHabit(config, habit.id, "check_in"), {
+      success: "flash.checkInRecorded",
+    });
     refresh();
   }
 
@@ -93,6 +134,7 @@ export default function HomeScreen() {
                 total: uniqueHabits.length,
                 streaks: activeStreaks,
               })}
+              onPress={() => router.push("/habits")}
             />
             <StatCard
               title={t("home.relationshipsOverdue")}
@@ -102,6 +144,7 @@ export default function HomeScreen() {
                   ? t("home.relationshipsNeedAttention", { count: overdue.length })
                   : t("home.allRelationshipsUpToDate")
               }
+              onPress={() => router.push("/relationships")}
             />
           </Row>
           <Row wrap>
@@ -109,33 +152,23 @@ export default function HomeScreen() {
               title={t("home.activeGoals")}
               main={String(data.activeGoals.length)}
               sub={t("home.goalsAchieved", { count: data.doneGoalsCount })}
+              onPress={() => router.push("/goals")}
             />
             <StatCard
               title={t("home.openTasks")}
-              main={String(data.openTasksCount)}
+              main={String(data.openTasksCount + data.inProgressTasksCount)}
               sub={t("home.tasksInProgress", { count: data.inProgressTasksCount })}
+              onPress={() => router.push("/tasks")}
             />
           </Row>
 
-          <SectionTitle>{t("mobile.quickAdd")}</SectionTitle>
-          <Row wrap>
-            <Chip label={`+ ${t("addMenu.task")}`} active={false} onPress={() => router.push("/tasks?add=1")} />
-            <Chip label={`+ ${t("addMenu.habit")}`} active={false} onPress={() => router.push("/habits?add=1")} />
-            <Chip label={`+ ${t("addMenu.contact")}`} active={false} onPress={() => router.push("/relationships?add=1")} />
-            <Chip label={`+ ${t("addMenu.goal")}`} active={false} onPress={() => router.push("/goals?add=goal")} />
-            <Chip label={`+ ${t("addMenu.commitment")}`} active={false} onPress={() => router.push("/goals?add=commitment")} />
-            <Chip label={`+ ${t("addMenu.event")}`} active={false} onPress={() => router.push("/timeline?add=event")} />
-            <Chip label={`+ ${t("addMenu.period")}`} active={false} onPress={() => router.push("/timeline?add=period")} />
-            <Chip label={`+ ${t("addMenu.entry")}`} active={false} onPress={() => router.push("/library?add=1")} />
-          </Row>
-
           <SectionTitle>{t("home.habitTracking")}</SectionTitle>
-          {homeHabits.length === 0 ? (
+          {uniqueHabits.length === 0 ? (
             <Card>
               <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noHabits")}</Text>
             </Card>
           ) : (
-            homeHabits.map((h) => {
+            uniqueHabits.map((h) => {
               const day = habitReportDay(h.report_time);
               const checked = h.last_checked_on === day;
               return (
@@ -157,66 +190,60 @@ export default function HomeScreen() {
               );
             })
           )}
+          {uniqueHabits.some((h) => (h.failure_count ?? 0) > 0) ? (
+            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginBottom: 8 }}>
+              {t("common.totalFailures")}:{" "}
+              {uniqueHabits.reduce((s, h) => s + (h.failure_count ?? 0), 0)}
+            </Text>
+          ) : null}
 
-          <SectionTitle>{t("home.pendingCommitments")}</SectionTitle>
-          {data.pendingCommitments.length === 0 ? (
+          <SectionTitle>{t("home.nearbyGoals")}</SectionTitle>
+          {rankedGoals.length === 0 ? (
             <Card>
-              <Text style={{ color: c.muted, textAlign: "right" }}>{t("goals.noCommitments")}</Text>
+              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noActiveGoals")}</Text>
             </Card>
           ) : (
-            data.pendingCommitments.slice(0, 4).map((cm) => (
-              <Card key={cm.id}>
+            rankedGoals.map((g) => (
+              <Card key={g.id}>
                 <Row>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: "right" }}>{g.title}</Text>
+                    <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                      {[g.category, horizonLabel(g, locale)].filter(Boolean).join(" · ")}
+                    </Text>
+                    {g.first_step ? (
+                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
+                        {t("common.firstStep")}: {g.first_step}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {achievabilityScore(g) >= 3 ? <Badge label={t("common.readyToAct")} tone="good" /> : null}
+                </Row>
+              </Card>
+            ))
+          )}
+          {data.pendingCommitments.length > 0 ? (
+            <Card>
+              <Text style={{ color: c.muted, fontSize: tokens.textXs, fontWeight: "600", textAlign: "right", marginBottom: 6 }}>
+                {t("home.pendingCommitments")}
+              </Text>
+              {data.pendingCommitments.map((cm) => (
+                <Row key={cm.id} style={{ marginBottom: 4 }}>
                   <Text style={{ color: c.ink, flex: 1, textAlign: "right" }}>{cm.text}</Text>
                   <Btn
                     small
                     label={t("common.done")}
                     onPress={async () => {
-                      await run((config) => api.setCommitmentStatus(config, cm.id, "done"));
+                      await run((config) => api.setCommitmentStatus(config, cm.id, "done"), {
+                        success: "flash.commitmentUpdated",
+                      });
                       refresh();
                     }}
                   />
                 </Row>
-              </Card>
-            ))
-          )}
-
-          <SectionTitle>{t("home.relationshipsWaiting")}</SectionTitle>
-          {overdue.length === 0 ? (
-            <Card>
-              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noOverdueRelationships")}</Text>
+              ))}
             </Card>
-          ) : (
-            overdue.slice(0, 4).map((r) => {
-              const days = r.last_contact_date
-                ? differenceInCalendarDays(todayDate, new Date(r.last_contact_date))
-                : null;
-              return (
-                <Card key={r.id}>
-                  <Row>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: c.ink, fontWeight: "600", textAlign: "right" }}>{r.name}</Text>
-                      <Text style={{ color: c.warn, fontSize: tokens.textXs, textAlign: "right", marginTop: 2 }}>
-                        {days === null
-                          ? t("relationships.noContactLogged")
-                          : t("relationships.lastContactDays", { days })}
-                      </Text>
-                    </View>
-                    <Btn
-                      small
-                      label={t("relationships.contactedToday")}
-                      onPress={async () => {
-                        await run((config) =>
-                          api.updateRelationship(config, r.id, { last_contact_date: todayLocalISO() })
-                        );
-                        refresh();
-                      }}
-                    />
-                  </Row>
-                </Card>
-              );
-            })
-          )}
+          ) : null}
 
           <SectionTitle>{t("home.tasksSection")}</SectionTitle>
           {data.openTasks.length === 0 ? (
@@ -224,7 +251,7 @@ export default function HomeScreen() {
               <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noOpenTasks")}</Text>
             </Card>
           ) : (
-            data.openTasks.slice(0, 5).map((task) => (
+            data.openTasks.map((task) => (
               <Card key={task.id}>
                 <Row>
                   <View style={{ flex: 1 }}>
@@ -244,19 +271,91 @@ export default function HomeScreen() {
             ))
           )}
 
+          <SectionTitle>{t("home.relationshipsWaiting")}</SectionTitle>
+          {sortedRelationships.length === 0 ? (
+            <Card>
+              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noRelationships")}</Text>
+            </Card>
+          ) : (
+            sortedRelationships.map((r) => {
+              const days = r.last_contact_date
+                ? differenceInCalendarDays(todayDate, new Date(r.last_contact_date))
+                : null;
+              const isLate =
+                r.reminder_days != null && (days === null || days >= r.reminder_days);
+              const wa = r.phone ? whatsappUrl(r.phone) : null;
+              return (
+                <Card key={r.id}>
+                  <Row>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: c.ink, fontWeight: "600", textAlign: "right" }}>{r.name}</Text>
+                      <Text
+                        style={{
+                          color: isLate ? c.warn : c.muted,
+                          fontSize: tokens.textXs,
+                          textAlign: "right",
+                          marginTop: 2,
+                        }}
+                      >
+                        {days === null
+                          ? t("relationships.noContactLogged")
+                          : t("relationships.lastContactDays", { days })}
+                      </Text>
+                    </View>
+                    <View style={{ gap: 4 }}>
+                      {wa ? (
+                        <Btn small label={t("common.openWhatsapp")} onPress={() => Linking.openURL(wa)} />
+                      ) : null}
+                      <Btn
+                        small
+                        label={t("relationships.contactedToday")}
+                        onPress={async () => {
+                          await run(
+                            (config) =>
+                              api.updateRelationship(config, r.id, { last_contact_date: todayLocalISO() }),
+                            { success: "flash.contactUpdated" }
+                          );
+                          refresh();
+                        }}
+                      />
+                    </View>
+                  </Row>
+                </Card>
+              );
+            })
+          )}
+
           <SectionTitle>{t("home.recentEvents")}</SectionTitle>
           {data.recentEvents.length === 0 ? (
             <Card>
               <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noEvents")}</Text>
             </Card>
           ) : (
-            data.recentEvents.slice(0, 5).map((ev) => (
+            data.recentEvents.slice(0, 10).map((ev) => (
               <Card key={ev.id}>
                 <Row>
                   <Text style={{ color: c.ink, flex: 1, textAlign: "right" }}>{displayTitle(ev)}</Text>
                   <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
-                    {new Date(ev.event_date).toLocaleDateString(locale === "he" ? "he-IL" : "en-US")}
+                    {formatEventWhen(ev, locale)}
                   </Text>
+                </Row>
+              </Card>
+            ))
+          )}
+
+          <SectionTitle>{t("home.librarySection")}</SectionTitle>
+          {data.libraryEntries.length === 0 ? (
+            <Card>
+              <Text style={{ color: c.muted, textAlign: "right" }}>{t("home.noLibraryEntries")}</Text>
+            </Card>
+          ) : (
+            data.libraryEntries.slice(0, 8).map((entry) => (
+              <Card key={entry.id}>
+                <Row>
+                  <Text style={{ color: c.ink, fontWeight: "600", flex: 1, textAlign: "right" }}>
+                    {entry.title}
+                  </Text>
+                  <Badge label={entry.category} />
                 </Row>
               </Card>
             ))

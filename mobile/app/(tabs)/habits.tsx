@@ -58,7 +58,7 @@ export default function HabitsScreen() {
   const [form, setForm] = useState<FormState | null>(null);
 
   useEffect(() => {
-    if (params.add) {
+    if (params.add === "habit" || params.add === "1") {
       setForm(emptyForm);
       router.setParams({ add: "" });
     }
@@ -71,7 +71,7 @@ export default function HabitsScreen() {
       confirmDelete(
         t("habits.resetStreak"),
         async () => {
-          await run((config) => api.reportHabit(config, habit.id, "reset"));
+          await run((config) => api.reportHabit(config, habit.id, "reset"), { success: "flash.streakReset" });
           refresh();
         },
         t("common.save"),
@@ -79,34 +79,42 @@ export default function HabitsScreen() {
       );
       return;
     }
-    await run((config) => api.reportHabit(config, habit.id, type));
+    const flash =
+      type === "check_in"
+        ? { success: "flash.checkInRecorded" as const }
+        : { success: "flash.fallRecorded" as const };
+    await run((config) => api.reportHabit(config, habit.id, type), flash);
     refresh();
   }
 
   async function submit() {
     if (!form || !form.name.trim()) return;
     if (form.id) {
-      await run((config) =>
-        api.updateHabit(config, form.id!, {
-          name: form.name,
-          kind: form.kind,
-          target_note: form.target_note || null,
-          report_time: form.report_time || null,
-          streak_count: Number(form.streak_count) || 0,
-          best_streak: Number(form.best_streak) || 0,
-          total_success_days: Number(form.total_success_days) || 0,
-          failure_count: Number(form.failure_count) || 0,
-          last_checked_on: form.last_checked_on || null,
-        })
+      await run(
+        (config) =>
+          api.updateHabit(config, form.id!, {
+            name: form.name,
+            kind: form.kind,
+            target_note: form.target_note || null,
+            report_time: form.report_time || null,
+            streak_count: Number(form.streak_count) || 0,
+            best_streak: Number(form.best_streak) || 0,
+            total_success_days: Number(form.total_success_days) || 0,
+            failure_count: Number(form.failure_count) || 0,
+            last_checked_on: form.last_checked_on || null,
+          }),
+        { success: "flash.habitUpdated" }
       );
     } else {
-      await run((config) =>
-        api.createHabit(config, {
-          name: form.name,
-          kind: form.kind,
-          target_note: form.target_note || null,
-          report_time: form.report_time || null,
-        })
+      await run(
+        (config) =>
+          api.createHabit(config, {
+            name: form.name,
+            kind: form.kind,
+            target_note: form.target_note || null,
+            report_time: form.report_time || null,
+          }),
+        { success: "flash.habitAdded" }
       );
     }
     setForm(null);
@@ -117,7 +125,7 @@ export default function HabitsScreen() {
     confirmDelete(
       `${t("common.delete")}: ${habit.name}?`,
       async () => {
-        await run((config) => api.deleteHabit(config, habit.id));
+        await run((config) => api.deleteHabit(config, habit.id), { success: "flash.habitDeleted" });
         setForm(null);
         refresh();
       },

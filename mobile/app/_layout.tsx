@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { SessionProvider } from "../src/session";
 import { I18nProvider, useI18n } from "../src/i18n";
 import { ThemeProvider, useColors } from "../src/theme";
+import { ToastProvider } from "../src/toast";
 
 function AppStack() {
   const c = useColors();
@@ -30,6 +31,7 @@ function AppStack() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="timeline" options={{ title: t("nav.timeline") }} />
         <Stack.Screen name="goals" options={{ title: t("nav.goals") }} />
         <Stack.Screen name="library" options={{ title: t("nav.library") }} />
@@ -44,7 +46,9 @@ export default function RootLayout() {
     <ThemeProvider>
       <I18nProvider>
         <SessionProvider>
-          <AppStack />
+          <ToastProvider>
+            <AppStack />
+          </ToastProvider>
         </SessionProvider>
       </I18nProvider>
     </ThemeProvider>

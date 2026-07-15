@@ -92,6 +92,10 @@ export const messages = {
     },
     login: {
       subtitle: "אזור אישי — כניסה עם Google",
+      welcome: "המרחב האישי שלך",
+      tagline: "הרגלים, מטרות, קשרים וציר החיים — הכל במקום אחד, רק בשבילך.",
+      signingIn: "מתחבר…",
+      error: "ההתחברות נכשלה — נסה שוב",
       calendarNote: "כולל גישה ליומן Google לסנכרון ציר הזמן.",
     },
     dbWarning: {
@@ -518,6 +522,10 @@ export const messages = {
     },
     login: {
       subtitle: "Personal area — sign in with Google",
+      welcome: "Your personal space",
+      tagline: "Habits, goals, relationships, and your life timeline — all in one place, just for you.",
+      signingIn: "Signing in…",
+      error: "Sign-in failed — please try again",
       calendarNote: "Includes Google Calendar access for timeline sync.",
     },
     dbWarning: {

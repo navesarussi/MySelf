@@ -54,7 +54,7 @@ export default function LibraryScreen() {
   );
 
   useEffect(() => {
-    if (params.add) {
+    if (params.add === "entry" || params.add === "1") {
       setForm(emptyForm);
       router.setParams({ add: "" });
     }
@@ -69,8 +69,8 @@ export default function LibraryScreen() {
   async function submit() {
     if (!form || !form.title.trim() || !form.body.trim()) return;
     const body = { title: form.title, category: form.category, body: form.body, tags: form.tags };
-    if (form.id) await run((config) => api.updateEntry(config, form.id!, body));
-    else await run((config) => api.createEntry(config, body));
+    if (form.id) await run((config) => api.updateEntry(config, form.id!, body), { success: "flash.entryUpdated" });
+    else await run((config) => api.createEntry(config, body), { success: "flash.entryAdded" });
     setForm(null);
     entriesQ.refresh();
   }
@@ -79,7 +79,7 @@ export default function LibraryScreen() {
     confirmDelete(
       `${t("library.deleteEntry")}: ${entry.title}?`,
       async () => {
-        await run((config) => api.deleteEntry(config, entry.id));
+        await run((config) => api.deleteEntry(config, entry.id), { success: "flash.entryDeleted" });
         setForm(null);
         entriesQ.refresh();
       },

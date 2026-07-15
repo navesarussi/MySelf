@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "מרכז השליטה",
+    "name": "MeAndMySelf",
     "slug": "myself",
     "version": "1.2.0",
     "scheme": "myself",
@@ -48,7 +48,12 @@
       "typedRoutes": false
     },
     "extra": {
-      "supportsRTL": true
-    }
+      "supportsRTL": true,
+      "router": {},
+      "eas": {
+        "projectId": "6f81d110-b64f-4339-8dc2-2c93ae180fe8"
+      }
+    },
+    "owner": "saussilberg"
   }
 }

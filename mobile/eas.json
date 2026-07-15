@@ -22,6 +22,15 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6791144676",
+        "appleId": "sarussilberg@gmail.com",
+        "appleTeamId": "HVW3H3DLRB",
+        "ascApiKeyPath": "/Users/navesarussi/.kupapay-store-keys/AuthKey_X3N8885G95.p8",
+        "ascApiKeyId": "X3N8885G95",
+        "ascApiKeyIssuerId": "3a825a1a-0b43-487a-9ba4-1ab24a88f553"
+      }
+    }
   }
 }

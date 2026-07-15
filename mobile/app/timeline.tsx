@@ -99,8 +99,8 @@ export default function TimelineScreen() {
       description: eventForm.description || null,
       category: eventForm.category || null,
     };
-    if (eventForm.id) await run((config) => api.updateEvent(config, eventForm.id!, body));
-    else await run((config) => api.createEvent(config, body));
+    if (eventForm.id) await run((config) => api.updateEvent(config, eventForm.id!, body), { success: "flash.eventUpdated", error: "flash.eventUpdateError" });
+    else await run((config) => api.createEvent(config, body), { success: "flash.eventAdded", error: "flash.eventAddError" });
     setEventForm(null);
     eventsQ.refresh();
   }
@@ -113,7 +113,10 @@ export default function TimelineScreen() {
         title: displayTitle(ev),
       }),
       async () => {
-        await run((config) => api.deleteEvent(config, ev.id));
+        await run((config) => api.deleteEvent(config, ev.id), {
+          success: google ? "flash.eventHidden" : "flash.eventDeleted",
+          error: google ? "flash.eventHideError" : "flash.eventDeleteError",
+        });
         setEventForm(null);
         eventsQ.refresh();
       },
@@ -131,8 +134,8 @@ export default function TimelineScreen() {
       color: periodForm.color,
       kind: periodForm.kind,
     };
-    if (periodForm.id) await run((config) => api.updatePeriod(config, periodForm.id!, body));
-    else await run((config) => api.createPeriod(config, body));
+    if (periodForm.id) await run((config) => api.updatePeriod(config, periodForm.id!, body), { success: "flash.periodUpdated", error: "flash.periodUpdateError" });
+    else await run((config) => api.createPeriod(config, body), { success: "flash.periodAdded", error: "flash.periodAddError" });
     setPeriodForm(null);
     periodsQ.refresh();
   }
@@ -141,7 +144,10 @@ export default function TimelineScreen() {
     confirmDelete(
       t("timeline.deleteConfirmPeriod", { title: p.title }),
       async () => {
-        await run((config) => api.deletePeriod(config, p.id));
+        await run((config) => api.deletePeriod(config, p.id), {
+          success: "flash.periodDeleted",
+          error: "flash.periodDeleteError",
+        });
         setPeriodForm(null);
         periodsQ.refresh();
       },

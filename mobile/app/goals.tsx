@@ -44,9 +44,11 @@ export default function GoalsScreen() {
   const commitmentsQ = useApi(api.commitments);
   const [goalForm, setGoalForm] = useState<GoalForm | null>(null);
   const [commitmentText, setCommitmentText] = useState("");
+  const [commitmentFocus, setCommitmentFocus] = useState(false);
 
   useEffect(() => {
     if (params.add === "goal") setGoalForm(emptyGoal);
+    if (params.add === "commitment") setCommitmentFocus(true);
     if (params.add) router.setParams({ add: "" });
   }, [params.add, router]);
 
@@ -66,14 +68,14 @@ export default function GoalsScreen() {
       first_step: goalForm.first_step || null,
       definition_of_done: goalForm.definition_of_done || null,
     };
-    if (goalForm.id) await run((config) => api.updateGoal(config, goalForm.id!, body));
-    else await run((config) => api.createGoal(config, body));
+    if (goalForm.id) await run((config) => api.updateGoal(config, goalForm.id!, body), { success: "flash.goalUpdated" });
+    else await run((config) => api.createGoal(config, body), { success: "flash.goalAdded" });
     setGoalForm(null);
     goalsQ.refresh();
   }
 
   async function toggleGoal(goal: Goal) {
-    await run((config) => api.updateGoal(config, goal.id, { toggle_status: true }));
+    await run((config) => api.updateGoal(config, goal.id, { toggle_status: true }), { success: "flash.goalUpdated" });
     goalsQ.refresh();
   }
 
@@ -81,7 +83,7 @@ export default function GoalsScreen() {
     confirmDelete(
       `${t("common.delete")}: ${goal.title}?`,
       async () => {
-        await run((config) => api.deleteGoal(config, goal.id));
+        await run((config) => api.deleteGoal(config, goal.id), { success: "flash.goalDeleted" });
         setGoalForm(null);
         goalsQ.refresh();
       },
@@ -92,13 +94,17 @@ export default function GoalsScreen() {
 
   async function addCommitment() {
     if (!commitmentText.trim()) return;
-    await run((config) => api.createCommitment(config, { text: commitmentText.trim() }));
+    await run((config) => api.createCommitment(config, { text: commitmentText.trim() }), {
+      success: "flash.commitmentAdded",
+    });
     setCommitmentText("");
     commitmentsQ.refresh();
   }
 
   async function setCommitment(cm: Commitment, status: Commitment["status"]) {
-    await run((config) => api.setCommitmentStatus(config, cm.id, status));
+    await run((config) => api.setCommitmentStatus(config, cm.id, status), {
+      success: "flash.commitmentUpdated",
+    });
     commitmentsQ.refresh();
   }
 
@@ -106,7 +112,7 @@ export default function GoalsScreen() {
     confirmDelete(
       `${t("common.delete")}?`,
       async () => {
-        await run((config) => api.deleteCommitment(config, cm.id));
+        await run((config) => api.deleteCommitment(config, cm.id), { success: "flash.commitmentDeleted" });
         commitmentsQ.refresh();
       },
       t("common.delete"),
@@ -188,6 +194,8 @@ export default function GoalsScreen() {
           value={commitmentText}
           onChangeText={setCommitmentText}
           placeholder={t("goals.commitmentPlaceholder")}
+          autoFocus={commitmentFocus}
+          onFocus={() => setCommitmentFocus(false)}
         />
         <Btn label={t("common.add")} onPress={addCommitment} disabled={busy || !commitmentText.trim()} />
       </Card>

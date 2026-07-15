@@ -72,7 +72,7 @@ export default function RelationshipsScreen() {
   );
 
   useEffect(() => {
-    if (params.add && projects.length) {
+    if ((params.add === "contact" || params.add === "1") && projects.length) {
       setForm(emptyForm(defaultProjectId));
       router.setParams({ add: "" });
     }
@@ -101,7 +101,9 @@ export default function RelationshipsScreen() {
   }, [relationships, groupFilter]);
 
   async function contactedToday(r: Relationship) {
-    await run((config) => api.updateRelationship(config, r.id, { last_contact_date: todayLocalISO() }));
+    await run((config) => api.updateRelationship(config, r.id, { last_contact_date: todayLocalISO() }), {
+      success: "flash.contactUpdated",
+    });
     relQ.refresh();
   }
 
@@ -115,8 +117,8 @@ export default function RelationshipsScreen() {
       notes: form.notes || null,
       project_id: form.project_id,
     };
-    if (form.id) await run((config) => api.updateRelationship(config, form.id!, body));
-    else await run((config) => api.createRelationship(config, body));
+    if (form.id) await run((config) => api.updateRelationship(config, form.id!, body), { success: "flash.relationshipUpdated" });
+    else await run((config) => api.createRelationship(config, body), { success: "flash.relationshipAdded" });
     setForm(null);
     relQ.refresh();
   }
@@ -125,7 +127,7 @@ export default function RelationshipsScreen() {
     confirmDelete(
       `${t("common.delete")}: ${r.name}?`,
       async () => {
-        await run((config) => api.deleteRelationship(config, r.id));
+        await run((config) => api.deleteRelationship(config, r.id), { success: "flash.relationshipDeleted" });
         setForm(null);
         relQ.refresh();
       },

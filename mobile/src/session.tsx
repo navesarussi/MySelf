@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { apiFetch } from "./api/client";
 
-/** Session = server URL + the site's session token (sent as a Bearer header).
- *  Token lives in SecureStore on native, localStorage on web. */
+/** Session = baked-in production API + session token in SecureStore.
+ *  After first successful sign-in the device stays logged in until logout. */
 
 const TOKEN_KEY = "myself.session_token";
-const SERVER_KEY = "myself.server_url";
 
-const DEFAULT_SERVER = process.env.EXPO_PUBLIC_API_URL || "https://myselfapp.xyz";
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://myselfapp.xyz";
 
 async function storeGet(key: string): Promise<string | null> {
   if (Platform.OS === "web") {
@@ -37,63 +37,59 @@ type SessionValue = {
   ready: boolean;
   token: string | null;
   serverUrl: string;
-  signIn: (serverUrl: string, token: string) => Promise<void>;
+  signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
-  setServerUrl: (url: string) => Promise<void>;
 };
 
 const SessionContext = createContext<SessionValue>({
   ready: false,
   token: null,
-  serverUrl: DEFAULT_SERVER,
+  serverUrl: API_URL,
   signIn: async () => {},
   signOut: async () => {},
-  setServerUrl: async () => {},
 });
 
+/** @deprecated kept for callers that still pass a URL — always uses API_URL */
 export function normalizeServerUrl(url: string): string {
   const trimmed = url.trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
+  if (!trimmed) return API_URL;
   return /^https?:\/\//.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
-  const [serverUrl, setServerUrlState] = useState(DEFAULT_SERVER);
 
   useEffect(() => {
-    Promise.all([storeGet(TOKEN_KEY), storeGet(SERVER_KEY)])
-      .then(([storedToken, storedServer]) => {
-        if (storedToken) setToken(storedToken);
-        if (storedServer) setServerUrlState(storedServer);
-      })
-      .finally(() => setReady(true));
+    (async () => {
+      const storedToken = await storeGet(TOKEN_KEY);
+      if (storedToken) {
+        try {
+          await apiFetch({ serverUrl: API_URL, token: storedToken }, "/session");
+          setToken(storedToken);
+        } catch {
+          await storeSet(TOKEN_KEY, null);
+        }
+      }
+    })().finally(() => setReady(true));
   }, []);
 
   const value = useMemo<SessionValue>(
     () => ({
       ready,
       token,
-      serverUrl,
-      signIn: async (url: string, newToken: string) => {
-        const normalized = normalizeServerUrl(url);
-        setServerUrlState(normalized);
+      serverUrl: API_URL,
+      signIn: async (newToken: string) => {
+        await apiFetch({ serverUrl: API_URL, token: newToken }, "/session");
         setToken(newToken);
-        await storeSet(SERVER_KEY, normalized);
         await storeSet(TOKEN_KEY, newToken);
       },
       signOut: async () => {
         setToken(null);
         await storeSet(TOKEN_KEY, null);
       },
-      setServerUrl: async (url: string) => {
-        const normalized = normalizeServerUrl(url);
-        setServerUrlState(normalized);
-        await storeSet(SERVER_KEY, normalized);
-      },
     }),
-    [ready, token, serverUrl]
+    [ready, token]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -80,7 +80,7 @@ export default function TasksScreen() {
   );
 
   useEffect(() => {
-    if (params.add && projects.length) {
+    if ((params.add === "task" || params.add === "1") && projects.length) {
       setForm(emptyForm(defaultProjectId));
       router.setParams({ add: "" });
     }
@@ -111,14 +111,16 @@ export default function TasksScreen() {
       due_date: form.due_date || null,
       notes: form.notes || null,
     };
-    if (form.id) await run((config) => api.updateTask(config, form.id!, body));
-    else await run((config) => api.createTask(config, body));
+    if (form.id) await run((config) => api.updateTask(config, form.id!, body), { success: "flash.taskUpdated", error: "flash.taskUpdateError" });
+    else await run((config) => api.createTask(config, body), { success: "flash.taskAdded", error: "flash.taskAddError" });
     setForm(null);
     tasksQ.refresh();
   }
 
   async function advance(task: Task) {
-    await run((config) => api.updateTask(config, task.id, { status: NEXT_STATUS[task.status] }));
+    await run((config) => api.updateTask(config, task.id, { status: NEXT_STATUS[task.status] }), {
+      success: "flash.taskUpdated",
+    });
     tasksQ.refresh();
   }
 
@@ -126,7 +128,10 @@ export default function TasksScreen() {
     confirmDelete(
       `${t("common.delete")}: ${task.title}?`,
       async () => {
-        await run((config) => api.deleteTask(config, task.id));
+        await run((config) => api.deleteTask(config, task.id), {
+          success: "flash.taskDeleted",
+          error: "flash.taskDeleteError",
+        });
         setForm(null);
         tasksQ.refresh();
       },

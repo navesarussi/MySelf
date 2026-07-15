@@ -1,20 +1,32 @@
 import React, { useState } from "react";
-import { Text } from "react-native";
+import { Platform, Text } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { api } from "../src/api/resources";
 import { useApi, useMutate } from "../src/hooks";
 import { useI18n } from "../src/i18n";
 import { useColors, tokens } from "../src/theme";
-import { useSession } from "../src/session";
-import { Btn, Card, Chip, Input, Label, Row, Screen, SectionTitle, confirmDelete } from "../src/components/ui";
+import { useSession, API_URL } from "../src/session";
+import { Btn, Card, Chip, Row, Screen, SectionTitle, confirmDelete } from "../src/components/ui";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function SettingsScreen() {
   const c = useColors();
   const { t, locale, setLocale } = useI18n();
-  const { serverUrl, setServerUrl, signOut } = useSession();
+  const { signOut } = useSession();
   const { run, busy } = useMutate();
   const syncQ = useApi(api.syncStatus);
-  const [serverDraft, setServerDraft] = useState(serverUrl);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  async function connectGoogle() {
+    const loginUrl = `${API_URL}/api/auth/google/login?next=${encodeURIComponent("/settings")}`;
+    if (Platform.OS === "web") {
+      window.open(loginUrl, "_blank");
+      return;
+    }
+    await WebBrowser.openBrowserAsync(loginUrl);
+    syncQ.refresh();
+  }
 
   async function runSync() {
     setSyncMessage(t("settings.syncing"));
@@ -65,26 +77,18 @@ export default function SettingsScreen() {
             </Row>
           </>
         ) : (
-          <Text style={{ color: c.muted, textAlign: "right" }}>{t("settings.reconnectHint")}</Text>
+          <>
+            <Text style={{ color: c.muted, textAlign: "right" }}>{t("settings.reconnectHint")}</Text>
+            <Row style={{ marginTop: 10 }}>
+              <Btn small label={t("common.signInGoogle")} onPress={connectGoogle} />
+            </Row>
+          </>
         )}
         {syncMessage ? (
           <Text style={{ color: c.accent, fontSize: tokens.textXs, textAlign: "right", marginTop: 8 }}>
             {syncMessage}
           </Text>
         ) : null}
-      </Card>
-
-      <SectionTitle>{t("mobile.serverUrl")}</SectionTitle>
-      <Card>
-        <Label>{t("mobile.serverUrl")}</Label>
-        <Input
-          value={serverDraft}
-          onChangeText={setServerDraft}
-          autoCapitalize="none"
-          keyboardType="url"
-          style={{ textAlign: "left" }}
-        />
-        <Btn small label={t("common.save")} onPress={() => setServerUrl(serverDraft)} />
       </Card>
 
       <SectionTitle>{t("nav.logout")}</SectionTitle>
