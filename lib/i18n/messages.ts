@@ -92,6 +92,10 @@ export const messages = {
     },
     login: {
       subtitle: "אזור אישי — כניסה עם Google",
+      welcome: "המרחב האישי שלך",
+      tagline: "הרגלים, מטרות, קשרים וציר החיים — הכל במקום אחד, רק בשבילך.",
+      signingIn: "מתחבר…",
+      error: "ההתחברות נכשלה — נסה שוב",
       calendarNote: "כולל גישה ליומן Google לסנכרון ציר הזמן.",
     },
     dbWarning: {
@@ -351,6 +355,19 @@ export const messages = {
       contactTitle: "Contact",
       contactBody: "Questions:",
     },
+    mobile: {
+      serverUrl: "כתובת השרת",
+      serverRequired: "יש להזין כתובת שרת",
+      manualToken: "טוקן גישה (חלופה ידנית)",
+      manualTokenPlaceholder: "הדבק כאן את הטוקן",
+      signInWithToken: "כניסה עם טוקן",
+      loginFailed: "ההתחברות נכשלה — נסה שוב",
+      pasteTokenHint: "אחרי הכניסה בדפדפן, העתק את הטוקן מהעמוד שנפתח והדבק אותו כאן",
+      more: "עוד",
+      retry: "נסה שוב",
+      logoutConfirm: "להתנתק?",
+      quickAdd: "הוספה מהירה",
+    },
     flash: {
       taskTitleRequired: "חסרה כותרת למשימה",
       projectRequired: "יש לבחור פרויקט",
@@ -505,6 +522,10 @@ export const messages = {
     },
     login: {
       subtitle: "Personal area — sign in with Google",
+      welcome: "Your personal space",
+      tagline: "Habits, goals, relationships, and your life timeline — all in one place, just for you.",
+      signingIn: "Signing in…",
+      error: "Sign-in failed — please try again",
       calendarNote: "Includes Google Calendar access for timeline sync.",
     },
     dbWarning: {
@@ -763,6 +784,19 @@ export const messages = {
         "Your dashboard data (timeline, habits, tasks, relationships, etc.) is stored in Supabase under a dedicated schema. Only the site owner has access.",
       contactTitle: "Contact",
       contactBody: "Questions:",
+    },
+    mobile: {
+      serverUrl: "Server URL",
+      serverRequired: "Server URL is required",
+      manualToken: "Access token (manual fallback)",
+      manualTokenPlaceholder: "Paste the token here",
+      signInWithToken: "Sign in with token",
+      loginFailed: "Sign-in failed — try again",
+      pasteTokenHint: "After signing in in the browser, copy the token from the page and paste it here",
+      more: "More",
+      retry: "Retry",
+      logoutConfirm: "Sign out?",
+      quickAdd: "Quick add",
     },
     flash: {
       taskTitleRequired: "Task title is required",
