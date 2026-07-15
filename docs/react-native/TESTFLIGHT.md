@@ -18,7 +18,46 @@ npx eas-cli init                 # מקשר את הפרויקט לחשבון (כ
 2. ב-App Store Connect: צור אפליקציה חדשה עם Bundle ID‏ `com.navesarussi.myself`
    (אם ה-Bundle ID עוד לא רשום — EAS ירשום אותו בשבילך בזמן ה-build הראשון).
 
-## כל העלאה ל-TestFlight
+## אוטומציה מלאה (GitHub Actions)
+
+כל push ל-`main` שמשנה קבצים תחת `mobile/` מפעיל את
+[`.github/workflows/testflight-ios.yml`](../../.github/workflows/testflight-ios.yml):
+
+1. מעלה **patch** ב-`package.json` (שורש + mobile) וב-`mobile/app.json`
+2. מריץ `eas build --platform ios --profile production --auto-submit`
+3. מספר ה-build עולה אוטומטית ב-EAS (`autoIncrement`)
+
+### חד-פעמי — GitHub Secrets
+
+ב-GitHub: **Settings → Secrets and variables → Actions**
+
+| Secret | ערך |
+| --- | --- |
+| `EXPO_TOKEN` | צור ב-[expo.dev → Access Tokens](https://expo.dev/accounts/saussilberg/settings/access-tokens) (Robot user מומלץ) |
+| `ASC_API_KEY_P8` | תוכן קובץ `AuthKey_X3N8885G95.p8` |
+| `ASC_API_KEY_ID` | `X3N8885G95` |
+| `ASC_API_KEY_ISSUER_ID` | `3a825a1a-0b43-487a-9ba4-1ab24a88f553` |
+
+`ASC_API_KEY_*` כבר הוגדרו בריפו. נשאר רק **`EXPO_TOKEN`**:
+
+```bash
+# אחרי יצירת הטוקן ב-expo.dev:
+gh secret set EXPO_TOKEN --repo navesarussi/MySelf
+```
+
+אם branch protection חוסם push של bump-version, הוסף גם `ADMIN_PAT` (PAT עם `repo`).
+
+### בדיקה ידנית
+
+GitHub → **Actions** → **TestFlight iOS** → **Run workflow**.
+
+### עדכונים בטלפון
+
+בודקים פנימיים (קבוצת `tests`) מקבלים עדכון אוטומטית ב-TestFlight אחרי ש-Apple מסיימת לעבד את ה-build (בדרך כלל 5–15 דקות).
+
+---
+
+## העלאה ידנית (גיבוי)
 
 ```bash
 cd mobile

@@ -1,0 +1,81 @@
+# Build iOS on every main push that touches mobile/, bump patch version, submit to TestFlight.
+#
+# Required GitHub secrets (repo → Settings → Secrets → Actions):
+#   EXPO_TOKEN          — https://expo.dev/accounts/saussilberg/settings/access-tokens
+#   ASC_API_KEY_P8      — contents of AuthKey_X3N8885G95.p8
+#   ASC_API_KEY_ID      — X3N8885G95
+#   ASC_API_KEY_ISSUER_ID — 3a825a1a-0b43-487a-9ba4-1ab24a88f553
+#
+# Optional: ADMIN_PAT — if branch protection blocks GITHUB_TOKEN from pushing version bumps.
+name: TestFlight iOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/testflight-ios.yml'
+    paths-ignore:
+      - 'mobile/app.json'
+      - 'mobile/package.json'
+  workflow_dispatch:
+
+concurrency:
+  group: testflight-ios
+  cancel-in-progress: true
+
+jobs:
+  testflight:
+    name: Build & submit to TestFlight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.ADMIN_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Bump patch version
+        run: bash scripts/ci-bump-version.sh
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ../package.json package.json app.json
+          git diff --staged --quiet || git commit -m "chore(mobile): bump version for TestFlight"
+          git push || true
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli@16
+
+      - name: Write ASC API key
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: bash scripts/ci-write-asc-key.sh
+
+      - name: Build iOS & submit to TestFlight
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
+        run: |
+          eas build \
+            --platform ios \
+            --profile production \
+            --non-interactive \
+            --auto-submit

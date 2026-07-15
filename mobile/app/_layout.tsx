@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "../src/session";
 import { I18nProvider, useI18n } from "../src/i18n";
 import { ThemeProvider, useColors } from "../src/theme";
@@ -43,14 +44,16 @@ function AppStack() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <I18nProvider>
-        <SessionProvider>
-          <ToastProvider>
-            <AppStack />
-          </ToastProvider>
-        </SessionProvider>
-      </I18nProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <I18nProvider>
+          <SessionProvider>
+            <ToastProvider>
+              <AppStack />
+            </ToastProvider>
+          </SessionProvider>
+        </I18nProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

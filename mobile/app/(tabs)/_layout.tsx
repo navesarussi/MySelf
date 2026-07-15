@@ -7,12 +7,15 @@ import { useI18n } from "../../src/i18n";
 import { useColors } from "../../src/theme";
 import { Loading } from "../../src/components/ui";
 import { AddMenuModal } from "../../src/components/add-menu";
+import { AppTopBar } from "../../src/components/app-top-bar";
+import { MoreMenuModal } from "../../src/components/more-menu";
 
 export default function TabsLayout() {
   const { ready, token } = useSession();
   const { t } = useI18n();
   const c = useColors();
   const [addOpen, setAddOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   if (!ready) return <Loading />;
   if (!token) return <Redirect href="/login" />;
@@ -21,7 +24,9 @@ export default function TabsLayout() {
     <>
       <Tabs
         screenOptions={{
-          headerShown: false,
+          headerShown: true,
+          header: () => <AppTopBar onMenuPress={() => setMoreOpen(true)} />,
+          headerShadowVisible: false,
           tabBarStyle: { backgroundColor: c.surface, borderTopColor: c.border, height: 60 },
           tabBarActiveTintColor: c.accent,
           tabBarInactiveTintColor: c.muted,
@@ -99,17 +104,9 @@ export default function TabsLayout() {
             ),
           }}
         />
-        <Tabs.Screen
-          name="more"
-          options={{
-            title: t("mobile.more"),
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="ellipsis-horizontal" color={color} size={size} />
-            ),
-          }}
-        />
       </Tabs>
       <AddMenuModal visible={addOpen} onClose={() => setAddOpen(false)} />
+      <MoreMenuModal visible={moreOpen} onClose={() => setMoreOpen(false)} />
     </>
   );
 }

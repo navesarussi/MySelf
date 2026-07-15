@@ -6,3 +6,4 @@ web-build/
 .env*.local
 ios/
 android/
+asc-api-key.p8
