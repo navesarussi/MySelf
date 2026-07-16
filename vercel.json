@@ -5,6 +5,10 @@
     {
       "path": "/api/integrations/google/sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/integrations/task-sources/sync",
+      "schedule": "15 6 * * *"
     }
   ]
 }

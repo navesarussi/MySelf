@@ -15,14 +15,23 @@ export async function getIntegrationToken(provider: string) {
 }
 
 export async function saveIntegrationToken(
-  row: Omit<IntegrationToken, "connected_at" | "last_sync_at" | "sync_status" | "sync_progress" | "sync_started_at"> & {
+  row: Omit<
+    IntegrationToken,
+    "connected_at" | "last_sync_at" | "sync_status" | "sync_progress" | "sync_started_at" | "settings"
+  > & {
     last_sync_at?: string | null;
     sync_status?: SyncStatus;
     sync_progress?: SyncProgress | null;
     sync_started_at?: string | null;
+    settings?: Record<string, unknown>;
   }
 ) {
   const supabase = getSupabase();
+  let settings = row.settings;
+  if (settings === undefined) {
+    const existing = await getIntegrationToken(row.provider);
+    settings = existing?.settings ?? {};
+  }
   await supabase.from("integration_tokens").upsert({
     provider: row.provider,
     access_token: row.access_token,
@@ -33,7 +42,23 @@ export async function saveIntegrationToken(
     sync_status: row.sync_status ?? "idle",
     sync_progress: row.sync_progress ?? null,
     sync_started_at: row.sync_started_at ?? null,
+    settings,
   });
+}
+
+export async function getTokenSettings<T extends Record<string, unknown>>(
+  provider: string
+): Promise<T> {
+  const token = await getIntegrationToken(provider);
+  return ((token?.settings ?? {}) as T);
+}
+
+export async function updateTokenSettings(
+  provider: string,
+  settings: Record<string, unknown>
+) {
+  const supabase = getSupabase();
+  await supabase.from("integration_tokens").update({ settings }).eq("provider", provider);
 }
 
 export async function deleteIntegrationToken(provider: string) {

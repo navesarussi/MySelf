@@ -11,6 +11,7 @@ export function googleAuthConfigured() {
 }
 
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+export const GOOGLE_TASKS_SCOPE = "https://www.googleapis.com/auth/tasks";
 export const GOOGLE_LOGIN_SCOPES = [
   "openid",
   "email",
@@ -18,3 +19,4 @@ export const GOOGLE_LOGIN_SCOPES = [
   GOOGLE_CALENDAR_SCOPE,
 ].join(" ");
 export const GOOGLE_PROVIDER = "google_calendar";
+export const GOOGLE_TASKS_PROVIDER = "google_tasks";

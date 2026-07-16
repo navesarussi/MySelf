@@ -44,6 +44,27 @@ User may set local title/description overrides on calendar events; re-sync prese
 ### FR-INT-GCAL-04
 Manual sync on demand plus daily automatic background sync (skipped if already synced within 24 hours). Sync runs in the background with progress indicator; `last_sync_at` updates only after a full successful sync.
 
+### FR-INT-TASKS-01
+Tasks support a `source` of `manual` or an external provider id. The mobile Tasks screen shows a unified list of all sources.
+
+### FR-INT-TASKS-02
+External task providers implement a shared port (list sources, pull open tasks, complete, reopen) and register in a central registry.
+
+### FR-INT-TASKS-03
+User connects Google Tasks via OAuth (`tasks` scope), selects which task lists to sync, and may sync manually or via daily cron.
+
+### FR-INT-TASKS-04
+V1 pull imports only open Google tasks from selected lists into `myself.tasks` with `project_id` null and generic external identity columns.
+
+### FR-INT-TASKS-05
+Completing or reopening a Google-sourced task in the app updates Google Tasks; failure reverts the local status and shows an error toast.
+
+### FR-INT-TASKS-06
+External-sourced task title/due/notes are read-only in V1. Priority may be edited locally without write-back.
+
+### FR-INT-TASKS-07
+Mobile Settings exposes Google Tasks connection, list picker, sync status, and Sync now. Website UI is out of scope.
+
 ### FR-INT-WA-01
 Optional phone number on relationships; when set, show WhatsApp quick-link via `wa.me`.
 
