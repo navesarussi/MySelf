@@ -42,7 +42,7 @@ export async function fetchTaskLists(accessToken: string): Promise<GoogleTaskLis
     }
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`tasks_lists_fetch_failed:${res.status}:${body.slice(0, 200)}`);
+      throw new Error(`tasks_lists_fetch_failed:${res.status}:${body.slice(0, 500)}`);
     }
 
     const data = (await res.json()) as GoogleTaskListResponse;
@@ -76,7 +76,7 @@ export async function fetchOpenTasks(accessToken: string, listId: string) {
     }
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`tasks_fetch_failed:${res.status}:${body.slice(0, 200)}`);
+      throw new Error(`tasks_fetch_failed:${res.status}:${body.slice(0, 500)}`);
     }
 
     const data = (await res.json()) as GoogleTasksResponse;
@@ -106,7 +106,7 @@ export async function completeGoogleTask(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`complete_task_failed:${res.status}:${body.slice(0, 200)}`);
+    throw new Error(`complete_task_failed:${res.status}:${body.slice(0, 500)}`);
   }
 }
 
@@ -129,7 +129,7 @@ export async function reopenGoogleTask(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`reopen_task_failed:${res.status}:${body.slice(0, 200)}`);
+    throw new Error(`reopen_task_failed:${res.status}:${body.slice(0, 500)}`);
   }
 }
 
@@ -147,10 +147,6 @@ export async function getValidGoogleTasksAccessToken(): Promise<string> {
     access_token: refreshed.access_token,
     refresh_token: row.refresh_token,
     expires_at,
-    last_sync_at: row.last_sync_at,
-    sync_status: row.sync_status,
-    sync_progress: row.sync_progress,
-    sync_started_at: row.sync_started_at,
   });
   return refreshed.access_token;
 }

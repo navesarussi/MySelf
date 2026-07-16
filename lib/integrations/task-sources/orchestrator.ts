@@ -49,10 +49,14 @@ export async function syncTaskSource(
     const supabase = getSupabase();
     let imported = 0;
 
+    if (providerId !== "google_tasks") {
+      throw new Error("unsupported_provider_upsert");
+    }
+
     for (let i = 0; i < drafts.length; i += BATCH_SIZE) {
       const chunk = drafts.slice(i, i + BATCH_SIZE);
       const upsertRows = chunk.map((draft) =>
-        buildExternalTaskUpsert(draft, providerId as "google_tasks", now)
+        buildExternalTaskUpsert(draft, "google_tasks", now)
       );
 
       const { error } = await supabase
