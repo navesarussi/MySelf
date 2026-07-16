@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Linking, Platform, Text } from "react-native";
+import { Platform, Text } from "react-native";
 import * as WebBrowser from "expo-web-browser";
+import * as ExpoLinking from "expo-linking";
 import { api } from "../src/api/resources";
 import { useApi, useMutate } from "../src/hooks";
 import { useI18n } from "../src/i18n";
@@ -90,7 +91,10 @@ export default function SettingsScreen() {
   }
 
   async function connectGoogleTasks() {
-    const appRedirect = Linking.createURL("/settings");
+    const appRedirect =
+      Platform.OS === "web"
+        ? `${window.location.origin}/settings`
+        : ExpoLinking.createURL("/settings");
     const connectUrl = `${API_URL}/api/integrations/google-tasks/connect?app_redirect=${encodeURIComponent(appRedirect)}`;
     if (Platform.OS === "web") {
       window.location.href = connectUrl;

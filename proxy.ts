@@ -18,6 +18,13 @@ export async function proxy(req: NextRequest) {
     }
   }
 
+  // Expo export puts fonts/images under public/spa/assets but the bundle requests /assets/…
+  if (pathname.startsWith("/assets/")) {
+    const url = req.nextUrl.clone();
+    url.pathname = `/spa${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
   // Static SPA assets + Next internals — never gate
   if (
     pathname.startsWith("/spa") ||

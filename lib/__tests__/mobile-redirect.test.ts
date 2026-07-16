@@ -14,18 +14,23 @@ describe("isAllowedAppRedirect", () => {
     assert.equal(isAllowedAppRedirect("exp://127.0.0.1:8081/--/auth"), true);
   });
 
-  it("allows https same-app /auth for Expo web", () => {
+  it("allows https SPA paths on app hosts", () => {
     assert.equal(isAllowedAppRedirect("https://myselfapp.xyz/auth"), true);
-    assert.equal(isAllowedAppRedirect("https://myselfapp.xyz/auth?x=1"), true);
+    assert.equal(isAllowedAppRedirect("https://myselfapp.xyz/settings"), true);
+    assert.equal(isAllowedAppRedirect("https://myselfapp.xyz/"), true);
   });
 
-  it("allows http localhost /auth for local web", () => {
+  it("allows http localhost SPA paths for local web", () => {
     assert.equal(isAllowedAppRedirect("http://localhost:3000/auth"), true);
   });
 
-  it("rejects https URLs that are not /auth", () => {
+  it("rejects foreign https hosts", () => {
     assert.equal(isAllowedAppRedirect("https://evil.com/steal"), false);
-    assert.equal(isAllowedAppRedirect("https://myselfapp.xyz/login"), false);
+  });
+
+  it("rejects https API and legacy paths on app host", () => {
+    assert.equal(isAllowedAppRedirect("https://myselfapp.xyz/api/v1/session"), false);
+    assert.equal(isAllowedAppRedirect("https://myselfapp.xyz/legacy"), false);
   });
 
   it("rejects myself with wrong host", () => {
