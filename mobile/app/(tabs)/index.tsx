@@ -10,7 +10,13 @@ import { useColors, tokens } from "../../src/theme";
 import { Badge, Btn, Card, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
 import { NEXT_STATUS, TaskCard } from "../../src/components/task-card";
 import { HabitCard } from "../../src/components/habit-card";
-import { dedupeHabits, effectiveStreak, habitReportDay, todayISO } from "@/lib/habit-stats";
+import {
+  dedupeHabits,
+  effectiveStreak,
+  habitReportDay,
+  sortHabitsByReportUrgency,
+  todayISO,
+} from "@/lib/habit-stats";
 import { achievabilityScore, horizonLabel, rankGoalsForHome } from "@/lib/goals-rank";
 import { displayTitle } from "@/lib/timeline-display";
 import { formatEventWhen } from "@/lib/timeline-layout";
@@ -79,6 +85,13 @@ export default function HomeScreen() {
   const checkedToday = uniqueHabits.filter(
     (h) => h.last_checked_on === habitReportDay(h.report_time)
   ).length;
+  const habitsPendingToday = useMemo(
+    () =>
+      sortHabitsByReportUrgency(uniqueHabits).filter(
+        (h) => h.last_checked_on !== habitReportDay(h.report_time)
+      ),
+    [uniqueHabits]
+  );
 
   const relationships = data?.relationships ?? [];
   const sortedRelationships = useMemo(
@@ -175,8 +188,17 @@ export default function HomeScreen() {
             <Card>
               <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noHabits")}</Text>
             </Card>
+          ) : habitsPendingToday.length === 0 ? (
+            <Card>
+              <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>
+                {t("home.allHabitsReportedToday")}
+              </Text>
+              <Link href="/habits" style={{ color: c.accent, textAlign: textStart, writingDirection, marginTop: 8 }}>
+                {t("home.allHabits")}
+              </Link>
+            </Card>
           ) : (
-            uniqueHabits.map((h) => (
+            habitsPendingToday.map((h) => (
               <HabitCard
                 key={h.id}
                 habit={h}
@@ -217,6 +239,11 @@ export default function HomeScreen() {
               />
             ))
           )}
+          {habitsPendingToday.length > 0 && checkedToday > 0 ? (
+            <Link href="/habits" style={{ color: c.accent, textAlign: textStart, writingDirection, marginBottom: 8 }}>
+              {t("home.allHabits")}
+            </Link>
+          ) : null}
           {uniqueHabits.some((h) => (h.failure_count ?? 0) > 0) ? (
             <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginBottom: 8 }}>
               {t("common.totalFailures")}:{" "}
