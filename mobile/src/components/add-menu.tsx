@@ -23,7 +23,7 @@ const MENU_ITEMS: { target: AddTarget; icon: keyof typeof Ionicons.glyphMap }[] 
 export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, row, menuAnchor } = useLayoutDir();
+  const { textStart, row, direction } = useLayoutDir();
   const router = useRouter();
   const items = MENU_ITEMS.filter((i) => SHOW_PROJECTS || i.target !== "project");
 
@@ -44,6 +44,7 @@ export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: 
                 borderWidth: 1,
                 borderRadius: tokens.radius,
                 overflow: "hidden",
+                direction,
               }}
             >
               <Text

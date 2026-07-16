@@ -17,7 +17,7 @@ const MENU_ITEMS = [
 export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, row, menuAnchor } = useLayoutDir();
+  const { textStart, row, menuAnchor, direction } = useLayoutDir();
   const router = useRouter();
   const { signOut } = useSession();
 
@@ -44,6 +44,7 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                 borderWidth: 1,
                 borderRadius: tokens.radius,
                 overflow: "hidden",
+                direction,
               }}
             >
               <Text

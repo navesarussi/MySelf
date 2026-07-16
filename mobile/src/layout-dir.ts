@@ -14,7 +14,11 @@ export function useLayoutDir() {
       direction: (rtl ? "rtl" : "ltr") as NonNullable<ViewStyle["direction"]>,
       textStart: textAlignStart(rtl),
       textLtr: "left" as const,
-      row: { flexDirection: "row" as const, alignItems: "center" as const },
+      row: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        direction: (rtl ? "rtl" : "ltr") as NonNullable<ViewStyle["direction"]>,
+      },
       menuAnchor: { alignItems: (rtl ? "flex-start" : "flex-end") as ViewStyle["alignItems"] },
     }),
     [rtl]

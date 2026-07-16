@@ -50,7 +50,7 @@ export function TaskCard({
       >
         {task.title}
       </Text>
-      <Row style={{ marginTop: 4, justifyContent: "flex-start" }} wrap>
+      <Row style={{ marginTop: 4 }} wrap>
         {task.project_name ? <Badge label={task.project_name} /> : null}
         <Badge
           label={taskPriorityLabel(t, task.priority)}
