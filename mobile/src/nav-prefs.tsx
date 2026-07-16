@@ -2,9 +2,24 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /** Tab screens that can sit in the bottom bar (excluding the center + button). */
-export type BottomTabId = "index" | "tasks" | "habits" | "relationships";
+export type BottomTabId =
+  | "index"
+  | "tasks"
+  | "timeline"
+  | "habits"
+  | "relationships"
+  | "goals"
+  | "library";
 
-export const ALL_BOTTOM_TAB_IDS: BottomTabId[] = ["index", "tasks", "habits", "relationships"];
+export const ALL_BOTTOM_TAB_IDS: BottomTabId[] = [
+  "index",
+  "tasks",
+  "timeline",
+  "habits",
+  "relationships",
+  "goals",
+  "library",
+];
 
 export const DEFAULT_BOTTOM_TABS: BottomTabId[] = ["index", "tasks", "habits", "relationships"];
 
@@ -100,20 +115,38 @@ export function useNavPrefs() {
 export const TAB_LABEL_KEY: Record<BottomTabId, string> = {
   index: "nav.home",
   tasks: "nav.tasks",
+  timeline: "nav.timeline",
   habits: "nav.habits",
   relationships: "nav.relationships",
+  goals: "nav.goals",
+  library: "nav.library",
 };
 
 export const TAB_HREF: Record<BottomTabId, `/${string}`> = {
   index: "/",
   tasks: "/tasks",
+  timeline: "/timeline",
   habits: "/habits",
   relationships: "/relationships",
+  goals: "/goals",
+  library: "/library",
 };
 
-export const TAB_ICON: Record<BottomTabId, "home-outline" | "checkbox-outline" | "repeat" | "people-outline"> = {
+export const TAB_ICON: Record<
+  BottomTabId,
+  | "home-outline"
+  | "checkbox-outline"
+  | "time-outline"
+  | "repeat"
+  | "people-outline"
+  | "flag-outline"
+  | "book-outline"
+> = {
   index: "home-outline",
   tasks: "checkbox-outline",
+  timeline: "time-outline",
   habits: "repeat",
   relationships: "people-outline",
+  goals: "flag-outline",
+  library: "book-outline",
 };

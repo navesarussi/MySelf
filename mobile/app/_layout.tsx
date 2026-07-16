@@ -40,10 +40,7 @@ function AppStack() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="auth" options={{ headerShown: false }} />
-        <Stack.Screen name="timeline" options={{ title: t("nav.timeline") }} />
         <Stack.Screen name="timeline-full" options={{ headerShown: false, animation: "fade" }} />
-        <Stack.Screen name="goals" options={{ title: t("nav.goals") }} />
-        <Stack.Screen name="library" options={{ title: t("nav.library") }} />
         <Stack.Screen name="settings" options={{ title: t("nav.settings") }} />
       </Stack>
     </>

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { api } from "../src/api/resources";
-import { useApi, useMutate } from "../src/hooks";
-import { useI18n } from "../src/i18n";
-import { useLayoutDir } from "../src/layout-dir";
-import { useColors, tokens } from "../src/theme";
+import { api } from "../../src/api/resources";
+import { useApi, useMutate } from "../../src/hooks";
+import { useI18n } from "../../src/i18n";
+import { useLayoutDir } from "../../src/layout-dir";
+import { useColors, tokens } from "../../src/theme";
 import {
   Badge,
   Btn,
@@ -20,9 +20,9 @@ import {
   Screen,
   SectionTitle,
   confirmDelete,
-} from "../src/components/ui";
-import { FormModal } from "../src/components/form-modal";
-import { TimelineVisual } from "../src/components/timeline-visual";
+} from "../../src/components/ui";
+import { FormModal } from "../../src/components/form-modal";
+import { TimelineVisual } from "../../src/components/timeline-visual";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import { formatPeriodRange, type LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";

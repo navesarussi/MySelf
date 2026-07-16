@@ -15,12 +15,6 @@ import {
   useNavPrefs,
 } from "../nav-prefs";
 
-const STACK_ITEMS = [
-  { href: "/timeline" as const, labelKey: "nav.timeline" as const, icon: "time-outline" as const },
-  { href: "/goals" as const, labelKey: "nav.goals" as const, icon: "flag-outline" as const },
-  { href: "/library" as const, labelKey: "nav.library" as const, icon: "book-outline" as const },
-] as const;
-
 export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
   const { t } = useI18n();
@@ -29,13 +23,11 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
   const { signOut } = useSession();
   const { isBottomTab } = useNavPrefs();
 
-  const overflowTabs = ALL_BOTTOM_TAB_IDS.filter((id) => !isBottomTab(id)).map((id) => ({
+  const items = ALL_BOTTOM_TAB_IDS.filter((id) => !isBottomTab(id)).map((id) => ({
     href: TAB_HREF[id],
     labelKey: TAB_LABEL_KEY[id],
     icon: TAB_ICON[id],
   }));
-
-  const items = [...overflowTabs, ...STACK_ITEMS];
 
   function navigate(href: string) {
     onClose();

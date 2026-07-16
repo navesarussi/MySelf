@@ -48,6 +48,7 @@ export default function TabsLayout() {
       >
         <Tabs.Screen name="index" options={tabOptions("index")} />
         <Tabs.Screen name="tasks" options={tabOptions("tasks")} />
+        <Tabs.Screen name="timeline" options={tabOptions("timeline")} />
         <Tabs.Screen
           name="add"
           options={{
@@ -89,6 +90,8 @@ export default function TabsLayout() {
         />
         <Tabs.Screen name="habits" options={tabOptions("habits")} />
         <Tabs.Screen name="relationships" options={tabOptions("relationships")} />
+        <Tabs.Screen name="goals" options={tabOptions("goals")} />
+        <Tabs.Screen name="library" options={tabOptions("library")} />
       </Tabs>
       <AddMenuModal visible={addOpen} onClose={() => setAddOpen(false)} />
       <MoreMenuModal visible={moreOpen} onClose={() => setMoreOpen(false)} />
