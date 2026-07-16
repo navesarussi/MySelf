@@ -1,8 +1,11 @@
+import "react-native-gesture-handler";
 import React, { useEffect } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { useFonts } from "expo-font";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
@@ -39,6 +42,7 @@ function AppStack() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="timeline" options={{ title: t("nav.timeline") }} />
+        <Stack.Screen name="timeline-full" options={{ headerShown: false, animation: "fade" }} />
         <Stack.Screen name="goals" options={{ title: t("nav.goals") }} />
         <Stack.Screen name="library" options={{ title: t("nav.library") }} />
         <Stack.Screen name="settings" options={{ title: t("nav.settings") }} />
@@ -59,23 +63,31 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  // App is portrait everywhere; only the full-screen timeline unlocks landscape.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <I18nProvider>
-          <DirectionRoot>
-            <SessionProvider>
-              <ToastProvider>
-                <ErrorBoundary>
-                  <AppStack />
-                </ErrorBoundary>
-              </ToastProvider>
-            </SessionProvider>
-          </DirectionRoot>
-        </I18nProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <I18nProvider>
+            <DirectionRoot>
+              <SessionProvider>
+                <ToastProvider>
+                  <ErrorBoundary>
+                    <AppStack />
+                  </ErrorBoundary>
+                </ToastProvider>
+              </SessionProvider>
+            </DirectionRoot>
+          </I18nProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
