@@ -1,34 +1,45 @@
 import { useMemo } from "react";
-import type { TextStyle, ViewStyle } from "react-native";
+import { I18nManager, type TextStyle, type ViewStyle } from "react-native";
 import { useI18n } from "./i18n";
 
 /**
- * Locale-aware layout helpers.
- * Uses explicit row-reverse for RTL so layout flips immediately
- * without waiting for a native I18nManager restart.
+ * Locale-aware layout helpers with physical left/right results.
+ *
+ * React Native swaps the meaning of `left`/`right` and `row`/`row-reverse`
+ * when `I18nManager.isRTL` is true. We compensate for that so Hebrew is always
+ * visually right-aligned and English always left-aligned, regardless of the
+ * native RTL flag (which may lag until an app restart).
  */
 export function useLayoutDir() {
   const { rtl } = useI18n();
 
   return useMemo(() => {
-    const textStart: NonNullable<TextStyle["textAlign"]> = rtl ? "right" : "left";
+    const nativeSwaps = I18nManager.isRTL;
+    // Want physical right for Hebrew, physical left for English.
+    const textStart: NonNullable<TextStyle["textAlign"]> =
+      rtl === nativeSwaps ? "left" : "right";
+    // Want children to flow from the start edge (right in Hebrew).
+    const flexDirection: NonNullable<ViewStyle["flexDirection"]> =
+      rtl === nativeSwaps ? "row" : "row-reverse";
+
     const writingDirection: NonNullable<TextStyle["writingDirection"]> = rtl ? "rtl" : "ltr";
+
     return {
       rtl,
       textStart,
       writingDirection,
-      /** Dates / codes stay LTR. */
-      textLtr: "left" as const,
+      /** Dates / codes stay physically LTR. */
+      textLtr: (nativeSwaps ? "right" : "left") as const,
       textStyle: {
         textAlign: textStart,
         writingDirection,
       } as TextStyle,
       row: {
-        flexDirection: (rtl ? "row-reverse" : "row") as ViewStyle["flexDirection"],
+        flexDirection,
         alignItems: "center" as const,
       },
       menuAnchor: {
-        // Menu button is on the start edge (right in RTL, left in LTR).
+        // Menu sits on the start edge: physical right in Hebrew, left in English.
         alignItems: (rtl ? "flex-end" : "flex-start") as ViewStyle["alignItems"],
       },
     };

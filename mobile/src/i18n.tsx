@@ -20,29 +20,40 @@ const I18nContext = React.createContext<I18nValue>({
   rtl: true,
 });
 
-function applyDocumentDirection(locale: Locale) {
+/**
+ * Keep the native layout engine in LTR so `left`/`right` mean physical sides.
+ * App-level Hebrew/English mirroring is handled entirely by useLayoutDir().
+ * (forceRTL requires a reload to stick; we still request LTR for future launches.)
+ */
+function lockNativeLayoutToLtr() {
+  if (Platform.OS === "web") return;
+  try {
+    I18nManager.allowRTL(false);
+    I18nManager.forceRTL(false);
+  } catch {
+    /* ignore */
+  }
+}
+
+function applyWebDocumentDirection(locale: Locale) {
+  if (Platform.OS !== "web" || typeof document === "undefined") return;
   const rtl = isRtl(locale);
-  if (Platform.OS === "web" && typeof document !== "undefined") {
-    document.documentElement.dir = rtl ? "rtl" : "ltr";
-    document.documentElement.lang = locale;
-  }
-  if (Platform.OS !== "web" && I18nManager.isRTL !== rtl) {
-    I18nManager.allowRTL(true);
-    I18nManager.forceRTL(rtl);
-  }
+  document.documentElement.dir = rtl ? "rtl" : "ltr";
+  document.documentElement.lang = locale;
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = React.useState<Locale>(DEFAULT_LOCALE);
 
   useEffect(() => {
+    lockNativeLayoutToLtr();
     AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
       if (raw === "he" || raw === "en") setLocaleState(raw);
     });
   }, []);
 
   useEffect(() => {
-    applyDocumentDirection(locale);
+    applyWebDocumentDirection(locale);
   }, [locale]);
 
   const value = React.useMemo<I18nValue>(() => {
