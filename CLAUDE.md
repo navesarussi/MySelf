@@ -1,11 +1,15 @@
 # MySelf — Project Notes
 
-## Current scope: app only (until told otherwise)
+## Current scope: MOBILE APP ONLY — website frozen
 
-Starting 2026-07-16, unless the user explicitly says otherwise, all requested changes apply only to the
-**mobile app** (`mobile/` — the Expo/React Native wrapper), not the website (`app/`, `components/`, the
-Next.js frontend). Backend/API code shared by both (`app/api/**`, `lib/**` outside `mobile/`) may still be
-touched when the app needs it, but do not change website UI/pages to satisfy an app-only request.
+**As of 2026-07-16 the website is no longer a product focus.** Until the user explicitly lifts this:
+
+- **In scope:** `mobile/` (Expo/React Native). This is the product.
+- **Also allowed when the app needs it:** `app/api/**`, `lib/**` (outside `mobile/`), `supabase/**`.
+- **Frozen — do not touch:** Next.js website UI (`app/**/page.tsx`, site layouts, `components/**` for the site).
+  No “parity with web”, no website polish, no new website features.
+
+Agents: if a request is ambiguous, assume mobile-only. See `.cursor/rules/app-only-scope.mdc`.
 
 ## Version tracking (strict)
 

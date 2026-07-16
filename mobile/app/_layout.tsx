@@ -1,3 +1,7 @@
+/**
+ * Product root (mobile). Website UI is frozen — see CLAUDE.md / mobile/SCOPE.md.
+ * Do not add website-parity work from here; shared API lives under app/api + lib.
+ */
 import "react-native-gesture-handler";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";

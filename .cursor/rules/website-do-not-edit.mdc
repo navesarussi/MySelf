@@ -1,0 +1,13 @@
+---
+description: Do not edit Next.js website UI while the freeze is active
+globs: app/**/page.tsx,app/**/layout.tsx,components/**
+alwaysApply: false
+---
+
+# Website UI freeze
+
+These paths are the **Next.js website**. They are frozen.
+
+- Do **not** edit to add features, polish UI, or “keep parity” with the mobile app.
+- Shared API routes live under `app/api/**` — those may change when the **mobile app** needs them; prefer not touching `page.tsx` / site `components/**`.
+- Lift only when the user explicitly says the website is in scope again.
