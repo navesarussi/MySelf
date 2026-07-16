@@ -6,7 +6,7 @@ const openTask = {
   id: "gt1",
   title: "Ship it",
   notes: "asap",
-  status: "needsAction",
+  status: "needsAction" as const,
   due: "2026-08-01T00:00:00.000Z",
   parent: "parent1",
 };
