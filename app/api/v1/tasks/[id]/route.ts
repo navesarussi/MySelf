@@ -73,6 +73,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const nextStatus = str(body.status) as TaskStatus;
     try {
       await applyExternalStatusChange(task, nextStatus);
+      patch.synced_at = new Date().toISOString();
     } catch (err) {
       return NextResponse.json({ error: "external_write_failed", details: String(err) }, { status: 502 });
     }
@@ -105,7 +106,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "external_write_failed", details: String(err) }, { status: 502 });
     }
 
-    const { error } = await getSupabase().from("tasks").update({ status: "done" }).eq("id", id);
+    const now = new Date().toISOString();
+    const { error } = await getSupabase()
+      .from("tasks")
+      .update({ status: "done", synced_at: now, updated_at: now })
+      .eq("id", id);
     if (error) return dbError();
     revalidateTaskPaths();
     return NextResponse.json({ ok: true, completed: true });

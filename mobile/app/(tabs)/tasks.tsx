@@ -167,6 +167,7 @@ export default function TasksScreen() {
   async function advance(task: Task) {
     await run((config) => api.updateTask(config, task.id, { status: nextStatusForTask(task) }), {
       success: "flash.taskUpdated",
+      error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
     });
     tasksQ.refresh();
   }
@@ -175,6 +176,7 @@ export default function TasksScreen() {
     const next = task.status === "done" ? "open" : "done";
     await run((config) => api.updateTask(config, task.id, { status: next }), {
       success: "flash.taskUpdated",
+      error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
     });
     tasksQ.refresh();
   }
