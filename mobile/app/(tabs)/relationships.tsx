@@ -50,11 +50,15 @@ const emptyForm = (projectId: string): FormState => ({
 });
 
 async function pickDeviceContact() {
-  const { status } = await Contacts.requestPermissionsAsync();
-  if (status !== "granted") return null;
-  const contact = await Contacts.presentContactPickerAsync();
-  if (!contact) return null;
-  return mapDeviceContact(contact);
+  try {
+    const { status } = await Contacts.requestPermissionsAsync();
+    if (status !== "granted") return null;
+    const contact = await Contacts.presentContactPickerAsync();
+    if (!contact) return null;
+    return mapDeviceContact(contact);
+  } catch {
+    return null;
+  }
 }
 
 function daysSince(r: Pick<Relationship, "last_contact_date">, today: Date): number | null {
