@@ -218,8 +218,16 @@ export const messages = {
       saveChanges: "שמירת שינויים",
       searchPlaceholder: "חיפוש לפי שם משימה...",
       priorityFilter: "עדיפות",
+      sourceFilter: "מקור",
       advanceStatus: "לחץ למעבר לשלב הבא",
       empty: "אין משימות להצגה. הוסף משימה למטה או שנה את הסינון.",
+      externalReadonlyHint: "משימה מ-Google Tasks — ניתן לערוך רק סטטוס ועדיפות.",
+      filterAllLists: "כל הרשימות",
+      listFilter: "רשימת Google",
+      source: {
+        manual: "ידני",
+        google_tasks: "Google Tasks",
+      },
     },
     projects: {
       title: "פרויקטים",
@@ -666,8 +674,16 @@ export const messages = {
       saveChanges: "Save changes",
       searchPlaceholder: "Search by task name...",
       priorityFilter: "Priority",
+      sourceFilter: "Source",
       advanceStatus: "Click to advance to the next stage",
       empty: "No tasks to show. Add a task below or change the filter.",
+      externalReadonlyHint: "Google Tasks item — only status and priority can be edited here.",
+      filterAllLists: "All lists",
+      listFilter: "Google list",
+      source: {
+        manual: "Manual",
+        google_tasks: "Google Tasks",
+      },
     },
     projects: {
       title: "Projects",
