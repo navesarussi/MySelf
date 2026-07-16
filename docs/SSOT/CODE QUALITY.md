@@ -13,6 +13,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - Unify Server Action return types (Result pattern) instead of flash cookies only.
 - Unify Google OAuth tokens (calendar + tasks) into one Google credential row with incremental scopes.
 - When a third external task source ships, consider `integration_settings` table if `settings` jsonb on `integration_tokens` becomes awkward.
+- [PENDING REFACTOR]: Split `mobile/app/(tabs)/index.tsx` further (habits / relationships / stats sections) — still ~450 lines after goal/library modal extract.
 
 ## Notes
 - Never mutate cookies inside Server Components (layout). Flash toast is set in Server Actions and read/cleared on the client.
