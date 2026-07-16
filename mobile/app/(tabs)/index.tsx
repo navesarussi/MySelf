@@ -8,6 +8,7 @@ import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
 import { Badge, Btn, Card, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
+import { NEXT_STATUS, TaskCard } from "../../src/components/task-card";
 import {
   dedupeHabits,
   effectiveStreak,
@@ -18,7 +19,7 @@ import { achievabilityScore, horizonLabel, rankGoalsForHome } from "@/lib/goals-
 import { displayTitle } from "@/lib/timeline-display";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { whatsappUrl } from "@/lib/integrations/phone";
-import type { Habit, Relationship } from "@/lib/types";
+import type { Habit, Relationship, Task } from "@/lib/types";
 
 function StatCard({
   title,
@@ -105,6 +106,21 @@ export default function HomeScreen() {
   async function checkIn(habit: Habit) {
     await run((config) => api.reportHabit(config, habit.id, "check_in"), {
       success: "flash.checkInRecorded",
+    });
+    refresh();
+  }
+
+  async function toggleTaskDone(task: Task) {
+    await run(
+      (config) => api.updateTask(config, task.id, { status: task.status === "done" ? "open" : "done" }),
+      { success: "flash.taskUpdated" }
+    );
+    refresh();
+  }
+
+  async function advanceTaskStatus(task: Task) {
+    await run((config) => api.updateTask(config, task.id, { status: NEXT_STATUS[task.status] }), {
+      success: "flash.taskUpdated",
     });
     refresh();
   }
@@ -255,22 +271,12 @@ export default function HomeScreen() {
             </Card>
           ) : (
             data.openTasks.map((task) => (
-              <Card key={task.id}>
-                <Row>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, textAlign: textStart }}>{task.title}</Text>
-                    {task.project_name ? (
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
-                        {task.project_name}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Badge
-                    label={task.status === "in_progress" ? t("common.inProgress") : t("common.open")}
-                    tone={task.status === "in_progress" ? "accent" : "default"}
-                  />
-                </Row>
-              </Card>
+              <TaskCard
+                key={task.id}
+                task={task}
+                onToggleDone={toggleTaskDone}
+                onAdvanceStatus={advanceTaskStatus}
+              />
             ))
           )}
 

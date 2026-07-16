@@ -230,6 +230,38 @@ export function Badge({
   );
 }
 
+export function Checkbox({
+  checked,
+  onPress,
+  disabled,
+}: {
+  checked: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const c = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={8}
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: checked ? c.good : c.border,
+        backgroundColor: checked ? c.good : "transparent",
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {checked ? <Text style={{ color: c.bg, fontSize: 13, fontWeight: "700" }}>✓</Text> : null}
+    </Pressable>
+  );
+}
+
 export function EmptyState({ text }: { text: string }) {
   const c = useColors();
   return (

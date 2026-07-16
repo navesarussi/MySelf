@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
 import { useApi, useMutate } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
-import { useColors, tokens } from "../../src/theme";
 import {
-  Badge,
   Btn,
-  Card,
   Chip,
   EmptyState,
   ErrorNote,
@@ -21,16 +18,12 @@ import {
   confirmDelete,
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
+import { NEXT_STATUS, TaskCard, taskPriorityLabel, taskStatusLabel } from "../../src/components/task-card";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
 
 const STATUSES: TaskStatus[] = ["open", "in_progress", "done"];
 const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
-const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
-  open: "in_progress",
-  in_progress: "done",
-  done: "open",
-};
 
 type FormState = {
   id?: string;
@@ -52,9 +45,8 @@ const emptyForm = (projectId: string): FormState => ({
 });
 
 export default function TasksScreen() {
-  const c = useColors();
   const { t } = useI18n();
-  const { textStart, textLtr } = useLayoutDir();
+  const { textLtr } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy } = useMutate();
@@ -94,10 +86,8 @@ export default function TasksScreen() {
     return [...list.filter((task) => task.status !== "done"), ...list.filter((task) => task.status === "done")];
   }, [tasksQ.data]);
 
-  const statusLabel = (s: TaskStatus) =>
-    s === "open" ? t("common.open") : s === "in_progress" ? t("common.inProgress") : t("common.done");
-  const priorityLabel = (p: TaskPriority) =>
-    p === "high" ? t("common.high") : p === "medium" ? t("common.medium") : t("common.low");
+  const statusLabel = (s: TaskStatus) => taskStatusLabel(t, s);
+  const priorityLabel = (p: TaskPriority) => taskPriorityLabel(t, p);
 
   function toggleStatusFilter(s: TaskStatus) {
     setStatusFilter((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
@@ -124,6 +114,26 @@ export default function TasksScreen() {
       success: "flash.taskUpdated",
     });
     tasksQ.refresh();
+  }
+
+  async function toggleDone(task: Task) {
+    await run(
+      (config) => api.updateTask(config, task.id, { status: task.status === "done" ? "open" : "done" }),
+      { success: "flash.taskUpdated" }
+    );
+    tasksQ.refresh();
+  }
+
+  function openEdit(task: Task) {
+    setForm({
+      id: task.id,
+      title: task.title,
+      project_id: task.project_id,
+      priority: task.priority,
+      status: task.status,
+      due_date: task.due_date ?? "",
+      notes: task.notes ?? "",
+    });
   }
 
   function removeTask(task: Task) {
@@ -177,54 +187,14 @@ export default function TasksScreen() {
       {tasksQ.data && tasks.length === 0 ? <EmptyState text={t("tasks.empty")} /> : null}
 
       {tasks.map((task) => (
-        <Card key={task.id} style={{ opacity: task.status === "done" ? 0.55 : 1 }}>
-          <Row>
-            <Pressable
-              style={{ flex: 1 }}
-              onPress={() =>
-                setForm({
-                  id: task.id,
-                  title: task.title,
-                  project_id: task.project_id,
-                  priority: task.priority,
-                  status: task.status,
-                  due_date: task.due_date ?? "",
-                  notes: task.notes ?? "",
-                })
-              }
-            >
-              <Text
-                style={{
-                  color: c.ink,
-                  textAlign: textStart,
-                  fontWeight: "600",
-                  textDecorationLine: task.status === "done" ? "line-through" : "none",
-                }}
-              >
-                {task.title}
-              </Text>
-              <Row style={{ marginTop: 4, justifyContent: "flex-start" }} wrap>
-                {task.project_name ? <Badge label={task.project_name} /> : null}
-                <Badge
-                  label={priorityLabel(task.priority)}
-                  tone={task.priority === "high" ? "warn" : task.priority === "medium" ? "accent" : "default"}
-                />
-                {task.due_date ? <Badge label={`${t("common.due")}: ${task.due_date}`} /> : null}
-              </Row>
-              {task.notes ? (
-                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
-                  {task.notes}
-                </Text>
-              ) : null}
-            </Pressable>
-            <Pressable onPress={() => advance(task)} disabled={busy}>
-              <Badge
-                label={statusLabel(task.status)}
-                tone={task.status === "done" ? "good" : task.status === "in_progress" ? "accent" : "default"}
-              />
-            </Pressable>
-          </Row>
-        </Card>
+        <TaskCard
+          key={task.id}
+          task={task}
+          busy={busy}
+          onToggleDone={toggleDone}
+          onAdvanceStatus={advance}
+          onPress={openEdit}
+        />
       ))}
 
       <FormModal

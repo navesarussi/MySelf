@@ -1,5 +1,12 @@
 # MySelf — Project Notes
 
+## Current scope: app only (until told otherwise)
+
+Starting 2026-07-16, unless the user explicitly says otherwise, all requested changes apply only to the
+**mobile app** (`mobile/` — the Expo/React Native wrapper), not the website (`app/`, `components/`, the
+Next.js frontend). Backend/API code shared by both (`app/api/**`, `lib/**` outside `mobile/`) may still be
+touched when the app needs it, but do not change website UI/pages to satisfy an app-only request.
+
 ## Version tracking (strict)
 
 The app displays its current version (from `package.json` → `version`, exposed via `lib/version.ts`) in small
