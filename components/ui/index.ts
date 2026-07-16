@@ -29,3 +29,4 @@ export {
   SubmitButton,
   IconButton,
 } from "./primitives";
+export { Modal } from "./modal";
