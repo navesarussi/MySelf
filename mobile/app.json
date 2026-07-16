@@ -2,7 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -15,7 +15,8 @@
       "infoPlist": {
         "CFBundleDevelopmentRegion": "he",
         "ITSAppUsesNonExemptEncryption": false,
-        "RCTNewArchEnabled": false
+        "RCTNewArchEnabled": false,
+        "NSContactsUsageDescription": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים."
       }
     },
     "android": {
@@ -45,7 +46,13 @@
           "backgroundColor": "#0b0c10"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

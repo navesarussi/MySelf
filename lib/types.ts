@@ -63,6 +63,7 @@ export type Relationship = {
   reminder_days: number | null;
   notes: string | null;
   phone: string | null;
+  email: string | null;
   project_id: string;
   project_name?: string;
   created_at: string;

@@ -3,7 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
-import { Badge, Card, Checkbox, Row } from "./ui";
+import { Badge, Btn, Card, Row } from "./ui";
 import type { Task, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
 
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
@@ -105,7 +105,13 @@ export function TaskCard({
   return (
     <Card style={{ opacity: done ? 0.55 : 1 }}>
       <Row>
-        <Checkbox checked={done} disabled={busy} onPress={() => onToggleDone(task)} />
+        <Btn
+          small
+          label={t("common.done")}
+          variant={done ? "ghost" : "primary"}
+          disabled={busy}
+          onPress={() => onToggleDone(task)}
+        />
         {onPress ? (
           <Pressable style={{ flex: 1 }} onPress={() => onPress(task)}>
             {Body}

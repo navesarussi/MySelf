@@ -40,6 +40,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const phoneRaw = str(body.phone);
     patch.phone = phoneRaw ? normalizePhone(phoneRaw) : null;
   }
+  if ("email" in body) patch.email = optStr(body.email);
   if ("notes" in body) patch.notes = optStr(body.notes);
   if ("last_contact_date" in body) patch.last_contact_date = optStr(body.last_contact_date);
   if (Object.keys(patch).length === 0) return badRequest("empty_patch");

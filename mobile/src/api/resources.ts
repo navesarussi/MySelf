@@ -18,12 +18,13 @@ export type HomePayload = {
   pendingCommitments: Commitment[];
   relationships: Pick<
     Relationship,
-    "id" | "name" | "last_contact_date" | "reminder_days" | "phone"
+    "id" | "name" | "last_contact_date" | "reminder_days" | "phone" | "email"
   >[];
   recentEvents: TimelineEvent[];
+  eventsMode: "upcoming" | "recent";
   openTasks: Task[];
   projects: Project[];
-  libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "updated_at">[];
+  libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "body" | "updated_at">[];
   openTasksCount: number;
   inProgressTasksCount: number;
 };

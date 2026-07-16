@@ -68,6 +68,12 @@ Mobile Settings exposes Google Tasks connection, list picker, sync status, and S
 ### FR-INT-WA-01
 Optional phone number on relationships; when set, show WhatsApp quick-link via `wa.me`.
 
+### FR-REL-EMAIL
+Relationships may store an optional email. Mobile form and create/update APIs include the field.
+
+### FR-REL-DEVICE-IMPORT
+Creating a relationship on mobile offers the system contact picker after permission. Selection pre-fills name, primary phone, and primary email; fields remain editable. Dismiss/deny → empty form. Secondary import control remains on the form.
+
 ### FR-HABIT-01
 Dedicated Habits tab (`/habits`) separate from goals/dreams (`/goals`).
 Habit stats: current streak, best streak, total successful days, failure count (streak breaks).
@@ -75,6 +81,14 @@ Successful days and best streak persist after a missed day.
 
 ### FR-HOME-01
 Home page is a data dashboard (no module shortcut cards). Shows aggregated stats for habits, goals, tasks, relationships, timeline.
+
+### FR-HOME-02
+Home relationships list shows only contacts due today or overdue (`days_since_last_contact >= reminder_days`).
+Home events show the next 10 upcoming events (title: upcoming); if none exist in the current calendar year, show the 10 most recent past events.
+Library and goal cards on home support open/edit/delete via the same forms as their tabs.
+
+### FR-HOME-03
+Home stats show at least 8 compact metrics without enlarging the stats block beyond denser cards.
 
 ### FR-TL-04
 Visual timeline supports deep zoom down to hourly divisions on a specific date (log-scale zoom control, adaptive axis ticks).
