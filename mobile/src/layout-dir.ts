@@ -29,7 +29,7 @@ export function useLayoutDir() {
       textStart,
       writingDirection,
       /** Dates / codes stay physically LTR. */
-      textLtr: (nativeSwaps ? "right" : "left") as const,
+      textLtr: (nativeSwaps ? "right" : "left") as TextStyle["textAlign"],
       textStyle: {
         textAlign: textStart,
         writingDirection,
