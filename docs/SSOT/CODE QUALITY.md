@@ -14,6 +14,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - Unify Google OAuth tokens (calendar + tasks) into one Google credential row with incremental scopes.
 - When a third external task source ships, consider `integration_settings` table if `settings` jsonb on `integration_tokens` becomes awkward.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/index.tsx` further (habits / relationships / stats sections) — still ~450 lines after goal/library modal extract.
+- [PENDING REFACTOR]: Split `mobile/app/(tabs)/relationships.tsx` (device import + form + list) — ~330 lines after email/device picker.
 
 ## Notes
 - Never mutate cookies inside Server Components (layout). Flash toast is set in Server Actions and read/cleared on the client.
