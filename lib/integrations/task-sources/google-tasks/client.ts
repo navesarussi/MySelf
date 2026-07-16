@@ -1,15 +1,20 @@
-import { exchangeCode, refreshAccessToken } from "../../google-calendar/client";
+import { refreshAccessToken } from "../../google-calendar/client";
 import { GOOGLE_TASKS_PROVIDER, GOOGLE_TASKS_SCOPE } from "../../google-config";
 import { getIntegrationToken, saveIntegrationToken } from "../../tokens";
 import type { GoogleTaskList, GoogleTaskListResponse, GoogleTasksResponse } from "./types";
 
-export function googleTasksAuthUrl(state: string): string {
+function googleTasksRedirectUri(): string {
   const origin = process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : "http://localhost:3000";
-  const redirectUri =
+  return (
     process.env.GOOGLE_TASKS_REDIRECT_URI ??
-    `${origin}/api/integrations/google-tasks/callback`;
+    `${origin}/api/integrations/google-tasks/callback`
+  );
+}
+
+export function googleTasksAuthUrl(state: string): string {
+  const redirectUri = googleTasksRedirectUri();
 
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
@@ -21,6 +26,26 @@ export function googleTasksAuthUrl(state: string): string {
     state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+export async function exchangeGoogleTasksCode(code: string) {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      redirect_uri: googleTasksRedirectUri(),
+      grant_type: "authorization_code",
+    }),
+  });
+  if (!res.ok) throw new Error("token_exchange_failed");
+  return res.json() as Promise<{
+    access_token: string;
+    refresh_token?: string;
+    expires_in: number;
+  }>;
 }
 
 export async function fetchTaskLists(accessToken: string): Promise<GoogleTaskList[]> {
@@ -151,4 +176,4 @@ export async function getValidGoogleTasksAccessToken(): Promise<string> {
   return refreshed.access_token;
 }
 
-export { exchangeCode, refreshAccessToken };
+export { refreshAccessToken };

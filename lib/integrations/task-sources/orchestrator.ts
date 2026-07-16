@@ -2,6 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import type { TaskSourceId } from "./types";
 import { getTaskSourceProvider } from "./registry";
 import {
+  getIntegrationToken,
   tryStartSync,
   setSyncCompleted,
   setSyncFailed,
@@ -14,9 +15,12 @@ const BATCH_SIZE = 100;
 
 export async function syncTaskSource(
   providerId: TaskSourceId
-): Promise<{ imported: number; markedDone: number; alreadyRunning?: true }> {
+): Promise<{ imported: number; markedDone: number; alreadyRunning?: true; notConnected?: true }> {
   const provider = getTaskSourceProvider(providerId);
   if (!provider) throw new Error("unknown_provider");
+
+  const token = await getIntegrationToken(providerId);
+  if (!token) return { imported: 0, markedDone: 0, notConnected: true as const };
 
   const started = await tryStartSync(providerId);
   if (!started) return { imported: 0, markedDone: 0, alreadyRunning: true as const };

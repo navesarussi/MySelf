@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { exchangeCode } from "@/lib/integrations/task-sources/google-tasks/client";
+import { exchangeGoogleTasksCode } from "@/lib/integrations/task-sources/google-tasks/client";
 import { GOOGLE_TASKS_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken, saveIntegrationToken } from "@/lib/integrations/tokens";
 import { consumeOAuthNext, consumeOAuthState } from "@/lib/integrations/oauth-state";
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeCode(code);
+    const tokens = await exchangeGoogleTasksCode(code);
     const existing = await getIntegrationToken(GOOGLE_TASKS_PROVIDER);
     const refreshToken = tokens.refresh_token ?? existing?.refresh_token;
 
