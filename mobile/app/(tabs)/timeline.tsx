@@ -23,6 +23,7 @@ import {
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
 import { TimelineVisual } from "../../src/components/timeline-visual";
+import { TimelineEventSheet } from "../../src/components/timeline/event-sheet";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import { formatPeriodRange, type LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
@@ -64,6 +65,7 @@ export default function TimelineScreen() {
   const [periodForm, setPeriodForm] = useState<PeriodForm | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"visual" | "list">("visual");
+  const [sheetEvents, setSheetEvents] = useState<TimelineEvent[] | null>(null);
 
   useEffect(() => {
     if (params.add === "event") setEventForm(emptyEvent);
@@ -262,10 +264,18 @@ export default function TimelineScreen() {
         <TimelineVisual
           events={events}
           periods={periods}
-          onEventPress={openEventForm}
+          onEventPress={(ev) => setSheetEvents([ev])}
           onPeriodPress={openPeriodForm}
+          onClusterPress={(evs) => setSheetEvents(evs)}
         />
       ) : null}
+
+      <TimelineEventSheet
+        events={sheetEvents}
+        periods={periods}
+        onClose={() => setSheetEvents(null)}
+        onEdit={openEventForm}
+      />
 
       {viewMode === "list" && periods.length > 0 ? (
         <>

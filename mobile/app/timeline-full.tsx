@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import type { TimelineEvent } from "@/lib/types";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +12,7 @@ import { useLayoutDir } from "../src/layout-dir";
 import { useColors } from "../src/theme";
 import { Loading } from "../src/components/ui";
 import { TimelineCanvas } from "../src/components/timeline/timeline-canvas";
+import { TimelineEventSheet } from "../src/components/timeline/event-sheet";
 
 /** Immersive full-screen timeline. Allows landscape while open, restores
  *  portrait on exit. View-only (tap a marker to jump/zoom); editing lives on
@@ -24,6 +26,7 @@ export default function TimelineFullScreen() {
   const eventsQ = useApi(api.timelineEvents);
   const periodsQ = useApi(api.periods);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [sheetEvents, setSheetEvents] = useState<TimelineEvent[] | null>(null);
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -73,12 +76,16 @@ export default function TimelineFullScreen() {
             periods={periods}
             height={Math.max(size.h - insets.top - insets.bottom - 150, 240)}
             fullscreen
+            onEventPress={(ev) => setSheetEvents([ev])}
+            onClusterPress={(evs) => setSheetEvents(evs)}
           />
           <Text style={{ color: c.muted, fontSize: 11, textAlign: "center", marginTop: 4 }}>
             {t("timeline.rotateHint")}
           </Text>
         </View>
       )}
+
+      <TimelineEventSheet events={sheetEvents} periods={periods} onClose={() => setSheetEvents(null)} />
     </View>
   );
 }
