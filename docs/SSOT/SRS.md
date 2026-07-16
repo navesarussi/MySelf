@@ -3,7 +3,12 @@
 ## Scope
 Personal private dashboard: timeline, habits/goals, relationships, content library, tasks.
 
+**Primary product surfaces:** Expo/React Native mobile app, and the same Expo app on the web at the production domain root. The Next.js website UI is preserved under `/legacy` (not deleted). Next.js continues to host `/api/**` and `/privacy`.
+
 ## Requirements
+
+### FR-WEB-PRIMARY-01
+The production domain root serves the Expo web SPA (exported into `public/spa`, rewritten by `proxy.ts`). `/api/**`, `/privacy`, and `/legacy/**` remain on Next.js. The previous website pages live under `/legacy` without being deleted.
 
 ### FR-AUTH-GOOGLE-01
 Site access via Google Sign-In (openid, email, profile, calendar.readonly). Only `ALLOWED_GOOGLE_EMAIL` may enter when configured.

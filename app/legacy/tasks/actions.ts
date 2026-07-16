@@ -14,9 +14,9 @@ function pick<T extends string>(value: string, allowed: T[], fallback: T): T {
 }
 
 function revalidateTaskPaths() {
-  revalidatePath("/tasks");
-  revalidatePath("/projects");
-  revalidatePath("/");
+  revalidatePath("/legacy/tasks");
+  revalidatePath("/legacy/projects");
+  revalidatePath("/legacy");
 }
 
 export async function addTask(formData: FormData) {

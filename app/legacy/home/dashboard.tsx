@@ -12,10 +12,11 @@ import {
 } from "lucide-react";
 import { HomePanel } from "@/components/home-panel";
 import { Badge } from "@/components/ui";
-import { HabitCard } from "@/app/habits/habit-card";
-import { HomeRelationshipRow } from "@/app/home/home-relationship-row";
-import { HomeTaskRow } from "@/app/home/home-task-row";
-import { HomeGoalRow } from "@/app/home/home-goal-row";
+import { HabitCard } from "@/app/legacy/habits/habit-card";
+import { HomeRelationshipRow } from "@/app/legacy/home/home-relationship-row";
+import { HomeTaskRow } from "@/app/legacy/home/home-task-row";
+import { HomeGoalRow } from "@/app/legacy/home/home-goal-row";
+import { legacyPath } from "@/lib/legacy-path";
 import { rankGoalsForHome } from "@/lib/goals-rank";
 import { habitReportDay } from "@/lib/habit-stats";
 import { SHOW_PROJECTS } from "@/lib/features";
@@ -101,7 +102,7 @@ export function HomeDashboard({
   return (
     <>
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link href="/habits" className="card p-3 transition hover:border-accent/60">
+        <Link href={legacyPath("/habits")} className="card p-3 transition hover:border-accent/60">
           <div className="flex items-center gap-2 text-sm text-muted">
             <Flame size={15} className="text-accent2" /> {t("home.activeHabits")}
           </div>
@@ -114,7 +115,7 @@ export function HomeDashboard({
             })}
           </p>
         </Link>
-        <Link href="/relationships" className="card p-3 transition hover:border-accent/60">
+        <Link href={legacyPath("/relationships")} className="card p-3 transition hover:border-accent/60">
           <div className="flex items-center gap-2 text-sm text-muted">
             <Users size={15} className="text-warn" /> {t("home.relationshipsOverdue")}
           </div>
@@ -125,14 +126,14 @@ export function HomeDashboard({
               : t("home.allRelationshipsUpToDate")}
           </p>
         </Link>
-        <Link href="/goals" className="card p-3 transition hover:border-accent/60">
+        <Link href={legacyPath("/goals")} className="card p-3 transition hover:border-accent/60">
           <div className="flex items-center gap-2 text-sm text-muted">
             <Target size={15} className="text-accent" /> {t("home.activeGoals")}
           </div>
           <p className="mt-2 text-3xl font-bold">{activeGoalsCount}</p>
           <p className="mt-1 text-xs text-muted">{t("home.goalsAchieved", { count: doneGoalsCount })}</p>
         </Link>
-        <Link href="/tasks" className="card p-3 transition hover:border-accent/60">
+        <Link href={legacyPath("/tasks")} className="card p-3 transition hover:border-accent/60">
           <div className="flex items-center gap-2 text-sm text-muted">
             <CheckSquare size={15} className="text-accent" /> {t("home.openTasks")}
           </div>
@@ -147,7 +148,7 @@ export function HomeDashboard({
         <HomePanel
           title={t("home.habitTracking")}
           icon={<Flame size={16} className="text-accent2" />}
-          href="/habits"
+          href={legacyPath("/habits")}
           linkLabel={t("home.allHabits")}
         >
           {allHabits.length === 0 ? (
@@ -172,7 +173,7 @@ export function HomeDashboard({
         <HomePanel
           title={t("home.nearbyGoals")}
           icon={<Target size={16} className="text-accent" />}
-          href="/goals"
+          href={legacyPath("/goals")}
           linkLabel={t("home.fullList")}
         >
           {rankedGoals.length === 0 ? (
@@ -204,7 +205,7 @@ export function HomeDashboard({
         <HomePanel
           title={t("home.tasksSection")}
           icon={<CheckSquare size={16} className="text-accent" />}
-          href="/tasks"
+          href={legacyPath("/tasks")}
           linkLabel={t("home.toTasks")}
         >
           {openTasks.length === 0 ? (
@@ -222,7 +223,7 @@ export function HomeDashboard({
           <HomePanel
             title={t("home.projectsSection")}
             icon={<FolderKanban size={16} className="text-accent" />}
-            href="/projects"
+            href={legacyPath("/projects")}
             linkLabel={t("home.toProjects")}
           >
             {projects.length === 0 ? (
@@ -253,7 +254,7 @@ export function HomeDashboard({
         <HomePanel
           title={t("home.relationshipsWaiting")}
           icon={<AlertCircle size={16} className="text-warn" />}
-          href="/relationships"
+          href={legacyPath("/relationships")}
           linkLabel={t("home.manageRelationships")}
         >
           {sortedRelationships.length === 0 ? (
@@ -270,7 +271,7 @@ export function HomeDashboard({
         <HomePanel
           title={t("home.recentEvents")}
           icon={<Clock size={16} className="text-accent" />}
-          href="/timeline"
+          href={legacyPath("/timeline")}
           linkLabel={t("home.toTimeline")}
         >
           {recentEvents.length === 0 ? (
@@ -290,7 +291,7 @@ export function HomeDashboard({
         <HomePanel
           title={t("home.librarySection")}
           icon={<BookOpen size={16} className="text-accent" />}
-          href="/library"
+          href={legacyPath("/library")}
           linkLabel={t("home.toLibrary")}
           maxHeight="max-h-64"
         >

@@ -9,9 +9,9 @@ import { rememberLastProject } from "@/lib/last-project";
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 function revalidateRelationshipPaths() {
-  revalidatePath("/relationships");
-  revalidatePath("/projects");
-  revalidatePath("/");
+  revalidatePath("/legacy/relationships");
+  revalidatePath("/legacy/projects");
+  revalidatePath("/legacy");
 }
 
 export async function addRelationship(formData: FormData) {

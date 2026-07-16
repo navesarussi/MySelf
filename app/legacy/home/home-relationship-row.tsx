@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui";
 import { whatsappUrl } from "@/lib/integrations/phone";
 import { getTranslations } from "@/lib/i18n";
 import type { Relationship } from "@/lib/types";
-import { markContactedToday } from "@/app/relationships/actions";
+import { markContactedToday } from "@/app/legacy/relationships/actions";
 import { MessageCircle } from "lucide-react";
 
 export async function HomeRelationshipRow({

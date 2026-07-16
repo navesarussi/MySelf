@@ -8,6 +8,6 @@ import { setFlash } from "@/lib/flash-actions";
 export async function disconnectGoogle() {
   await deleteIntegrationToken(GOOGLE_PROVIDER);
   await setFlash("flash.googleDisconnected");
-  revalidatePath("/settings");
-  revalidatePath("/timeline");
+  revalidatePath("/legacy/settings");
+  revalidatePath("/legacy/timeline");
 }

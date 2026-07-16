@@ -7,8 +7,8 @@ import type { Project, Relationship, Task } from "@/lib/types";
 import { useTranslations } from "@/components/locale-provider";
 import { SubmitButton, inputClass } from "@/components/ui";
 import { AddFormToggle } from "@/components/add-form-toggle";
-import { TaskForm, TaskList } from "@/app/tasks/task-board";
-import { RelationshipForm, RelationshipList } from "@/app/relationships/relationship-board";
+import { TaskForm, TaskList } from "@/app/legacy/tasks/task-board";
+import { RelationshipForm, RelationshipList } from "@/app/legacy/relationships/relationship-board";
 import { addProject, renameProject, deleteProject } from "./actions";
 
 type Tab = "missions" | "connections";

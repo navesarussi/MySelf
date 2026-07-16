@@ -23,7 +23,7 @@ export async function addContentEntry(formData: FormData) {
     tags,
   });
   await setFlash("flash.entryAdded");
-  revalidatePath("/library");
+  revalidatePath("/legacy/library");
 }
 
 export async function updateContentEntry(formData: FormData) {
@@ -44,7 +44,7 @@ export async function updateContentEntry(formData: FormData) {
     .update({ title, category: category || "כללי", body, tags, updated_at: new Date().toISOString() })
     .eq("id", id);
   await setFlash("flash.entryUpdated");
-  revalidatePath("/library");
+  revalidatePath("/legacy/library");
 }
 
 export async function deleteContentEntry(formData: FormData) {
@@ -53,5 +53,5 @@ export async function deleteContentEntry(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("content_entries").delete().eq("id", id);
   await setFlash("flash.entryDeleted");
-  revalidatePath("/library");
+  revalidatePath("/legacy/library");
 }

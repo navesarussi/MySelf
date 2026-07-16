@@ -9,7 +9,7 @@ import { useTranslations } from "@/components/locale-provider";
 function LoginContent() {
   const params = useSearchParams();
   const { t } = useTranslations();
-  const next = params.get("next") || "/";
+  const next = params.get("next") || "/legacy";
   const loginHref = `/api/auth/google/login?next=${encodeURIComponent(next)}`;
 
   return (

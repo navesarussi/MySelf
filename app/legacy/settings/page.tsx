@@ -77,7 +77,7 @@ export default async function SettingsPage() {
           <div className="mt-3">
             <p className="text-sm text-muted">{t("settings.reconnectHint")}</p>
             <Link
-              href="/api/auth/google/login?next=/settings"
+              href="/api/auth/google/login?next=/legacy/settings"
               className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg hover:opacity-90"
             >
               {t("common.signInGoogle")}

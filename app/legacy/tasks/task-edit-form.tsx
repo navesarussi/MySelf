@@ -47,7 +47,7 @@ export function TaskEditForm({
         placeholder={t("tasks.titlePlaceholder")}
       />
       {showProjectSelect ? (
-        <select name="project_id" defaultValue={task.project_id} className={inputClass}>
+        <select name="project_id" defaultValue={task.project_id ?? ""} className={inputClass}>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -55,7 +55,7 @@ export function TaskEditForm({
           ))}
         </select>
       ) : (
-        <input type="hidden" name="project_id" value={task.project_id} />
+        <input type="hidden" name="project_id" value={task.project_id ?? ""} />
       )}
       <select name="priority" defaultValue={task.priority} className={inputClass}>
         <option value="high">{t("tasks.priorityHigh")}</option>

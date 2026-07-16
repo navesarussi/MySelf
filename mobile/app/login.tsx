@@ -90,7 +90,8 @@ export default function LoginScreen() {
     setError(null);
     setBusy(true);
     try {
-      const appRedirect = Linking.createURL("auth");
+      const appRedirect =
+        Platform.OS === "web" ? `${window.location.origin}/auth` : Linking.createURL("auth");
       const nextPath = `/api/v1/auth/mobile-redirect?app_redirect=${encodeURIComponent(appRedirect)}`;
       const loginUrl = `${API_URL}/api/auth/google/login?next=${encodeURIComponent(nextPath)}`;
 

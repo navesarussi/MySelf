@@ -30,8 +30,8 @@ export async function addTimelineEvent(formData: FormData) {
   });
 
   await setFlash(error ? "flash.eventAddError" : "flash.eventAdded", error ? "error" : "success");
-  revalidatePath("/timeline");
-  revalidatePath("/");
+  revalidatePath("/legacy/timeline");
+  revalidatePath("/legacy");
 }
 
 export async function updateTimelineEvent(formData: FormData) {
@@ -83,8 +83,8 @@ export async function updateTimelineEvent(formData: FormData) {
     await setFlash(error ? "flash.eventUpdateError" : "flash.eventUpdated", error ? "error" : "success");
   }
 
-  revalidatePath("/timeline");
-  revalidatePath("/");
+  revalidatePath("/legacy/timeline");
+  revalidatePath("/legacy");
 }
 
 export async function deleteTimelineEvent(formData: FormData) {
@@ -104,8 +104,8 @@ export async function deleteTimelineEvent(formData: FormData) {
     await setFlash(error ? "flash.eventDeleteError" : "flash.eventDeleted", error ? "error" : "success");
   }
 
-  revalidatePath("/timeline");
-  revalidatePath("/");
+  revalidatePath("/legacy/timeline");
+  revalidatePath("/legacy");
 }
 
 export async function addLifePeriod(formData: FormData) {
@@ -129,7 +129,7 @@ export async function addLifePeriod(formData: FormData) {
   });
 
   await setFlash(error ? "flash.periodAddError" : "flash.periodAdded", error ? "error" : "success");
-  revalidatePath("/timeline");
+  revalidatePath("/legacy/timeline");
 }
 
 export async function updateLifePeriod(formData: FormData) {
@@ -156,7 +156,7 @@ export async function updateLifePeriod(formData: FormData) {
     .eq("id", id);
 
   await setFlash(error ? "flash.periodUpdateError" : "flash.periodUpdated", error ? "error" : "success");
-  revalidatePath("/timeline");
+  revalidatePath("/legacy/timeline");
 }
 
 export async function deleteLifePeriod(formData: FormData) {
@@ -166,5 +166,5 @@ export async function deleteLifePeriod(formData: FormData) {
   const supabase = getSupabase();
   const { error } = await supabase.from("life_periods").delete().eq("id", id);
   await setFlash(error ? "flash.periodDeleteError" : "flash.periodDeleted", error ? "error" : "success");
-  revalidatePath("/timeline");
+  revalidatePath("/legacy/timeline");
 }

@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui";
 import { formatLocaleDate, getTranslations } from "@/lib/i18n";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
-import { updateTaskStatus } from "@/app/tasks/actions";
+import { updateTaskStatus } from "@/app/legacy/tasks/actions";
 
 function priorityTone(p: TaskPriority): "warn" | "accent" | "default" {
   if (p === "high") return "warn";

@@ -5,7 +5,7 @@ import { getSupabase } from "@/lib/supabase";
 import { setFlash } from "@/lib/flash-actions";
 import { canDeleteProject } from "@/lib/projects/delete-guard";
 
-const PATHS = ["/projects", "/tasks", "/relationships", "/"] as const;
+const PATHS = ["/legacy/projects", "/legacy/tasks", "/legacy/relationships", "/legacy"] as const;
 
 function revalidateAll() {
   for (const p of PATHS) revalidatePath(p);

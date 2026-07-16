@@ -1,3 +1,5 @@
+import { LEGACY_BASE } from "@/lib/legacy-path";
+
 export type AddTarget =
   | "task"
   | "contact"
@@ -27,15 +29,15 @@ export function isAddTarget(value: string | undefined | null): value is AddTarge
 
 export function addTargetHref(target: AddTarget): string {
   const routes: Record<AddTarget, string> = {
-    task: "/tasks?add=task",
-    contact: "/relationships?add=contact",
-    event: "/timeline?add=event",
-    period: "/timeline?add=period",
-    project: "/projects?add=project",
-    habit: "/habits?add=habit",
-    goal: "/goals?add=goal",
-    commitment: "/goals?add=commitment",
-    entry: "/library?add=entry",
+    task: `${LEGACY_BASE}/tasks?add=task`,
+    contact: `${LEGACY_BASE}/relationships?add=contact`,
+    event: `${LEGACY_BASE}/timeline?add=event`,
+    period: `${LEGACY_BASE}/timeline?add=period`,
+    project: `${LEGACY_BASE}/projects?add=project`,
+    habit: `${LEGACY_BASE}/habits?add=habit`,
+    goal: `${LEGACY_BASE}/goals?add=goal`,
+    commitment: `${LEGACY_BASE}/goals?add=commitment`,
+    entry: `${LEGACY_BASE}/library?add=entry`,
   };
   return routes[target];
 }

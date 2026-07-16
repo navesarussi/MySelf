@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { Badge } from "@/components/ui";
 import { useTranslations } from "@/components/locale-provider";
-import { GoalEditForm } from "@/app/goals/goal-edit-form";
+import { GoalEditForm } from "@/app/legacy/goals/goal-edit-form";
 import { achievabilityScore, horizonLabel } from "@/lib/goals-rank";
 import type { Goal } from "@/lib/types";
 import type { Locale } from "@/lib/i18n";

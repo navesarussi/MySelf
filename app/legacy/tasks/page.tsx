@@ -77,7 +77,7 @@ export default async function TasksPage({
     p.set("project", patch.project ?? projectId);
     p.set("status", patch.status ?? (selectedStatuses.length ? selectedStatuses.join(",") : ALL_FILTER));
     p.set("priority", patch.priority ?? priority);
-    return `/tasks?${p.toString()}`;
+    return `/legacy/tasks?${p.toString()}`;
   };
 
   const statusHref = (s: TaskStatus | typeof ALL_FILTER) => {

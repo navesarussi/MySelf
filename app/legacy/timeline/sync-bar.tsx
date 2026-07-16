@@ -24,7 +24,7 @@ export function TimelineSyncBar({ connected, lastSyncAt, initialSyncStatus }: Pr
   if (!connected) {
     return (
       <p className="mb-3 text-xs text-muted">
-        <Link href="/settings" className="text-accent hover:underline">
+        <Link href="/legacy/settings" className="text-accent hover:underline">
           {t("timeline.connectGoogle")}
         </Link>{" "}
         {t("timeline.importHint")}

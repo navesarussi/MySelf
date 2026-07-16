@@ -18,8 +18,8 @@ export async function addHabit(formData: FormData) {
     .from("habits")
     .insert({ name, kind, target_note: target_note || null, report_time });
   await setFlash("flash.habitAdded");
-  revalidatePath("/habits");
-  revalidatePath("/");
+  revalidatePath("/legacy/habits");
+  revalidatePath("/legacy");
 }
 
 export async function checkInHabit(formData: FormData) {
@@ -47,8 +47,8 @@ export async function checkInHabit(formData: FormData) {
     .eq("id", id);
 
   await setFlash("flash.checkInRecorded");
-  revalidatePath("/habits");
-  revalidatePath("/");
+  revalidatePath("/legacy/habits");
+  revalidatePath("/legacy");
 }
 
 export async function reportHabitFall(formData: FormData) {
@@ -76,8 +76,8 @@ export async function reportHabitFall(formData: FormData) {
     .eq("id", id);
 
   await setFlash("flash.fallRecorded");
-  revalidatePath("/habits");
-  revalidatePath("/");
+  revalidatePath("/legacy/habits");
+  revalidatePath("/legacy");
 }
 
 export async function resetHabit(formData: FormData) {
@@ -98,8 +98,8 @@ export async function resetHabit(formData: FormData) {
     .eq("id", id);
 
   await setFlash("flash.streakReset");
-  revalidatePath("/habits");
-  revalidatePath("/");
+  revalidatePath("/legacy/habits");
+  revalidatePath("/legacy");
 }
 
 export async function updateHabit(formData: FormData) {
@@ -135,8 +135,8 @@ export async function updateHabit(formData: FormData) {
     .eq("id", id);
 
   await setFlash("flash.habitUpdated");
-  revalidatePath("/habits");
-  revalidatePath("/");
+  revalidatePath("/legacy/habits");
+  revalidatePath("/legacy");
 }
 
 export async function deleteHabit(formData: FormData) {
@@ -145,6 +145,6 @@ export async function deleteHabit(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("habits").delete().eq("id", id);
   await setFlash("flash.habitDeleted");
-  revalidatePath("/habits");
-  revalidatePath("/");
+  revalidatePath("/legacy/habits");
+  revalidatePath("/legacy");
 }

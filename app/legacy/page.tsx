@@ -5,7 +5,7 @@ import { DbWarning } from "@/components/db-warning";
 import { dedupeHabits, effectiveStreak, habitReportDay, selectHomeHabits, todayISO } from "@/lib/habit-stats";
 import { getTranslations } from "@/lib/i18n";
 import type { Habit, Goal, Commitment, Relationship, TimelineEvent, Task, Project, ContentEntry } from "@/lib/types";
-import { HomeDashboard } from "@/app/home/dashboard";
+import { HomeDashboard } from "@/app/legacy/home/dashboard";
 import { Compass } from "lucide-react";
 
 export const revalidate = 30;

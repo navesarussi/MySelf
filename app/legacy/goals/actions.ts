@@ -22,8 +22,8 @@ export async function addGoal(formData: FormData) {
     definition_of_done: definition_of_done || null,
   });
   await setFlash("flash.goalAdded");
-  revalidatePath("/goals");
-  revalidatePath("/");
+  revalidatePath("/legacy/goals");
+  revalidatePath("/legacy");
 }
 
 export async function updateGoal(formData: FormData) {
@@ -47,8 +47,8 @@ export async function updateGoal(formData: FormData) {
     })
     .eq("id", id);
   await setFlash("flash.goalUpdated");
-  revalidatePath("/goals");
-  revalidatePath("/");
+  revalidatePath("/legacy/goals");
+  revalidatePath("/legacy");
 }
 
 export async function toggleGoalStatus(formData: FormData) {
@@ -61,8 +61,8 @@ export async function toggleGoalStatus(formData: FormData) {
     .update({ status: status === "active" ? "done" : "active" })
     .eq("id", id);
   await setFlash("flash.goalUpdated");
-  revalidatePath("/goals");
-  revalidatePath("/");
+  revalidatePath("/legacy/goals");
+  revalidatePath("/legacy");
 }
 
 export async function deleteGoal(formData: FormData) {
@@ -71,8 +71,8 @@ export async function deleteGoal(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("goals").delete().eq("id", id);
   await setFlash("flash.goalDeleted");
-  revalidatePath("/goals");
-  revalidatePath("/");
+  revalidatePath("/legacy/goals");
+  revalidatePath("/legacy");
 }
 
 export async function addCommitment(formData: FormData) {
@@ -82,8 +82,8 @@ export async function addCommitment(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("commitments").insert({ text, commitment_date });
   await setFlash("flash.commitmentAdded");
-  revalidatePath("/goals");
-  revalidatePath("/");
+  revalidatePath("/legacy/goals");
+  revalidatePath("/legacy");
 }
 
 export async function setCommitmentStatus(formData: FormData) {
@@ -93,8 +93,8 @@ export async function setCommitmentStatus(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("commitments").update({ status }).eq("id", id);
   await setFlash("flash.commitmentUpdated");
-  revalidatePath("/goals");
-  revalidatePath("/");
+  revalidatePath("/legacy/goals");
+  revalidatePath("/legacy");
 }
 
 export async function deleteCommitment(formData: FormData) {
@@ -103,6 +103,6 @@ export async function deleteCommitment(formData: FormData) {
   const supabase = getSupabase();
   await supabase.from("commitments").delete().eq("id", id);
   await setFlash("flash.commitmentDeleted");
-  revalidatePath("/goals");
-  revalidatePath("/");
+  revalidatePath("/legacy/goals");
+  revalidatePath("/legacy");
 }
