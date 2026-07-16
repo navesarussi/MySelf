@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized, badRequest, dbError, readJson } from "@/lib/api/auth";
 import { GOOGLE_TASKS_PROVIDER } from "@/lib/integrations/google-config";
-import { getTokenSettings, updateTokenSettings } from "@/lib/integrations/tokens";
+import {
+  getIntegrationToken,
+  getTokenSettings,
+  updateTokenSettings,
+} from "@/lib/integrations/tokens";
 import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
 
 type GoogleTasksSettings = {
@@ -33,6 +37,11 @@ export async function PATCH(req: NextRequest) {
 
   if (!Array.isArray(selectedListIds) || !selectedListIds.every((id) => typeof id === "string")) {
     return badRequest("selected_list_ids must be string[]");
+  }
+
+  const token = await getIntegrationToken(GOOGLE_TASKS_PROVIDER);
+  if (!token) {
+    return badRequest("not_connected");
   }
 
   try {

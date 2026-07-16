@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncAllTaskSources } from "@/lib/integrations/task-sources/orchestrator";
+import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
 import { getIntegrationToken } from "@/lib/integrations/tokens";
 import type { TaskSourceId } from "@/lib/integrations/task-sources/types";
 
@@ -37,16 +37,29 @@ export async function GET(req: NextRequest) {
   try {
     const providers: TaskSourceId[] = ["google_tasks", "monday", "github"];
     const skipped: Record<string, string> = {};
-    
+    const results: Record<
+      string,
+      { imported: number; markedDone: number; error?: string; alreadyRunning?: true }
+    > = {};
+
     for (const provider of providers) {
       const check = await shouldSkipDailySync(provider);
       if (check.skip && check.reason) {
         skipped[provider] = check.reason;
+        continue;
+      }
+
+      try {
+        results[provider] = await syncTaskSource(provider);
+      } catch (err) {
+        results[provider] = {
+          imported: 0,
+          markedDone: 0,
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
     }
 
-    const results = await syncAllTaskSources();
-    
     return NextResponse.json({
       ok: true,
       results,
