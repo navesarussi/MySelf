@@ -9,17 +9,13 @@ import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
 import { Badge, Btn, Card, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
 import { NEXT_STATUS, TaskCard } from "../../src/components/task-card";
-import {
-  dedupeHabits,
-  effectiveStreak,
-  habitReportDay,
-  todayISO,
-} from "@/lib/habit-stats";
+import { HabitCard } from "../../src/components/habit-card";
+import { dedupeHabits, effectiveStreak, habitReportDay, todayISO } from "@/lib/habit-stats";
 import { achievabilityScore, horizonLabel, rankGoalsForHome } from "@/lib/goals-rank";
 import { displayTitle } from "@/lib/timeline-display";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { whatsappUrl } from "@/lib/integrations/phone";
-import type { Habit, Relationship, Task } from "@/lib/types";
+import type { Relationship, Task } from "@/lib/types";
 
 function StatCard({
   title,
@@ -103,13 +99,6 @@ export default function HomeScreen() {
     [data?.activeGoals, locale]
   );
 
-  async function checkIn(habit: Habit) {
-    await run((config) => api.reportHabit(config, habit.id, "check_in"), {
-      success: "flash.checkInRecorded",
-    });
-    refresh();
-  }
-
   async function toggleTaskDone(task: Task) {
     await run(
       (config) => api.updateTask(config, task.id, { status: task.status === "done" ? "open" : "done" }),
@@ -187,27 +176,46 @@ export default function HomeScreen() {
               <Text style={{ color: c.muted, textAlign: textStart }}>{t("home.noHabits")}</Text>
             </Card>
           ) : (
-            uniqueHabits.map((h) => {
-              const day = habitReportDay(h.report_time);
-              const checked = h.last_checked_on === day;
-              return (
-                <Card key={h.id}>
-                  <Row>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart }}>{h.name}</Text>
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
-                        {t("common.streak")}: {effectiveStreak(h, day)} · {t("common.peak")}: {h.best_streak}
-                      </Text>
-                    </View>
-                    {checked ? (
-                      <Badge label={t("habits.checkedToday")} tone="good" />
-                    ) : (
-                      <Btn small label={t("habits.checkInToday")} onPress={() => checkIn(h)} />
-                    )}
-                  </Row>
-                </Card>
-              );
-            })
+            uniqueHabits.map((h) => (
+              <HabitCard
+                key={h.id}
+                habit={h}
+                onCheckIn={async () => {
+                  await run((config) => api.reportHabit(config, h.id, "check_in"), { success: "flash.checkInRecorded" });
+                  refresh();
+                }}
+                onReportFall={async () => {
+                  await run((config) => api.reportHabit(config, h.id, "fall"), { success: "flash.fallRecorded" });
+                  refresh();
+                }}
+                onReset={async () => {
+                  await run((config) => api.reportHabit(config, h.id, "reset"), { success: "flash.streakReset" });
+                  refresh();
+                }}
+                onSave={async (fields) => {
+                  await run(
+                    (config) =>
+                      api.updateHabit(config, h.id, {
+                        name: fields.name,
+                        kind: fields.kind,
+                        target_note: fields.target_note || null,
+                        report_time: fields.report_time || null,
+                        streak_count: Number(fields.streak_count) || 0,
+                        best_streak: Number(fields.best_streak) || 0,
+                        total_success_days: Number(fields.total_success_days) || 0,
+                        failure_count: Number(fields.failure_count) || 0,
+                        last_checked_on: fields.last_checked_on || null,
+                      }),
+                    { success: "flash.habitUpdated" }
+                  );
+                  refresh();
+                }}
+                onDelete={async () => {
+                  await run((config) => api.deleteHabit(config, h.id), { success: "flash.habitDeleted" });
+                  refresh();
+                }}
+              />
+            ))
           )}
           {uniqueHabits.some((h) => (h.failure_count ?? 0) > 0) ? (
             <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginBottom: 8 }}>
