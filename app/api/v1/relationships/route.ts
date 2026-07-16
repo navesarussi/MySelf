@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       reminder_days: reminder,
       notes: optStr(body.notes),
       phone: phoneRaw ? normalizePhone(phoneRaw) : null,
+      email: optStr(body.email),
       project_id,
     })
     .select()
