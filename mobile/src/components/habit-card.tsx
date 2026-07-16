@@ -24,15 +24,16 @@ type EditFields = {
 
 function StatTile({ icon, iconColor, label, value }: { icon: React.ComponentProps<typeof Ionicons>["name"]; iconColor: string; label: string; value: number }) {
   const c = useColors();
+  const { writingDirection } = useLayoutDir();
   return (
     <View style={{ flex: 1, minWidth: 70, backgroundColor: c.border + "40", borderRadius: tokens.radiusSm, paddingVertical: 6, alignItems: "center" }}>
       <Row style={{ gap: 3, justifyContent: "center" }}>
         <Ionicons name={icon} size={11} color={iconColor} />
-        <Text style={{ color: c.muted, fontSize: 9 }} numberOfLines={1}>
+        <Text style={{ color: c.muted, fontSize: 9, writingDirection }} numberOfLines={1}>
           {label}
         </Text>
       </Row>
-      <Text style={{ color: c.ink, fontWeight: "700", fontSize: 15, marginTop: 2 }}>{value}</Text>
+      <Text style={{ color: c.ink, fontWeight: "700", fontSize: 15, marginTop: 2, writingDirection }}>{value}</Text>
     </View>
   );
 }
@@ -56,7 +57,7 @@ export function HabitCard({
 }) {
   const c = useColors();
   const { t, locale } = useI18n();
-  const { textStart, textLtr } = useLayoutDir();
+  const { textStart, textLtr, writingDirection, row } = useLayoutDir();
   const [editing, setEditing] = useState(false);
   const [viewing, setViewing] = useState(false);
   const [form, setForm] = useState<EditFields | null>(null);
@@ -131,11 +132,11 @@ export function HabitCard({
           <Row>
             <View style={{ flex: 1 }}>
               <Row style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-                <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart }}>{habit.name}</Text>
+                <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>{habit.name}</Text>
                 <Badge label={habit.kind === "build" ? t("habits.build") : t("habits.quit")} tone={habit.kind === "build" ? "good" : "warn"} />
               </Row>
               {habit.target_note ? (
-                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }} numberOfLines={2}>
+                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }} numberOfLines={2}>
                   {habit.target_note}
                 </Text>
               ) : null}
@@ -158,7 +159,7 @@ export function HabitCard({
           </Row>
 
           <Row style={{ marginTop: 8, justifyContent: "space-between" }}>
-            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart }} numberOfLines={1}>
+            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }} numberOfLines={1}>
               {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
             </Text>
           </Row>
@@ -247,7 +248,7 @@ export function HabitCard({
             >
               <ScrollView contentContainerStyle={{ padding: tokens.padLg }}>
                 <Row style={{ justifyContent: "space-between" }}>
-                  <Text style={{ color: c.ink, fontSize: 17, fontWeight: "700", textAlign: textStart }}>{habit.name}</Text>
+                  <Text style={{ color: c.ink, fontSize: 17, fontWeight: "700", textAlign: textStart, writingDirection }}>{habit.name}</Text>
                   <Pressable onPress={() => setViewing(false)} hitSlop={8}>
                     <Ionicons name="close" size={20} color={c.muted} />
                   </Pressable>
@@ -261,7 +262,7 @@ export function HabitCard({
                 </Row>
 
                 {habit.target_note ? (
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 8 }}>
+                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 8 }}>
                     {habit.target_note}
                   </Text>
                 ) : null}
@@ -273,7 +274,7 @@ export function HabitCard({
                   <StatTile icon="alert-circle-outline" iconColor={c.warn} label={t("common.failures")} value={failures} />
                 </Row>
 
-                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 10 }}>
+                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 10 }}>
                   {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
                   {reportTime !== "00:00" ? `  ·  ${t("habits.reportOpensAt", { time: reportTime })}` : ""}
                 </Text>

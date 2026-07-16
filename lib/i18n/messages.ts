@@ -352,6 +352,9 @@ export const messages = {
       disconnect: "ניתוק יומן גוגל",
       appVersion: "גרסת האפליקציה",
       versionValue: "v{version}",
+      bottomTabs: "טאבים בתחתית",
+      bottomTabsHint: "בחר אילו מסכים יופיעו בפס התחתון. השאר יופיעו בתפריט העליון.",
+      bottomTabsMin: "חייבים לפחות טאב אחד בתחתית",
     },
     privacy: {
       title: "Privacy Policy — מרכז השליטה",
@@ -797,6 +800,9 @@ export const messages = {
       disconnect: "Disconnect Google Calendar",
       appVersion: "App version",
       versionValue: "v{version}",
+      bottomTabs: "Bottom tabs",
+      bottomTabsHint: "Choose which screens appear in the bottom bar. The rest stay in the top menu.",
+      bottomTabsMin: "Keep at least one tab in the bottom bar",
     },
     privacy: {
       title: "Privacy Policy — Command Center",

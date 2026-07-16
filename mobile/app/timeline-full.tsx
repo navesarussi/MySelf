@@ -7,6 +7,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { api } from "../src/api/resources";
 import { useApi } from "../src/hooks";
 import { useI18n } from "../src/i18n";
+import { useLayoutDir } from "../src/layout-dir";
 import { useColors } from "../src/theme";
 import { Loading } from "../src/components/ui";
 import { TimelineCanvas } from "../src/components/timeline/timeline-canvas";
@@ -17,6 +18,7 @@ import { TimelineCanvas } from "../src/components/timeline/timeline-canvas";
 export default function TimelineFullScreen() {
   const c = useColors();
   const { t } = useI18n();
+  const { row, textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const eventsQ = useApi(api.timelineEvents);
@@ -42,22 +44,23 @@ export default function TimelineFullScreen() {
     >
       <View
         style={{
-          flexDirection: "row",
-          alignItems: "center",
+          ...row,
           justifyContent: "space-between",
           paddingHorizontal: 12,
           paddingVertical: 8,
         }}
       >
-        <Text style={{ color: c.ink, fontSize: 15, fontWeight: "700" }}>{t("timeline.title")}</Text>
+        <Text style={{ color: c.ink, fontSize: 15, fontWeight: "700", textAlign: textStart, writingDirection }}>
+          {t("timeline.title")}
+        </Text>
         <Pressable
           onPress={() => router.back()}
           hitSlop={10}
           accessibilityLabel={t("timeline.exitFullscreen")}
-          style={{ flexDirection: "row", alignItems: "center", gap: 4, padding: 6 }}
+          style={{ ...row, gap: 4, padding: 6 }}
         >
           <Ionicons name="contract-outline" size={18} color={c.muted} />
-          <Text style={{ color: c.muted, fontSize: 12 }}>{t("timeline.exitFullscreen")}</Text>
+          <Text style={{ color: c.muted, fontSize: 12, writingDirection }}>{t("timeline.exitFullscreen")}</Text>
         </Pressable>
       </View>
 

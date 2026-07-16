@@ -77,7 +77,7 @@ function DecoBlob({ color, size, top, right, opacity }: { color: string; size: n
 export default function LoginScreen() {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, textLtr } = useLayoutDir();
+  const { textStart, textLtr, writingDirection } = useLayoutDir();
   const router = useRouter();
   const { ready, token, signIn } = useSession();
   const [error, setError] = useState<string | null>(null);

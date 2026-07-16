@@ -7,8 +7,15 @@ import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
 import { confirmDelete } from "./ui";
 import { useSession } from "../session";
+import {
+  ALL_BOTTOM_TAB_IDS,
+  TAB_HREF,
+  TAB_ICON,
+  TAB_LABEL_KEY,
+  useNavPrefs,
+} from "../nav-prefs";
 
-const MENU_ITEMS = [
+const STACK_ITEMS = [
   { href: "/timeline" as const, labelKey: "nav.timeline" as const, icon: "time-outline" as const },
   { href: "/goals" as const, labelKey: "nav.goals" as const, icon: "flag-outline" as const },
   { href: "/library" as const, labelKey: "nav.library" as const, icon: "book-outline" as const },
@@ -17,13 +24,22 @@ const MENU_ITEMS = [
 export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, row, menuAnchor, direction } = useLayoutDir();
+  const { textStart, writingDirection, row, menuAnchor } = useLayoutDir();
   const router = useRouter();
   const { signOut } = useSession();
+  const { isBottomTab } = useNavPrefs();
 
-  function navigate(href: (typeof MENU_ITEMS)[number]["href"]) {
+  const overflowTabs = ALL_BOTTOM_TAB_IDS.filter((id) => !isBottomTab(id)).map((id) => ({
+    href: TAB_HREF[id],
+    labelKey: TAB_LABEL_KEY[id],
+    icon: TAB_ICON[id],
+  }));
+
+  const items = [...overflowTabs, ...STACK_ITEMS];
+
+  function navigate(href: string) {
     onClose();
-    router.push(href);
+    router.push(href as `/${string}`);
   }
 
   function logout() {
@@ -44,7 +60,6 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                 borderWidth: 1,
                 borderRadius: tokens.radius,
                 overflow: "hidden",
-                direction,
               }}
             >
               <Text
@@ -52,14 +67,14 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                   color: c.muted,
                   fontSize: tokens.textXs,
                   fontWeight: "600",
-                  textAlign: textStart,
+                  textAlign: textStart, writingDirection,
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                 }}
               >
                 {t("nav.menu")}
               </Text>
-              {MENU_ITEMS.map(({ href, labelKey, icon }) => (
+              {items.map(({ href, labelKey, icon }) => (
                 <Pressable
                   key={href}
                   onPress={() => navigate(href)}
@@ -72,7 +87,14 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                   })}
                 >
                   <Ionicons name={icon} size={18} color={c.accent} />
-                  <Text style={{ color: c.ink, fontSize: tokens.textSm, flex: 1, textAlign: textStart }}>
+                  <Text
+                    style={{
+                      color: c.ink,
+                      fontSize: tokens.textSm,
+                      flex: 1,
+                      textAlign: textStart, writingDirection,
+                    }}
+                  >
                     {t(labelKey)}
                   </Text>
                 </Pressable>
@@ -90,7 +112,14 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
                 })}
               >
                 <Ionicons name="log-out-outline" size={18} color={c.warn} />
-                <Text style={{ color: c.warn, fontSize: tokens.textSm, flex: 1, textAlign: textStart }}>
+                <Text
+                  style={{
+                    color: c.warn,
+                    fontSize: tokens.textSm,
+                    flex: 1,
+                    textAlign: textStart, writingDirection,
+                  }}
+                >
                   {t("nav.logout")}
                 </Text>
               </Pressable>

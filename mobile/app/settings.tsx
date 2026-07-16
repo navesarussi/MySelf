@@ -9,16 +9,22 @@ import { useColors, tokens } from "../src/theme";
 import { useSession, API_URL } from "../src/session";
 import { Btn, Card, Chip, Row, Screen, SectionTitle, confirmDelete } from "../src/components/ui";
 import { getAppVersion } from "../src/version";
+import {
+  ALL_BOTTOM_TAB_IDS,
+  TAB_LABEL_KEY,
+  useNavPrefs,
+} from "../src/nav-prefs";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SettingsScreen() {
   const c = useColors();
   const { t, locale, setLocale } = useI18n();
-  const { textStart, textLtr } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   const version = getAppVersion();
   const { signOut } = useSession();
   const { run, busy } = useMutate();
+  const { bottomTabs, toggleBottomTab } = useNavPrefs();
   const syncQ = useApi(api.syncStatus);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
@@ -51,7 +57,14 @@ export default function SettingsScreen() {
     <Screen title={t("settings.title")} subtitle={t("settings.subtitle")} refreshing={syncQ.loading} onRefresh={syncQ.refresh}>
       <SectionTitle>{t("language.label")}</SectionTitle>
       <Card>
-        <Text style={{ color: c.muted, fontSize: tokens.textSm, textAlign: textStart, marginBottom: 8 }}>
+        <Text
+          style={{
+            color: c.muted,
+            fontSize: tokens.textSm,
+            textAlign: textStart, writingDirection,
+            marginBottom: 8,
+          }}
+        >
           {t("language.hint")}
         </Text>
         <Row>
@@ -60,9 +73,52 @@ export default function SettingsScreen() {
         </Row>
       </Card>
 
+      <SectionTitle>{t("settings.bottomTabs")}</SectionTitle>
+      <Card>
+        <Text
+          style={{
+            color: c.muted,
+            fontSize: tokens.textSm,
+            textAlign: textStart, writingDirection,
+            marginBottom: 8,
+          }}
+        >
+          {t("settings.bottomTabsHint")}
+        </Text>
+        <Row wrap>
+          {ALL_BOTTOM_TAB_IDS.map((id) => (
+            <Chip
+              key={id}
+              label={t(TAB_LABEL_KEY[id])}
+              active={bottomTabs.includes(id)}
+              onPress={() => toggleBottomTab(id)}
+            />
+          ))}
+        </Row>
+        {bottomTabs.length <= 1 ? (
+          <Text
+            style={{
+              color: c.muted,
+              fontSize: tokens.textXs,
+              textAlign: textStart, writingDirection,
+              marginTop: 8,
+            }}
+          >
+            {t("settings.bottomTabsMin")}
+          </Text>
+        ) : null}
+      </Card>
+
       <SectionTitle>{t("settings.appVersion")}</SectionTitle>
       <Card>
-        <Text style={{ color: c.ink, fontSize: tokens.text, fontWeight: "600", textAlign: textStart }}>
+        <Text
+          style={{
+            color: c.ink,
+            fontSize: tokens.text,
+            fontWeight: "600",
+            textAlign: textStart, writingDirection,
+          }}
+        >
           {t("settings.versionValue", { version })}
         </Text>
       </Card>
@@ -71,16 +127,30 @@ export default function SettingsScreen() {
       <Card>
         {syncQ.data?.connected ? (
           <>
-            <Text style={{ color: c.good, textAlign: textStart }}>
+            <Text style={{ color: c.good, textAlign: textStart, writingDirection }}>
               ✓ {t("settings.connected")} · {syncQ.data.eventCount ?? 0} {t("settings.importedEvents")}
             </Text>
-            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textXs,
+                textAlign: textStart, writingDirection,
+                marginTop: 4,
+              }}
+            >
               {t("settings.lastSync")}:{" "}
               {syncQ.data.lastSyncAt
                 ? new Date(syncQ.data.lastSyncAt).toLocaleString(locale === "he" ? "he-IL" : "en-US")
                 : t("common.notSyncedYet")}
             </Text>
-            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 2 }}>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textXs,
+                textAlign: textStart, writingDirection,
+                marginTop: 2,
+              }}
+            >
               {t("settings.autoSync")}
             </Text>
             <Row style={{ marginTop: 10 }}>
@@ -89,14 +159,23 @@ export default function SettingsScreen() {
           </>
         ) : (
           <>
-            <Text style={{ color: c.muted, textAlign: textStart }}>{t("settings.reconnectHint")}</Text>
+            <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>
+              {t("settings.reconnectHint")}
+            </Text>
             <Row style={{ marginTop: 10 }}>
               <Btn small label={t("common.signInGoogle")} onPress={connectGoogle} />
             </Row>
           </>
         )}
         {syncMessage ? (
-          <Text style={{ color: c.accent, fontSize: tokens.textXs, textAlign: textStart, marginTop: 8 }}>
+          <Text
+            style={{
+              color: c.accent,
+              fontSize: tokens.textXs,
+              textAlign: textStart, writingDirection,
+              marginTop: 8,
+            }}
+          >
             {syncMessage}
           </Text>
         ) : null}

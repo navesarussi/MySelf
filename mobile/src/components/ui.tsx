@@ -6,7 +6,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -33,24 +32,38 @@ export function Screen({
   headerRight?: React.ReactNode;
 }) {
   const c = useColors();
-  const { direction, textStart } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: c.bg, direction }}
-      contentContainerStyle={{ padding: tokens.padLg, paddingBottom: 48, direction }}
+      style={{ flex: 1, backgroundColor: c.bg }}
+      contentContainerStyle={{ padding: tokens.padLg, paddingBottom: 48 }}
       refreshControl={
         onRefresh ? (
           <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.accent} />
         ) : undefined
       }
     >
-      <View style={[styles.headerRow]}>
+      <View style={[row, { gap: 8, marginBottom: 14 }]}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: c.ink, fontSize: tokens.title, fontWeight: "700", textAlign: textStart }}>
+          <Text
+            style={{
+              color: c.ink,
+              fontSize: tokens.title,
+              fontWeight: "700",
+              textAlign: textStart, writingDirection,
+            }}
+          >
             {title}
           </Text>
           {subtitle ? (
-            <Text style={{ color: c.muted, fontSize: tokens.subtitle, marginTop: 2, textAlign: textStart }}>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.subtitle,
+                marginTop: 2,
+                textAlign: textStart, writingDirection,
+              }}
+            >
               {subtitle}
             </Text>
           ) : null}
@@ -64,7 +77,6 @@ export function Screen({
 
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
   const c = useColors();
-  const { direction } = useLayoutDir();
   return (
     <View
       style={[
@@ -75,7 +87,6 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
           borderRadius: tokens.radius,
           padding: tokens.pad,
           marginBottom: 10,
-          direction,
         },
         style,
       ]}
@@ -96,13 +107,7 @@ export function Row({
 }) {
   const { row } = useLayoutDir();
   return (
-    <View
-      style={[
-        row, { gap: 8 },
-        wrap ? { flexWrap: "wrap" } : null,
-        style,
-      ]}
-    >
+    <View style={[row, { gap: 8 }, wrap ? { flexWrap: "wrap" } : null, style]}>
       {children}
     </View>
   );
@@ -118,6 +123,7 @@ export function Chip({
   onPress: () => void;
 }) {
   const c = useColors();
+  const { writingDirection } = useLayoutDir();
   return (
     <Pressable
       onPress={onPress}
@@ -128,7 +134,14 @@ export function Chip({
         paddingVertical: 6,
       }}
     >
-      <Text style={{ color: active ? c.bg : c.muted, fontSize: tokens.textXs, fontWeight: "600" }}>
+      <Text
+        style={{
+          color: active ? c.bg : c.muted,
+          fontSize: tokens.textXs,
+          fontWeight: "600",
+          writingDirection,
+        }}
+      >
         {label}
       </Text>
     </Pressable>
@@ -149,6 +162,7 @@ export function Btn({
   small?: boolean;
 }) {
   const c = useColors();
+  const { writingDirection } = useLayoutDir();
   const bg = variant === "primary" ? c.accent : variant === "warn" ? c.warn + "26" : "transparent";
   const fg = variant === "primary" ? c.bg : variant === "warn" ? c.warn : c.muted;
   return (
@@ -166,7 +180,14 @@ export function Btn({
         alignItems: "center",
       }}
     >
-      <Text style={{ color: fg, fontSize: small ? tokens.textXs : tokens.text, fontWeight: "600" }}>
+      <Text
+        style={{
+          color: fg,
+          fontSize: small ? tokens.textXs : tokens.text,
+          fontWeight: "600",
+          writingDirection,
+        }}
+      >
         {label}
       </Text>
     </Pressable>
@@ -175,7 +196,7 @@ export function Btn({
 
 export function Input(props: TextInputProps) {
   const c = useColors();
-  const { textStart } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   return (
     <TextInput
       placeholderTextColor={c.muted}
@@ -189,7 +210,7 @@ export function Input(props: TextInputProps) {
           paddingVertical: 9,
           color: c.ink,
           fontSize: tokens.text,
-          textAlign: textStart,
+          textAlign: textStart, writingDirection,
           marginBottom: 8,
         },
         props.style,
@@ -200,9 +221,16 @@ export function Input(props: TextInputProps) {
 
 export function Label({ children }: { children: string }) {
   const c = useColors();
-  const { textStart } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   return (
-    <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 4, textAlign: textStart }}>
+    <Text
+      style={{
+        color: c.muted,
+        fontSize: tokens.textXs,
+        marginBottom: 4,
+        textAlign: textStart, writingDirection,
+      }}
+    >
       {children}
     </Text>
   );
@@ -216,6 +244,7 @@ export function Badge({
   tone?: "default" | "accent" | "warn" | "good";
 }) {
   const c = useColors();
+  const { writingDirection } = useLayoutDir();
   const map = {
     default: { bg: c.border + "99", fg: c.muted },
     accent: { bg: c.accent + "26", fg: c.accent },
@@ -225,7 +254,7 @@ export function Badge({
   const { bg, fg } = map[tone];
   return (
     <View style={{ backgroundColor: bg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
-      <Text style={{ color: fg, fontSize: tokens.textXs }}>{label}</Text>
+      <Text style={{ color: fg, fontSize: tokens.textXs, writingDirection }}>{label}</Text>
     </View>
   );
 }
@@ -264,9 +293,18 @@ export function Checkbox({
 
 export function EmptyState({ text }: { text: string }) {
   const c = useColors();
+  const { writingDirection } = useLayoutDir();
   return (
     <Card>
-      <Text style={{ color: c.muted, fontSize: tokens.text, textAlign: "center", paddingVertical: 12 }}>
+      <Text
+        style={{
+          color: c.muted,
+          fontSize: tokens.text,
+          textAlign: "center",
+          paddingVertical: 12,
+          writingDirection,
+        }}
+      >
         {text}
       </Text>
     </Card>
@@ -285,10 +323,10 @@ export function Loading() {
 export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   return (
     <Card style={{ borderColor: c.warn }}>
-      <Text style={{ color: c.warn, textAlign: textStart }}>{message}</Text>
+      <Text style={{ color: c.warn, textAlign: textStart, writingDirection }}>{message}</Text>
       {onRetry ? (
         <View style={{ marginTop: 8, alignSelf: "flex-start" }}>
           <Btn small variant="ghost" label={t("common.loading")} onPress={onRetry} />
@@ -300,7 +338,7 @@ export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () 
 
 export function SectionTitle({ children }: { children: string }) {
   const c = useColors();
-  const { textStart } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   return (
     <Text
       style={{
@@ -309,7 +347,7 @@ export function SectionTitle({ children }: { children: string }) {
         fontWeight: "700",
         marginTop: 14,
         marginBottom: 8,
-        textAlign: textStart,
+        textAlign: textStart, writingDirection,
       }}
     >
       {children}
@@ -329,12 +367,3 @@ export function confirmDelete(title: string, onConfirm: () => void, confirmLabel
     { text: confirmLabel, style: "destructive", onPress: onConfirm },
   ]);
 }
-
-const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 14,
-  },
-});

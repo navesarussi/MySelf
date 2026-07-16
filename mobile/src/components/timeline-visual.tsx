@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useColors, tokens } from "../theme";
 import { useI18n } from "../i18n";
+import { useLayoutDir } from "../layout-dir";
 import { TimelineCanvas } from "./timeline/timeline-canvas";
 import type { LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
@@ -23,17 +24,17 @@ export function TimelineVisual({
 }) {
   const c = useColors();
   const { t } = useI18n();
+  const { row, writingDirection } = useLayoutDir();
   const router = useRouter();
 
   return (
     <View>
-      <View style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 }}>
+      <View style={{ ...row, justifyContent: "flex-start", marginBottom: 8 }}>
         <Pressable
           onPress={() => router.push("/timeline-full")}
           hitSlop={6}
           style={{
-            flexDirection: "row",
-            alignItems: "center",
+            ...row,
             gap: 5,
             borderWidth: 1,
             borderColor: c.accent + "55",

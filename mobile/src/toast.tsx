@@ -13,7 +13,7 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const c = useColors();
-  const { textStart } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   const [message, setMessage] = useState<string | null>(null);
   const [tone, setTone] = useState<ToastTone>("success");
   const opacity = useRef(new Animated.Value(0)).current;
@@ -62,7 +62,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               elevation: 6,
             }}
           >
-            <Text style={{ color: c.bg, fontSize: tokens.textSm, fontWeight: "600", textAlign: textStart }}>
+            <Text style={{ color: c.bg, fontSize: tokens.textSm, fontWeight: "600", textAlign: textStart, writingDirection }}>
               {message}
             </Text>
           </View>

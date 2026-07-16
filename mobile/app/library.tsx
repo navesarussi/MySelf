@@ -36,7 +36,7 @@ const emptyForm: FormState = { title: "", category: "", body: "", tags: "" };
 export default function LibraryScreen() {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, textLtr } = useLayoutDir();
+  const { textStart, textLtr, writingDirection } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy } = useMutate();
@@ -119,7 +119,7 @@ export default function LibraryScreen() {
             <Pressable onPress={() => setExpanded(open ? null : entry.id)}>
               <Row>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart }}>{entry.title}</Text>
+                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>{entry.title}</Text>
                   <Row style={{ justifyContent: "flex-start", marginTop: 4 }} wrap>
                     <Badge label={entry.category} tone="accent" />
                     {entry.tags.map((tag) => (
@@ -129,7 +129,7 @@ export default function LibraryScreen() {
                 </View>
               </Row>
               <Text
-                style={{ color: c.muted, fontSize: tokens.textSm, lineHeight: 20, textAlign: textStart, marginTop: 6 }}
+                style={{ color: c.muted, fontSize: tokens.textSm, lineHeight: 20, textAlign: textStart, writingDirection, marginTop: 6 }}
                 numberOfLines={open ? undefined : 3}
               >
                 {entry.body}

@@ -29,7 +29,7 @@ export function FormModal({
 }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, row, direction } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
@@ -45,16 +45,15 @@ export function FormModal({
             borderColor: c.border,
             borderWidth: 1,
             maxHeight: "85%",
-            direction,
           }}
         >
-          <ScrollView contentContainerStyle={{ padding: tokens.padLg, direction }}>
+          <ScrollView contentContainerStyle={{ padding: tokens.padLg }}>
             <Text
               style={{
                 color: c.ink,
                 fontSize: 17,
                 fontWeight: "700",
-                textAlign: textStart,
+                textAlign: textStart, writingDirection,
                 marginBottom: 12,
               }}
             >

@@ -58,7 +58,7 @@ function isOverdue(r: Relationship, today: Date): boolean {
 export default function RelationshipsScreen() {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, textLtr } = useLayoutDir();
+  const { textStart, textLtr, writingDirection } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy } = useMutate();
@@ -183,21 +183,21 @@ export default function RelationshipsScreen() {
                 }
               >
                 <Row style={{ justifyContent: "flex-start" }} wrap>
-                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart }}>{r.name}</Text>
+                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>{r.name}</Text>
                   {r.group_name ? <Badge label={r.group_name} /> : null}
                 </Row>
                 <Text
                   style={{
                     color: overdue ? c.warn : c.muted,
                     fontSize: tokens.textXs,
-                    textAlign: textStart,
+                    textAlign: textStart, writingDirection,
                     marginTop: 2,
                   }}
                 >
                   {days === null ? t("relationships.noContactLogged") : t("relationships.lastContactDays", { days })}
                 </Text>
                 {r.notes ? (
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
+                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 4 }}>
                     {r.notes}
                   </Text>
                 ) : null}

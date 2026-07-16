@@ -9,16 +9,29 @@ import { Loading } from "../../src/components/ui";
 import { AddMenuModal } from "../../src/components/add-menu";
 import { AppTopBar } from "../../src/components/app-top-bar";
 import { MoreMenuModal } from "../../src/components/more-menu";
+import { TAB_ICON, TAB_LABEL_KEY, type BottomTabId, useNavPrefs } from "../../src/nav-prefs";
 
 export default function TabsLayout() {
   const { ready, token } = useSession();
   const { t } = useI18n();
   const c = useColors();
+  const { ready: prefsReady, isBottomTab } = useNavPrefs();
   const [addOpen, setAddOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  if (!ready) return <Loading />;
+  if (!ready || !prefsReady) return <Loading />;
   if (!token) return <Redirect href="/login" />;
+
+  function tabOptions(id: BottomTabId) {
+    const visible = isBottomTab(id);
+    return {
+      title: t(TAB_LABEL_KEY[id]),
+      href: visible ? undefined : (null as null),
+      tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+        <Ionicons name={TAB_ICON[id]} color={color} size={size} />
+      ),
+    };
+  }
 
   return (
     <>
@@ -33,22 +46,8 @@ export default function TabsLayout() {
           tabBarLabelStyle: { fontSize: 10 },
         }}
       >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: t("nav.home"),
-            tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />,
-          }}
-        />
-        <Tabs.Screen
-          name="tasks"
-          options={{
-            title: t("nav.tasks"),
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="checkbox-outline" color={color} size={size} />
-            ),
-          }}
-        />
+        <Tabs.Screen name="index" options={tabOptions("index")} />
+        <Tabs.Screen name="tasks" options={tabOptions("tasks")} />
         <Tabs.Screen
           name="add"
           options={{
@@ -88,22 +87,8 @@ export default function TabsLayout() {
             },
           }}
         />
-        <Tabs.Screen
-          name="habits"
-          options={{
-            title: t("nav.habits"),
-            tabBarIcon: ({ color, size }) => <Ionicons name="repeat" color={color} size={size} />,
-          }}
-        />
-        <Tabs.Screen
-          name="relationships"
-          options={{
-            title: t("nav.relationships"),
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="people-outline" color={color} size={size} />
-            ),
-          }}
-        />
+        <Tabs.Screen name="habits" options={tabOptions("habits")} />
+        <Tabs.Screen name="relationships" options={tabOptions("relationships")} />
       </Tabs>
       <AddMenuModal visible={addOpen} onClose={() => setAddOpen(false)} />
       <MoreMenuModal visible={moreOpen} onClose={() => setMoreOpen(false)} />

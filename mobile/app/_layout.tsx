@@ -1,6 +1,6 @@
 import "react-native-gesture-handler";
 import React, { useEffect } from "react";
-import { Platform, View } from "react-native";
+import { Platform } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -11,17 +11,12 @@ import { AntDesign, Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
 import { SessionProvider } from "../src/session";
 import { I18nProvider, useI18n } from "../src/i18n";
-import { useLayoutDir } from "../src/layout-dir";
+import { NavPrefsProvider } from "../src/nav-prefs";
 import { ThemeProvider, useColors } from "../src/theme";
 import { ToastProvider } from "../src/toast";
 import { ErrorBoundary } from "../src/components/error-boundary";
 
 SplashScreen.preventAutoHideAsync();
-
-function DirectionRoot({ children }: { children: React.ReactNode }) {
-  const { direction } = useLayoutDir();
-  return <View style={{ flex: 1, direction }}>{children}</View>;
-}
 
 function AppStack() {
   const c = useColors();
@@ -76,7 +71,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <I18nProvider>
-            <DirectionRoot>
+            <NavPrefsProvider>
               <SessionProvider>
                 <ToastProvider>
                   <ErrorBoundary>
@@ -84,7 +79,7 @@ export default function RootLayout() {
                   </ErrorBoundary>
                 </ToastProvider>
               </SessionProvider>
-            </DirectionRoot>
+            </NavPrefsProvider>
           </I18nProvider>
         </ThemeProvider>
       </SafeAreaProvider>

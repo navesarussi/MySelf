@@ -35,7 +35,7 @@ export function TaskCard({
 }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   const done = task.status === "done";
 
   const Body = (
@@ -43,7 +43,7 @@ export function TaskCard({
       <Text
         style={{
           color: c.ink,
-          textAlign: textStart,
+          textAlign: textStart, writingDirection,
           fontWeight: "600",
           textDecorationLine: done ? "line-through" : "none",
         }}
@@ -59,7 +59,14 @@ export function TaskCard({
         {task.due_date ? <Badge label={`${t("common.due")}: ${task.due_date}`} /> : null}
       </Row>
       {task.notes ? (
-        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, marginTop: 4 }}>
+        <Text
+          style={{
+            color: c.muted,
+            fontSize: tokens.textXs,
+            textAlign: textStart, writingDirection,
+            marginTop: 4,
+          }}
+        >
           {task.notes}
         </Text>
       ) : null}

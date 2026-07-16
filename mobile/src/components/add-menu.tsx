@@ -23,7 +23,7 @@ const MENU_ITEMS: { target: AddTarget; icon: keyof typeof Ionicons.glyphMap }[] 
 export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, row, direction } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
   const router = useRouter();
   const items = MENU_ITEMS.filter((i) => SHOW_PROJECTS || i.target !== "project");
 
@@ -44,7 +44,6 @@ export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: 
                 borderWidth: 1,
                 borderRadius: tokens.radius,
                 overflow: "hidden",
-                direction,
               }}
             >
               <Text
@@ -52,7 +51,7 @@ export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: 
                   color: c.muted,
                   fontSize: tokens.textXs,
                   fontWeight: "600",
-                  textAlign: textStart,
+                  textAlign: textStart, writingDirection,
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                 }}
@@ -72,7 +71,14 @@ export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: 
                   })}
                 >
                   <Ionicons name={icon} size={16} color={c.accent} />
-                  <Text style={{ color: c.ink, fontSize: tokens.textSm, flex: 1, textAlign: textStart }}>
+                  <Text
+                    style={{
+                      color: c.ink,
+                      fontSize: tokens.textSm,
+                      flex: 1,
+                      textAlign: textStart, writingDirection,
+                    }}
+                  >
                     {t(`addMenu.${target}`)}
                   </Text>
                 </Pressable>
