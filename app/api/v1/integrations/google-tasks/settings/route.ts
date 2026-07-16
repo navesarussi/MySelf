@@ -1,0 +1,60 @@
+import { NextRequest, NextResponse } from "next/server";
+import { isApiAuthorized, unauthorized, badRequest, dbError, readJson } from "@/lib/api/auth";
+import { GOOGLE_TASKS_PROVIDER } from "@/lib/integrations/google-config";
+import { getTokenSettings, updateTokenSettings } from "@/lib/integrations/tokens";
+import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
+
+type GoogleTasksSettings = {
+  selected_list_ids: string[];
+  pull_completed?: boolean;
+};
+
+export async function GET(req: NextRequest) {
+  if (!(await isApiAuthorized(req))) return unauthorized();
+
+  try {
+    const settings = await getTokenSettings<GoogleTasksSettings>(GOOGLE_TASKS_PROVIDER);
+    return NextResponse.json({
+      selected_list_ids: settings.selected_list_ids ?? [],
+      pull_completed: settings.pull_completed ?? false,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "fetch_failed";
+    console.error("[google-tasks-settings-get]", message);
+    return dbError(message);
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  if (!(await isApiAuthorized(req))) return unauthorized();
+
+  const body = await readJson(req);
+  const selectedListIds = body.selected_list_ids;
+
+  if (!Array.isArray(selectedListIds) || !selectedListIds.every((id) => typeof id === "string")) {
+    return badRequest("selected_list_ids must be string[]");
+  }
+
+  try {
+    const currentSettings = await getTokenSettings<GoogleTasksSettings>(GOOGLE_TASKS_PROVIDER);
+    const newSettings: GoogleTasksSettings = {
+      selected_list_ids: selectedListIds,
+      pull_completed: body.pull_completed ?? currentSettings.pull_completed ?? false,
+    };
+
+    await updateTokenSettings(GOOGLE_TASKS_PROVIDER, newSettings);
+
+    const syncResult = await syncTaskSource("google_tasks");
+    return NextResponse.json({
+      success: true,
+      settings: newSettings,
+      imported: syncResult.imported,
+      markedDone: syncResult.markedDone,
+      alreadyRunning: syncResult.alreadyRunning,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "update_failed";
+    console.error("[google-tasks-settings-patch]", message);
+    return dbError(message);
+  }
+}
