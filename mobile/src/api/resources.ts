@@ -28,6 +28,14 @@ export type HomePayload = {
   inProgressTasksCount: number;
 };
 
+export type GoogleTasksStatusPayload = {
+  connected: boolean;
+  syncStatus?: "idle" | "running" | "completed" | "failed";
+  lastSyncAt?: string | null;
+  taskCount?: number;
+  selected_list_ids?: string[];
+};
+
 export type SyncStatusPayload = {
   connected: boolean;
   syncStatus?: "idle" | "running" | "completed" | "failed";
@@ -145,7 +153,7 @@ export const api = {
       { method: "POST", body: {} }
     ),
 
-  googleTasksStatus: (c: ApiConfig) => apiFetch(c, "/integrations/google-tasks/status"),
+  googleTasksStatus: (c: ApiConfig) => apiFetch<GoogleTasksStatusPayload>(c, "/integrations/google-tasks/status"),
   googleTasksLists: (c: ApiConfig) => apiFetch<{ id: string; title: string }[]>(c, "/integrations/google-tasks/lists"),
   patchGoogleTasksSettings: (c: ApiConfig, body: { selected_list_ids: string[] }) =>
     apiFetch(c, "/integrations/google-tasks/settings", { method: "PATCH", body }),
