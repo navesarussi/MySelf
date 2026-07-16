@@ -49,10 +49,11 @@ export default function SettingsScreen() {
       setAvailableLists(lists);
     } catch {
       setAvailableLists([]);
+      setTasksSyncMessage(t("settings.googleTasksListsFailed"));
     } finally {
       setListsLoading(false);
     }
-  }, [token, serverUrl, googleTasksQ.data?.connected]);
+  }, [token, serverUrl, googleTasksQ.data?.connected, t]);
 
   useEffect(() => {
     if (googleTasksQ.data?.connected) {
