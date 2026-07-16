@@ -1,0 +1,23 @@
+---
+description: Website frozen — only mobile app work until user says otherwise
+alwaysApply: true
+---
+
+# Scope: mobile app only (website frozen)
+
+As of 2026-07-16 the **website is out of scope**. Do not change Next.js UI/pages until the user explicitly lifts this freeze.
+
+## In scope
+- `mobile/` (Expo / React Native app) — primary product
+- Shared backend only when the app needs it: `app/api/**`, `lib/**` (outside `mobile/`), `supabase/**`
+
+## Out of scope (do not touch)
+- Website UI/pages: `app/**/page.tsx`, `app/**/layout.tsx` (except API routes), `components/**` used by the Next.js site
+- Website-only styling, nav, or feature work “for parity”
+
+## Examples
+- ❌ Adding a Google Tasks panel to `app/tasks/page.tsx`
+- ✅ Sync + API under `app/api/**` + UI in `mobile/app/(tabs)/tasks.tsx`
+- ✅ Migration in `supabase/` consumed by the mobile app
+
+If a request is ambiguous, assume **mobile only**. Backend changes are allowed solely to serve the app.
