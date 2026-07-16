@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
+import { selectHomeEvents } from "@/lib/home-events";
 import type { Task } from "@/lib/types";
 
 type TaskRow = Task & { projects: { name: string } | null };
@@ -33,13 +34,14 @@ export async function GET(req: NextRequest) {
       .order("commitment_date", { ascending: false }),
     supabase
       .from("relationships")
-      .select("id, name, last_contact_date, reminder_days, phone")
+      .select("id, name, last_contact_date, reminder_days, phone, email")
       .order("name"),
     supabase
       .from("timeline_events")
       .select("*")
+      .is("hidden_at", null)
       .order("event_date", { ascending: false })
-      .limit(30),
+      .limit(200),
     supabase
       .from("tasks")
       .select("*, projects(name)")
@@ -48,11 +50,13 @@ export async function GET(req: NextRequest) {
     supabase.from("projects").select("*").order("sort_order"),
     supabase
       .from("content_entries")
-      .select("id, title, category, tags, updated_at")
+      .select("id, title, category, tags, body, updated_at")
       .order("updated_at", { ascending: false })
       .limit(20),
     supabase.from("tasks").select("id, status"),
   ]);
+
+  const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
 
   const openTasks = ((tasksRes.data as TaskRow[]) || []).map((row) => ({
     ...row,
@@ -67,7 +71,8 @@ export async function GET(req: NextRequest) {
     doneGoalsCount: doneGoalsRes.count || 0,
     pendingCommitments: commitmentsRes.data || [],
     relationships: relRes.data || [],
-    recentEvents: eventsRes.data || [],
+    recentEvents: selected.events,
+    eventsMode: selected.mode,
     openTasks,
     projects: projectsRes.data || [],
     libraryEntries: libraryRes.data || [],
