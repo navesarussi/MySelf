@@ -23,6 +23,7 @@ npm run dev
 | `GOOGLE_CLIENT_ID` | OAuth client ID מ-Google Cloud |
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
 | `GOOGLE_REDIRECT_URI` | Callback, למשל `http://localhost:3000/api/auth/google/callback` |
+| `GOOGLE_TASKS_REDIRECT_URI` | Callback למשימות גוגל, בפרודקשן: `https://myselfapp.xyz/api/integrations/google-tasks/callback` |
 | `CRON_SECRET` | מחרוזת סודית לאימות סנכרון שבועי (Vercel Cron) |
 
 ## Google Sign-In + יומן

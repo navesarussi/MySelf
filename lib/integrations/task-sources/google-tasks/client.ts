@@ -3,14 +3,19 @@ import { GOOGLE_TASKS_PROVIDER, GOOGLE_TASKS_SCOPE } from "../../google-config";
 import { getIntegrationToken, saveIntegrationToken } from "../../tokens";
 import type { GoogleTaskList, GoogleTaskListResponse, GoogleTasksResponse } from "./types";
 
-function googleTasksRedirectUri(): string {
-  const origin = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
-  return (
-    process.env.GOOGLE_TASKS_REDIRECT_URI ??
-    `${origin}/api/integrations/google-tasks/callback`
-  );
+export function googleTasksRedirectUri(): string {
+  if (process.env.GOOGLE_TASKS_REDIRECT_URI) {
+    return process.env.GOOGLE_TASKS_REDIRECT_URI;
+  }
+  // Prefer stable production domain — VERCEL_URL is often *.vercel.app and
+  // causes Google redirect_uri_mismatch against the Console allowlist.
+  if (process.env.VERCEL_ENV === "production") {
+    return "https://myselfapp.xyz/api/integrations/google-tasks/callback";
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/api/integrations/google-tasks/callback`;
+  }
+  return "http://localhost:3000/api/integrations/google-tasks/callback";
 }
 
 export function googleTasksAuthUrl(state: string): string {
