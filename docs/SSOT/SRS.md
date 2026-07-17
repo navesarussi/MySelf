@@ -3,7 +3,12 @@
 ## Scope
 Personal private dashboard: timeline, habits/goals, relationships, content library, tasks.
 
+**Primary product surfaces:** Expo/React Native mobile app, and the same Expo app on the web at the production domain root. The Next.js website UI is preserved under `/legacy` (not deleted). Next.js continues to host `/api/**` and `/privacy`.
+
 ## Requirements
+
+### FR-WEB-PRIMARY-01
+The production domain root serves the Expo web SPA (exported into `public/spa`, rewritten by `proxy.ts`). `/api/**`, `/privacy`, and `/legacy/**` remain on Next.js. The previous website pages live under `/legacy` without being deleted.
 
 ### FR-AUTH-GOOGLE-01
 Site access via Google Sign-In (openid, email, profile, calendar.readonly). Only `ALLOWED_GOOGLE_EMAIL` may enter when configured.
@@ -44,8 +49,35 @@ User may set local title/description overrides on calendar events; re-sync prese
 ### FR-INT-GCAL-04
 Manual sync on demand plus daily automatic background sync (skipped if already synced within 24 hours). Sync runs in the background with progress indicator; `last_sync_at` updates only after a full successful sync.
 
+### FR-INT-TASKS-01
+Tasks support a `source` of `manual` or an external provider id. The mobile Tasks screen shows a unified list of all sources.
+
+### FR-INT-TASKS-02
+External task providers implement a shared port (list sources, pull open tasks, complete, reopen) and register in a central registry.
+
+### FR-INT-TASKS-03
+User connects Google Tasks via OAuth (`tasks` scope), selects which task lists to sync, and may sync manually or via daily cron.
+
+### FR-INT-TASKS-04
+V1 pull imports only open Google tasks from selected lists into `myself.tasks` with `project_id` null and generic external identity columns.
+
+### FR-INT-TASKS-05
+Completing or reopening a Google-sourced task in the app updates Google Tasks; failure reverts the local status and shows an error toast.
+
+### FR-INT-TASKS-06
+External-sourced task title/due/notes are read-only in V1. Priority may be edited locally without write-back.
+
+### FR-INT-TASKS-07
+Mobile Settings exposes Google Tasks connection, list picker, sync status, and Sync now. Website UI is out of scope.
+
 ### FR-INT-WA-01
 Optional phone number on relationships; when set, show WhatsApp quick-link via `wa.me`.
+
+### FR-REL-EMAIL
+Relationships may store an optional email. Mobile form and create/update APIs include the field.
+
+### FR-REL-DEVICE-IMPORT
+Creating a relationship on mobile offers the system contact picker after permission. Selection pre-fills name, primary phone, and primary email; fields remain editable. Dismiss/deny → empty form. Secondary import control remains on the form.
 
 ### FR-HABIT-01
 Dedicated Habits tab (`/habits`) separate from goals/dreams (`/goals`).
@@ -54,6 +86,14 @@ Successful days and best streak persist after a missed day.
 
 ### FR-HOME-01
 Home page is a data dashboard (no module shortcut cards). Shows aggregated stats for habits, goals, tasks, relationships, timeline.
+
+### FR-HOME-02
+Home relationships list shows only contacts due today or overdue (`days_since_last_contact >= reminder_days`).
+Home events show the next 10 upcoming events (title: upcoming); if none exist in the current calendar year, show the 10 most recent past events.
+Library and goal cards on home support open/edit/delete via the same forms as their tabs.
+
+### FR-HOME-03
+Home stats show at least 8 compact metrics without enlarging the stats block beyond denser cards.
 
 ### FR-TL-04
 Visual timeline supports deep zoom down to hourly divisions on a specific date (log-scale zoom control, adaptive axis ticks).

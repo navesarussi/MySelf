@@ -24,7 +24,6 @@ export const ALL_BOTTOM_TAB_IDS: BottomTabId[] = [
 export const DEFAULT_BOTTOM_TABS: BottomTabId[] = ["index", "tasks", "habits", "relationships"];
 
 const STORAGE_KEY = "myself.bottomTabs";
-const MAX_BOTTOM_TABS = 4;
 
 type NavPrefsValue = {
   ready: boolean;
@@ -49,7 +48,7 @@ function normalize(ids: unknown): BottomTabId[] {
   );
   const unique = [...new Set(valid)];
   if (unique.length === 0) return [...DEFAULT_BOTTOM_TABS];
-  return unique.slice(0, MAX_BOTTOM_TABS);
+  return unique;
 }
 
 export function NavPrefsProvider({ children }: { children: React.ReactNode }) {
@@ -84,7 +83,6 @@ export function NavPrefsProvider({ children }: { children: React.ReactNode }) {
           if (prev.length <= 1) return prev;
           next = prev.filter((x) => x !== id);
         } else {
-          if (prev.length >= MAX_BOTTOM_TABS) return prev;
           next = [...prev, id];
         }
         AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});

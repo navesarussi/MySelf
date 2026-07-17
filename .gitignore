@@ -9,3 +9,4 @@ supabase/.temp/
 .env*
 tsconfig.tsbuildinfo
 .worktrees/
+public/spa/

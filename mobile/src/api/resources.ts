@@ -19,14 +19,23 @@ export type HomePayload = {
   pendingCommitments: Commitment[];
   relationships: Pick<
     Relationship,
-    "id" | "name" | "last_contact_date" | "reminder_days" | "phone"
+    "id" | "name" | "last_contact_date" | "reminder_days" | "phone" | "email"
   >[];
   recentEvents: TimelineEvent[];
+  eventsMode: "upcoming" | "recent";
   openTasks: Task[];
   projects: Project[];
-  libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "updated_at">[];
+  libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "body" | "updated_at">[];
   openTasksCount: number;
   inProgressTasksCount: number;
+};
+
+export type GoogleTasksStatusPayload = {
+  connected: boolean;
+  syncStatus?: "idle" | "running" | "completed" | "failed";
+  lastSyncAt?: string | null;
+  taskCount?: number;
+  selected_list_ids?: string[];
 };
 
 export type SyncStatusPayload = {
@@ -49,11 +58,16 @@ export const api = {
   deleteProject: (c: ApiConfig, id: string) =>
     apiFetch<{ ok: boolean }>(c, `/projects/${id}`, { method: "DELETE" }),
 
-  tasks: (c: ApiConfig, params?: { project?: string; status?: string; priority?: string }) => {
+  tasks: (
+    c: ApiConfig,
+    params?: { project?: string; status?: string; priority?: string; source?: string; external_list?: string }
+  ) => {
     const sp = new URLSearchParams();
     if (params?.project) sp.set("project", params.project);
     if (params?.status) sp.set("status", params.status);
     if (params?.priority) sp.set("priority", params.priority);
+    if (params?.source) sp.set("source", params.source);
+    if (params?.external_list) sp.set("external_list", params.external_list);
     const qs = sp.toString();
     return apiFetch<Task[]>(c, `/tasks${qs ? `?${qs}` : ""}`);
   },
@@ -150,4 +164,16 @@ export const api = {
       "/sync",
       { method: "POST", body: {} }
     ),
+
+  googleTasksStatus: (c: ApiConfig) => apiFetch<GoogleTasksStatusPayload>(c, "/integrations/google-tasks/status"),
+  googleTasksLists: (c: ApiConfig) => apiFetch<{ id: string; title: string }[]>(c, "/integrations/google-tasks/lists"),
+  patchGoogleTasksSettings: (c: ApiConfig, body: { selected_list_ids: string[] }) =>
+    apiFetch(c, "/integrations/google-tasks/settings", { method: "PATCH", body }),
+  disconnectGoogleTasks: (c: ApiConfig) =>
+    apiFetch(c, "/integrations/google-tasks/disconnect", { method: "POST", body: {} }),
+  syncTaskSources: (c: ApiConfig, provider?: string) =>
+    apiFetch(c, "/integrations/task-sources/sync", {
+      method: "POST",
+      body: provider ? { provider } : {},
+    }),
 };

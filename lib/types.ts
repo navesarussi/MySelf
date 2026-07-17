@@ -75,6 +75,7 @@ export type Relationship = {
   reminder_days: number | null;
   notes: string | null;
   phone: string | null;
+  email: string | null;
   project_id: string;
   project_name?: string;
   created_at: string;
@@ -99,6 +100,7 @@ export type IntegrationToken = {
   sync_status: SyncStatus;
   sync_progress: SyncProgress | null;
   sync_started_at: string | null;
+  settings: Record<string, unknown>;
 };
 
 export type ContentEntry = {
@@ -121,15 +123,28 @@ export type Project = {
 export type TaskPriority = "high" | "medium" | "low";
 export type TaskStatus = "open" | "in_progress" | "done";
 
+export type TaskSource = "manual" | "google_tasks";
+
+export type TaskExternalMeta = {
+  listTitle?: string;
+  deepLink?: string;
+  parentExternalId?: string;
+};
+
 export type Task = {
   id: string;
   title: string;
-  project_id: string;
+  project_id: string | null;
   project_name?: string;
   priority: TaskPriority;
   status: TaskStatus;
   due_date: string | null;
   notes: string | null;
+  source: TaskSource;
+  external_id: string | null;
+  external_list_id: string | null;
+  external_meta: TaskExternalMeta;
+  synced_at: string | null;
   created_at: string;
   updated_at: string;
 };

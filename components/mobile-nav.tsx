@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { CheckSquare, Home, Plus, Repeat, Users, X } from "lucide-react";
 import { useTranslations } from "@/components/locale-provider";
 import { AddMenuList } from "@/components/add-menu-list";
+import { legacyPath } from "@/lib/legacy-path";
 
 /** Phone-only bottom navigation: Home · Tasks · ➕ · Habits · Relationships.
  *  Everything else lives in the top menu on the home screen. */
@@ -28,13 +29,13 @@ export function MobileNav() {
     setOpen(false);
   }, [pathname]);
 
-  if (pathname === "/login") return null;
+  if (pathname === legacyPath("/login")) return null;
 
   const links = [
-    { href: "/", label: t("nav.home"), icon: Home },
-    { href: "/tasks", label: t("nav.tasks"), icon: CheckSquare },
-    { href: "/habits", label: t("nav.habits"), icon: Repeat },
-    { href: "/relationships", label: t("nav.relationships"), icon: Users },
+    { href: legacyPath("/"), label: t("nav.home"), icon: Home },
+    { href: legacyPath("/tasks"), label: t("nav.tasks"), icon: CheckSquare },
+    { href: legacyPath("/habits"), label: t("nav.habits"), icon: Repeat },
+    { href: legacyPath("/relationships"), label: t("nav.relationships"), icon: Users },
   ];
 
   const item = (l: (typeof links)[number]) => {

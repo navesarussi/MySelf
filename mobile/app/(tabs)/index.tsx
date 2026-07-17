@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { differenceInCalendarDays } from "date-fns";
@@ -10,6 +10,8 @@ import { useColors, tokens } from "../../src/theme";
 import { Badge, Btn, Card, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
 import { NEXT_STATUS, TaskCard } from "../../src/components/task-card";
 import { HabitCard } from "../../src/components/habit-card";
+import { HomeGoalModal } from "../../src/components/home-goal-modal";
+import { HomeLibraryModal } from "../../src/components/home-library-modal";
 import {
   dedupeHabits,
   effectiveStreak,
@@ -18,10 +20,11 @@ import {
   todayISO,
 } from "@/lib/habit-stats";
 import { achievabilityScore, horizonLabel, rankGoalsForHome } from "@/lib/goals-rank";
+import { filterDueRelationships } from "@/lib/relationships-due";
 import { displayTitle } from "@/lib/timeline-display";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { whatsappUrl } from "@/lib/integrations/phone";
-import type { Relationship, Task } from "@/lib/types";
+import type { ContentEntry, Goal, Relationship, Task } from "@/lib/types";
 
 function StatCard({
   title,
@@ -37,10 +40,10 @@ function StatCard({
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
   return (
-    <Pressable onPress={onPress} style={{ flex: 1, minWidth: 150 }}>
-      <Card>
+    <Pressable onPress={onPress} style={{ flex: 1, minWidth: 100 }}>
+      <Card style={{ padding: 10 }}>
         <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>{title}</Text>
-        <Text style={{ color: c.ink, fontSize: 20, fontWeight: "700", textAlign: textStart, writingDirection, marginTop: 2 }}>
+        <Text style={{ color: c.ink, fontSize: 16, fontWeight: "700", textAlign: textStart, writingDirection, marginTop: 2 }}>
           {main}
         </Text>
         <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
@@ -51,28 +54,15 @@ function StatCard({
   );
 }
 
-function sortRelationships(relationships: Relationship[], today: Date): Relationship[] {
-  return [...relationships].sort((a, b) => {
-    const overdueScore = (r: Relationship) => {
-      if (r.reminder_days == null) return 0;
-      const days = r.last_contact_date
-        ? differenceInCalendarDays(today, new Date(r.last_contact_date))
-        : Infinity;
-      return days >= r.reminder_days ? 1 : 0;
-    };
-    const diff = overdueScore(b) - overdueScore(a);
-    if (diff !== 0) return diff;
-    return a.name.localeCompare(b.name, "he");
-  });
-}
-
 export default function HomeScreen() {
   const c = useColors();
   const { t, locale } = useI18n();
-  const { textStart, textLtr, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
   const { data, loading, error, refresh } = useApi(api.home);
   const { run } = useMutate();
+  const [goalForm, setGoalForm] = useState<Goal | null>(null);
+  const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags" | "body"> | null>(null);
 
   const today = todayISO();
   const todayDate = new Date();
@@ -94,23 +84,29 @@ export default function HomeScreen() {
   );
 
   const relationships = data?.relationships ?? [];
-  const sortedRelationships = useMemo(
-    () => sortRelationships(relationships as Relationship[], todayDate),
+  const dueRelationships = useMemo(
+    () => filterDueRelationships(relationships as Relationship[], todayDate),
     [relationships, todayDate]
   );
-
-  const overdue = sortedRelationships.filter((r) => {
-    if (r.reminder_days == null) return false;
-    const days = r.last_contact_date
-      ? differenceInCalendarDays(todayDate, new Date(r.last_contact_date))
-      : Infinity;
-    return days >= r.reminder_days;
-  });
 
   const rankedGoals = useMemo(
     () => rankGoalsForHome(data?.activeGoals ?? [], 5, locale),
     [data?.activeGoals, locale]
   );
+
+  const habitsPendingCount = habitsPendingToday.length;
+  const dueSoonTasks = (data?.openTasks ?? []).filter((task) => {
+    if (!task.due_date) return false;
+    const due = new Date(task.due_date);
+    const horizon = new Date(todayDate);
+    horizon.setDate(horizon.getDate() + 7);
+    return due <= horizon;
+  }).length;
+  const bestStreak = uniqueHabits.reduce(
+    (m, h) => Math.max(m, effectiveStreak(h, habitReportDay(h.report_time))),
+    0
+  );
+  const readyGoals = (data?.activeGoals ?? []).filter((g) => achievabilityScore(g) >= 3).length;
 
   async function toggleTaskDone(task: Task) {
     await run(
@@ -159,16 +155,14 @@ export default function HomeScreen() {
             />
             <StatCard
               title={t("home.relationshipsOverdue")}
-              main={String(overdue.length)}
+              main={String(dueRelationships.length)}
               sub={
-                overdue.length
-                  ? t("home.relationshipsNeedAttention", { count: overdue.length })
+                dueRelationships.length
+                  ? t("home.relationshipsNeedAttention", { count: dueRelationships.length })
                   : t("home.allRelationshipsUpToDate")
               }
               onPress={() => router.push("/relationships")}
             />
-          </Row>
-          <Row wrap>
             <StatCard
               title={t("home.activeGoals")}
               main={String(data.activeGoals.length)}
@@ -180,6 +174,30 @@ export default function HomeScreen() {
               main={String(data.openTasksCount + data.inProgressTasksCount)}
               sub={t("home.tasksInProgress", { count: data.inProgressTasksCount })}
               onPress={() => router.push("/tasks")}
+            />
+            <StatCard
+              title={t("home.habitsPendingToday")}
+              main={String(habitsPendingCount)}
+              sub={t("home.habitsPendingSub")}
+              onPress={() => router.push("/habits")}
+            />
+            <StatCard
+              title={t("home.tasksDueSoon")}
+              main={String(dueSoonTasks)}
+              sub={t("home.tasksDueSoonSub")}
+              onPress={() => router.push("/tasks")}
+            />
+            <StatCard
+              title={t("home.bestActiveStreak")}
+              main={String(bestStreak)}
+              sub={t("home.bestActiveStreakSub")}
+              onPress={() => router.push("/habits")}
+            />
+            <StatCard
+              title={t("home.readyGoals")}
+              main={String(readyGoals)}
+              sub={t("home.readyGoalsSub")}
+              onPress={() => router.push("/goals")}
             />
           </Row>
 
@@ -258,22 +276,24 @@ export default function HomeScreen() {
             </Card>
           ) : (
             rankedGoals.map((g) => (
-              <Card key={g.id}>
-                <Row>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>{g.title}</Text>
-                    <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
-                      {[g.category, horizonLabel(g, locale)].filter(Boolean).join(" · ")}
-                    </Text>
-                    {g.first_step ? (
+              <Pressable key={g.id} onPress={() => setGoalForm(g)}>
+                <Card>
+                  <Row>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>{g.title}</Text>
                       <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
-                        {t("common.firstStep")}: {g.first_step}
+                        {[g.category, horizonLabel(g, locale)].filter(Boolean).join(" · ")}
                       </Text>
-                    ) : null}
-                  </View>
-                  {achievabilityScore(g) >= 3 ? <Badge label={t("common.readyToAct")} tone="good" /> : null}
-                </Row>
-              </Card>
+                      {g.first_step ? (
+                        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
+                          {t("common.firstStep")}: {g.first_step}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {achievabilityScore(g) >= 3 ? <Badge label={t("common.readyToAct")} tone="good" /> : null}
+                  </Row>
+                </Card>
+              </Pressable>
             ))
           )}
           {data.pendingCommitments.length > 0 ? (
@@ -316,17 +336,15 @@ export default function HomeScreen() {
           )}
 
           <SectionTitle>{t("home.relationshipsWaiting")}</SectionTitle>
-          {sortedRelationships.length === 0 ? (
+          {dueRelationships.length === 0 ? (
             <Card>
-              <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noRelationships")}</Text>
+              <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noDueRelationships")}</Text>
             </Card>
           ) : (
-            sortedRelationships.map((r) => {
+            dueRelationships.map((r) => {
               const days = r.last_contact_date
                 ? differenceInCalendarDays(todayDate, new Date(r.last_contact_date))
                 : null;
-              const isLate =
-                r.reminder_days != null && (days === null || days >= r.reminder_days);
               const wa = r.phone ? whatsappUrl(r.phone) : null;
               return (
                 <Card key={r.id}>
@@ -335,9 +353,10 @@ export default function HomeScreen() {
                       <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>{r.name}</Text>
                       <Text
                         style={{
-                          color: isLate ? c.warn : c.muted,
+                          color: c.warn,
                           fontSize: tokens.textXs,
-                          textAlign: textStart, writingDirection,
+                          textAlign: textStart,
+                          writingDirection,
                           marginTop: 2,
                         }}
                       >
@@ -369,13 +388,15 @@ export default function HomeScreen() {
             })
           )}
 
-          <SectionTitle>{t("home.recentEvents")}</SectionTitle>
+          <SectionTitle>
+            {data.eventsMode === "upcoming" ? t("home.upcomingEvents") : t("home.recentEvents")}
+          </SectionTitle>
           {data.recentEvents.length === 0 ? (
             <Card>
               <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noEvents")}</Text>
             </Card>
           ) : (
-            data.recentEvents.slice(0, 10).map((ev) => (
+            data.recentEvents.map((ev) => (
               <Card key={ev.id}>
                 <Row>
                   <Text style={{ color: c.ink, flex: 1, textAlign: textStart, writingDirection }}>{displayTitle(ev)}</Text>
@@ -394,14 +415,16 @@ export default function HomeScreen() {
             </Card>
           ) : (
             data.libraryEntries.slice(0, 8).map((entry) => (
-              <Card key={entry.id}>
-                <Row>
-                  <Text style={{ color: c.ink, fontWeight: "600", flex: 1, textAlign: textStart, writingDirection }}>
-                    {entry.title}
-                  </Text>
-                  <Badge label={entry.category} />
-                </Row>
-              </Card>
+              <Pressable key={entry.id} onPress={() => setLibraryForm(entry)}>
+                <Card>
+                  <Row>
+                    <Text style={{ color: c.ink, fontWeight: "600", flex: 1, textAlign: textStart, writingDirection }}>
+                      {entry.title}
+                    </Text>
+                    <Badge label={entry.category} />
+                  </Row>
+                </Card>
+              </Pressable>
             ))
           )}
 
@@ -418,6 +441,9 @@ export default function HomeScreen() {
           </View>
         </>
       ) : null}
+
+      <HomeGoalModal goal={goalForm} onClose={() => setGoalForm(null)} onSaved={refresh} />
+      <HomeLibraryModal entry={libraryForm} onClose={() => setLibraryForm(null)} onSaved={refresh} />
     </Screen>
   );
 }

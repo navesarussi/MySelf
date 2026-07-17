@@ -40,6 +40,7 @@ export default function TabsLayout() {
           headerShown: true,
           header: () => <AppTopBar onMenuPress={() => setMoreOpen(true)} />,
           headerShadowVisible: false,
+          tabBarScrollEnabled: true,
           tabBarStyle: { backgroundColor: c.surface, borderTopColor: c.border, height: 60 },
           tabBarActiveTintColor: c.accent,
           tabBarInactiveTintColor: c.muted,

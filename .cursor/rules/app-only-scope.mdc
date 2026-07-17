@@ -1,23 +1,28 @@
 ---
-description: Website frozen — only mobile app work until user says otherwise
+description: Expo app is primary (mobile + web domain); legacy Next UI under /legacy
 alwaysApply: true
 ---
 
-# Scope: mobile app only (website frozen)
+# Scope: Expo app primary (mobile + web)
 
-As of 2026-07-16 the **website is out of scope**. Do not change Next.js UI/pages until the user explicitly lifts this freeze.
+As of 2026-07-17 the **primary product** is the Expo app (`mobile/`):
+
+- Native iOS/Android builds
+- Web SPA served at the production domain root (via `public/spa` + middleware)
 
 ## In scope
-- `mobile/` (Expo / React Native app) — primary product
-- Shared backend only when the app needs it: `app/api/**`, `lib/**` (outside `mobile/`), `supabase/**`
+- `mobile/` (Expo / React Native / Expo web)
+- Shared backend: `app/api/**`, `lib/**` (outside `mobile/`), `supabase/**`
+- Domain wiring for Expo web: `proxy.ts`, `scripts/export-expo-web.sh`, `public/spa/` (generated)
+- Relocating or maintaining the old Next.js UI under `app/legacy/**` when needed for domain routing
 
-## Out of scope (do not touch)
-- Website UI/pages: `app/**/page.tsx`, `app/**/layout.tsx` (except API routes), `components/**` used by the Next.js site
-- Website-only styling, nav, or feature work “for parity”
+## Out of scope (do not polish)
+- New features or visual polish on the **legacy** Next.js website under `/legacy`
+- “Parity” work that only improves legacy pages
 
 ## Examples
-- ❌ Adding a Google Tasks panel to `app/tasks/page.tsx`
+- ❌ Building a new Google Tasks panel only on `app/legacy/tasks/page.tsx`
 - ✅ Sync + API under `app/api/**` + UI in `mobile/app/(tabs)/tasks.tsx`
-- ✅ Migration in `supabase/` consumed by the mobile app
+- ✅ Middleware so `myselfapp.xyz/` serves the Expo SPA while `/legacy` keeps the old site
 
-If a request is ambiguous, assume **mobile only**. Backend changes are allowed solely to serve the app.
+If a request is ambiguous, assume **Expo app** (mobile and/or web SPA). Backend changes are allowed to serve the app.

@@ -1,15 +1,20 @@
 # MySelf — Project Notes
 
-## Current scope: MOBILE APP ONLY — website frozen
+## Current scope: Expo app primary (mobile + web domain)
 
-**As of 2026-07-16 the website is no longer a product focus.** Until the user explicitly lifts this:
+**As of 2026-07-17:**
 
-- **In scope:** `mobile/` (Expo/React Native). This is the product.
-- **Also allowed when the app needs it:** `app/api/**`, `lib/**` (outside `mobile/`), `supabase/**`.
-- **Frozen — do not touch:** Next.js website UI (`app/**/page.tsx`, site layouts, `components/**` for the site).
-  No “parity with web”, no website polish, no new website features.
+- **Primary product:** `mobile/` (Expo) — native apps and the web SPA at the production domain root.
+- **Backend:** `app/api/**`, `lib/**`, `supabase/**` serve the app.
+- **Legacy website:** preserved under `/legacy` (Next.js UI moved to `app/legacy/**`). Do not polish it unless explicitly asked.
+- **Privacy:** remains at `/privacy` for App Store / login links.
 
-Agents: if a request is ambiguous, assume mobile-only. See `.cursor/rules/app-only-scope.mdc`.
+Agents: if a request is ambiguous, assume Expo app work. See `.cursor/rules/app-only-scope.mdc`.
+
+## Domain / build
+
+- `npm run build` runs `scripts/export-expo-web.sh` then `next build`.
+- Expo web export lands in `public/spa/` (gitignored); `proxy.ts` rewrites non-API UI routes to that SPA.
 
 ## Version tracking (strict)
 

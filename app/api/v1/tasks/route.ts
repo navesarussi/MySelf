@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
   const project = sp.get("project");
   const status = sp.get("status");
   const priority = sp.get("priority");
+  const source = sp.get("source");
+  const externalList = sp.get("external_list");
 
   let q = getSupabase()
     .from("tasks")
@@ -36,6 +38,8 @@ export async function GET(req: NextRequest) {
     if (list.length) q = q.in("status", list);
   }
   if (priority && (PRIORITIES as string[]).includes(priority)) q = q.eq("priority", priority);
+  if (source) q = q.eq("source", source);
+  if (externalList) q = q.eq("external_list_id", externalList);
 
   const { data, error } = await q;
   if (error) return dbError();
@@ -64,6 +68,7 @@ export async function POST(req: NextRequest) {
       status: pick(str(body.status), STATUSES, "open"),
       due_date: optStr(body.due_date),
       notes: optStr(body.notes),
+      source: "manual",
     })
     .select()
     .single();

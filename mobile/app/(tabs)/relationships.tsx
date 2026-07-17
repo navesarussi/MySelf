@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Linking as RNLinking, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as Contacts from "expo-contacts";
 import { differenceInCalendarDays } from "date-fns";
 import { api } from "../../src/api/resources";
 import { useApi, useMutate, todayLocalISO } from "../../src/hooks";
@@ -23,6 +24,7 @@ import {
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
 import { whatsappUrl } from "@/lib/integrations/phone";
+import { mapDeviceContact } from "@/lib/device-contact-map";
 import type { Relationship } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
 
@@ -32,6 +34,7 @@ type FormState = {
   group_name: string;
   reminder_days: string;
   phone: string;
+  email: string;
   notes: string;
   project_id: string;
 };
@@ -41,9 +44,22 @@ const emptyForm = (projectId: string): FormState => ({
   group_name: "",
   reminder_days: "",
   phone: "",
+  email: "",
   notes: "",
   project_id: projectId,
 });
+
+async function pickDeviceContact() {
+  try {
+    const { status } = await Contacts.requestPermissionsAsync();
+    if (status !== "granted") return null;
+    const contact = await Contacts.presentContactPickerAsync();
+    if (!contact) return null;
+    return mapDeviceContact(contact);
+  } catch {
+    return null;
+  }
+}
 
 function daysSince(r: Pick<Relationship, "last_contact_date">, today: Date): number | null {
   return r.last_contact_date ? differenceInCalendarDays(today, new Date(r.last_contact_date)) : null;
@@ -73,11 +89,32 @@ export default function RelationshipsScreen() {
     [projects]
   );
 
+  async function startCreate() {
+    const picked = await pickDeviceContact();
+    setForm({
+      ...emptyForm(defaultProjectId),
+      ...(picked ? { name: picked.name, phone: picked.phone, email: picked.email } : {}),
+    });
+  }
+
+  async function importIntoForm() {
+    if (!form) return;
+    const picked = await pickDeviceContact();
+    if (!picked) return;
+    setForm({
+      ...form,
+      name: picked.name || form.name,
+      phone: picked.phone || form.phone,
+      email: picked.email || form.email,
+    });
+  }
+
   useEffect(() => {
     if ((params.add === "contact" || params.add === "1") && projects.length) {
-      setForm(emptyForm(defaultProjectId));
+      void startCreate();
       router.setParams({ add: "" });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.add, projects.length, defaultProjectId, router]);
 
   const today = new Date();
@@ -116,6 +153,7 @@ export default function RelationshipsScreen() {
       group_name: form.group_name || null,
       reminder_days: form.reminder_days ? Number(form.reminder_days) : null,
       phone: form.phone || null,
+      email: form.email || null,
       notes: form.notes || null,
       project_id: form.project_id,
     };
@@ -145,7 +183,7 @@ export default function RelationshipsScreen() {
       refreshing={relQ.loading}
       onRefresh={relQ.refresh}
       headerRight={
-        <Btn small label={`+ ${t("relationships.addContact")}`} onPress={() => setForm(emptyForm(defaultProjectId))} />
+        <Btn small label={`+ ${t("relationships.addContact")}`} onPress={() => void startCreate()} />
       }
     >
       {groups.length > 0 ? (
@@ -177,6 +215,7 @@ export default function RelationshipsScreen() {
                     group_name: r.group_name ?? "",
                     reminder_days: r.reminder_days != null ? String(r.reminder_days) : "",
                     phone: r.phone ?? "",
+                    email: r.email ?? "",
                     notes: r.notes ?? "",
                     project_id: r.project_id,
                   })
@@ -196,6 +235,11 @@ export default function RelationshipsScreen() {
                 >
                   {days === null ? t("relationships.noContactLogged") : t("relationships.lastContactDays", { days })}
                 </Text>
+                {r.email ? (
+                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
+                    {r.email}
+                  </Text>
+                ) : null}
                 {r.notes ? (
                   <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 4 }}>
                     {r.notes}
@@ -231,6 +275,14 @@ export default function RelationshipsScreen() {
       >
         {form ? (
           <View>
+            <View style={{ marginBottom: 10, alignSelf: "flex-start" }}>
+              <Btn
+                small
+                variant="ghost"
+                label={t("relationships.importFromDevice")}
+                onPress={() => void importIntoForm()}
+              />
+            </View>
             <Input value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} placeholder={t("relationships.namePlaceholder")} />
             <Input
               value={form.group_name}
@@ -248,7 +300,14 @@ export default function RelationshipsScreen() {
               onChangeText={(v) => setForm({ ...form, phone: v })}
               placeholder={t("relationships.phonePlaceholder")}
               keyboardType="phone-pad"
-              style={{ textAlign: textLtr }}
+              style={form.phone ? { textAlign: textLtr } : undefined}
+            />
+            <Input
+              value={form.email}
+              onChangeText={(v) => setForm({ ...form, email: v })}
+              placeholder={t("relationships.emailPlaceholder")}
+              keyboardType="email-address"
+              style={form.email ? { textAlign: textLtr } : undefined}
             />
             <Input
               value={form.notes}

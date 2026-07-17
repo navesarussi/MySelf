@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 
+function rewriteToSpa(req: NextRequest) {
+  const url = req.nextUrl.clone();
+  url.pathname = "/spa/index.html";
+  return NextResponse.rewrite(url);
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -12,13 +18,23 @@ export async function proxy(req: NextRequest) {
     }
   }
 
+  // Expo export puts fonts/images under public/spa/assets but the bundle requests /assets/…
+  if (pathname.startsWith("/assets/")) {
+    const url = req.nextUrl.clone();
+    url.pathname = `/spa${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  // Static SPA assets + Next internals — never gate
   if (
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/privacy") ||
+    pathname.startsWith("/spa") ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname === "/privacy" ||
+    pathname.startsWith("/privacy/") ||
     pathname.startsWith("/api/auth/google") ||
     pathname.startsWith("/api/integrations/google/callback") ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon")
+    pathname.startsWith("/api/integrations/google-tasks/callback")
   ) {
     return NextResponse.next();
   }
@@ -26,11 +42,7 @@ export async function proxy(req: NextRequest) {
   const secret = process.env.AUTH_SECRET;
   const token = req.cookies.get(SESSION_COOKIE)?.value;
 
-  // REST API for the mobile app: same session token, sent as a Bearer header
-  // (or the regular cookie). Unauthorized calls get JSON 401, not a redirect.
-  // CORS is open (Bearer-only; browsers never attach the session cookie
-  // cross-origin because responses are non-credentialed) so the app's web
-  // build can talk to the API from another origin.
+  // REST API for the mobile/Expo app: Bearer (or cookie). CORS open for web SPA.
   if (pathname.startsWith("/api/v1")) {
     const cors = {
       "Access-Control-Allow-Origin": "*",
@@ -54,13 +66,31 @@ export async function proxy(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: cors });
   }
 
-  if (secret && (await isValidSessionToken(token, secret))) {
+  // Other /api/* (server actions helpers, logout, etc.) — continue; handlers enforce auth
+  if (pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
-  const loginUrl = new URL("/login", req.url);
-  loginUrl.searchParams.set("next", pathname);
-  return NextResponse.redirect(loginUrl);
+  // Preserved Next.js website under /legacy — cookie session required
+  if (pathname.startsWith("/legacy")) {
+    if (pathname.startsWith("/legacy/login")) {
+      return NextResponse.next();
+    }
+    if (secret && (await isValidSessionToken(token, secret))) {
+      return NextResponse.next();
+    }
+    const loginUrl = new URL("/legacy/login", req.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Public static files in /public (logo.png, etc.)
+  if (pathname.includes(".") && !pathname.endsWith(".html")) {
+    return NextResponse.next();
+  }
+
+  // Domain root UI → Expo SPA (auth is client-side via Bearer token)
+  return rewriteToSpa(req);
 }
 
 export const config = {

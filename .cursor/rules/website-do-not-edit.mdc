@@ -1,13 +1,21 @@
 ---
-description: Do not edit Next.js website UI while the freeze is active
-globs: app/**/page.tsx,app/**/layout.tsx,components/**
+description: Do not polish the legacy Next.js website under /legacy
+globs:
+  - app/legacy/**/*
+  - components/nav.tsx
+  - components/mobile-nav.tsx
+  - components/global-add-menu.tsx
+  - components/home-panel.tsx
+  - components/add-menu-list.tsx
 alwaysApply: false
 ---
 
-# Website UI freeze
+# Legacy website — no polish
 
-These paths are the **Next.js website**. They are frozen.
+These paths are the **preserved Next.js website** under `/legacy`.
 
-- Do **not** edit to add features, polish UI, or “keep parity” with the mobile app.
-- Shared API routes live under `app/api/**` — those may change when the **mobile app** needs them; prefer not touching `page.tsx` / site `components/**`.
-- Lift only when the user explicitly says the website is in scope again.
+- Do **not** add features or polish UI here for “parity” with the Expo app.
+- The primary web product is the Expo SPA at the domain root.
+- Touches are allowed only when needed for routing/domain wiring (e.g. `legacyPath` hrefs).
+
+See `.cursor/rules/app-only-scope.mdc` and `docs/react-native/WEB-DOMAIN.md`.

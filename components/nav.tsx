@@ -8,6 +8,7 @@ import { AppLogo } from "@/components/app-logo";
 import { useTranslations } from "@/components/locale-provider";
 import { SHOW_PROJECTS } from "@/lib/features";
 import { APP_VERSION } from "@/lib/version";
+import { legacyPath } from "@/lib/legacy-path";
 
 export function Nav() {
   const pathname = usePathname();
@@ -15,25 +16,25 @@ export function Nav() {
   const { t } = useTranslations();
 
   const links = [
-    { href: "/", label: t("nav.home") },
-    { href: "/timeline", label: t("nav.timeline") },
-    { href: "/tasks", label: t("nav.tasks") },
-    ...(SHOW_PROJECTS ? [{ href: "/projects", label: t("nav.projects") }] : []),
-    { href: "/habits", label: t("nav.habits") },
-    { href: "/goals", label: t("nav.goals") },
-    { href: "/relationships", label: t("nav.relationships") },
-    { href: "/library", label: t("nav.library") },
-    { href: "/settings", label: t("nav.settings") },
+    { href: legacyPath("/"), label: t("nav.home") },
+    { href: legacyPath("/timeline"), label: t("nav.timeline") },
+    { href: legacyPath("/tasks"), label: t("nav.tasks") },
+    ...(SHOW_PROJECTS ? [{ href: legacyPath("/projects"), label: t("nav.projects") }] : []),
+    { href: legacyPath("/habits"), label: t("nav.habits") },
+    { href: legacyPath("/goals"), label: t("nav.goals") },
+    { href: legacyPath("/relationships"), label: t("nav.relationships") },
+    { href: legacyPath("/library"), label: t("nav.library") },
+    { href: legacyPath("/settings"), label: t("nav.settings") },
   ];
 
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
-    window.location.href = "/login";
+    window.location.href = legacyPath("/login");
   }
 
   return (
     <header className="flex items-center justify-between gap-4">
-      <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+      <Link href={legacyPath("/")} className="flex items-center gap-2 text-lg font-bold tracking-tight">
         <AppLogo size={28} priority />
         <span className="flex flex-col leading-tight">
           <span>{t("nav.brand")}</span>
