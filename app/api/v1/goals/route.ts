@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
-import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, conflict, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { dedupeGoals, isUniqueViolation } from "@/lib/data-integrity";
 
 function revalidateGoalPaths() {
   revalidatePath("/goals");
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await getSupabase().from("goals").select("*").order("sort_order");
   if (error) return dbError();
-  return NextResponse.json(data || []);
+  return NextResponse.json(dedupeGoals(data || []));
 }
 
 export async function POST(req: NextRequest) {
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single();
-  if (error) return dbError();
+  if (error) return isUniqueViolation(error) ? conflict("goal_duplicate") : dbError();
   revalidateGoalPaths();
   return NextResponse.json(data, { status: 201 });
 }

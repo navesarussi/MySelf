@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
@@ -18,6 +18,7 @@ import {
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
 import { HabitCard } from "../../src/components/habit-card";
+import { dedupeHabits } from "@/lib/habit-stats";
 
 type AddFormState = {
   name: string;
@@ -49,7 +50,7 @@ export default function HabitsScreen() {
     }
   }, [params.add, router]);
 
-  const habits = data ?? [];
+  const habits = useMemo(() => dedupeHabits(data ?? []), [data]);
 
   async function submitAdd() {
     if (!addForm || !addForm.name.trim()) return;

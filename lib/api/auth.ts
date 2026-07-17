@@ -26,6 +26,10 @@ export function dbError(message = "db_error") {
   return NextResponse.json({ error: message }, { status: 500 });
 }
 
+export function conflict(message = "duplicate") {
+  return NextResponse.json({ error: message }, { status: 409 });
+}
+
 export function notFound() {
   return NextResponse.json({ error: "not_found" }, { status: 404 });
 }
