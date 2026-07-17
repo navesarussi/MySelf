@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Apply all myself schema migrations to the linked Supabase project.
-# Migrations are idempotent (IF NOT EXISTS / guarded inserts).
+# Migrations are idempotent (IF NOT EXISTS / guarded inserts / dedupe in 0015).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
