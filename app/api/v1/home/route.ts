@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
+import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
+import { dedupeHabits } from "@/lib/habit-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import type { Task } from "@/lib/types";
 
@@ -58,16 +60,18 @@ export async function GET(req: NextRequest) {
 
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
 
-  const openTasks = ((tasksRes.data as TaskRow[]) || []).map((row) => ({
-    ...row,
-    project_name: row.projects?.name,
-    projects: undefined,
-  }));
+  const openTasks = dedupeTasks(
+    ((tasksRes.data as TaskRow[]) || []).map((row) => ({
+      ...row,
+      project_name: row.projects?.name,
+      projects: undefined,
+    }))
+  );
   const allTasks = (allTasksRes.data as Pick<Task, "status">[]) || [];
 
   return NextResponse.json({
-    habits: habitsRes.data || [],
-    activeGoals: goalsRes.data || [],
+    habits: dedupeHabits(habitsRes.data || []),
+    activeGoals: dedupeGoals(goalsRes.data || []),
     doneGoalsCount: doneGoalsRes.count || 0,
     pendingCommitments: commitmentsRes.data || [],
     relationships: relRes.data || [],

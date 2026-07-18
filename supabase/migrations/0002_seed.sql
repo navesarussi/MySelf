@@ -1,5 +1,16 @@
 -- Seed data derived from "מרכז השליטה" v3.0 (08/07/2026).
 -- Dates for past events are best-effort approximations from the doc's relative wording — edit freely in the UI.
+-- Idempotent: scripts/db-apply.sh re-runs every migration file; skip when the v3.0 marker exists.
+
+do $seed$
+begin
+  if exists (
+    select 1 from myself.timeline_events
+    where event_date = '2026-07-08' and title = 'מרכז השליטה - גרסה 3.0'
+    limit 1
+  ) then
+    raise notice 'Seed v3.0 already applied — skipping';
+  else
 
 insert into myself.timeline_events (event_date, title, description, category) values
   ('2026-04-08', 'תחילת הטיול באוסטרליה', 'טיול ללא דדליין חזרה, כ-3 חודשים בתכנון המקורי.', 'טיול'),
@@ -112,3 +123,6 @@ $$🥇 Digital Scale — הכי מרכזי כרגע. שותפות עם חבר ט
 
 🥉 KupaPay / Serosilberg — נמוך כרגע, ברקע. עם אברהם. אפליקציית ניהול קופה משותפת. חיה בחנות של אפל, תקועה על אישור גוגל פליי. כ-10 משתמשים (כולם חברים). שאיפה ארוכת-טווח: 1000 משתמשים קבועים, אך לא דחיפה פעילה כרגע.$$,
   array['פרויקטים', 'עבודה']);
+
+  end if;
+end $seed$;
