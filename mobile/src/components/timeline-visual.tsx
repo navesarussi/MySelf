@@ -16,11 +16,13 @@ export function TimelineVisual({
   periods,
   onEventPress,
   onPeriodPress,
+  onClusterPress,
 }: {
   events: TimelineEvent[];
   periods: LifePeriod[];
   onEventPress: (ev: TimelineEvent) => void;
   onPeriodPress: (p: LifePeriod) => void;
+  onClusterPress?: (events: TimelineEvent[]) => void;
 }) {
   const c = useColors();
   const { t } = useI18n();
@@ -57,6 +59,7 @@ export function TimelineVisual({
         height={360}
         onEventPress={onEventPress}
         onPeriodPress={onPeriodPress}
+        onClusterPress={onClusterPress}
       />
     </View>
   );

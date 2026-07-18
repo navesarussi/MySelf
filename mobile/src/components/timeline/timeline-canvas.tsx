@@ -26,8 +26,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useColors, tokens } from "../../theme";
 import { useI18n } from "../../i18n";
 import {
-  assignEventLanes,
-  assignVisiblePeriodLanes,
   axisLineTop,
   eventDateTime,
   periodBarGeom,
@@ -39,13 +37,26 @@ import {
   tracksHeight,
   xFor,
 } from "@/lib/timeline-layout";
+import {
+  assignClusterLanes,
+  clampSpanX,
+  clusterEvents,
+  clusterZoomTarget,
+  dedupeEvents,
+  stablePeriodLanes,
+  visibleLabelSegment,
+  type TimelineCluster,
+} from "@/lib/timeline-engine";
 import { isEventVisibleAtZoom, spanToZoomLevel, type TimelineZoomLevel } from "@/lib/timeline-zoom";
 import { displayTitle } from "@/lib/timeline-display";
 import type { LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
 
 const HOUR_MS = 60 * 60 * 1000;
-const EVENT_LANE_H = 22;
+const EVENT_LANE_H = 30;
+const CLUSTER_GAP_PX = 48;
+const LABEL_GAP_PX = 120;
+const MIN_SPAN_MS = 3 * HOUR_MS;
 const MILESTONE_CATEGORY = "אבן דרך";
 
 type Win = { min: number; max: number };
@@ -57,11 +68,11 @@ function haptic(kind: "select" | "light") {
 }
 
 /**
- * Cinematic, gesture-driven timeline board. Runs on the old RN architecture, so
- * live panning uses a native-driver translate (buttery, no distortion) and zoom
- * uses focal-anchored state updates; programmatic moves (double-tap, buttons,
- * minimap) ease via requestAnimationFrame. All plotting reuses the shared
- * lib/timeline-* math so web and native stay in sync.
+ * Gesture-driven timeline board backed by the pure lib/timeline-engine layout:
+ * period lanes are stable (viewport-independent), overlapping events collapse
+ * into tappable clusters, duplicate rows render once with a ×N badge, and all
+ * geometry is clamped so deep zoom stays pixel-accurate. Live panning uses a
+ * native-driver translate; programmatic moves ease via requestAnimationFrame.
  */
 export function TimelineCanvas({
   events,
@@ -70,6 +81,7 @@ export function TimelineCanvas({
   fullscreen = false,
   onEventPress,
   onPeriodPress,
+  onClusterPress,
 }: {
   events: TimelineEvent[];
   periods: LifePeriod[];
@@ -77,15 +89,19 @@ export function TimelineCanvas({
   fullscreen?: boolean;
   onEventPress?: (ev: TimelineEvent) => void;
   onPeriodPress?: (p: LifePeriod) => void;
+  onClusterPress?: (events: TimelineEvent[]) => void;
 }) {
   const c = useColors();
   const { t, locale } = useI18n();
+  const localeTag = locale === "he" ? "he-IL" : "en-US";
 
-  const bounds = useMemo(() => timelineBounds(events, periods), [events, periods]);
+  const today = todayIso();
+  const deduped = useMemo(() => dedupeEvents(events), [events]);
+  const bounds = useMemo(() => timelineBounds(deduped.events, periods), [deduped.events, periods]);
   const [view, setView] = useState<Win>(() => ({ min: bounds.min, max: bounds.max }));
   const [plotW, setPlotW] = useState(0);
 
-  // Re-fit when the underlying data range changes (mirrors the web behaviour).
+  // Re-fit when the underlying data range changes.
   useEffect(() => {
     setView({ min: bounds.min, max: bounds.max });
   }, [bounds.min, bounds.max]);
@@ -106,7 +122,7 @@ export function TimelineCanvas({
   const clampView = useCallback(
     (min: number, max: number): Win => {
       const fullSpan = (bounds.max - bounds.min) * 1.4;
-      const nextSpan = Math.min(Math.max(max - min, 3 * HOUR_MS), Math.max(fullSpan, 6 * HOUR_MS));
+      const nextSpan = Math.min(Math.max(max - min, MIN_SPAN_MS), Math.max(fullSpan, 2 * MIN_SPAN_MS));
       const center = (min + max) / 2;
       let nextMin = center - nextSpan / 2;
       let nextMax = center + nextSpan / 2;
@@ -168,6 +184,34 @@ export function TimelineCanvas({
     animateViewTo({ min: bounds.min, max: bounds.max });
     haptic("light");
   }, [animateViewTo, bounds.min, bounds.max]);
+
+  const goToToday = useCallback(() => {
+    const { min, max } = viewRef.current;
+    const span = max - min;
+    const center = toTime(today) + 12 * HOUR_MS;
+    animateViewTo(clampView(center - span / 2, center + span / 2));
+    haptic("light");
+  }, [animateViewTo, clampView, today]);
+
+  const openCluster = useCallback(
+    (cluster: TimelineCluster) => {
+      haptic("light");
+      if (cluster.events.length === 1) {
+        onEventPress?.(cluster.events[0]);
+        return;
+      }
+      // Zoom in until the cluster splits; when its members share (almost) the
+      // same instant, zooming can't separate them — hand the list to the host.
+      if (cluster.timeMax - cluster.timeMin < MIN_SPAN_MS) {
+        if (onClusterPress) onClusterPress(cluster.events);
+        else onEventPress?.(cluster.events[0]);
+        return;
+      }
+      const target = clusterZoomTarget(cluster, MIN_SPAN_MS);
+      animateViewTo(clampView(target.min, target.max));
+    },
+    [animateViewTo, clampView, onClusterPress, onEventPress]
+  );
 
   // --- Pan (native-driver translate during drag, commit + momentum on release) ---
   const panRef = useRef(null);
@@ -232,49 +276,43 @@ export function TimelineCanvas({
     [zoomBy]
   );
 
-  // --- Layout ---
+  // --- Layout (all math from lib/timeline-engine — stable across pan/zoom) ---
   const span = view.max - view.min;
   const padMin = view.min - span;
   const padMax = view.max + span;
-  const today = todayIso();
 
-  const { lanes, laneCount } = useMemo(
-    () => assignVisiblePeriodLanes(periods, padMin, padMax),
-    [periods, padMin, padMax]
-  );
+  const { lanes, laneCount } = useMemo(() => stablePeriodLanes(periods, today), [periods, today]);
   const tracksH = tracksHeight(laneCount);
   const intrinsicAxisY = axisLineTop(tracksH);
 
-  const visibleEvents = useMemo(
-    () =>
-      events.filter((ev) => {
-        const time = eventDateTime(ev);
-        return time >= padMin && time <= padMax && isEventVisibleAtZoom(ev.min_zoom, span);
-      }),
-    [events, padMin, padMax, span]
+  const zoomVisibleEvents = useMemo(
+    () => deduped.events.filter((ev) => isEventVisibleAtZoom(ev.min_zoom, span)),
+    [deduped.events, span]
   );
 
-  const eventItems = useMemo(
-    () =>
-      visibleEvents.map((ev) => ({ ev, x: xFor(eventDateTime(ev), view.min, view.max, plotW || 1) })),
-    [visibleEvents, view.min, view.max, plotW]
-  );
-  const { lanes: eventLanes, laneCount: eventLaneCount } = useMemo(
-    () => assignEventLanes(eventItems.map((i) => ({ id: i.ev.id, x: i.x })), 104),
-    [eventItems]
+  const clusters = useMemo(() => {
+    if (!plotW) return [];
+    return clusterEvents(zoomVisibleEvents, view.min, view.max, plotW, CLUSTER_GAP_PX).filter(
+      (cl) => cl.x >= -plotW && cl.x <= plotW * 2
+    );
+  }, [zoomVisibleEvents, view.min, view.max, plotW]);
+
+  const { lanes: clusterLanes, laneCount: clusterLaneCount } = useMemo(
+    () => assignClusterLanes(clusters, LABEL_GAP_PX),
+    [clusters]
   );
 
-  const intrinsicH = plotBandHeight(tracksH) + eventLaneCount * EVENT_LANE_H + 16;
+  const intrinsicH = plotBandHeight(tracksH) + clusterLaneCount * EVENT_LANE_H + 16;
   const topPad = Math.max((height - intrinsicH) / 2, 8);
   const axisY = topPad + intrinsicAxisY;
 
   // Ticks generated over a 3-span overscan window so edges stay populated mid-drag.
   const ticks = useMemo(() => {
     if (!plotW) return [];
-    return timelineTicks(padMin, padMax, plotW * 3).map((tk) => ({ ...tk, x: tk.x - plotW }));
-  }, [padMin, padMax, plotW]);
+    return timelineTicks(padMin, padMax, plotW * 3, localeTag).map((tk) => ({ ...tk, x: tk.x - plotW }));
+  }, [padMin, padMax, plotW, localeTag]);
 
-  const todayX = plotW ? xFor(toTime(today), view.min, view.max, plotW) : -1;
+  const todayX = plotW ? xFor(toTime(today) + 12 * HOUR_MS, view.min, view.max, plotW) : -1;
   const zoomLevel = spanToZoomLevel(span);
   const zoomLabel =
     zoomLevel === "years"
@@ -294,6 +332,7 @@ export function TimelineCanvas({
       {/* Controls */}
       <View style={[styles.controls, { borderColor: c.border }]}>
         <ControlBtn icon="scan-outline" label={t("timeline.fitAll")} onPress={fitAll} color={c} />
+        <ControlBtn icon="locate-outline" label={t("timeline.today")} onPress={goToToday} color={c} />
         <ControlBtn icon="remove-outline" onPress={() => zoomBy(1 / 1.8)} color={c} />
         <ControlBtn icon="add-outline" onPress={() => zoomBy(1.8)} color={c} />
         <View style={{ flex: 1 }} />
@@ -338,31 +377,53 @@ export function TimelineCanvas({
                 <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: panX }] }]}>
                   {plotW > 0 ? (
                     <>
-                      {/* Period bands */}
+                      {/* Vertical grid at major ticks */}
+                      {ticks
+                        .filter((tk) => tk.major)
+                        .map((tk) => (
+                          <View
+                            key={`grid-${tk.key}`}
+                            style={{
+                              position: "absolute",
+                              left: tk.x,
+                              top: 0,
+                              bottom: 0,
+                              width: StyleSheet.hairlineWidth,
+                              backgroundColor: c.border + "66",
+                            }}
+                          />
+                        ))}
+
+                      {/* Period bands (stable lanes, clamped geometry, sticky labels) */}
                       {periods.map((p) => {
                         const lane = lanes.get(p.id);
                         if (lane === undefined) return null;
-                        const start = xFor(toTime(p.start_date), view.min, view.max, plotW);
-                        const end = xFor(toTime(p.end_date || today), view.min, view.max, plotW);
-                        const left = Math.min(start, end);
-                        const width = Math.max(Math.max(start, end) - left, 8);
+                        const startX = xFor(toTime(p.start_date), view.min, view.max, plotW);
+                        const endX = xFor(toTime(p.end_date || today), view.min, view.max, plotW);
+                        const spanPx = clampSpanX(startX, endX, plotW);
+                        if (!spanPx) return null;
                         const geom = periodBarGeom(lane);
+                        const label = visibleLabelSegment(spanPx.left, spanPx.left + spanPx.width, plotW);
+                        const ongoing = !p.end_date;
                         return (
                           <Pressable
                             key={p.id}
                             onPress={() => onPeriodPress?.(p)}
                             style={{
                               position: "absolute",
-                              left,
-                              width,
+                              left: spanPx.left,
+                              width: spanPx.width,
                               top: topPad + geom.top,
                               height: geom.bottom - geom.top,
                               borderRadius: 9,
+                              borderTopStartRadius: spanPx.clippedStart ? 0 : 9,
+                              borderBottomStartRadius: spanPx.clippedStart ? 0 : 9,
+                              borderTopEndRadius: spanPx.clippedEnd || ongoing ? 0 : 9,
+                              borderBottomEndRadius: spanPx.clippedEnd || ongoing ? 0 : 9,
                               borderWidth: 1,
                               borderColor: p.color,
                               overflow: "hidden",
                               justifyContent: "center",
-                              paddingHorizontal: 8,
                             }}
                           >
                             <LinearGradient
@@ -371,9 +432,24 @@ export function TimelineCanvas({
                               end={{ x: 0, y: 1 }}
                               style={StyleSheet.absoluteFill}
                             />
-                            <Text numberOfLines={1} style={{ color: c.ink, fontSize: 11, fontWeight: "700" }}>
-                              {p.title}
-                            </Text>
+                            {label ? (
+                              <View
+                                pointerEvents="none"
+                                style={{
+                                  position: "absolute",
+                                  left: label.left - spanPx.left,
+                                  width: label.width,
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Text
+                                  numberOfLines={1}
+                                  style={{ color: c.ink, fontSize: 11, fontWeight: "700", maxWidth: label.width }}
+                                >
+                                  {p.title}
+                                </Text>
+                              </View>
+                            ) : null}
                           </Pressable>
                         );
                       })}
@@ -392,7 +468,10 @@ export function TimelineCanvas({
 
                       {/* Today glow line */}
                       {todayX >= -plotW && todayX <= plotW * 2 ? (
-                        <View style={{ position: "absolute", left: todayX - 8, top: 0, bottom: 0, width: 16, alignItems: "center" }}>
+                        <View
+                          pointerEvents="none"
+                          style={{ position: "absolute", left: todayX - 8, top: 0, bottom: 0, width: 16, alignItems: "center" }}
+                        >
                           <LinearGradient
                             colors={[c.accent2 + "00", c.accent2 + "44", c.accent2 + "00"]}
                             start={{ x: 0, y: 0 }}
@@ -401,6 +480,22 @@ export function TimelineCanvas({
                           />
                           <View style={{ width: 2, flex: 1, backgroundColor: c.accent2 }} />
                           <View style={{ position: "absolute", top: axisY - 5, width: 10, height: 10, borderRadius: 999, backgroundColor: c.accent2 }} />
+                          <View
+                            style={{
+                              position: "absolute",
+                              top: 4,
+                              paddingHorizontal: 6,
+                              paddingVertical: 2,
+                              borderRadius: 999,
+                              backgroundColor: c.accent2 + "26",
+                              borderWidth: 1,
+                              borderColor: c.accent2 + "66",
+                            }}
+                          >
+                            <Text style={{ color: c.accent2, fontSize: 9, fontWeight: "700" }}>
+                              {t("timeline.today")}
+                            </Text>
+                          </View>
                         </View>
                       ) : null}
 
@@ -408,11 +503,16 @@ export function TimelineCanvas({
                       {ticks.map((tick) => (
                         <View
                           key={tick.key}
-                          style={{ position: "absolute", left: tick.x - 32, width: 64, top: axisY - 24, alignItems: "center" }}
+                          pointerEvents="none"
+                          style={{ position: "absolute", left: tick.x - 40, width: 80, top: axisY - 26, alignItems: "center" }}
                         >
                           <Text
                             numberOfLines={1}
-                            style={{ color: tick.major ? c.ink : c.muted, fontSize: 9, fontWeight: tick.major ? "700" : "400" }}
+                            style={{
+                              color: tick.major ? c.ink : c.muted,
+                              fontSize: tick.major ? 10 : 9,
+                              fontWeight: tick.major ? "700" : "400",
+                            }}
                           >
                             {tick.label}
                           </Text>
@@ -420,17 +520,18 @@ export function TimelineCanvas({
                         </View>
                       ))}
 
-                      {/* Events */}
-                      {eventItems.map(({ ev, x }) => (
-                        <EventMarker
-                          key={ev.id}
-                          ev={ev}
-                          x={x}
-                          dotTop={axisY - 5}
-                          labelTop={axisY + 14 + (eventLanes.get(ev.id) ?? 0) * EVENT_LANE_H}
-                          locale={locale}
+                      {/* Event clusters */}
+                      {clusters.map((cluster) => (
+                        <ClusterMarker
+                          key={cluster.key}
+                          cluster={cluster}
+                          duplicates={deduped.duplicates}
+                          axisY={axisY}
+                          labelTop={axisY + 16 + (clusterLanes.get(cluster.key) ?? 0) * EVENT_LANE_H}
+                          localeTag={localeTag}
                           color={c}
-                          onPress={() => onEventPress?.(ev)}
+                          eventsLabel={(n) => t("timeline.eventsCount", { count: n })}
+                          onPress={() => openCluster(cluster)}
                         />
                       ))}
                     </>
@@ -443,7 +544,17 @@ export function TimelineCanvas({
       </PinchGestureHandler>
 
       {/* Minimap scrubber */}
-      <Minimap bounds={bounds} view={view} onSeek={(next) => setView(clampView(next.min, next.max))} color={c} />
+      <Minimap
+        bounds={bounds}
+        view={view}
+        periods={periods}
+        periodLanes={lanes}
+        laneCount={laneCount}
+        events={deduped.events}
+        today={today}
+        onSeek={(next) => setView(clampView(next.min, next.max))}
+        color={c}
+      />
 
       <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "center", marginTop: 6 }}>
         {t("timeline.gestureHint")}
@@ -484,28 +595,38 @@ function ControlBtn({
   );
 }
 
-function EventMarker({
-  ev,
-  x,
-  dotTop,
+/**
+ * One marker per cluster: a dot (or count chip for multi-event clusters) on the
+ * axis, a hairline connector, and a single label block in its collision-free
+ * lane. Duplicate rows show once with a ×N badge.
+ */
+function ClusterMarker({
+  cluster,
+  duplicates,
+  axisY,
   labelTop,
-  locale,
+  localeTag,
   color,
+  eventsLabel,
   onPress,
 }: {
-  ev: TimelineEvent;
-  x: number;
-  dotTop: number;
+  cluster: TimelineCluster;
+  duplicates: Map<string, number>;
+  axisY: number;
   labelTop: number;
-  locale: "he" | "en";
+  localeTag: string;
   color: ReturnType<typeof useColors>;
+  eventsLabel: (n: number) => string;
   onPress: () => void;
 }) {
   const appear = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
-  const isMilestone = ev.category === MILESTONE_CATEGORY;
-  const isGoogle = ev.source === "google_calendar";
-  const dotColor = isMilestone ? color.accent2 : isGoogle ? color.accent2 : color.accent;
+  const multi = cluster.events.length > 1;
+  const first = cluster.events[0];
+  const isMilestone = !multi && first.category === MILESTONE_CATEGORY;
+  const isGoogle = !multi && first.source === "google_calendar";
+  const dotColor = multi ? color.accent : isMilestone || isGoogle ? color.accent2 : color.accent;
+  const dupCount = multi ? 0 : (duplicates.get(first.id) ?? 0);
 
   useEffect(() => {
     Animated.timing(appear, {
@@ -528,15 +649,37 @@ function EventMarker({
     return () => loop.stop();
   }, [isMilestone, pulse]);
 
-  const dotSize = isMilestone ? 14 : 10;
+  const dotSize = multi ? 20 : isMilestone ? 14 : 10;
+  const x = cluster.x;
+
+  const dateLabel = multi
+    ? `${new Date(cluster.timeMin).toLocaleDateString(localeTag, { month: "numeric", day: "numeric" })} – ${new Date(cluster.timeMax).toLocaleDateString(localeTag, { year: "2-digit", month: "numeric", day: "numeric" })}`
+    : new Date(eventDateTime(first)).toLocaleDateString(localeTag, {
+        year: "2-digit",
+        month: "numeric",
+        day: "numeric",
+      });
 
   return (
     <>
+      {/* Connector from axis to label lane */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: x - StyleSheet.hairlineWidth,
+          top: axisY + 6,
+          height: Math.max(labelTop - axisY - 7, 0),
+          width: StyleSheet.hairlineWidth * 2,
+          backgroundColor: color.border,
+        }}
+      />
+
       <Animated.View
         style={{
           position: "absolute",
           left: x - dotSize / 2,
-          top: dotTop - (dotSize - 10) / 2,
+          top: axisY - dotSize / 2 + 1,
           opacity: appear,
           transform: [{ scale: appear }],
         }}
@@ -556,33 +699,40 @@ function EventMarker({
             }}
           />
         ) : null}
-        <Pressable onPress={onPress} hitSlop={10}>
+        <Pressable onPress={onPress} hitSlop={12}>
           <View
             style={{
               width: dotSize,
               height: dotSize,
               borderRadius: 999,
-              backgroundColor: dotColor,
+              backgroundColor: multi ? color.accent : dotColor,
               borderWidth: 2,
               borderColor: color.bg,
+              alignItems: "center",
+              justifyContent: "center",
             }}
-          />
+          >
+            {multi ? (
+              <Text style={{ color: color.bg, fontSize: 10, fontWeight: "800" }}>{cluster.events.length}</Text>
+            ) : null}
+          </View>
         </Pressable>
       </Animated.View>
-      <Animated.View
-        style={{ position: "absolute", left: x - 52, top: labelTop, width: 104, opacity: appear }}
-      >
+
+      <Animated.View style={{ position: "absolute", left: x - 56, top: labelTop, width: 112, opacity: appear }}>
         <Pressable onPress={onPress}>
-          <Text numberOfLines={1} style={{ color: color.ink, fontSize: 10, fontWeight: "600", textAlign: "center" }}>
-            {displayTitle(ev)}
-          </Text>
-          <Text style={{ color: color.muted, fontSize: 8, textAlign: "center" }}>
-            {new Date(ev.event_date).toLocaleDateString(locale === "he" ? "he-IL" : "en-US", {
-              year: "2-digit",
-              month: "numeric",
-              day: "numeric",
-            })}
-          </Text>
+          <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 3 }}>
+            <Text
+              numberOfLines={1}
+              style={{ color: color.ink, fontSize: 10.5, fontWeight: "600", textAlign: "center", flexShrink: 1 }}
+            >
+              {multi ? eventsLabel(cluster.events.length) : displayTitle(first)}
+            </Text>
+            {dupCount > 1 ? (
+              <Text style={{ color: color.muted, fontSize: 9, fontWeight: "700" }}>×{dupCount}</Text>
+            ) : null}
+          </View>
+          <Text style={{ color: color.muted, fontSize: 9, textAlign: "center" }}>{dateLabel}</Text>
         </Pressable>
       </Animated.View>
     </>
@@ -592,11 +742,21 @@ function EventMarker({
 function Minimap({
   bounds,
   view,
+  periods,
+  periodLanes,
+  laneCount,
+  events,
+  today,
   onSeek,
   color,
 }: {
   bounds: { min: number; max: number };
   view: Win;
+  periods: LifePeriod[];
+  periodLanes: Map<string, number>;
+  laneCount: number;
+  events: TimelineEvent[];
+  today: string;
   onSeek: (v: Win) => void;
   color: ReturnType<typeof useColors>;
 }) {
@@ -610,6 +770,10 @@ function Minimap({
 
   const winLeft = ((view.min - bounds.min) / fullSpan) * trackW;
   const winWidth = Math.max(((view.max - view.min) / fullSpan) * trackW, 14);
+
+  const laneRows = Math.min(laneCount, 4);
+  const stripH = 3;
+  const stripsTop = 5;
 
   const onGestureEvent = useCallback(
     (e: PanGestureHandlerGestureEvent) => {
@@ -625,35 +789,106 @@ function Minimap({
     if (e.nativeEvent.state === State.BEGAN) startRef.current = viewRef.current;
   }, []);
 
+  const onTrackTap = useCallback(
+    (e: TapGestureHandlerStateChangeEvent) => {
+      if (e.nativeEvent.state !== State.ACTIVE) return;
+      const w = trackWRef.current || 1;
+      const time = bounds.min + (e.nativeEvent.x / w) * fullSpan;
+      const span = viewRef.current.max - viewRef.current.min;
+      onSeek({ min: time - span / 2, max: time + span / 2 });
+    },
+    [bounds.min, fullSpan, onSeek]
+  );
+
   return (
-    <View
-      onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
-      style={{
-        height: 34,
-        marginTop: 8,
-        borderRadius: tokens.radiusSm,
-        backgroundColor: color.border + "40",
-        overflow: "hidden",
-        justifyContent: "center",
-      }}
-    >
-      <View style={{ position: "absolute", left: 0, right: 0, top: 16, height: 1, backgroundColor: color.border }} />
-      <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onStateChange}>
-        <View
-          style={{
-            position: "absolute",
-            left: Math.min(Math.max(winLeft, 0), Math.max(trackW - winWidth, 0)),
-            width: winWidth,
-            top: 3,
-            bottom: 3,
-            borderRadius: 6,
-            backgroundColor: color.accent + "33",
-            borderWidth: 1.5,
-            borderColor: color.accent,
-          }}
-        />
-      </PanGestureHandler>
-    </View>
+    <TapGestureHandler onHandlerStateChange={onTrackTap}>
+      <View
+        onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+        style={{
+          height: 40,
+          marginTop: 8,
+          borderRadius: tokens.radiusSm,
+          backgroundColor: color.border + "40",
+          overflow: "hidden",
+          justifyContent: "center",
+        }}
+      >
+        {/* Period strips (same stable lanes as the board, compressed) */}
+        {trackW > 0
+          ? periods.map((p) => {
+              const lane = periodLanes.get(p.id);
+              if (lane === undefined || lane >= laneRows) return null;
+              const left = ((toTime(p.start_date) - bounds.min) / fullSpan) * trackW;
+              const right = ((toTime(p.end_date || today) - bounds.min) / fullSpan) * trackW;
+              return (
+                <View
+                  key={p.id}
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    left: Math.max(left, 0),
+                    width: Math.max(Math.min(right, trackW) - Math.max(left, 0), 2),
+                    top: stripsTop + lane * (stripH + 1),
+                    height: stripH,
+                    borderRadius: 2,
+                    backgroundColor: p.color + "AA",
+                  }}
+                />
+              );
+            })
+          : null}
+
+        {/* Event density dots */}
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 26, height: 3 }}>
+          {trackW > 0
+            ? events.map((ev) => (
+                <View
+                  key={ev.id}
+                  style={{
+                    position: "absolute",
+                    left: ((eventDateTime(ev) - bounds.min) / fullSpan) * trackW - 1,
+                    width: 2,
+                    height: 3,
+                    borderRadius: 1,
+                    backgroundColor: color.muted,
+                  }}
+                />
+              ))
+            : null}
+        </View>
+
+        {/* Today tick */}
+        {trackW > 0 ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: ((toTime(today) - bounds.min) / fullSpan) * trackW,
+              top: 2,
+              bottom: 2,
+              width: 1.5,
+              backgroundColor: color.accent2,
+            }}
+          />
+        ) : null}
+
+        <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onStateChange}>
+          <View
+            style={{
+              position: "absolute",
+              left: Math.min(Math.max(winLeft, 0), Math.max(trackW - winWidth, 0)),
+              width: winWidth,
+              top: 2,
+              bottom: 2,
+              borderRadius: 6,
+              backgroundColor: color.accent + "33",
+              borderWidth: 1.5,
+              borderColor: color.accent,
+            }}
+          />
+        </PanGestureHandler>
+      </View>
+    </TapGestureHandler>
   );
 }
 

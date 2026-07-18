@@ -175,16 +175,21 @@ export function formatHeDate(iso: string) {
 /** Adaptive axis ticks: years → months → days → hours based on zoom density. */
 export type TimelineTick = { x: number; label: string; key: string; major?: boolean };
 
-export function timelineTicks(viewMin: number, viewMax: number, plotW: number): TimelineTick[] {
+export function timelineTicks(
+  viewMin: number,
+  viewMax: number,
+  plotW: number,
+  tickLocale = "he-IL"
+): TimelineTick[] {
   const span = viewMax - viewMin;
   const ppd = plotW / (span / DAY_MS);
   const pph = ppd / 24;
   const pxPerYear = plotW / (span / YEAR_MS);
 
   let ticks: TimelineTick[];
-  if (pph >= 28) ticks = hourTicks(viewMin, viewMax, plotW);
-  else if (ppd >= 18) ticks = dayTicks(viewMin, viewMax, plotW);
-  else if (ppd >= 2.5) ticks = monthTicks(viewMin, viewMax, plotW);
+  if (pph >= 28) ticks = hourTicks(viewMin, viewMax, plotW, tickLocale);
+  else if (ppd >= 18) ticks = dayTicks(viewMin, viewMax, plotW, tickLocale);
+  else if (ppd >= 2.5) ticks = monthTicks(viewMin, viewMax, plotW, tickLocale);
   else {
     ticks = yearTicks(viewMin, viewMax, plotW).map((t) => ({
       x: t.x,
@@ -202,7 +207,7 @@ function capTicks(ticks: TimelineTick[], max: number): TimelineTick[] {
   return ticks.filter((_, i) => i % step === 0);
 }
 
-function hourTicks(min: number, max: number, plotW: number): TimelineTick[] {
+function hourTicks(min: number, max: number, plotW: number, tickLocale = "he-IL"): TimelineTick[] {
   const ticks: TimelineTick[] = [];
   const start = new Date(min);
   start.setMinutes(0, 0, 0);
@@ -221,14 +226,14 @@ function hourTicks(min: number, max: number, plotW: number): TimelineTick[] {
     const d = new Date(t);
     const major = d.getHours() === 0;
     const label = major
-      ? d.toLocaleDateString("he-IL", { day: "numeric", month: "short" })
+      ? d.toLocaleDateString(tickLocale, { day: "numeric", month: "short" })
       : `${String(d.getHours()).padStart(2, "0")}:00`;
     ticks.push({ x: xFor(t, min, max, plotW), label, key: `h-${t}`, major });
   }
   return ticks;
 }
 
-function dayTicks(min: number, max: number, plotW: number): TimelineTick[] {
+function dayTicks(min: number, max: number, plotW: number, tickLocale = "he-IL"): TimelineTick[] {
   const ticks: TimelineTick[] = [];
   const start = new Date(min);
   start.setHours(0, 0, 0, 0);
@@ -244,7 +249,7 @@ function dayTicks(min: number, max: number, plotW: number): TimelineTick[] {
     if (t < min - DAY_MS || t > max + DAY_MS) continue;
     const d = new Date(t);
     const major = d.getDate() === 1;
-    const label = d.toLocaleDateString("he-IL", {
+    const label = d.toLocaleDateString(tickLocale, {
       day: "numeric",
       month: major ? "short" : undefined,
       year: major ? "numeric" : undefined,
@@ -254,7 +259,7 @@ function dayTicks(min: number, max: number, plotW: number): TimelineTick[] {
   return ticks;
 }
 
-function monthTicks(min: number, max: number, plotW: number): TimelineTick[] {
+function monthTicks(min: number, max: number, plotW: number, tickLocale = "he-IL"): TimelineTick[] {
   const ticks: TimelineTick[] = [];
   const minD = new Date(min);
   const maxD = new Date(max);
@@ -271,7 +276,7 @@ function monthTicks(min: number, max: number, plotW: number): TimelineTick[] {
     if (t >= min - DAY_MS) {
       ticks.push({
         x: xFor(t, min, max, plotW),
-        label: new Date(y, m, 1).toLocaleDateString("he-IL", { month: "short", year: "numeric" }),
+        label: new Date(y, m, 1).toLocaleDateString(tickLocale, { month: "short", year: "numeric" }),
         key: `m-${y}-${m}`,
         major: m === 0,
       });

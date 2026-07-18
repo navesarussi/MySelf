@@ -19,6 +19,18 @@ export type TimelineEvent = {
   created_at: string;
 };
 
+export type TimelineEventLinkKind = "image" | "note" | "link";
+
+export type TimelineEventLink = {
+  id: string;
+  event_id: string;
+  kind: TimelineEventLinkKind;
+  url: string | null;
+  content: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
 export type Habit = {
   id: string;
   name: string;

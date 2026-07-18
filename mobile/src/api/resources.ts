@@ -8,6 +8,7 @@ import type {
   Relationship,
   Task,
   TimelineEvent,
+  TimelineEventLink,
 } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
 
@@ -137,6 +138,16 @@ export const api = {
     apiFetch<{ ok: boolean; hidden?: boolean }>(c, `/timeline/events/${id}`, {
       method: "DELETE",
     }),
+
+  eventLinks: (c: ApiConfig, eventId: string) =>
+    apiFetch<TimelineEventLink[]>(c, `/timeline/events/${eventId}/links`),
+  createEventLink: (
+    c: ApiConfig,
+    eventId: string,
+    body: { kind: TimelineEventLink["kind"]; url?: string | null; content?: string | null }
+  ) => apiFetch<TimelineEventLink>(c, `/timeline/events/${eventId}/links`, { method: "POST", body }),
+  deleteEventLink: (c: ApiConfig, linkId: string) =>
+    apiFetch<{ ok: boolean }>(c, `/timeline/links/${linkId}`, { method: "DELETE" }),
 
   periods: (c: ApiConfig) => apiFetch<LifePeriod[]>(c, "/timeline/periods"),
   createPeriod: (c: ApiConfig, body: Partial<LifePeriod>) =>
