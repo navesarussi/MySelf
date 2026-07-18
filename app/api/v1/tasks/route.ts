@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import { dedupeTasks } from "@/lib/data-integrity";
+import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 
 const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
@@ -51,6 +52,8 @@ export async function GET(req: NextRequest) {
       projects: undefined,
     }))
   );
+  const rawCount = (data as TaskRow[] | null)?.length ?? 0;
+  scheduleDataIntegrityCleanup(tasks.length < rawCount);
   return NextResponse.json(tasks);
 }
 

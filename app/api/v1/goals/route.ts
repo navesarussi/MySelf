@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { badRequest, conflict, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, isUniqueViolation } from "@/lib/data-integrity";
+import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 
 function revalidateGoalPaths() {
   revalidatePath("/goals");
@@ -13,7 +14,10 @@ export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await getSupabase().from("goals").select("*").order("sort_order");
   if (error) return dbError();
-  return NextResponse.json(dedupeGoals(data || []));
+  const rows = data || [];
+  const unique = dedupeGoals(rows);
+  scheduleDataIntegrityCleanup(unique.length < rows.length);
+  return NextResponse.json(unique);
 }
 
 export async function POST(req: NextRequest) {

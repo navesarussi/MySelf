@@ -18,17 +18,28 @@ jobs:
         with:
           version: latest
 
-      - name: Link Supabase project
-        run: supabase link --project-ref roeefqpdbftlndzsvhfj
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-
       - name: Apply migrations
         run: |
-          for f in supabase/migrations/*.sql; do
-            echo "→ $f"
-            supabase db query --linked -f "$f"
-          done
-          supabase db query --linked "NOTIFY pgrst, 'reload schema';"
+          set -euo pipefail
+          if [ -n "${DATABASE_URL:-}" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client > /dev/null
+            for f in supabase/migrations/*.sql; do
+              echo "→ $f"
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+            done
+            psql "$DATABASE_URL" -c "NOTIFY pgrst, 'reload schema';"
+            exit 0
+          fi
+          if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            supabase link --project-ref roeefqpdbftlndzsvhfj
+            for f in supabase/migrations/*.sql; do
+              echo "→ $f"
+              supabase db query --linked -f "$f"
+            done
+            supabase db query --linked "NOTIFY pgrst, 'reload schema';"
+            exit 0
+          fi
+          echo "Skipping: add DATABASE_URL or SUPABASE_ACCESS_TOKEN to GitHub Actions secrets."
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

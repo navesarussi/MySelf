@@ -4,6 +4,7 @@ import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
 import { dedupeHabits } from "@/lib/habit-stats";
 import { selectHomeEvents } from "@/lib/home-events";
+import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
 
 type TaskRow = Task & { projects: { name: string } | null };
@@ -67,11 +68,18 @@ export async function GET(req: NextRequest) {
       projects: undefined,
     }))
   );
+  const habits = dedupeHabits(habitsRes.data || []);
+  const activeGoals = dedupeGoals(goalsRes.data || []);
+  scheduleDataIntegrityCleanup(
+    habits.length < (habitsRes.data?.length ?? 0) ||
+      activeGoals.length < (goalsRes.data?.length ?? 0) ||
+      openTasks.length < ((tasksRes.data as TaskRow[] | null)?.length ?? 0)
+  );
   const allTasks = (allTasksRes.data as Pick<Task, "status">[]) || [];
 
   return NextResponse.json({
-    habits: dedupeHabits(habitsRes.data || []),
-    activeGoals: dedupeGoals(goalsRes.data || []),
+    habits,
+    activeGoals,
     doneGoalsCount: doneGoalsRes.count || 0,
     pendingCommitments: commitmentsRes.data || [],
     relationships: relRes.data || [],

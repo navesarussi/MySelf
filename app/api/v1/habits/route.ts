@@ -5,6 +5,7 @@ import { normalizeReportTime } from "@/lib/habit-stats";
 import { badRequest, conflict, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import { dedupeHabits } from "@/lib/habit-stats";
 import { isUniqueViolation } from "@/lib/data-integrity";
+import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 
 function revalidateHabitPaths() {
   revalidatePath("/habits");
@@ -19,7 +20,10 @@ export async function GET(req: NextRequest) {
     .eq("archived", false)
     .order("created_at");
   if (error) return dbError();
-  return NextResponse.json(dedupeHabits(data || []));
+  const rows = data || [];
+  const unique = dedupeHabits(rows);
+  scheduleDataIntegrityCleanup(unique.length < rows.length);
+  return NextResponse.json(unique);
 }
 
 export async function POST(req: NextRequest) {
