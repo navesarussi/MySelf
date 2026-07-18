@@ -3,6 +3,7 @@ import { getSupabase } from "@/lib/supabase";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
 import { dedupeHabits } from "@/lib/habit-stats";
+import { selectHomeEvents } from "@/lib/home-events";
 import type { Task } from "@/lib/types";
 
 type TaskRow = Task & { projects: { name: string } | null };
