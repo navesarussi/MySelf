@@ -12,6 +12,29 @@ import {
 import { buildExternalTaskUpsert, idsToMarkDone } from "./merge";
 
 const BATCH_SIZE = 100;
+const PAGE_SIZE = 1000;
+
+async function fetchExistingExternalTaskIds(providerId: TaskSourceId) {
+  const supabase = getSupabase();
+  const byExternalId = new Map<string, string>();
+
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("id, external_id")
+      .eq("source", providerId)
+      .not("external_id", "is", null)
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`sync_fetch_existing_failed:${error.message}`);
+    if (!data?.length) break;
+    for (const row of data) {
+      if (row.external_id) byExternalId.set(row.external_id, row.id);
+    }
+    if (data.length < PAGE_SIZE) break;
+  }
+
+  return byExternalId;
+}
 
 export async function syncTaskSource(
   providerId: TaskSourceId
@@ -57,17 +80,24 @@ export async function syncTaskSource(
       throw new Error("unsupported_provider_upsert");
     }
 
+    const existingByExternalId = await fetchExistingExternalTaskIds(providerId);
+
     for (let i = 0; i < drafts.length; i += BATCH_SIZE) {
       const chunk = drafts.slice(i, i + BATCH_SIZE);
-      const upsertRows = chunk.map((draft) =>
-        buildExternalTaskUpsert(draft, "google_tasks", now)
-      );
 
-      const { error } = await supabase
-        .from("tasks")
-        .upsert(upsertRows, { onConflict: "source,external_id" });
+      for (const draft of chunk) {
+        const row = buildExternalTaskUpsert(draft, "google_tasks", now);
+        const existingId = existingByExternalId.get(draft.externalId);
 
-      if (error) throw new Error(`sync_upsert_failed:${error.message}`);
+        if (existingId) {
+          const { error } = await supabase.from("tasks").update(row).eq("id", existingId);
+          if (error) throw new Error(`sync_update_failed:${error.message}`);
+        } else {
+          const { data, error } = await supabase.from("tasks").insert(row).select("id").single();
+          if (error) throw new Error(`sync_insert_failed:${error.message}`);
+          if (data?.id) existingByExternalId.set(draft.externalId, data.id);
+        }
+      }
 
       imported += chunk.length;
       await updateSyncProgress(providerId, {

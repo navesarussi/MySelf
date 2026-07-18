@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { normalizeReportTime } from "@/lib/habit-stats";
-import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, conflict, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { dedupeHabits } from "@/lib/habit-stats";
+import { isUniqueViolation } from "@/lib/data-integrity";
+import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 
 function revalidateHabitPaths() {
   revalidatePath("/habits");
@@ -17,7 +20,10 @@ export async function GET(req: NextRequest) {
     .eq("archived", false)
     .order("created_at");
   if (error) return dbError();
-  return NextResponse.json(data || []);
+  const rows = data || [];
+  const unique = dedupeHabits(rows);
+  scheduleDataIntegrityCleanup(unique.length < rows.length);
+  return NextResponse.json(unique);
 }
 
 export async function POST(req: NextRequest) {
@@ -37,7 +43,7 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single();
-  if (error) return dbError();
+  if (error) return isUniqueViolation(error) ? conflict("habit_duplicate") : dbError();
   revalidateHabitPaths();
   return NextResponse.json(data, { status: 201 });
 }
