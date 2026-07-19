@@ -41,6 +41,9 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli@16
 
+      - name: Install mobile dependencies
+        run: npm ci
+
       - name: Write ASC API key
         env:
           ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
