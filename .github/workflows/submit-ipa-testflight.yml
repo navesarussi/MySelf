@@ -1,0 +1,60 @@
+# One-shot: submit an existing IPA (from a GitHub Release) to TestFlight.
+# Used when EAS cloud builds are quota-exhausted and we built --local.
+name: Submit IPA to TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub release tag that contains the .ipa asset"
+        required: true
+        type: string
+      asset_name:
+        description: "IPA filename in the release"
+        required: true
+        default: "myself-1.9.3.ipa"
+        type: string
+
+jobs:
+  submit:
+    name: Submit to TestFlight
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download IPA from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.release_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "${{ inputs.asset_name }}" \
+            --dir .
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli@16
+
+      - name: Write ASC API key
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: bash scripts/ci-write-asc-key.sh
+
+      - name: Submit to App Store Connect
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
+        run: |
+          eas submit \
+            --platform ios \
+            --profile production \
+            --path "./${{ inputs.asset_name }}" \
+            --non-interactive \
+            --wait
