@@ -1,4 +1,4 @@
-import { MONDAY_SCOPES, mondayRedirectUri } from "../../monday-config";
+import { mondayRedirectUri } from "../../monday-config";
 
 export { mondayRedirectUri };
 export { fetchMondayAccount, fetchMondayBoards, fetchAssignedOpenItems } from "./fetch";
@@ -9,11 +9,13 @@ export {
 } from "./status";
 
 export function mondayAuthUrl(state: string): string {
+  // Omit `scope` so Monday uses the scopes configured on the app.
+  // Requesting scopes not enabled in Developer Center → invalid_scope.
   const params = new URLSearchParams({
     client_id: process.env.MONDAY_CLIENT_ID!,
     redirect_uri: mondayRedirectUri(),
     state,
-    scope: MONDAY_SCOPES,
+    force_install_if_needed: "true",
   });
   return `https://auth.monday.com/oauth2/authorize?${params}`;
 }

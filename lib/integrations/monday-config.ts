@@ -1,11 +1,13 @@
 export const MONDAY_PROVIDER = "monday";
 
+/** Scopes requested only if the Monday app has them enabled.
+ * Prefer omitting `scope` in the authorize URL so Monday uses the app's
+ * configured list (avoids invalid_scope when a scope isn't toggled on). */
 export const MONDAY_SCOPES = [
   "me:read",
   "account:read",
   "boards:read",
   "boards:write",
-  "workspaces:read",
 ].join(" ");
 
 export function mondayConfigured() {

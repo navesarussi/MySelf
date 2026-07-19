@@ -121,7 +121,7 @@ async function fetchAssignedItemsPage(
     boards: { items_page: { cursor: string | null; items: MondayItem[] } }[] | null;
   }>(
     accessToken,
-    `query ($ids: [ID!], $columnId: String!) {
+    `query ($ids: [ID!], $columnId: ID!) {
       boards(ids: $ids) {
         items_page(
           limit: 50
