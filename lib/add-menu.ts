@@ -41,3 +41,19 @@ export function addTargetHref(target: AddTarget): string {
   };
   return routes[target];
 }
+
+/** Expo Router paths for the mobile / Expo-web SPA (no /legacy prefix). */
+export function mobileAddTargetHref(target: AddTarget): string {
+  const routes: Record<AddTarget, string> = {
+    task: "/tasks?add=task",
+    contact: "/relationships?add=contact",
+    event: "/timeline?add=event",
+    period: "/timeline?add=period",
+    project: "/settings?add=project",
+    habit: "/habits?add=habit",
+    goal: "/goals?add=goal",
+    commitment: "/goals?add=commitment",
+    entry: "/library?add=entry",
+  };
+  return routes[target];
+}

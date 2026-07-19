@@ -25,7 +25,7 @@ export type TasksFilterState = {
   q: string;
   project: string;
   status: TaskStatus[];
-  priority: string;
+  priority: TaskPriority[];
   source: typeof ALL_FILTER | TaskSource;
   externalList: string;
   overdue: boolean;
@@ -37,7 +37,7 @@ export function defaultTasksFilter(): TasksFilterState {
     q: "",
     project: ALL_FILTER,
     status: [...ACTIVE_STATUSES],
-    priority: ALL_FILTER,
+    priority: [],
     source: ALL_FILTER,
     externalList: ALL_FILTER,
     overdue: false,
@@ -78,11 +78,11 @@ export function TasksFilterBar({
         clear: () => onChange({ ...value, project: ALL_FILTER }),
       });
     }
-    if (value.priority !== ALL_FILTER) {
+    if (value.priority.length > 0) {
       chips.push({
         key: "priority",
-        label: taskPriorityLabel(t, value.priority as TaskPriority),
-        clear: () => onChange({ ...value, priority: ALL_FILTER }),
+        label: value.priority.map((p) => taskPriorityLabel(t, p)).join(", "),
+        clear: () => onChange({ ...value, priority: [] }),
       });
     }
     if (value.overdue) {
@@ -122,6 +122,13 @@ export function TasksFilterBar({
       ? value.status.filter((x) => x !== s)
       : [...value.status, s];
     onChange({ ...value, status: next });
+  }
+
+  function togglePriority(p: TaskPriority) {
+    const next = value.priority.includes(p)
+      ? value.priority.filter((x) => x !== p)
+      : [...value.priority, p];
+    onChange({ ...value, priority: next });
   }
 
   const showLists =
@@ -253,15 +260,15 @@ export function TasksFilterBar({
               <Row wrap style={{ marginBottom: 10 }}>
                 <Chip
                   label={t("common.all")}
-                  active={value.priority === ALL_FILTER}
-                  onPress={() => onChange({ ...value, priority: ALL_FILTER })}
+                  active={value.priority.length === 0}
+                  onPress={() => onChange({ ...value, priority: [] })}
                 />
                 {ALL_PRIORITIES.map((p) => (
                   <Chip
                     key={p}
                     label={taskPriorityLabel(t, p)}
-                    active={value.priority === p}
-                    onPress={() => onChange({ ...value, priority: p })}
+                    active={value.priority.includes(p)}
+                    onPress={() => togglePriority(p)}
                   />
                 ))}
               </Row>

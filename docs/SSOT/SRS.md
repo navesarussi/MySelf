@@ -18,6 +18,7 @@ After sign-in, calendar sync runs in the background without blocking the redirec
 
 ### FR-NAV-01
 Navigation includes: בית, ציר זמן, משימות, פרויקטים, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן, הגדרות.
+On mobile, the Home tab sits on the visual right of the bottom bar (without reversing the rest of the RTL layout).
 
 ### FR-PROJ-01
 Projects are a first-class entity with CRUD. Fields: `name`, `sort_order`.
@@ -47,7 +48,7 @@ Calendar-sourced events display with a calendar icon and category `יומן`, in
 User may set local title/description overrides on calendar events; re-sync preserves overrides.
 
 ### FR-INT-GCAL-04
-Manual sync on demand plus daily automatic background sync (skipped if already synced within 24 hours). Sync runs in the background with progress indicator; `last_sync_at` updates only after a full successful sync.
+Manual sync on demand plus daily automatic background sync (skipped if already synced within 24 hours). Sync runs in the background with progress indicator; `last_sync_at` updates only after a full successful sync. Settings shows the same “auto sync once a day” note for Calendar and every connected task integration (Google Tasks, Monday, GitHub); daily cron covers all of them.
 
 ### FR-INT-TASKS-01
 Tasks support a `source` of `manual` or an external provider id. The mobile Tasks screen shows a unified list of all sources.
@@ -98,12 +99,14 @@ Optional phone number on relationships; when set, show WhatsApp quick-link via `
 Relationships may store an optional email. Mobile form and create/update APIs include the field.
 
 ### FR-REL-DEVICE-IMPORT
-Creating a relationship on mobile offers the system contact picker after permission. Selection pre-fills name, primary phone, and primary email; fields remain editable. Dismiss/deny → empty form. Secondary import control remains on the form.
+Creating a relationship on mobile offers the system contact picker after permission. Selection pre-fills name, primary phone, and primary email; fields remain editable. Dismiss/deny → empty form. Secondary import control remains on the form and switches label after import.
+Contact cadence field defaults to 7 days and is labeled as desired contact frequency (not a “reminder”).
 
 ### FR-HABIT-01
 Dedicated Habits tab (`/habits`) separate from goals/dreams (`/goals`).
 Habit stats: current streak, best streak, total successful days, failure count (streak breaks).
 Successful days and best streak persist after a missed day.
+Habits list orders by oldest last report first (never reported first); list refreshes after each report.
 
 ### FR-HOME-01
 Home page is a data dashboard (no module shortcut cards). Shows aggregated stats for habits, goals, tasks, relationships, timeline.
@@ -111,6 +114,8 @@ Home page is a data dashboard (no module shortcut cards). Shows aggregated stats
 ### FR-HOME-02
 Home relationships list shows only contacts due today or overdue (`days_since_last_contact >= reminder_days`).
 Home events show the next 10 upcoming events (title: upcoming); if none exist in the current calendar year, show the 10 most recent past events.
+Home tasks show the top 10 open tasks by priority (urgent → low).
+Section titles on home navigate to the matching tab.
 Library and goal cards on home support open/edit/delete via the same forms as their tabs.
 
 ### FR-HOME-03
@@ -125,7 +130,7 @@ Fields: title, `project_id` (references `projects`), priority (`urgent|high|medi
 Filter/search/sort supported. CRUD supported.
 
 ### FR-TASK-02
-Tasks screen uses a compact search bar plus a filter sheet (source, project, status, priority, overdue, sort). Active filters appear as removable chips. Default view hides `done` tasks.
+Tasks screen uses a compact search bar plus a filter sheet (source, project, status, multi-select priority, overdue, sort). Active filters appear as removable chips. Default view hides `done` tasks.
 
 ### FR-INT-TASKS-15
 User may connect one GitHub account via OAuth; select which repositories to sync (`selected_list_ids` = `owner/repo`).
@@ -150,7 +155,7 @@ After create / update / delete actions, show a short Hebrew toast (נוסף / ע
 
 ### FR-TL-01
 Timeline supports overlapping life periods (`life_periods`) that may nest or overlap in time.
-Views: (1) chronological list newest-first, (2) visual axis with period bands + zoom, (3) by-period accordion.
+Views: visual axis with period bands + zoom, then chronological sections below in one scroll (Future → Today → Past). Period accordion (tap period → events list + edit).
 Events can be browsed chronologically regardless of period grouping.
 
 ### FR-TL-03

@@ -8,6 +8,7 @@ import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
 import { Badge, Btn, Card, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
+import { HomeStatsGrid, type HomeStatItem } from "../../src/components/home-stats-grid";
 import { NEXT_STATUS, TaskCard } from "../../src/components/task-card";
 import { HabitCard } from "../../src/components/habit-card";
 import { HomeGoalModal } from "../../src/components/home-goal-modal";
@@ -21,38 +22,11 @@ import {
 } from "@/lib/habit-stats";
 import { achievabilityScore, horizonLabel, rankGoalsForHome } from "@/lib/goals-rank";
 import { filterDueRelationships } from "@/lib/relationships-due";
+import { topPriorityTasks } from "@/lib/task-priority";
 import { displayTitle } from "@/lib/timeline-display";
 import { formatEventWhen } from "@/lib/timeline-layout";
 import { whatsappUrl } from "@/lib/integrations/phone";
 import type { ContentEntry, Goal, Relationship, Task } from "@/lib/types";
-
-function StatCard({
-  title,
-  main,
-  sub,
-  onPress,
-}: {
-  title: string;
-  main: string;
-  sub: string;
-  onPress: () => void;
-}) {
-  const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
-  return (
-    <Pressable onPress={onPress} style={{ flex: 1, minWidth: 100 }}>
-      <Card style={{ padding: 10 }}>
-        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>{title}</Text>
-        <Text style={{ color: c.ink, fontSize: 16, fontWeight: "700", textAlign: textStart, writingDirection, marginTop: 2 }}>
-          {main}
-        </Text>
-        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
-          {sub}
-        </Text>
-      </Card>
-    </Pressable>
-  );
-}
 
 export default function HomeScreen() {
   const c = useColors();
@@ -69,12 +43,6 @@ export default function HomeScreen() {
 
   const habits = data?.habits ?? [];
   const uniqueHabits = dedupeHabits(habits, today);
-  const activeStreaks = uniqueHabits.filter(
-    (h) => effectiveStreak(h, habitReportDay(h.report_time)) > 0
-  ).length;
-  const checkedToday = uniqueHabits.filter(
-    (h) => h.last_checked_on === habitReportDay(h.report_time)
-  ).length;
   const habitsPendingToday = useMemo(
     () =>
       sortHabitsByReportUrgency(uniqueHabits).filter(
@@ -108,6 +76,92 @@ export default function HomeScreen() {
   );
   const readyGoals = (data?.activeGoals ?? []).filter((g) => achievabilityScore(g) >= 3).length;
 
+  const topTasks = useMemo(
+    () => topPriorityTasks(data?.openTasks ?? [], 10),
+    [data?.openTasks]
+  );
+
+  const statItems = useMemo((): HomeStatItem[] => {
+    if (!data) return [];
+    return [
+      {
+        id: "habits",
+        title: t("home.activeHabits"),
+        main: String(uniqueHabits.length),
+        icon: "repeat",
+        accent: c.accent2,
+        onPress: () => router.push("/habits"),
+      },
+      {
+        id: "relationships",
+        title: t("home.relationshipsOverdue"),
+        main: String(dueRelationships.length),
+        icon: "people-outline",
+        accent: dueRelationships.length > 0 ? c.warn : c.good,
+        onPress: () => router.push("/relationships"),
+      },
+      {
+        id: "goals",
+        title: t("home.activeGoals"),
+        main: String(data.activeGoals.length),
+        icon: "flag-outline",
+        accent: c.accent,
+        onPress: () => router.push("/goals"),
+      },
+      {
+        id: "tasks",
+        title: t("home.openTasks"),
+        main: String(data.openTasksCount + data.inProgressTasksCount),
+        icon: "checkbox-outline",
+        accent: c.accent,
+        onPress: () => router.push("/tasks"),
+      },
+      {
+        id: "habits-pending",
+        title: t("home.habitsPendingToday"),
+        main: String(habitsPendingCount),
+        icon: "time-outline",
+        accent: habitsPendingCount > 0 ? c.warn : c.good,
+        onPress: () => router.push("/habits"),
+      },
+      {
+        id: "tasks-due",
+        title: t("home.tasksDueSoon"),
+        main: String(dueSoonTasks),
+        icon: "calendar-outline",
+        accent: dueSoonTasks > 0 ? c.warn : c.muted,
+        onPress: () => router.push("/tasks"),
+      },
+      {
+        id: "streak",
+        title: t("home.bestActiveStreak"),
+        main: String(bestStreak),
+        icon: "flame-outline",
+        accent: c.accent2,
+        onPress: () => router.push("/habits"),
+      },
+      {
+        id: "ready-goals",
+        title: t("home.readyGoals"),
+        main: String(readyGoals),
+        icon: "rocket-outline",
+        accent: c.good,
+        onPress: () => router.push("/goals"),
+      },
+    ];
+  }, [
+    data,
+    t,
+    c,
+    router,
+    uniqueHabits.length,
+    dueRelationships.length,
+    habitsPendingCount,
+    dueSoonTasks,
+    bestStreak,
+    readyGoals,
+  ]);
+
   async function toggleTaskDone(task: Task) {
     await run(
       (config) => api.updateTask(config, task.id, { status: task.status === "done" ? "open" : "done" }),
@@ -124,15 +178,21 @@ export default function HomeScreen() {
   }
 
   return (
-    <Screen title={t("nav.brand")} refreshing={loading} onRefresh={refresh}>
+    <Screen refreshing={loading} onRefresh={refresh}>
       <Card>
-        <Text style={{ color: c.accent, fontSize: tokens.textSm, fontWeight: "600", textAlign: textStart, writingDirection }}>
-          {t("home.compass")}
+        <Text
+          style={{
+            color: c.ink,
+            fontSize: 18,
+            fontWeight: "700",
+            lineHeight: 28,
+            textAlign: textStart,
+            writingDirection,
+          }}
+        >
+          {t("home.quote")}
         </Text>
-        <Text style={{ color: c.ink, fontSize: 15, lineHeight: 24, textAlign: textStart, writingDirection, marginTop: 6 }}>
-          &quot;{t("home.quote")}&quot;
-        </Text>
-        <Text style={{ color: c.muted, fontSize: tokens.textSm, lineHeight: 20, textAlign: textStart, writingDirection, marginTop: 6 }}>
+        <Text style={{ color: c.muted, fontSize: tokens.textSm, lineHeight: 20, textAlign: textStart, writingDirection, marginTop: 8 }}>
           {t("home.mission")}
         </Text>
       </Card>
@@ -142,66 +202,9 @@ export default function HomeScreen() {
 
       {data ? (
         <>
-          <Row wrap>
-            <StatCard
-              title={t("home.activeHabits")}
-              main={String(uniqueHabits.length)}
-              sub={t("home.checkedToday", {
-                checked: checkedToday,
-                total: uniqueHabits.length,
-                streaks: activeStreaks,
-              })}
-              onPress={() => router.push("/habits")}
-            />
-            <StatCard
-              title={t("home.relationshipsOverdue")}
-              main={String(dueRelationships.length)}
-              sub={
-                dueRelationships.length
-                  ? t("home.relationshipsNeedAttention", { count: dueRelationships.length })
-                  : t("home.allRelationshipsUpToDate")
-              }
-              onPress={() => router.push("/relationships")}
-            />
-            <StatCard
-              title={t("home.activeGoals")}
-              main={String(data.activeGoals.length)}
-              sub={t("home.goalsAchieved", { count: data.doneGoalsCount })}
-              onPress={() => router.push("/goals")}
-            />
-            <StatCard
-              title={t("home.openTasks")}
-              main={String(data.openTasksCount + data.inProgressTasksCount)}
-              sub={t("home.tasksInProgress", { count: data.inProgressTasksCount })}
-              onPress={() => router.push("/tasks")}
-            />
-            <StatCard
-              title={t("home.habitsPendingToday")}
-              main={String(habitsPendingCount)}
-              sub={t("home.habitsPendingSub")}
-              onPress={() => router.push("/habits")}
-            />
-            <StatCard
-              title={t("home.tasksDueSoon")}
-              main={String(dueSoonTasks)}
-              sub={t("home.tasksDueSoonSub")}
-              onPress={() => router.push("/tasks")}
-            />
-            <StatCard
-              title={t("home.bestActiveStreak")}
-              main={String(bestStreak)}
-              sub={t("home.bestActiveStreakSub")}
-              onPress={() => router.push("/habits")}
-            />
-            <StatCard
-              title={t("home.readyGoals")}
-              main={String(readyGoals)}
-              sub={t("home.readyGoalsSub")}
-              onPress={() => router.push("/goals")}
-            />
-          </Row>
+          <HomeStatsGrid items={statItems} />
 
-          <SectionTitle>{t("home.habitTracking")}</SectionTitle>
+          <SectionTitle onPress={() => router.push("/habits")}>{t("home.habitTracking")}</SectionTitle>
           {uniqueHabits.length === 0 ? (
             <Card>
               <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noHabits")}</Text>
@@ -211,9 +214,6 @@ export default function HomeScreen() {
               <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>
                 {t("home.allHabitsReportedToday")}
               </Text>
-              <Link href="/habits" style={{ color: c.accent, textAlign: textStart, writingDirection, marginTop: 8 }}>
-                {t("home.allHabits")}
-              </Link>
             </Card>
           ) : (
             habitsPendingToday.map((h) => (
@@ -257,11 +257,6 @@ export default function HomeScreen() {
               />
             ))
           )}
-          {habitsPendingToday.length > 0 && checkedToday > 0 ? (
-            <Link href="/habits" style={{ color: c.accent, textAlign: textStart, writingDirection, marginBottom: 8 }}>
-              {t("home.allHabits")}
-            </Link>
-          ) : null}
           {uniqueHabits.some((h) => (h.failure_count ?? 0) > 0) ? (
             <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginBottom: 8 }}>
               {t("common.totalFailures")}:{" "}
@@ -269,7 +264,7 @@ export default function HomeScreen() {
             </Text>
           ) : null}
 
-          <SectionTitle>{t("home.nearbyGoals")}</SectionTitle>
+          <SectionTitle onPress={() => router.push("/goals")}>{t("home.nearbyGoals")}</SectionTitle>
           {rankedGoals.length === 0 ? (
             <Card>
               <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noActiveGoals")}</Text>
@@ -319,13 +314,13 @@ export default function HomeScreen() {
             </Card>
           ) : null}
 
-          <SectionTitle>{t("home.tasksSection")}</SectionTitle>
-          {data.openTasks.length === 0 ? (
+          <SectionTitle onPress={() => router.push("/tasks")}>{t("home.tasksSection")}</SectionTitle>
+          {topTasks.length === 0 ? (
             <Card>
               <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noOpenTasks")}</Text>
             </Card>
           ) : (
-            data.openTasks.map((task) => (
+            topTasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -335,7 +330,7 @@ export default function HomeScreen() {
             ))
           )}
 
-          <SectionTitle>{t("home.relationshipsWaiting")}</SectionTitle>
+          <SectionTitle onPress={() => router.push("/relationships")}>{t("home.relationshipsWaiting")}</SectionTitle>
           {dueRelationships.length === 0 ? (
             <Card>
               <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noDueRelationships")}</Text>
@@ -388,7 +383,7 @@ export default function HomeScreen() {
             })
           )}
 
-          <SectionTitle>
+          <SectionTitle onPress={() => router.push("/timeline")}>
             {data.eventsMode === "upcoming" ? t("home.upcomingEvents") : t("home.recentEvents")}
           </SectionTitle>
           {data.recentEvents.length === 0 ? (
@@ -408,7 +403,7 @@ export default function HomeScreen() {
             ))
           )}
 
-          <SectionTitle>{t("home.librarySection")}</SectionTitle>
+          <SectionTitle onPress={() => router.push("/library")}>{t("home.librarySection")}</SectionTitle>
           {data.libraryEntries.length === 0 ? (
             <Card>
               <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>{t("home.noLibraryEntries")}</Text>

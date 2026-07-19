@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useI18n } from "../i18n";
@@ -13,7 +13,9 @@ export function AppTopBar({ onMenuPress }: { onMenuPress: () => void }) {
   const { t } = useI18n();
   const { writingDirection, row } = useLayoutDir();
   const router = useRouter();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const isHome = pathname === "/" || pathname === "/index" || pathname.endsWith("/(tabs)");
 
   return (
     <View
@@ -58,7 +60,7 @@ export function AppTopBar({ onMenuPress }: { onMenuPress: () => void }) {
           }}
           numberOfLines={1}
         >
-          {t("nav.brand")}
+          {isHome ? "" : t("nav.brand")}
         </Text>
 
         <Pressable

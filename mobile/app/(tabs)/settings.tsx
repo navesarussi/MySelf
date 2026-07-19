@@ -235,20 +235,6 @@ export default function SettingsScreen() {
         ) : null}
       </Card>
 
-      <SectionTitle>{t("settings.appVersion")}</SectionTitle>
-      <Card>
-        <Text
-          style={{
-            color: c.ink,
-            fontSize: tokens.text,
-            fontWeight: "600",
-            textAlign: textStart, writingDirection,
-          }}
-        >
-          {t("settings.versionValue", { version })}
-        </Text>
-      </Card>
-
       <SectionTitle
         onAdd={connectGoogle}
         addLabel={t("common.signInGoogle")}
@@ -361,6 +347,16 @@ export default function SettingsScreen() {
                 ? new Date(googleTasksQ.data.lastSyncAt).toLocaleString(locale === "he" ? "he-IL" : "en-US")
                 : t("common.notSyncedYet")}
             </Text>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textXs,
+                textAlign: textStart, writingDirection,
+                marginTop: 2,
+              }}
+            >
+              {t("settings.autoSync")}
+            </Text>
             {savedListIds.length === 0 ? (
               <Text
                 style={{
@@ -468,6 +464,18 @@ export default function SettingsScreen() {
           }
         />
       </Card>
+
+      <Text
+        style={{
+          color: c.muted,
+          fontSize: 11,
+          textAlign: "center",
+          marginTop: 24,
+          marginBottom: 8,
+        }}
+      >
+        {t("settings.versionValue", { version })}
+      </Text>
     </Screen>
   );
 }

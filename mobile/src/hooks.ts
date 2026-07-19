@@ -70,10 +70,13 @@ export function useMutate() {
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           await signOut();
-        } else if (flash?.error) {
-          showToast(t(flash.error), "error");
+        } else {
+          const apiMsg = err instanceof ApiError ? err.message : "";
+          if (flash?.error) showToast(t(flash.error), "error");
+          else if (apiMsg && apiMsg !== "db_error") showToast(apiMsg, "error");
+          else showToast(t("common.error"), "error");
         }
-        throw err;
+        return null;
       } finally {
         setBusy(false);
       }

@@ -7,6 +7,7 @@ import {
   effectiveStreak,
   habitReportDay,
   normalizeReportTime,
+  sortHabitsByOldestReport,
   sortHabitsByReportUrgency,
 } from "../habit-stats";
 import type { Habit } from "../types";
@@ -127,6 +128,24 @@ describe("sortHabitsByReportUrgency", () => {
     const b = { ...base, id: "b", last_checked_on: "2026-07-13" };
     const sorted = sortHabitsByReportUrgency([a, b], now);
     assert.deepEqual(sorted.map((h) => h.id), ["a", "b"]);
+  });
+});
+
+describe("sortHabitsByOldestReport", () => {
+  it("puts never-reported habits first, then oldest last report", () => {
+    const never = { ...base, id: "never", last_checked_on: null, last_reported_at: null };
+    const old = { ...base, id: "old", last_checked_on: "2026-07-01", last_reported_at: "2026-07-01T08:00:00Z" };
+    const recent = {
+      ...base,
+      id: "recent",
+      last_checked_on: "2026-07-12",
+      last_reported_at: "2026-07-12T08:00:00Z",
+    };
+    const sorted = sortHabitsByOldestReport([recent, never, old]);
+    assert.deepEqual(
+      sorted.map((h) => h.id),
+      ["never", "old", "recent"]
+    );
   });
 });
 

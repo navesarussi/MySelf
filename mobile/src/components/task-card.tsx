@@ -75,7 +75,7 @@ export function TaskCard({
   const { textStart, writingDirection } = useLayoutDir();
   const done = task.status === "done";
 
-  const Body = (
+  const titleBlock = (
     <View style={{ flex: 1 }}>
       <Text
         style={{
@@ -101,14 +101,6 @@ export function TaskCard({
           {task.external_meta.listTitle}
         </Text>
       ) : null}
-      <Row style={{ marginTop: 4 }} wrap>
-        {task.project_name ? <Badge label={task.project_name} /> : null}
-        {isExternalTask(task) ? (
-          <Badge label={taskSourceLabel(t, task.source)} tone="accent" />
-        ) : null}
-        <Badge label={taskPriorityLabel(t, task.priority)} tone={priorityTone(task.priority)} />
-        {task.due_date ? <Badge label={`${t("common.due")}: ${task.due_date}`} /> : null}
-      </Row>
       {task.notes ? (
         <Text
           style={{
@@ -127,7 +119,14 @@ export function TaskCard({
 
   return (
     <Card style={{ opacity: done ? 0.55 : 1 }}>
-      <Row>
+      <Row style={{ alignItems: "flex-start", gap: 8 }}>
+        {onPress ? (
+          <Pressable style={{ flex: 1 }} onPress={() => onPress(task)}>
+            {titleBlock}
+          </Pressable>
+        ) : (
+          titleBlock
+        )}
         <Btn
           small
           label={t("common.done")}
@@ -135,13 +134,14 @@ export function TaskCard({
           disabled={busy}
           onPress={() => onToggleDone(task)}
         />
-        {onPress ? (
-          <Pressable style={{ flex: 1 }} onPress={() => onPress(task)}>
-            {Body}
-          </Pressable>
-        ) : (
-          Body
-        )}
+      </Row>
+      <Row style={{ marginTop: 8, justifyContent: "flex-start" }} wrap>
+        {task.project_name ? <Badge label={task.project_name} /> : null}
+        {isExternalTask(task) ? (
+          <Badge label={taskSourceLabel(t, task.source)} tone="accent" />
+        ) : null}
+        <Badge label={taskPriorityLabel(t, task.priority)} tone={priorityTone(task.priority)} />
+        {task.due_date ? <Badge label={`${t("common.due")}: ${task.due_date}`} /> : null}
         <Pressable onPress={() => onAdvanceStatus?.(task)} disabled={busy || !onAdvanceStatus}>
           <Badge label={taskStatusLabel(t, task.status)} tone={statusTone(task.status)} />
         </Pressable>

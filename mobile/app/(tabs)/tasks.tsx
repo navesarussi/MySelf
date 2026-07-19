@@ -74,7 +74,7 @@ export default function TasksScreen() {
       api.tasks(config, {
         project: filter.project !== ALL_FILTER ? filter.project : undefined,
         status: filter.status.length ? filter.status.join(",") : undefined,
-        priority: filter.priority !== ALL_FILTER ? filter.priority : undefined,
+        priority: filter.priority.length ? filter.priority.join(",") : undefined,
         source: filter.source !== ALL_FILTER ? filter.source : undefined,
         external_list: filter.externalList !== ALL_FILTER ? filter.externalList : undefined,
         q: filter.q.trim() || undefined,
@@ -84,7 +84,7 @@ export default function TasksScreen() {
     [
       filter.project,
       filter.status.join(","),
-      filter.priority,
+      filter.priority.join(","),
       filter.source,
       filter.externalList,
       filter.q,

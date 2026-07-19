@@ -24,7 +24,7 @@ export function Screen({
   onRefresh,
   headerRight,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   children: React.ReactNode;
   refreshing?: boolean;
@@ -33,6 +33,7 @@ export function Screen({
 }) {
   const c = useColors();
   const { textStart, writingDirection, row } = useLayoutDir();
+  const showHeader = Boolean(title || subtitle || headerRight);
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.bg }}
@@ -43,33 +44,39 @@ export function Screen({
         ) : undefined
       }
     >
-      <View style={[row, { gap: 8, marginBottom: 14 }]}>
-        <View style={{ flex: 1 }}>
-          <Text
-            style={{
-              color: c.ink,
-              fontSize: tokens.title,
-              fontWeight: "700",
-              textAlign: textStart, writingDirection,
-            }}
-          >
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text
-              style={{
-                color: c.muted,
-                fontSize: tokens.subtitle,
-                marginTop: 2,
-                textAlign: textStart, writingDirection,
-              }}
-            >
-              {subtitle}
-            </Text>
-          ) : null}
+      {showHeader ? (
+        <View style={[row, { gap: 8, marginBottom: 14 }]}>
+          <View style={{ flex: 1 }}>
+            {title ? (
+              <Text
+                style={{
+                  color: c.ink,
+                  fontSize: tokens.title,
+                  fontWeight: "700",
+                  textAlign: textStart,
+                  writingDirection,
+                }}
+              >
+                {title}
+              </Text>
+            ) : null}
+            {subtitle ? (
+              <Text
+                style={{
+                  color: c.muted,
+                  fontSize: tokens.subtitle,
+                  marginTop: title ? 2 : 0,
+                  textAlign: textStart,
+                  writingDirection,
+                }}
+              >
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+          {headerRight}
         </View>
-        {headerRight}
-      </View>
+      ) : null}
       {children}
     </ScrollView>
   );
@@ -340,13 +347,29 @@ export function SectionTitle({
   children,
   onAdd,
   addLabel,
+  onPress,
 }: {
   children: string;
   onAdd?: () => void;
   addLabel?: string;
+  onPress?: () => void;
 }) {
   const c = useColors();
   const { textStart, writingDirection, row } = useLayoutDir();
+  const title = (
+    <Text
+      style={{
+        flex: 1,
+        color: onPress ? c.accent : c.ink,
+        fontSize: 16,
+        fontWeight: "700",
+        textAlign: textStart,
+        writingDirection,
+      }}
+    >
+      {children}
+    </Text>
+  );
   return (
     <View
       style={{
@@ -358,18 +381,13 @@ export function SectionTitle({
         gap: 8,
       }}
     >
-      <Text
-        style={{
-          flex: 1,
-          color: c.ink,
-          fontSize: 16,
-          fontWeight: "700",
-          textAlign: textStart,
-          writingDirection,
-        }}
-      >
-        {children}
-      </Text>
+      {onPress ? (
+        <Pressable style={{ flex: 1 }} onPress={onPress} accessibilityRole="link">
+          {title}
+        </Pressable>
+      ) : (
+        title
+      )}
       {onAdd ? (
         <Pressable
           onPress={onAdd}

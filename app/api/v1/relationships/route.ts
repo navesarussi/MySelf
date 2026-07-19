@@ -37,22 +37,34 @@ export async function POST(req: NextRequest) {
   if (!project_id) return badRequest("project_required");
 
   const phoneRaw = str(body.phone);
+  const reminderRaw =
+    typeof body.reminder_days === "number" ? body.reminder_days : Number(str(body.reminder_days));
   const reminder =
-    typeof body.reminder_days === "number" ? body.reminder_days : Number(str(body.reminder_days)) || null;
-  const { data, error } = await getSupabase()
-    .from("relationships")
-    .insert({
-      name,
-      group_name: optStr(body.group_name),
-      reminder_days: reminder,
-      notes: optStr(body.notes),
-      phone: phoneRaw ? normalizePhone(phoneRaw) : null,
-      email: optStr(body.email),
-      project_id,
-    })
-    .select()
-    .single();
-  if (error) return dbError();
+    Number.isFinite(reminderRaw) && reminderRaw > 0 ? Math.floor(reminderRaw) : 7;
+
+  const row = {
+    name,
+    group_name: optStr(body.group_name),
+    reminder_days: reminder,
+    notes: optStr(body.notes),
+    phone: phoneRaw ? normalizePhone(phoneRaw) || null : null,
+    email: optStr(body.email),
+    project_id,
+  };
+
+  const supabase = getSupabase();
+  let { data, error } = await supabase.from("relationships").insert(row).select().single();
+
+  // Older DBs may lack the email column — retry without it.
+  if (error && /email/i.test(error.message || "")) {
+    const { email: _email, ...withoutEmail } = row;
+    ({ data, error } = await supabase.from("relationships").insert(withoutEmail).select().single());
+  }
+
+  if (error) {
+    console.error("[relationships POST]", error.message, error.code, error.details);
+    return dbError(error.message || "db_error");
+  }
   revalidateRelationshipPaths();
   return NextResponse.json(data, { status: 201 });
 }

@@ -10,7 +10,6 @@ import {
   Badge,
   Btn,
   Card,
-  Chip,
   EmptyState,
   ErrorNote,
   Input,
@@ -25,8 +24,9 @@ import { FormModal } from "../../src/components/form-modal";
 import { TimelineVisual } from "../../src/components/timeline-visual";
 import { TimelineEventSheet } from "../../src/components/timeline/event-sheet";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
-import { formatPeriodRange, type LifePeriod } from "@/lib/life-periods";
+import { eventsForPeriod, formatPeriodRange, type LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
+import { todayISO } from "@/lib/habit-stats";
 
 type EventForm = {
   id?: string;
@@ -64,8 +64,10 @@ export default function TimelineScreen() {
   const [eventForm, setEventForm] = useState<EventForm | null>(null);
   const [periodForm, setPeriodForm] = useState<PeriodForm | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"visual" | "list">("visual");
   const [sheetEvents, setSheetEvents] = useState<TimelineEvent[] | null>(null);
+  const [expandedPeriodId, setExpandedPeriodId] = useState<string | null>(null);
+  const [futureOpen, setFutureOpen] = useState(true);
+  const [pastOpen, setPastOpen] = useState(false);
 
   useEffect(() => {
     if (params.add === "event") setEventForm(emptyEvent);
@@ -75,18 +77,26 @@ export default function TimelineScreen() {
 
   const events = eventsQ.data ?? [];
   const periods = periodsQ.data ?? [];
+  const today = todayISO();
 
-  // Chronological list grouped by year, newest first (visual zoom board is a
-  // documented roadmap item — see docs/react-native/STATUS.md)
-  const byYear = useMemo(() => {
-    const groups = new Map<string, TimelineEvent[]>();
+  const chronoBuckets = useMemo(() => {
+    const todayEvents: TimelineEvent[] = [];
+    const futureEvents: TimelineEvent[] = [];
+    const pastEvents: TimelineEvent[] = [];
     for (const ev of events) {
-      const year = ev.event_date.slice(0, 4);
-      if (!groups.has(year)) groups.set(year, []);
-      groups.get(year)!.push(ev);
+      if (ev.event_date === today) todayEvents.push(ev);
+      else if (ev.event_date > today) futureEvents.push(ev);
+      else pastEvents.push(ev);
     }
-    return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [events]);
+    const byDateAsc = (a: TimelineEvent, b: TimelineEvent) =>
+      a.event_date.localeCompare(b.event_date) || (a.event_time || "").localeCompare(b.event_time || "");
+    const byDateDesc = (a: TimelineEvent, b: TimelineEvent) =>
+      b.event_date.localeCompare(a.event_date) || (b.event_time || "").localeCompare(a.event_time || "");
+    todayEvents.sort(byDateAsc);
+    futureEvents.sort(byDateAsc);
+    pastEvents.sort(byDateDesc);
+    return { todayEvents, futureEvents, pastEvents };
+  }, [events, today]);
 
   function refreshAll() {
     eventsQ.refresh();
@@ -202,6 +212,94 @@ export default function TimelineScreen() {
     });
   }
 
+  function togglePeriodExpand(periodId: string) {
+    setExpandedPeriodId((prev) => (prev === periodId ? null : periodId));
+  }
+
+  function renderEventCard(ev: TimelineEvent) {
+    return (
+      <Pressable key={ev.id} onPress={() => openEventForm(ev)}>
+        <Card>
+          <Row>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>
+                {displayTitle(ev)}
+              </Text>
+              {displayDescription(ev) ? (
+                <Text
+                  style={{
+                    color: c.muted,
+                    fontSize: tokens.textXs,
+                    textAlign: textStart,
+                    writingDirection,
+                    marginTop: 2,
+                  }}
+                >
+                  {displayDescription(ev)}
+                </Text>
+              ) : null}
+              <Row style={{ justifyContent: "flex-start", marginTop: 4 }} wrap>
+                {ev.category ? <Badge label={ev.category} /> : null}
+                {isGoogleCalendarEvent(ev) ? (
+                  <Badge label={t("common.fromGoogleCalendar")} tone="accent" />
+                ) : null}
+              </Row>
+            </View>
+            <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
+              {new Date(ev.event_date).toLocaleDateString(locale === "he" ? "he-IL" : "en-US")}
+              {ev.event_time ? `\n${ev.event_time.slice(0, 5)}` : ""}
+            </Text>
+          </Row>
+        </Card>
+      </Pressable>
+    );
+  }
+
+  function renderPeriodCard(p: LifePeriod) {
+    const expanded = expandedPeriodId === p.id;
+    const periodEvents = expanded ? eventsForPeriod(events, p) : [];
+    return (
+      <View key={p.id}>
+        <Card style={{ borderColor: p.color, borderStartWidth: 4 }}>
+          <Row>
+            <Pressable style={{ flex: 1 }} onPress={() => togglePeriodExpand(p.id)}>
+              <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>
+                {p.title}
+              </Text>
+              <Text
+                style={{
+                  color: c.muted,
+                  fontSize: tokens.textXs,
+                  textAlign: textStart,
+                  writingDirection,
+                  marginTop: 2,
+                }}
+              >
+                {formatPeriodRange(p, locale)}
+                {expanded
+                  ? ` · ${t("timeline.eventsCount", { count: periodEvents.length })}`
+                  : ""}
+              </Text>
+            </Pressable>
+            <Btn small variant="ghost" label={t("timeline.edit")} onPress={() => openPeriodForm(p)} />
+            {p.kind === "milestone_band" ? <Badge label={t("common.milestone")} tone="accent" /> : null}
+          </Row>
+          {expanded ? (
+            <View style={{ marginTop: 8 }}>
+              {periodEvents.length === 0 ? (
+                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
+                  {t("timeline.noEventsInPeriod")}
+                </Text>
+              ) : (
+                periodEvents.map((ev) => renderEventCard(ev))
+              )}
+            </View>
+          ) : null}
+        </Card>
+      </View>
+    );
+  }
+
   return (
     <Screen
       title={t("timeline.title")}
@@ -249,23 +347,18 @@ export default function TimelineScreen() {
         </Card>
       ) : null}
 
-      <Row style={{ marginBottom: 12 }}>
-        <Chip label={t("timeline.visualAxis")} active={viewMode === "visual"} onPress={() => setViewMode("visual")} />
-        <Chip label={t("timeline.chronological")} active={viewMode === "list"} onPress={() => setViewMode("list")} />
-      </Row>
-
       {eventsQ.error ? <ErrorNote message={eventsQ.error} onRetry={eventsQ.refresh} /> : null}
       {loading && !eventsQ.data ? <Loading /> : null}
       {eventsQ.data && events.length === 0 && periods.length === 0 ? (
         <EmptyState text={t("timeline.empty")} />
       ) : null}
 
-      {viewMode === "visual" && (events.length > 0 || periods.length > 0) ? (
+      {events.length > 0 || periods.length > 0 ? (
         <TimelineVisual
           events={events}
           periods={periods}
           onEventPress={(ev) => setSheetEvents([ev])}
-          onPeriodPress={openPeriodForm}
+          onPeriodPress={(p) => setExpandedPeriodId(p.id)}
           onClusterPress={(evs) => setSheetEvents(evs)}
         />
       ) : null}
@@ -277,60 +370,62 @@ export default function TimelineScreen() {
         onEdit={openEventForm}
       />
 
-      {viewMode === "list" && periods.length > 0 ? (
+      {periods.length > 0 ? (
         <>
           <SectionTitle>{t("timeline.byPeriods")}</SectionTitle>
-          {periods.map((p) => (
-            <Pressable key={p.id} onPress={() => openPeriodForm(p)}>
-              <Card style={{ borderColor: p.color, borderStartWidth: 4 }}>
-                <Row>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>{p.title}</Text>
-                    <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
-                      {formatPeriodRange(p, locale)}
-                    </Text>
-                  </View>
-                  {p.kind === "milestone_band" ? <Badge label={t("common.milestone")} tone="accent" /> : null}
-                </Row>
-              </Card>
-            </Pressable>
-          ))}
+          {periods.map((p) => renderPeriodCard(p))}
         </>
       ) : null}
 
-      {viewMode === "list" ? <SectionTitle>{t("timeline.chronological")}</SectionTitle> : null}
+      <SectionTitle>{t("timeline.chronological")}</SectionTitle>
 
-      {viewMode === "list" && byYear.map(([year, list]) => (
-        <View key={year}>
-          <Text style={{ color: c.accent, fontWeight: "700", fontSize: 15, textAlign: textStart, writingDirection, marginVertical: 6 }}>
-            {year}
-          </Text>
-          {list.map((ev) => (
-            <Pressable key={ev.id} onPress={() => openEventForm(ev)}>
-              <Card>
-                <Row>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>{displayTitle(ev)}</Text>
-                    {displayDescription(ev) ? (
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
-                        {displayDescription(ev)}
-                      </Text>
-                    ) : null}
-                    <Row style={{ justifyContent: "flex-start", marginTop: 4 }} wrap>
-                      {ev.category ? <Badge label={ev.category} /> : null}
-                      {isGoogleCalendarEvent(ev) ? <Badge label={t("common.fromGoogleCalendar")} tone="accent" /> : null}
-                    </Row>
-                  </View>
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
-                    {new Date(ev.event_date).toLocaleDateString(locale === "he" ? "he-IL" : "en-US")}
-                    {ev.event_time ? `\n${ev.event_time.slice(0, 5)}` : ""}
-                  </Text>
-                </Row>
-              </Card>
-            </Pressable>
-          ))}
-        </View>
-      ))}
+      <Pressable onPress={() => setFutureOpen((v) => !v)}>
+        <Text
+          style={{
+            color: c.accent,
+            fontWeight: "700",
+            fontSize: 15,
+            textAlign: textStart,
+            writingDirection,
+            marginVertical: 6,
+          }}
+        >
+          {futureOpen ? "▾ " : "▸ "}
+          {t("timeline.futureSection")} ({chronoBuckets.futureEvents.length})
+        </Text>
+      </Pressable>
+      {futureOpen ? chronoBuckets.futureEvents.map((ev) => renderEventCard(ev)) : null}
+
+      <Text
+        style={{
+          color: c.accent,
+          fontWeight: "700",
+          fontSize: 15,
+          textAlign: textStart,
+          writingDirection,
+          marginVertical: 6,
+        }}
+      >
+        {t("timeline.todaySection")}
+      </Text>
+      {chronoBuckets.todayEvents.map((ev) => renderEventCard(ev))}
+
+      <Pressable onPress={() => setPastOpen((v) => !v)}>
+        <Text
+          style={{
+            color: c.accent,
+            fontWeight: "700",
+            fontSize: 15,
+            textAlign: textStart,
+            writingDirection,
+            marginVertical: 6,
+          }}
+        >
+          {pastOpen ? "▾ " : "▸ "}
+          {t("timeline.pastSection")} ({chronoBuckets.pastEvents.length})
+        </Text>
+      </Pressable>
+      {pastOpen ? chronoBuckets.pastEvents.map((ev) => renderEventCard(ev)) : null}
 
       <FormModal
         visible={eventForm !== null}

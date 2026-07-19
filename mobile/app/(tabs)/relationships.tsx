@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Linking as RNLinking, Pressable, Text, View } from "react-native";
+import { Linking as RNLinking, Platform, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Contacts from "expo-contacts";
 import { differenceInCalendarDays } from "date-fns";
@@ -37,19 +37,24 @@ type FormState = {
   email: string;
   notes: string;
   project_id: string;
+  importedFromDevice?: boolean;
 };
+
+const DEFAULT_CADENCE_DAYS = "7";
 
 const emptyForm = (projectId: string): FormState => ({
   name: "",
   group_name: "",
-  reminder_days: "",
+  reminder_days: DEFAULT_CADENCE_DAYS,
   phone: "",
   email: "",
   notes: "",
   project_id: projectId,
+  importedFromDevice: false,
 });
 
 async function pickDeviceContact() {
+  if (Platform.OS === "web") return null;
   try {
     const { status } = await Contacts.requestPermissionsAsync();
     if (status !== "granted") return null;
@@ -89,11 +94,19 @@ export default function RelationshipsScreen() {
     [projects]
   );
 
-  async function startCreate() {
+  async function startCreate(projectId = defaultProjectId) {
+    if (!projectId) return;
     const picked = await pickDeviceContact();
     setForm({
-      ...emptyForm(defaultProjectId),
-      ...(picked ? { name: picked.name, phone: picked.phone, email: picked.email } : {}),
+      ...emptyForm(projectId),
+      ...(picked
+        ? {
+            name: picked.name,
+            phone: picked.phone,
+            email: picked.email,
+            importedFromDevice: true,
+          }
+        : {}),
     });
   }
 
@@ -106,16 +119,17 @@ export default function RelationshipsScreen() {
       name: picked.name || form.name,
       phone: picked.phone || form.phone,
       email: picked.email || form.email,
+      importedFromDevice: true,
     });
   }
 
   useEffect(() => {
-    if ((params.add === "contact" || params.add === "1") && projects.length) {
-      void startCreate();
+    if ((params.add === "contact" || params.add === "1") && defaultProjectId) {
+      void startCreate(defaultProjectId);
       router.setParams({ add: "" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.add, projects.length, defaultProjectId, router]);
+  }, [params.add, defaultProjectId, router]);
 
   const today = new Date();
   const relationships = relQ.data ?? [];
@@ -124,7 +138,6 @@ export default function RelationshipsScreen() {
     [relationships]
   );
 
-  // Urgency first (overdue, then longest since contact), like the web default sort
   const filtered = useMemo(() => {
     const list =
       groupFilter === ALL_FILTER ? relationships : relationships.filter((r) => r.group_name === groupFilter);
@@ -151,14 +164,22 @@ export default function RelationshipsScreen() {
     const body = {
       name: form.name,
       group_name: form.group_name || null,
-      reminder_days: form.reminder_days ? Number(form.reminder_days) : null,
+      reminder_days: form.reminder_days ? Number(form.reminder_days) : 7,
       phone: form.phone || null,
       email: form.email || null,
       notes: form.notes || null,
       project_id: form.project_id,
     };
-    if (form.id) await run((config) => api.updateRelationship(config, form.id!, body), { success: "flash.relationshipUpdated" });
-    else await run((config) => api.createRelationship(config, body), { success: "flash.relationshipAdded" });
+    const result = form.id
+      ? await run((config) => api.updateRelationship(config, form.id!, body), {
+          success: "flash.relationshipUpdated",
+          error: "flash.relationshipUpdateError",
+        })
+      : await run((config) => api.createRelationship(config, body), {
+          success: "flash.relationshipAdded",
+          error: "flash.relationshipAddError",
+        });
+    if (!result) return;
     setForm(null);
     relQ.refresh();
   }
@@ -183,7 +204,12 @@ export default function RelationshipsScreen() {
       refreshing={relQ.loading}
       onRefresh={relQ.refresh}
       headerRight={
-        <Btn small label={`+ ${t("relationships.addContact")}`} onPress={() => void startCreate()} />
+        <Btn
+          small
+          label={`+ ${t("relationships.addContact")}`}
+          onPress={() => void startCreate()}
+          disabled={!defaultProjectId}
+        />
       }
     >
       {groups.length > 0 ? (
@@ -213,11 +239,12 @@ export default function RelationshipsScreen() {
                     id: r.id,
                     name: r.name,
                     group_name: r.group_name ?? "",
-                    reminder_days: r.reminder_days != null ? String(r.reminder_days) : "",
+                    reminder_days: r.reminder_days != null ? String(r.reminder_days) : DEFAULT_CADENCE_DAYS,
                     phone: r.phone ?? "",
                     email: r.email ?? "",
                     notes: r.notes ?? "",
                     project_id: r.project_id,
+                    importedFromDevice: false,
                   })
                 }
               >
@@ -275,24 +302,31 @@ export default function RelationshipsScreen() {
       >
         {form ? (
           <View>
-            <View style={{ marginBottom: 10, alignSelf: "flex-start" }}>
-              <Btn
-                small
-                variant="ghost"
-                label={t("relationships.importFromDevice")}
-                onPress={() => void importIntoForm()}
-              />
-            </View>
+            {Platform.OS !== "web" ? (
+              <View style={{ marginBottom: 10, alignSelf: "flex-start" }}>
+                <Btn
+                  small
+                  variant="ghost"
+                  label={
+                    form.importedFromDevice
+                      ? t("relationships.importedChangeContact")
+                      : t("relationships.importFromDevice")
+                  }
+                  onPress={() => void importIntoForm()}
+                />
+              </View>
+            ) : null}
             <Input value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} placeholder={t("relationships.namePlaceholder")} />
             <Input
               value={form.group_name}
               onChangeText={(v) => setForm({ ...form, group_name: v })}
               placeholder={t("relationships.groupPlaceholder")}
             />
+            <Label>{t("relationships.cadenceLabel")}</Label>
             <Input
               value={form.reminder_days}
               onChangeText={(v) => setForm({ ...form, reminder_days: v })}
-              placeholder={t("relationships.reminderPlaceholder")}
+              placeholder={t("relationships.cadencePlaceholder")}
               keyboardType="numeric"
             />
             <Input

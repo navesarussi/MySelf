@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useColors, tokens } from "../theme";
 import { useI18n } from "../i18n";
@@ -22,18 +31,40 @@ type EditFields = {
   last_checked_on: string;
 };
 
-function StatTile({ icon, iconColor, label, value }: { icon: React.ComponentProps<typeof Ionicons>["name"]; iconColor: string; label: string; value: number }) {
+function StatTile({
+  icon,
+  iconColor,
+  label,
+  value,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  iconColor: string;
+  label: string;
+  value: number;
+}) {
   const c = useColors();
   const { writingDirection } = useLayoutDir();
   return (
-    <View style={{ flex: 1, minWidth: 70, backgroundColor: c.border + "40", borderRadius: tokens.radiusSm, paddingVertical: 6, alignItems: "center" }}>
+    <View
+      style={{
+        flex: 1,
+        minWidth: 70,
+        backgroundColor: c.border + "40",
+        borderRadius: tokens.radiusSm,
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+        alignItems: "center",
+      }}
+    >
       <Row style={{ gap: 3, justifyContent: "center" }}>
-        <Ionicons name={icon} size={11} color={iconColor} />
+        <Ionicons name={icon} size={12} color={iconColor} />
         <Text style={{ color: c.muted, fontSize: 9, writingDirection }} numberOfLines={1}>
           {label}
         </Text>
       </Row>
-      <Text style={{ color: c.ink, fontWeight: "700", fontSize: 15, marginTop: 2, writingDirection }}>{value}</Text>
+      <Text style={{ color: c.ink, fontWeight: "700", fontSize: 16, marginTop: 2, writingDirection }}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -57,7 +88,8 @@ export function HabitCard({
 }) {
   const c = useColors();
   const { t, locale } = useI18n();
-  const { textStart, textLtr, writingDirection, row } = useLayoutDir();
+  const { textStart, textLtr, writingDirection } = useLayoutDir();
+  const { height: windowHeight } = useWindowDimensions();
   const [editing, setEditing] = useState(false);
   const [viewing, setViewing] = useState(false);
   const [form, setForm] = useState<EditFields | null>(null);
@@ -84,6 +116,7 @@ export function HabitCard({
       : null;
 
   function openEdit() {
+    setViewing(false);
     setForm({
       name: habit.name,
       kind: habit.kind,
@@ -110,10 +143,16 @@ export function HabitCard({
   }
 
   function requestDelete() {
-    confirmDelete(t("habits.confirmDelete", { name: habit.name }), async () => {
-      await onDelete();
-      setEditing(false);
-    }, t("common.delete"), t("common.cancel"));
+    confirmDelete(
+      t("habits.confirmDelete", { name: habit.name }),
+      async () => {
+        await onDelete();
+        setEditing(false);
+        setViewing(false);
+      },
+      t("common.delete"),
+      t("common.cancel")
+    );
   }
 
   function requestReset() {
@@ -123,29 +162,66 @@ export function HabitCard({
   const successTotal = successDays + failures;
   const successPct = successTotal > 0 ? Math.round((successDays / successTotal) * 100) : 0;
   const failurePct = 100 - successPct;
-  const streakPct = habit.best_streak > 0 ? Math.min(100, Math.round((streak / habit.best_streak) * 100)) : 0;
+  const streakPct =
+    habit.best_streak > 0 ? Math.min(100, Math.round((streak / habit.best_streak) * 100)) : 0;
+  const sheetMaxHeight = Math.min(windowHeight * 0.88, 640);
 
   return (
     <>
-      <Pressable onPress={() => setViewing(true)} accessibilityRole="button" accessibilityLabel={t("habits.viewDetails")}>
+      <Pressable
+        onPress={() => setViewing(true)}
+        accessibilityRole="button"
+        accessibilityLabel={t("habits.viewDetails")}
+      >
         <Card>
           <Row>
             <View style={{ flex: 1 }}>
               <Row style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-                <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>{habit.name}</Text>
-                <Badge label={habit.kind === "build" ? t("habits.build") : t("habits.quit")} tone={habit.kind === "build" ? "good" : "warn"} />
+                <Text
+                  style={{
+                    color: c.ink,
+                    fontWeight: "700",
+                    textAlign: textStart,
+                    writingDirection,
+                  }}
+                >
+                  {habit.name}
+                </Text>
+                <Badge
+                  label={habit.kind === "build" ? t("habits.build") : t("habits.quit")}
+                  tone={habit.kind === "build" ? "good" : "warn"}
+                />
               </Row>
               {habit.target_note ? (
-                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }} numberOfLines={2}>
+                <Text
+                  style={{
+                    color: c.muted,
+                    fontSize: tokens.textXs,
+                    textAlign: textStart,
+                    writingDirection,
+                    marginTop: 2,
+                  }}
+                  numberOfLines={2}
+                >
                   {habit.target_note}
                 </Text>
               ) : null}
             </View>
             <Row style={{ gap: 2 }}>
-              <Pressable onPress={requestReset} hitSlop={8} style={{ padding: 4 }} accessibilityLabel={t("habits.resetStreak")}>
+              <Pressable
+                onPress={requestReset}
+                hitSlop={8}
+                style={{ padding: 4 }}
+                accessibilityLabel={t("habits.resetStreak")}
+              >
                 <Ionicons name="refresh-outline" size={16} color={c.muted} />
               </Pressable>
-              <Pressable onPress={openEdit} hitSlop={8} style={{ padding: 4 }} accessibilityLabel={t("habits.editOrDelete")}>
+              <Pressable
+                onPress={openEdit}
+                hitSlop={8}
+                style={{ padding: 4 }}
+                accessibilityLabel={t("habits.editOrDelete")}
+              >
                 <Ionicons name="create-outline" size={16} color={c.muted} />
               </Pressable>
             </Row>
@@ -153,13 +229,36 @@ export function HabitCard({
 
           <Row wrap style={{ marginTop: 8, gap: 6 }}>
             <StatTile icon="flame" iconColor={c.accent2} label={t("common.streak")} value={streak} />
-            <StatTile icon="trending-up-outline" iconColor={c.accent} label={t("common.peak")} value={habit.best_streak} />
-            <StatTile icon="thumbs-up-outline" iconColor={c.good} label={t("common.positives")} value={successDays} />
-            <StatTile icon="alert-circle-outline" iconColor={c.warn} label={t("common.failures")} value={failures} />
+            <StatTile
+              icon="trending-up-outline"
+              iconColor={c.accent}
+              label={t("common.peak")}
+              value={habit.best_streak}
+            />
+            <StatTile
+              icon="thumbs-up-outline"
+              iconColor={c.good}
+              label={t("common.positives")}
+              value={successDays}
+            />
+            <StatTile
+              icon="alert-circle-outline"
+              iconColor={c.warn}
+              label={t("common.failures")}
+              value={failures}
+            />
           </Row>
 
           <Row style={{ marginTop: 8, justifyContent: "space-between" }}>
-            <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }} numberOfLines={1}>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textXs,
+                textAlign: textStart,
+                writingDirection,
+              }}
+              numberOfLines={1}
+            >
               {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
             </Text>
           </Row>
@@ -170,7 +269,13 @@ export function HabitCard({
             ) : (
               <>
                 <Btn small label={t("habits.checkInToday")} onPress={onCheckIn} disabled={busy} />
-                <Btn small variant="warn" label={t("habits.reportFall")} onPress={onReportFall} disabled={busy} />
+                <Btn
+                  small
+                  variant="warn"
+                  label={t("habits.reportFall")}
+                  onPress={onReportFall}
+                  disabled={busy}
+                />
               </>
             )}
           </Row>
@@ -189,10 +294,22 @@ export function HabitCard({
         {form ? (
           <View>
             <Label>{t("habits.name")}</Label>
-            <Input value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} placeholder={t("habits.namePlaceholder")} />
+            <Input
+              value={form.name}
+              onChangeText={(v) => setForm({ ...form, name: v })}
+              placeholder={t("habits.namePlaceholder")}
+            />
             <Row style={{ marginBottom: 8 }}>
-              <Chip label={t("habits.buildNew")} active={form.kind === "build"} onPress={() => setForm({ ...form, kind: "build" })} />
-              <Chip label={t("habits.quitBad")} active={form.kind === "quit"} onPress={() => setForm({ ...form, kind: "quit" })} />
+              <Chip
+                label={t("habits.buildNew")}
+                active={form.kind === "build"}
+                onPress={() => setForm({ ...form, kind: "build" })}
+              />
+              <Chip
+                label={t("habits.quitBad")}
+                active={form.kind === "quit"}
+                onPress={() => setForm({ ...form, kind: "quit" })}
+              />
             </Row>
             <Input
               value={form.target_note}
@@ -208,9 +325,17 @@ export function HabitCard({
               style={{ textAlign: textLtr }}
             />
             <Label>{t("common.streak")}</Label>
-            <Input value={form.streak_count} onChangeText={(v) => setForm({ ...form, streak_count: v })} keyboardType="numeric" />
+            <Input
+              value={form.streak_count}
+              onChangeText={(v) => setForm({ ...form, streak_count: v })}
+              keyboardType="numeric"
+            />
             <Label>{t("common.peak")}</Label>
-            <Input value={form.best_streak} onChangeText={(v) => setForm({ ...form, best_streak: v })} keyboardType="numeric" />
+            <Input
+              value={form.best_streak}
+              onChangeText={(v) => setForm({ ...form, best_streak: v })}
+              keyboardType="numeric"
+            />
             <Label>{t("common.positives")}</Label>
             <Input
               value={form.total_success_days}
@@ -218,7 +343,11 @@ export function HabitCard({
               keyboardType="numeric"
             />
             <Label>{t("common.failures")}</Label>
-            <Input value={form.failure_count} onChangeText={(v) => setForm({ ...form, failure_count: v })} keyboardType="numeric" />
+            <Input
+              value={form.failure_count}
+              onChangeText={(v) => setForm({ ...form, failure_count: v })}
+              keyboardType="numeric"
+            />
             <Label>{`${t("habits.lastCheck")} (YYYY-MM-DD)`}</Label>
             <Input
               value={form.last_checked_on}
@@ -231,97 +360,216 @@ export function HabitCard({
         ) : null}
       </FormModal>
 
-      <Modal visible={viewing} animationType="fade" transparent onRequestClose={() => setViewing(false)}>
-        <Pressable
-          style={{ flex: 1, backgroundColor: "#00000088", justifyContent: "center", padding: 16 }}
-          onPress={() => setViewing(false)}
+      <Modal visible={viewing} animationType="slide" transparent onRequestClose={() => setViewing(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#00000088" }}
         >
-          <Pressable onPress={(e) => e.stopPropagation()}>
+          <Pressable style={{ flex: 1 }} onPress={() => setViewing(false)} />
+          <View
+            style={{
+              backgroundColor: c.surface,
+              borderTopLeftRadius: 18,
+              borderTopRightRadius: 18,
+              borderColor: c.border,
+              borderWidth: 1,
+              maxHeight: sheetMaxHeight,
+              height: sheetMaxHeight,
+            }}
+          >
             <View
               style={{
-                backgroundColor: c.surface,
-                borderColor: c.border,
-                borderWidth: 1,
-                borderRadius: 18,
-                maxHeight: "85%",
+                alignSelf: "center",
+                width: 36,
+                height: 4,
+                borderRadius: 999,
+                backgroundColor: c.border,
+                marginTop: 10,
+                marginBottom: 4,
               }}
+            />
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: tokens.padLg, paddingBottom: 28 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
             >
-              <ScrollView contentContainerStyle={{ padding: tokens.padLg }}>
-                <Row style={{ justifyContent: "space-between" }}>
-                  <Text style={{ color: c.ink, fontSize: 17, fontWeight: "700", textAlign: textStart, writingDirection }}>{habit.name}</Text>
-                  <Pressable onPress={() => setViewing(false)} hitSlop={8}>
-                    <Ionicons name="close" size={20} color={c.muted} />
-                  </Pressable>
-                </Row>
+              <Row style={{ justifyContent: "space-between", marginTop: 8, marginBottom: 4 }}>
+                <Text
+                  style={{
+                    color: c.ink,
+                    fontSize: 20,
+                    fontWeight: "700",
+                    flex: 1,
+                    textAlign: textStart,
+                    writingDirection,
+                  }}
+                >
+                  {habit.name}
+                </Text>
+                <Pressable onPress={() => setViewing(false)} hitSlop={10} style={{ padding: 4 }}>
+                  <Ionicons name="close" size={22} color={c.muted} />
+                </Pressable>
+              </Row>
 
-                <Row style={{ marginTop: 8, justifyContent: "flex-start" }}>
-                  <Badge label={habit.kind === "build" ? t("habits.build") : t("habits.quit")} tone={habit.kind === "build" ? "good" : "warn"} />
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
-                    {t("habits.created")}: {formatLocaleDate(locale, habit.created_at)}
-                  </Text>
-                </Row>
+              <Row style={{ marginTop: 6, justifyContent: "flex-start", flexWrap: "wrap", gap: 6 }}>
+                <Badge
+                  label={habit.kind === "build" ? t("habits.build") : t("habits.quit")}
+                  tone={habit.kind === "build" ? "good" : "warn"}
+                />
+                <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
+                  {t("habits.created")}: {formatLocaleDate(locale, habit.created_at)}
+                </Text>
+              </Row>
 
-                {habit.target_note ? (
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 8 }}>
-                    {habit.target_note}
+              {habit.target_note ? (
+                <Text
+                  style={{
+                    color: c.ink,
+                    fontSize: tokens.textSm,
+                    lineHeight: 22,
+                    textAlign: textStart,
+                    writingDirection,
+                    marginTop: 12,
+                  }}
+                >
+                  {habit.target_note}
+                </Text>
+              ) : null}
+
+              <Row wrap style={{ marginTop: 16, gap: 8 }}>
+                <StatTile icon="flame" iconColor={c.accent2} label={t("common.streak")} value={streak} />
+                <StatTile
+                  icon="trending-up-outline"
+                  iconColor={c.accent}
+                  label={t("common.peak")}
+                  value={habit.best_streak}
+                />
+                <StatTile
+                  icon="thumbs-up-outline"
+                  iconColor={c.good}
+                  label={t("common.positives")}
+                  value={successDays}
+                />
+                <StatTile
+                  icon="alert-circle-outline"
+                  iconColor={c.warn}
+                  label={t("common.failures")}
+                  value={failures}
+                />
+              </Row>
+
+              <View
+                style={{
+                  marginTop: 16,
+                  padding: 12,
+                  borderRadius: tokens.radiusSm,
+                  backgroundColor: c.border + "33",
+                }}
+              >
+                <Text
+                  style={{
+                    color: c.muted,
+                    fontSize: tokens.textXs,
+                    textAlign: textStart,
+                    writingDirection,
+                  }}
+                >
+                  {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
+                </Text>
+                {reportTime !== "00:00" ? (
+                  <Text
+                    style={{
+                      color: c.muted,
+                      fontSize: tokens.textXs,
+                      textAlign: textStart,
+                      writingDirection,
+                      marginTop: 4,
+                    }}
+                  >
+                    {t("habits.reportOpensAt", { time: reportTime })}
                   </Text>
                 ) : null}
+              </View>
 
-                <Row wrap style={{ marginTop: 12, gap: 6 }}>
-                  <StatTile icon="flame" iconColor={c.accent2} label={t("common.streak")} value={streak} />
-                  <StatTile icon="trending-up-outline" iconColor={c.accent} label={t("common.peak")} value={habit.best_streak} />
-                  <StatTile icon="thumbs-up-outline" iconColor={c.good} label={t("common.positives")} value={successDays} />
-                  <StatTile icon="alert-circle-outline" iconColor={c.warn} label={t("common.failures")} value={failures} />
-                </Row>
+              {habit.best_streak > 0 ? (
+                <View style={{ marginTop: 18 }}>
+                  <Row style={{ justifyContent: "space-between" }}>
+                    <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
+                      {t("habits.streakProgress")}
+                    </Text>
+                    <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "700" }}>
+                      {streak}/{habit.best_streak}
+                    </Text>
+                  </Row>
+                  <View
+                    style={{
+                      height: 10,
+                      borderRadius: 999,
+                      backgroundColor: c.border + "60",
+                      overflow: "hidden",
+                      marginTop: 6,
+                    }}
+                  >
+                    <View
+                      style={{
+                        height: "100%",
+                        width: `${streakPct}%`,
+                        backgroundColor: c.accent2,
+                        borderRadius: 999,
+                      }}
+                    />
+                  </View>
+                </View>
+              ) : null}
 
-                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 10 }}>
-                  {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
-                  {reportTime !== "00:00" ? `  ·  ${t("habits.reportOpensAt", { time: reportTime })}` : ""}
-                </Text>
-
-                {habit.best_streak > 0 ? (
-                  <View style={{ marginTop: 14 }}>
-                    <Row style={{ justifyContent: "space-between" }}>
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs }}>{t("habits.streakProgress")}</Text>
-                      <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "700" }}>
-                        {streak}/{habit.best_streak}
+              {successTotal > 0 ? (
+                <View style={{ marginTop: 18 }}>
+                  <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6 }}>
+                    {t("habits.successVsFailure")}
+                  </Text>
+                  <Row style={{ height: 12, borderRadius: 999, overflow: "hidden" }}>
+                    <View style={{ height: "100%", width: `${successPct}%`, backgroundColor: c.good }} />
+                    <View style={{ height: "100%", width: `${failurePct}%`, backgroundColor: c.warn }} />
+                  </Row>
+                  <Row style={{ marginTop: 8, justifyContent: "space-between" }}>
+                    <Row style={{ gap: 6 }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: c.good }} />
+                      <Text style={{ color: c.muted, fontSize: 11 }}>
+                        {t("habits.successDays")}: {successDays} ({successPct}%)
                       </Text>
                     </Row>
-                    <View style={{ height: 8, borderRadius: 999, backgroundColor: c.border + "60", overflow: "hidden", marginTop: 4 }}>
-                      <View style={{ height: "100%", width: `${streakPct}%`, backgroundColor: c.accent2, borderRadius: 999 }} />
-                    </View>
-                  </View>
-                ) : null}
+                    <Row style={{ gap: 6 }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: c.warn }} />
+                      <Text style={{ color: c.muted, fontSize: 11 }}>
+                        {t("habits.failureDays")}: {failures} ({failurePct}%)
+                      </Text>
+                    </Row>
+                  </Row>
+                </View>
+              ) : null}
 
-                {successTotal > 0 ? (
-                  <View style={{ marginTop: 14 }}>
-                    <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 4 }}>
-                      {t("habits.successVsFailure")}
-                    </Text>
-                    <Row style={{ height: 12, borderRadius: 999, overflow: "hidden", gap: 0 }}>
-                      <View style={{ height: "100%", width: `${successPct}%`, backgroundColor: c.good }} />
-                      <View style={{ height: "100%", width: `${failurePct}%`, backgroundColor: c.warn }} />
-                    </Row>
-                    <Row style={{ marginTop: 4, justifyContent: "space-between" }}>
-                      <Row style={{ gap: 4 }}>
-                        <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: c.good }} />
-                        <Text style={{ color: c.muted, fontSize: 10 }}>
-                          {t("habits.successDays")}: {successDays}
-                        </Text>
-                      </Row>
-                      <Row style={{ gap: 4 }}>
-                        <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: c.warn }} />
-                        <Text style={{ color: c.muted, fontSize: 10 }}>
-                          {t("habits.failureDays")}: {failures}
-                        </Text>
-                      </Row>
-                    </Row>
-                  </View>
-                ) : null}
-              </ScrollView>
-            </View>
-          </Pressable>
-        </Pressable>
+              <Row style={{ marginTop: 22, gap: 8, flexWrap: "wrap" }}>
+                {!checked ? (
+                  <>
+                    <Btn small label={t("habits.checkInToday")} onPress={onCheckIn} disabled={busy} />
+                    <Btn
+                      small
+                      variant="warn"
+                      label={t("habits.reportFall")}
+                      onPress={onReportFall}
+                      disabled={busy}
+                    />
+                  </>
+                ) : (
+                  <Badge label={t("habits.checkedToday")} tone="good" />
+                )}
+                <View style={{ flex: 1 }} />
+                <Btn small variant="ghost" label={t("habits.editOrDelete")} onPress={openEdit} />
+              </Row>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );

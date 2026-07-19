@@ -2,6 +2,7 @@ node_modules/
 .expo/
 dist/
 web-build/
+build/
 *.log
 .env*.local
 ios/

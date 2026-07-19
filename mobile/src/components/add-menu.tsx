@@ -2,7 +2,7 @@ import React from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { addTargetHref, type AddTarget } from "@/lib/add-menu";
+import { mobileAddTargetHref, type AddTarget } from "@/lib/add-menu";
 import { SHOW_PROJECTS } from "@/lib/features";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
@@ -29,7 +29,7 @@ export function AddMenuModal({ visible, onClose }: { visible: boolean; onClose: 
 
   function select(target: AddTarget) {
     onClose();
-    router.push(addTargetHref(target) as `/${string}`);
+    router.push(mobileAddTargetHref(target) as `/${string}`);
   }
 
   return (

@@ -61,6 +61,21 @@ function minutesUntilReportReset(reportTime: string | null | undefined, now: Dat
 }
 
 /**
+ * Habits page order: oldest last report first (never reported counts as oldest).
+ * List reorders automatically after a new report when the caller refreshes data.
+ */
+export function sortHabitsByOldestReport(habits: Habit[]): Habit[] {
+  return [...habits].sort((a, b) => {
+    const aKey = a.last_reported_at || a.last_checked_on || "";
+    const bKey = b.last_reported_at || b.last_checked_on || "";
+    if (!aKey && !bKey) return 0;
+    if (!aKey) return -1;
+    if (!bKey) return 1;
+    return aKey.localeCompare(bKey);
+  });
+}
+
+/**
  * Habits page order: habits still waiting on today's report float to the top,
  * with the one closest to missing its report window (soonest reset) first.
  * Already-reported habits stay below, in their original order.

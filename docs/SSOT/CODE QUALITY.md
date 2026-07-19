@@ -18,6 +18,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - [PENDING REFACTOR]: Split `mobile/src/components/github-settings.tsx` (grouped repo picker) under 200 lines.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/index.tsx` further (habits / relationships / stats sections) — still ~450 lines after goal/library modal extract.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/relationships.tsx` (device import + form + list) — ~330 lines after email/device picker.
+- [PENDING REFACTOR]: Split `mobile/app/(tabs)/timeline.tsx` chronological/period accordion helpers under 200 lines.
 
 ## Notes
 - Never mutate cookies inside Server Components (layout). Flash toast is set in Server Actions and read/cleared on the client.

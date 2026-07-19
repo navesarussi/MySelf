@@ -18,7 +18,7 @@ import {
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
 import { HabitCard } from "../../src/components/habit-card";
-import { dedupeHabits } from "@/lib/habit-stats";
+import { dedupeHabits, sortHabitsByOldestReport } from "@/lib/habit-stats";
 
 type AddFormState = {
   name: string;
@@ -50,7 +50,7 @@ export default function HabitsScreen() {
     }
   }, [params.add, router]);
 
-  const habits = useMemo(() => dedupeHabits(data ?? []), [data]);
+  const habits = useMemo(() => sortHabitsByOldestReport(dedupeHabits(data ?? [])), [data]);
 
   async function submitAdd() {
     if (!addForm || !addForm.name.trim()) return;
