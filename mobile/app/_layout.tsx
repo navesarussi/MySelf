@@ -41,7 +41,6 @@ function AppStack() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="timeline-full" options={{ headerShown: false, animation: "fade" }} />
-        <Stack.Screen name="settings" options={{ title: t("nav.settings") }} />
       </Stack>
     </>
   );

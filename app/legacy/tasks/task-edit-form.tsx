@@ -58,6 +58,7 @@ export function TaskEditForm({
         <input type="hidden" name="project_id" value={task.project_id ?? ""} />
       )}
       <select name="priority" defaultValue={task.priority} className={inputClass}>
+        <option value="urgent">{t("common.urgent")}</option>
         <option value="high">{t("tasks.priorityHigh")}</option>
         <option value="medium">{t("tasks.priorityMedium")}</option>
         <option value="low">{t("tasks.priorityLow")}</option>
@@ -65,6 +66,8 @@ export function TaskEditForm({
       <select name="status" defaultValue={task.status} className={inputClass}>
         <option value="open">{t("common.open")}</option>
         <option value="in_progress">{t("common.inProgress")}</option>
+        <option value="stuck">{t("common.stuck")}</option>
+        <option value="review">{t("common.review")}</option>
         <option value="done">{t("common.done")}</option>
       </select>
       <input

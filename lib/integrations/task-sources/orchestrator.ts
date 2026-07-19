@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import type { TaskPriority, TaskStatus } from "@/lib/types";
 import type { TaskSourceId } from "./types";
 import { getTaskSourceProvider } from "./registry";
 import { createMondayProvider } from "./monday/provider";
@@ -22,12 +23,15 @@ async function fetchExistingExternalTaskIds(
   accountKeyPrefix?: string
 ) {
   const supabase = getSupabase();
-  const byExternalId = new Map<string, string>();
+  const byExternalId = new Map<
+    string,
+    { id: string; status: string; priority: string }
+  >();
 
   for (let from = 0; ; from += PAGE_SIZE) {
     let query = supabase
       .from("tasks")
-      .select("id, external_id")
+      .select("id, external_id, status, priority")
       .eq("source", providerId)
       .not("external_id", "is", null)
       .range(from, from + PAGE_SIZE - 1);
@@ -40,7 +44,13 @@ async function fetchExistingExternalTaskIds(
     if (error) throw new Error(`sync_fetch_existing_failed:${error.message}`);
     if (!data?.length) break;
     for (const row of data) {
-      if (row.external_id) byExternalId.set(row.external_id, row.id);
+      if (row.external_id) {
+        byExternalId.set(row.external_id, {
+          id: row.id,
+          status: row.status,
+          priority: row.priority,
+        });
+      }
     }
     if (data.length < PAGE_SIZE) break;
   }
@@ -53,7 +63,8 @@ async function syncSingleAccount(
   accountKey: string,
   pull: (selectedListIds: string[]) => Promise<
     Parameters<typeof buildExternalTaskUpsert>[0][]
-  >
+  >,
+  listIdsOverride?: string[]
 ): Promise<{ imported: number; markedDone: number; alreadyRunning?: true }> {
   const started = await tryStartSync(providerId, accountKey);
   if (!started) return { imported: 0, markedDone: 0, alreadyRunning: true as const };
@@ -69,7 +80,8 @@ async function syncSingleAccount(
       providerId,
       accountKey
     );
-    const selectedListIds = settings.selected_list_ids ?? [];
+    const selectedListIds =
+      listIdsOverride ?? settings.selected_list_ids ?? [];
     const drafts = selectedListIds.length ? await pull(selectedListIds) : [];
     const now = new Date().toISOString();
     const fetchedIds = new Set(drafts.map((d) => d.externalId));
@@ -91,16 +103,32 @@ async function syncSingleAccount(
       const chunk = drafts.slice(i, i + BATCH_SIZE);
 
       for (const draft of chunk) {
-        const row = buildExternalTaskUpsert(draft, providerId, now);
-        const existingId = existingByExternalId.get(draft.externalId);
+        const existing = existingByExternalId.get(draft.externalId);
+        const row = buildExternalTaskUpsert(
+          draft,
+          providerId,
+          now,
+          existing
+            ? {
+                status: existing.status as TaskStatus,
+                priority: existing.priority as TaskPriority,
+              }
+            : undefined
+        );
 
-        if (existingId) {
-          const { error } = await supabase.from("tasks").update(row).eq("id", existingId);
+        if (existing) {
+          const { error } = await supabase.from("tasks").update(row).eq("id", existing.id);
           if (error) throw new Error(`sync_update_failed:${error.message}`);
         } else {
           const { data, error } = await supabase.from("tasks").insert(row).select("id").single();
           if (error) throw new Error(`sync_insert_failed:${error.message}`);
-          if (data?.id) existingByExternalId.set(draft.externalId, data.id);
+          if (data?.id) {
+            existingByExternalId.set(draft.externalId, {
+              id: data.id,
+              status: row.status,
+              priority: row.priority,
+            });
+          }
         }
       }
 
@@ -132,11 +160,14 @@ async function syncSingleAccount(
       .from("tasks")
       .select("external_id")
       .eq("source", providerId)
-      .eq("status", "open")
+      .neq("status", "done")
       .not("external_id", "is", null);
 
     if (providerId === MONDAY_PROVIDER && accountKey) {
       localQuery = localQuery.like("external_id", `${accountKey}:%`);
+    }
+    if (listIdsOverride?.length) {
+      localQuery = localQuery.in("external_list_id", listIdsOverride);
     }
 
     const { data: localOpenRows, error: fetchError } = await localQuery;
@@ -166,21 +197,35 @@ async function syncSingleAccount(
   }
 }
 
+export type SyncTaskSourceOptions = {
+  accountKey?: string;
+  listIds?: string[];
+};
+
 export async function syncTaskSource(
-  providerId: TaskSourceId
+  providerId: TaskSourceId,
+  opts?: SyncTaskSourceOptions
 ): Promise<{ imported: number; markedDone: number; alreadyRunning?: true; notConnected?: true }> {
   if (providerId === MONDAY_PROVIDER) {
     const accounts = await listIntegrationTokens(MONDAY_PROVIDER);
     if (!accounts.length) return { imported: 0, markedDone: 0, notConnected: true as const };
 
+    const scoped = opts?.accountKey
+      ? accounts.filter((a) => a.account_key === opts.accountKey)
+      : accounts;
+    if (!scoped.length) return { imported: 0, markedDone: 0, notConnected: true as const };
+
     let imported = 0;
     let markedDone = 0;
     let anyRunning = false;
 
-    for (const account of accounts) {
+    for (const account of scoped) {
       const provider = createMondayProvider(account.account_key);
-      const result = await syncSingleAccount(providerId, account.account_key, (ids) =>
-        provider.pullOpenTasks(ids)
+      const result = await syncSingleAccount(
+        providerId,
+        account.account_key,
+        (ids) => provider.pullOpenTasks(ids),
+        opts?.listIds
       );
       if (result.alreadyRunning) anyRunning = true;
       imported += result.imported;
@@ -199,7 +244,12 @@ export async function syncTaskSource(
   const token = await getIntegrationToken(providerId);
   if (!token) return { imported: 0, markedDone: 0, notConnected: true as const };
 
-  return syncSingleAccount(providerId, "", (ids) => provider.pullOpenTasks(ids));
+  return syncSingleAccount(
+    providerId,
+    "",
+    (ids) => provider.pullOpenTasks(ids),
+    opts?.listIds
+  );
 }
 
 export async function syncAllTaskSources(): Promise<

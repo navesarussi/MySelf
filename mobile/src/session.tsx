@@ -95,6 +95,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       signOut: async () => {
         setToken(null);
         await storeSet(TOKEN_KEY, null);
+        if (Platform.OS === "web") {
+          try {
+            await fetch(`${API_URL}/api/logout`, { method: "POST", credentials: "include" });
+          } catch {
+            // Local session is already cleared; cookie cleanup is best-effort.
+          }
+        }
       },
     }),
     [ready, token]

@@ -10,8 +10,21 @@ import { getLastProject } from "@/lib/last-project";
 
 export const revalidate = 30;
 
-const statuses: Array<TaskStatus | typeof ALL_FILTER> = [ALL_FILTER, "open", "in_progress", "done"];
-const priorities: Array<TaskPriority | typeof ALL_FILTER> = [ALL_FILTER, "high", "medium", "low"];
+const statuses: Array<TaskStatus | typeof ALL_FILTER> = [
+  ALL_FILTER,
+  "open",
+  "in_progress",
+  "stuck",
+  "review",
+  "done",
+];
+const priorities: Array<TaskPriority | typeof ALL_FILTER> = [
+  ALL_FILTER,
+  "urgent",
+  "high",
+  "medium",
+  "low",
+];
 
 type TaskRow = Task & { projects: { name: string } | null };
 
@@ -57,7 +70,8 @@ export default async function TasksPage({
   const sp = await searchParams;
   const add = isAddTarget(sp.add) ? sp.add : undefined;
   const projectId = sp.project || ALL_FILTER;
-  const isTaskStatus = (s: string): s is TaskStatus => s === "open" || s === "in_progress" || s === "done";
+  const isTaskStatus = (s: string): s is TaskStatus =>
+    s === "open" || s === "in_progress" || s === "stuck" || s === "review" || s === "done";
   const selectedStatuses: TaskStatus[] =
     sp.status && sp.status !== ALL_FILTER ? sp.status.split(",").filter(isTaskStatus) : [];
   const priority = sp.priority || ALL_FILTER;
@@ -92,11 +106,14 @@ export default async function TasksPage({
     if (s === ALL_FILTER) return t("common.all");
     if (s === "open") return t("common.open");
     if (s === "in_progress") return t("common.inProgress");
+    if (s === "stuck") return t("common.stuck");
+    if (s === "review") return t("common.review");
     return t("common.done");
   };
 
   const priorityLabel = (p: TaskPriority | typeof ALL_FILTER) => {
     if (p === ALL_FILTER) return t("common.all");
+    if (p === "urgent") return t("common.urgent");
     if (p === "high") return t("common.high");
     if (p === "medium") return t("common.medium");
     return t("common.low");

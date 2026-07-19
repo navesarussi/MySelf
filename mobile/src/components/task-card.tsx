@@ -8,7 +8,9 @@ import type { Task, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
 
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
   open: "in_progress",
-  in_progress: "done",
+  in_progress: "stuck",
+  stuck: "review",
+  review: "done",
   done: "open",
 };
 
@@ -17,22 +19,42 @@ export function isExternalTask(task: Pick<Task, "source">) {
 }
 
 export function nextStatusForTask(task: Task): TaskStatus {
-  if (isExternalTask(task)) return task.status === "done" ? "open" : "done";
   return NEXT_STATUS[task.status];
 }
 
 export function taskSourceLabel(t: (key: string) => string, source: TaskSource) {
   if (source === "google_tasks") return t("tasks.source.google_tasks");
   if (source === "monday") return t("tasks.source.monday");
+  if (source === "github") return t("tasks.source.github");
   return t("tasks.source.manual");
 }
 
 export function taskStatusLabel(t: (key: string) => string, s: TaskStatus) {
-  return s === "open" ? t("common.open") : s === "in_progress" ? t("common.inProgress") : t("common.done");
+  if (s === "open") return t("common.open");
+  if (s === "in_progress") return t("common.inProgress");
+  if (s === "stuck") return t("common.stuck");
+  if (s === "review") return t("common.review");
+  return t("common.done");
 }
 
 export function taskPriorityLabel(t: (key: string) => string, p: TaskPriority) {
-  return p === "high" ? t("common.high") : p === "medium" ? t("common.medium") : t("common.low");
+  if (p === "urgent") return t("common.urgent");
+  if (p === "high") return t("common.high");
+  if (p === "medium") return t("common.medium");
+  return t("common.low");
+}
+
+function priorityTone(p: TaskPriority): "warn" | "accent" | "default" {
+  if (p === "urgent" || p === "high") return "warn";
+  if (p === "medium") return "accent";
+  return "default";
+}
+
+function statusTone(s: TaskStatus): "good" | "accent" | "warn" | "default" {
+  if (s === "done") return "good";
+  if (s === "stuck") return "warn";
+  if (s === "in_progress" || s === "review") return "accent";
+  return "default";
 }
 
 export function TaskCard({
@@ -58,7 +80,8 @@ export function TaskCard({
       <Text
         style={{
           color: c.ink,
-          textAlign: textStart, writingDirection,
+          textAlign: textStart,
+          writingDirection,
           fontWeight: "600",
           textDecorationLine: done ? "line-through" : "none",
         }}
@@ -83,10 +106,7 @@ export function TaskCard({
         {isExternalTask(task) ? (
           <Badge label={taskSourceLabel(t, task.source)} tone="accent" />
         ) : null}
-        <Badge
-          label={taskPriorityLabel(t, task.priority)}
-          tone={task.priority === "high" ? "warn" : task.priority === "medium" ? "accent" : "default"}
-        />
+        <Badge label={taskPriorityLabel(t, task.priority)} tone={priorityTone(task.priority)} />
         {task.due_date ? <Badge label={`${t("common.due")}: ${task.due_date}`} /> : null}
       </Row>
       {task.notes ? (
@@ -94,7 +114,8 @@ export function TaskCard({
           style={{
             color: c.muted,
             fontSize: tokens.textXs,
-            textAlign: textStart, writingDirection,
+            textAlign: textStart,
+            writingDirection,
             marginTop: 4,
           }}
         >
@@ -122,10 +143,7 @@ export function TaskCard({
           Body
         )}
         <Pressable onPress={() => onAdvanceStatus?.(task)} disabled={busy || !onAdvanceStatus}>
-          <Badge
-            label={taskStatusLabel(t, task.status)}
-            tone={done ? "good" : task.status === "in_progress" ? "accent" : "default"}
-          />
+          <Badge label={taskStatusLabel(t, task.status)} tone={statusTone(task.status)} />
         </Pressable>
       </Row>
     </Card>

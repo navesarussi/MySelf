@@ -46,6 +46,8 @@ export type MondayAccount = {
   last_sync_at?: string | null;
   sync_status?: "idle" | "running" | "completed" | "failed";
   selected_list_ids?: string[];
+  task_count?: number;
+  task_count_by_board?: Record<string, number>;
 };
 
 export type SyncStatusPayload = {
@@ -70,7 +72,16 @@ export const api = {
 
   tasks: (
     c: ApiConfig,
-    params?: { project?: string; status?: string; priority?: string; source?: string; external_list?: string }
+    params?: {
+      project?: string;
+      status?: string;
+      priority?: string;
+      source?: string;
+      external_list?: string;
+      q?: string;
+      overdue?: boolean;
+      sort?: string;
+    }
   ) => {
     const sp = new URLSearchParams();
     if (params?.project) sp.set("project", params.project);
@@ -78,6 +89,9 @@ export const api = {
     if (params?.priority) sp.set("priority", params.priority);
     if (params?.source) sp.set("source", params.source);
     if (params?.external_list) sp.set("external_list", params.external_list);
+    if (params?.q) sp.set("q", params.q);
+    if (params?.overdue) sp.set("overdue", "1");
+    if (params?.sort) sp.set("sort", params.sort);
     const qs = sp.toString();
     return apiFetch<Task[]>(c, `/tasks${qs ? `?${qs}` : ""}`);
   },
@@ -181,10 +195,18 @@ export const api = {
     apiFetch(c, "/integrations/google-tasks/settings", { method: "PATCH", body }),
   disconnectGoogleTasks: (c: ApiConfig) =>
     apiFetch(c, "/integrations/google-tasks/disconnect", { method: "POST", body: {} }),
-  syncTaskSources: (c: ApiConfig, provider?: string) =>
+  syncTaskSources: (
+    c: ApiConfig,
+    provider?: string,
+    opts?: { account_key?: string; list_ids?: string[] }
+  ) =>
     apiFetch(c, "/integrations/task-sources/sync", {
       method: "POST",
-      body: provider ? { provider } : {},
+      body: {
+        ...(provider ? { provider } : {}),
+        ...(opts?.account_key ? { account_key: opts.account_key } : {}),
+        ...(opts?.list_ids?.length ? { list_ids: opts.list_ids } : {}),
+      },
     }),
 
   mondayAccounts: (c: ApiConfig) =>
@@ -200,4 +222,24 @@ export const api = {
   ) => apiFetch(c, "/integrations/monday/settings", { method: "PATCH", body }),
   disconnectMonday: (c: ApiConfig, body: { account_key: string }) =>
     apiFetch(c, "/integrations/monday/disconnect", { method: "POST", body }),
+
+  githubStatus: (c: ApiConfig) =>
+    apiFetch<{
+      connected: boolean;
+      syncStatus?: "idle" | "running" | "completed" | "failed";
+      lastSyncAt?: string | null;
+      taskCount?: number;
+      task_count_by_repo?: Record<string, number>;
+      selected_list_ids?: string[];
+      account_name?: string | null;
+    }>(c, "/integrations/github/status"),
+  githubRepos: (c: ApiConfig) =>
+    apiFetch<{ id: string; title: string; owner: string; name: string }[]>(
+      c,
+      "/integrations/github/repos"
+    ),
+  patchGithubSettings: (c: ApiConfig, body: { selected_list_ids: string[] }) =>
+    apiFetch(c, "/integrations/github/settings", { method: "PATCH", body }),
+  disconnectGithub: (c: ApiConfig) =>
+    apiFetch(c, "/integrations/github/disconnect", { method: "POST", body: {} }),
 };

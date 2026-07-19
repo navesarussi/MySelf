@@ -2,7 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "1.8.3",
+    "version": "1.9.3",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
         "CFBundleDevelopmentRegion": "he",
         "ITSAppUsesNonExemptEncryption": false,
         "RCTNewArchEnabled": false,
-        "NSContactsUsageDescription": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים."
+        "NSContactsUsageDescription": "\u05dc\u05d0\u05e4\u05e9\u05e8 \u05dc-MeAndMySelf \u05dc\u05e7\u05e8\u05d5\u05d0 \u05d0\u05e0\u05e9\u05d9 \u05e7\u05e9\u05e8 \u05db\u05d3\u05d9 \u05dc\u05de\u05dc\u05d0 \u05e4\u05e8\u05d8\u05d9 \u05e7\u05e9\u05e8 \u05d7\u05d3\u05e9\u05d9\u05dd."
       }
     },
     "android": {
@@ -50,7 +50,7 @@
       [
         "expo-contacts",
         {
-          "contactsPermission": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים."
+          "contactsPermission": "\u05dc\u05d0\u05e4\u05e9\u05e8 \u05dc-MeAndMySelf \u05dc\u05e7\u05e8\u05d5\u05d0 \u05d0\u05e0\u05e9\u05d9 \u05e7\u05e9\u05e8 \u05db\u05d3\u05d9 \u05dc\u05de\u05dc\u05d0 \u05e4\u05e8\u05d8\u05d9 \u05e7\u05e9\u05e8 \u05d7\u05d3\u05e9\u05d9\u05dd."
         }
       ]
     ],

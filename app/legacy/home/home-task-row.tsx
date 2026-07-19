@@ -4,14 +4,16 @@ import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { updateTaskStatus } from "@/app/legacy/tasks/actions";
 
 function priorityTone(p: TaskPriority): "warn" | "accent" | "default" {
-  if (p === "high") return "warn";
+  if (p === "urgent" || p === "high") return "warn";
   if (p === "medium") return "accent";
   return "default";
 }
 
 const STATUS_CYCLE: Record<TaskStatus, TaskStatus> = {
   open: "in_progress",
-  in_progress: "done",
+  in_progress: "stuck",
+  stuck: "review",
+  review: "done",
   done: "open",
 };
 
@@ -19,6 +21,7 @@ export async function HomeTaskRow({ task }: { task: Task }) {
   const { t, locale } = await getTranslations();
 
   const priorityLabel: Record<TaskPriority, string> = {
+    urgent: t("common.urgent"),
     high: t("common.high"),
     medium: t("common.medium"),
     low: t("common.low"),
@@ -27,6 +30,8 @@ export async function HomeTaskRow({ task }: { task: Task }) {
   const statusLabel: Record<TaskStatus, string> = {
     open: t("common.open"),
     in_progress: t("common.inProgress"),
+    stuck: t("common.stuck"),
+    review: t("common.review"),
     done: t("common.done"),
   };
 

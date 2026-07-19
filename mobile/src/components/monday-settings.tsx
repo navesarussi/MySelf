@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Platform, Text } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
 import { api, type MondayAccount } from "../api/resources";
@@ -13,7 +13,7 @@ import { Btn, Card, Chip, Row, SectionTitle, confirmDelete } from "./ui";
 export function MondaySettingsSection() {
   const c = useColors();
   const { t, locale } = useI18n();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
   const { token, serverUrl } = useSession();
   const { run, busy } = useMutate();
   const accountsQ = useApi(api.mondayAccounts);
@@ -23,6 +23,8 @@ export function MondaySettingsSection() {
   >({});
   const [selectedByAccount, setSelectedByAccount] = useState<Record<string, string[]>>({});
   const [loadingBoards, setLoadingBoards] = useState<string | null>(null);
+  const [boardsOpen, setBoardsOpen] = useState<Record<string, boolean>>({});
+  const [syncingBoard, setSyncingBoard] = useState<string | null>(null);
 
   const accounts = accountsQ.data?.accounts ?? [];
 
@@ -78,6 +80,10 @@ export function MondaySettingsSection() {
     });
   }
 
+  function toggleBoardsOpen(accountKey: string) {
+    setBoardsOpen((prev) => ({ ...prev, [accountKey]: !prev[accountKey] }));
+  }
+
   function isDirty(account: MondayAccount) {
     const selected = selectedByAccount[account.account_key] ?? [];
     const saved = account.selected_list_ids ?? [];
@@ -102,19 +108,28 @@ export function MondaySettingsSection() {
     }
   }
 
-  async function runMondaySync() {
+  async function syncBoard(accountKey: string, boardId: string) {
+    const key = `${accountKey}:${boardId}`;
+    setSyncingBoard(key);
     setMessage(t("settings.syncing"));
     try {
-      const result = await run((config) => api.syncTaskSources(config, "monday"));
+      const result = await run((config) =>
+        api.syncTaskSources(config, "monday", {
+          account_key: accountKey,
+          list_ids: [boardId],
+        })
+      );
       setMessage(
         result?.ok
           ? t("flash.tasksSynced", { count: result.imported ?? 0 })
           : t("settings.syncFailed")
       );
+      accountsQ.refresh();
     } catch {
       setMessage(t("settings.syncFailed"));
+    } finally {
+      setSyncingBoard(null);
     }
-    accountsQ.refresh();
   }
 
   function disconnect(account: MondayAccount) {
@@ -135,15 +150,54 @@ export function MondaySettingsSection() {
 
   return (
     <>
-      <SectionTitle>{t("settings.monday")}</SectionTitle>
+      <SectionTitle
+        onAdd={connectMonday}
+        addLabel={t("settings.mondayAddAccount")}
+      >
+        {t("settings.monday")}
+      </SectionTitle>
+      <Text
+        style={{
+          color: c.muted,
+          fontSize: tokens.textXs,
+          marginBottom: 8,
+          textAlign: textStart,
+          writingDirection,
+        }}
+      >
+        {t("settings.mondayAutoSync")}
+      </Text>
+
       {accounts.map((account) => {
         const boards = boardsByAccount[account.account_key] ?? [];
         const selected = selectedByAccount[account.account_key] ?? [];
+        const open = boardsOpen[account.account_key] === true;
+        const selectedCount = (account.selected_list_ids ?? []).length;
+        const counts = account.task_count_by_board ?? {};
+
         return (
           <Card key={account.account_key} style={{ marginBottom: 10 }}>
-            <Text style={{ color: c.good, textAlign: textStart, writingDirection }}>
+            <Text
+              style={{
+                color: c.good,
+                fontWeight: "600",
+                textAlign: textStart,
+                writingDirection: "ltr",
+              }}
+            >
               ✓ {account.account_name}
               {account.account_slug ? ` (${account.account_slug})` : ""}
+            </Text>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textSm,
+                marginTop: 4,
+                textAlign: textStart,
+                writingDirection,
+              }}
+            >
+              {t("settings.importedTasksCount", { count: account.task_count ?? 0 })}
             </Text>
             <Text
               style={{
@@ -161,6 +215,7 @@ export function MondaySettingsSection() {
                   )
                 : t("common.notSyncedYet")}
             </Text>
+
             {loadingBoards === account.account_key ? (
               <Text
                 style={{
@@ -175,30 +230,74 @@ export function MondaySettingsSection() {
               </Text>
             ) : boards.length ? (
               <>
-                <Text
-                  style={{
-                    color: c.muted,
-                    fontSize: tokens.textSm,
-                    marginTop: 8,
-                    marginBottom: 8,
-                    textAlign: textStart,
-                    writingDirection,
-                  }}
+                <Pressable
+                  onPress={() => toggleBoardsOpen(account.account_key)}
+                  style={{ marginTop: 10, marginBottom: open ? 8 : 0 }}
                 >
-                  {t("settings.mondayBoardsHint")}
-                </Text>
-                <Row wrap>
-                  {boards.map((board) => (
-                    <Chip
-                      key={board.id}
-                      label={board.title}
-                      active={selected.includes(board.id)}
-                      onPress={() => toggleBoard(account.account_key, board.id)}
-                    />
-                  ))}
-                </Row>
+                  <Text
+                    style={{
+                      color: c.accent,
+                      fontSize: tokens.textSm,
+                      textAlign: textStart,
+                      writingDirection,
+                    }}
+                  >
+                    {open ? "▾ " : "▸ "}
+                    {t("settings.mondayBoardsToggle", {
+                      selected: selectedCount,
+                      total: boards.length,
+                    })}
+                  </Text>
+                </Pressable>
+                {open ? (
+                  <>
+                    <Text
+                      style={{
+                        color: c.muted,
+                        fontSize: tokens.textSm,
+                        marginBottom: 8,
+                        textAlign: textStart,
+                        writingDirection,
+                      }}
+                    >
+                      {t("settings.mondayBoardsHint")}
+                    </Text>
+                    {boards.map((board) => {
+                      const active = selected.includes(board.id);
+                      const boardCount = counts[board.id] ?? 0;
+                      const syncKey = `${account.account_key}:${board.id}`;
+                      return (
+                        <View
+                          key={board.id}
+                          style={{
+                            ...row,
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 8,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Chip
+                            label={`${board.title} · ${boardCount}`}
+                            active={active}
+                            onPress={() => toggleBoard(account.account_key, board.id)}
+                          />
+                          {active ? (
+                            <Btn
+                              small
+                              label={t("common.syncNow")}
+                              onPress={() => syncBoard(account.account_key, board.id)}
+                              disabled={busy || syncingBoard === syncKey}
+                            />
+                          ) : null}
+                        </View>
+                      );
+                    })}
+                  </>
+                ) : null}
               </>
             ) : null}
+
             <Row style={{ marginTop: 10 }} wrap>
               {isDirty(account) && selected.length > 0 ? (
                 <Btn
@@ -207,9 +306,6 @@ export function MondaySettingsSection() {
                   onPress={() => saveBoards(account.account_key)}
                   disabled={busy}
                 />
-              ) : null}
-              {(account.selected_list_ids?.length ?? 0) > 0 ? (
-                <Btn small label={t("common.syncNow")} onPress={runMondaySync} disabled={busy} />
               ) : null}
               <Btn
                 small
@@ -222,29 +318,51 @@ export function MondaySettingsSection() {
           </Card>
         );
       })}
-      <Card>
-        <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>
-          {accounts.length
-            ? t("settings.mondayAddAnotherHint")
-            : t("settings.mondayConnectHint")}
-        </Text>
-        <Row style={{ marginTop: 10 }}>
-          <Btn small label={t("settings.mondayAddAccount")} onPress={connectMonday} />
-        </Row>
-        {message ? (
+
+      {accounts.length === 0 ? (
+        <Card>
+          <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>
+            {t("settings.mondayConnectHint")}
+          </Text>
           <Text
             style={{
-              color: c.accent,
+              color: c.muted,
               fontSize: tokens.textXs,
+              marginTop: 6,
               textAlign: textStart,
               writingDirection,
-              marginTop: 8,
             }}
           >
-            {message}
+            {t("settings.mondayPrivateAppHint")}
           </Text>
-        ) : null}
-      </Card>
+        </Card>
+      ) : (
+        <Text
+          style={{
+            color: c.muted,
+            fontSize: tokens.textXs,
+            marginBottom: 8,
+            textAlign: textStart,
+            writingDirection,
+          }}
+        >
+          {t("settings.mondayPrivateAppHint")}
+        </Text>
+      )}
+
+      {message ? (
+        <Text
+          style={{
+            color: c.accent,
+            fontSize: tokens.textXs,
+            textAlign: textStart,
+            writingDirection,
+            marginBottom: 8,
+          }}
+        >
+          {message}
+        </Text>
+      ) : null}
     </>
   );
 }

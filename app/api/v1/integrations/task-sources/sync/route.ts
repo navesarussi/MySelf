@@ -14,6 +14,10 @@ export async function POST(req: NextRequest) {
 
   const body = await readJson(req);
   const provider = body.provider;
+  const accountKey = typeof body.account_key === "string" ? body.account_key : undefined;
+  const listIds = Array.isArray(body.list_ids)
+    ? body.list_ids.filter((id: unknown): id is string => typeof id === "string")
+    : undefined;
 
   if (provider !== undefined && !isTaskSourceId(provider)) {
     return badRequest("invalid provider");
@@ -22,7 +26,10 @@ export async function POST(req: NextRequest) {
   const targetProvider = isTaskSourceId(provider) ? provider : "google_tasks";
 
   try {
-    const result = await syncTaskSource(targetProvider);
+    const result = await syncTaskSource(targetProvider, {
+      accountKey,
+      listIds: listIds?.length ? listIds : undefined,
+    });
     if (result.notConnected) {
       return badRequest("not_connected");
     }

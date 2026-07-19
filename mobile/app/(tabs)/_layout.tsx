@@ -93,6 +93,13 @@ export default function TabsLayout() {
         <Tabs.Screen name="relationships" options={tabOptions("relationships")} />
         <Tabs.Screen name="goals" options={tabOptions("goals")} />
         <Tabs.Screen name="library" options={tabOptions("library")} />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            href: null,
+            title: t("nav.settings"),
+          }}
+        />
       </Tabs>
       <AddMenuModal visible={addOpen} onClose={() => setAddOpen(false)} />
       <MoreMenuModal visible={moreOpen} onClose={() => setMoreOpen(false)} />

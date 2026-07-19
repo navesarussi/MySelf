@@ -5,8 +5,8 @@ import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthoriz
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { applyExternalStatusChange } from "@/lib/integrations/task-sources/writeback";
 
-const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
-const STATUSES: TaskStatus[] = ["open", "in_progress", "done"];
+const PRIORITIES: TaskPriority[] = ["urgent", "high", "medium", "low"];
+const STATUSES: TaskStatus[] = ["open", "in_progress", "stuck", "review", "done"];
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -39,13 +39,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (field in body) {
         return NextResponse.json({ error: "external_readonly", field }, { status: 400 });
       }
-    }
-
-    if ("status" in body && str(body.status) === "in_progress") {
-      return NextResponse.json(
-        { error: "external_readonly", field: "status", message: "in_progress not allowed for external tasks" },
-        { status: 400 }
-      );
     }
   }
 

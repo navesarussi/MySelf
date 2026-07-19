@@ -336,22 +336,61 @@ export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () 
   );
 }
 
-export function SectionTitle({ children }: { children: string }) {
+export function SectionTitle({
+  children,
+  onAdd,
+  addLabel,
+}: {
+  children: string;
+  onAdd?: () => void;
+  addLabel?: string;
+}) {
   const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
   return (
-    <Text
+    <View
       style={{
-        color: c.ink,
-        fontSize: 16,
-        fontWeight: "700",
+        ...row,
+        alignItems: "center",
+        justifyContent: "space-between",
         marginTop: 14,
         marginBottom: 8,
-        textAlign: textStart, writingDirection,
+        gap: 8,
       }}
     >
-      {children}
-    </Text>
+      <Text
+        style={{
+          flex: 1,
+          color: c.ink,
+          fontSize: 16,
+          fontWeight: "700",
+          textAlign: textStart,
+          writingDirection,
+        }}
+      >
+        {children}
+      </Text>
+      {onAdd ? (
+        <Pressable
+          onPress={onAdd}
+          accessibilityRole="button"
+          accessibilityLabel={addLabel ?? "+"}
+          hitSlop={8}
+          style={({ pressed }) => ({
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: pressed ? c.accent + "33" : c.accent + "22",
+            borderWidth: 1,
+            borderColor: c.accent,
+          })}
+        >
+          <Text style={{ color: c.accent, fontSize: 18, fontWeight: "700", lineHeight: 20 }}>+</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 

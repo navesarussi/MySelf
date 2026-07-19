@@ -6,8 +6,8 @@ import { setFlash } from "@/lib/flash-actions";
 import { rememberLastProject } from "@/lib/last-project";
 import type { TaskPriority, TaskStatus } from "@/lib/types";
 
-const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
-const STATUSES: TaskStatus[] = ["open", "in_progress", "done"];
+const PRIORITIES: TaskPriority[] = ["urgent", "high", "medium", "low"];
+const STATUSES: TaskStatus[] = ["open", "in_progress", "stuck", "review", "done"];
 
 function pick<T extends string>(value: string, allowed: T[], fallback: T): T {
   return (allowed as string[]).includes(value) ? (value as T) : fallback;

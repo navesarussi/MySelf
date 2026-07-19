@@ -121,10 +121,10 @@ export type Project = {
   created_at: string;
 };
 
-export type TaskPriority = "high" | "medium" | "low";
-export type TaskStatus = "open" | "in_progress" | "done";
+export type TaskPriority = "urgent" | "high" | "medium" | "low";
+export type TaskStatus = "open" | "in_progress" | "stuck" | "review" | "done";
 
-export type TaskSource = "manual" | "google_tasks" | "monday";
+export type TaskSource = "manual" | "google_tasks" | "monday" | "github";
 
 export type TaskExternalMeta = {
   listTitle?: string;

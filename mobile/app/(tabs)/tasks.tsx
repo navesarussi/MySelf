@@ -23,22 +23,18 @@ import {
   nextStatusForTask,
   TaskCard,
   taskPriorityLabel,
-  taskSourceLabel,
   taskStatusLabel,
 } from "../../src/components/task-card";
+import {
+  ALL_PRIORITIES,
+  ALL_STATUSES,
+  defaultTasksFilter,
+  TasksFilterBar,
+  type TasksFilterState,
+} from "../../src/components/tasks-filter-bar";
 import type { Task, TaskExternalMeta, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
 import { useColors, tokens } from "../../src/theme";
-
-const STATUSES: TaskStatus[] = ["open", "in_progress", "done"];
-const EXTERNAL_STATUSES: TaskStatus[] = ["open", "done"];
-const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
-const SOURCE_FILTERS: Array<typeof ALL_FILTER | TaskSource> = [
-  ALL_FILTER,
-  "manual",
-  "google_tasks",
-  "monday",
-];
 
 type FormState = {
   id?: string;
@@ -68,26 +64,33 @@ export default function TasksScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy } = useMutate();
-
-  const [projectFilter, setProjectFilter] = useState<string>(ALL_FILTER);
-  const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
-  const [priorityFilter, setPriorityFilter] = useState<string>(ALL_FILTER);
-  const [sourceFilter, setSourceFilter] = useState<typeof ALL_FILTER | TaskSource>(ALL_FILTER);
-  const [listFilter, setListFilter] = useState<string>(ALL_FILTER);
+  const [filter, setFilter] = useState<TasksFilterState>(defaultTasksFilter);
   const [form, setForm] = useState<FormState | null>(null);
-  const googleListOptionsRef = useRef<Array<{ id: string; title: string }>>([]);
+  const listOptionsRef = useRef<Array<{ id: string; title: string }>>([]);
 
   const projectsQ = useApi(api.projects);
   const tasksQ = useApi(
     (config) =>
       api.tasks(config, {
-        project: projectFilter !== ALL_FILTER ? projectFilter : undefined,
-        status: statusFilter.length ? statusFilter.join(",") : undefined,
-        priority: priorityFilter !== ALL_FILTER ? priorityFilter : undefined,
-        source: sourceFilter !== ALL_FILTER ? sourceFilter : undefined,
-        external_list: listFilter !== ALL_FILTER ? listFilter : undefined,
+        project: filter.project !== ALL_FILTER ? filter.project : undefined,
+        status: filter.status.length ? filter.status.join(",") : undefined,
+        priority: filter.priority !== ALL_FILTER ? filter.priority : undefined,
+        source: filter.source !== ALL_FILTER ? filter.source : undefined,
+        external_list: filter.externalList !== ALL_FILTER ? filter.externalList : undefined,
+        q: filter.q.trim() || undefined,
+        overdue: filter.overdue || undefined,
+        sort: filter.sort,
       }),
-    [projectFilter, statusFilter.join(","), priorityFilter, sourceFilter, listFilter]
+    [
+      filter.project,
+      filter.status.join(","),
+      filter.priority,
+      filter.source,
+      filter.externalList,
+      filter.q,
+      filter.overdue,
+      filter.sort,
+    ]
   );
 
   const projects = projectsQ.data ?? [];
@@ -104,13 +107,17 @@ export default function TasksScreen() {
   }, [params.add, projects.length, defaultProjectId, router]);
 
   useEffect(() => {
-    if (sourceFilter !== "google_tasks") {
-      setListFilter(ALL_FILTER);
+    if (
+      filter.source !== "google_tasks" &&
+      filter.source !== "monday" &&
+      filter.source !== "github"
+    ) {
+      if (filter.externalList !== ALL_FILTER) {
+        setFilter((prev) => ({ ...prev, externalList: ALL_FILTER }));
+      }
+      return;
     }
-  }, [sourceFilter]);
-
-  useEffect(() => {
-    if (sourceFilter !== "google_tasks" || listFilter !== ALL_FILTER) return;
+    if (filter.externalList !== ALL_FILTER) return;
     const map = new Map<string, string>();
     for (const task of tasksQ.data ?? []) {
       if (task.external_list_id) {
@@ -118,25 +125,12 @@ export default function TasksScreen() {
       }
     }
     if (map.size) {
-      googleListOptionsRef.current = [...map.entries()].map(([id, title]) => ({ id, title }));
+      listOptionsRef.current = [...map.entries()].map(([id, title]) => ({ id, title }));
     }
-  }, [tasksQ.data, sourceFilter, listFilter]);
+  }, [tasksQ.data, filter.source, filter.externalList]);
 
-  const googleListOptions = googleListOptionsRef.current;
-
-  const tasks = useMemo(() => {
-    const list = tasksQ.data ?? [];
-    return [...list.filter((task) => task.status !== "done"), ...list.filter((task) => task.status === "done")];
-  }, [tasksQ.data]);
-
-  const statusLabel = (s: TaskStatus) => taskStatusLabel(t, s);
-  const priorityLabel = (p: TaskPriority) => taskPriorityLabel(t, p);
+  const tasks = tasksQ.data ?? [];
   const isEditingExternal = form?.id ? isExternalTask({ source: form.source ?? "manual" }) : false;
-  const editStatuses = isEditingExternal ? EXTERNAL_STATUSES : STATUSES;
-
-  function toggleStatusFilter(s: TaskStatus) {
-    setStatusFilter((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
-  }
 
   async function submit() {
     if (!form) return;
@@ -222,64 +216,16 @@ export default function TasksScreen() {
       subtitle={t("tasks.subtitleAlt")}
       refreshing={tasksQ.loading}
       onRefresh={tasksQ.refresh}
-      headerRight={<Btn small label={`+ ${t("tasks.addTask")}`} onPress={() => setForm(emptyForm(defaultProjectId))} />}
+      headerRight={
+        <Btn small label={`+ ${t("tasks.addTask")}`} onPress={() => setForm(emptyForm(defaultProjectId))} />
+      }
     >
-      <Label>{t("tasks.sourceFilter")}</Label>
-      <Row wrap style={{ marginBottom: 8 }}>
-        {SOURCE_FILTERS.map((s) => (
-          <Chip
-            key={s}
-            label={s === ALL_FILTER ? t("common.all") : taskSourceLabel(t, s)}
-            active={sourceFilter === s}
-            onPress={() => {
-              setSourceFilter(s);
-              if (s !== "google_tasks") setListFilter(ALL_FILTER);
-            }}
-          />
-        ))}
-      </Row>
-      {sourceFilter === "google_tasks" && googleListOptions.length ? (
-        <>
-          <Label>{t("tasks.listFilter")}</Label>
-          <Row wrap style={{ marginBottom: 8 }}>
-            <Chip
-              label={t("tasks.filterAllLists")}
-              active={listFilter === ALL_FILTER}
-              onPress={() => setListFilter(ALL_FILTER)}
-            />
-            {googleListOptions.map((list) => (
-              <Chip
-                key={list.id}
-                label={list.title}
-                active={listFilter === list.id}
-                onPress={() => setListFilter(list.id)}
-              />
-            ))}
-          </Row>
-        </>
-      ) : null}
-
-      <Label>{t("nav.projects")}</Label>
-      <Row wrap style={{ marginBottom: 8 }}>
-        <Chip label={t("common.all")} active={projectFilter === ALL_FILTER} onPress={() => setProjectFilter(ALL_FILTER)} />
-        {projects.map((p) => (
-          <Chip key={p.id} label={p.name} active={projectFilter === p.id} onPress={() => setProjectFilter(p.id)} />
-        ))}
-      </Row>
-      <Label>{t("common.status")}</Label>
-      <Row wrap style={{ marginBottom: 8 }}>
-        <Chip label={t("common.all")} active={statusFilter.length === 0} onPress={() => setStatusFilter([])} />
-        {STATUSES.map((s) => (
-          <Chip key={s} label={statusLabel(s)} active={statusFilter.includes(s)} onPress={() => toggleStatusFilter(s)} />
-        ))}
-      </Row>
-      <Label>{t("tasks.priorityFilter")}</Label>
-      <Row wrap style={{ marginBottom: 12 }}>
-        <Chip label={t("common.all")} active={priorityFilter === ALL_FILTER} onPress={() => setPriorityFilter(ALL_FILTER)} />
-        {PRIORITIES.map((p) => (
-          <Chip key={p} label={priorityLabel(p)} active={priorityFilter === p} onPress={() => setPriorityFilter(p)} />
-        ))}
-      </Row>
+      <TasksFilterBar
+        value={filter}
+        onChange={setFilter}
+        projects={projects}
+        listOptions={listOptionsRef.current}
+      />
 
       {tasksQ.error ? <ErrorNote message={tasksQ.error} onRetry={tasksQ.refresh} /> : null}
       {tasksQ.loading && !tasksQ.data ? <Loading /> : null}
@@ -375,10 +321,10 @@ export default function TasksScreen() {
             )}
             <Label>{t("tasks.priorityFilter")}</Label>
             <Row wrap style={{ marginBottom: 8 }}>
-              {PRIORITIES.map((p) => (
+              {ALL_PRIORITIES.map((p) => (
                 <Chip
                   key={p}
-                  label={priorityLabel(p)}
+                  label={taskPriorityLabel(t, p)}
                   active={form.priority === p}
                   onPress={() => setForm({ ...form, priority: p })}
                 />
@@ -386,10 +332,10 @@ export default function TasksScreen() {
             </Row>
             <Label>{t("common.status")}</Label>
             <Row wrap style={{ marginBottom: 8 }}>
-              {editStatuses.map((s) => (
+              {ALL_STATUSES.map((s) => (
                 <Chip
                   key={s}
-                  label={statusLabel(s)}
+                  label={taskStatusLabel(t, s)}
                   active={form.status === s}
                   onPress={() => setForm({ ...form, status: s })}
                 />

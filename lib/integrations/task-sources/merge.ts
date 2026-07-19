@@ -1,9 +1,27 @@
 import type { ExternalTaskDraft, TaskSourceId } from "./types";
+import type { TaskPriority, TaskStatus } from "@/lib/types";
+
+const LOCAL_RICH_STATUSES: TaskStatus[] = ["in_progress", "stuck", "review"];
+
+export type ExistingExternalTask = {
+  status: TaskStatus;
+  priority: TaskPriority;
+};
+
+export function resolveExternalSyncStatus(
+  draftStatus: "open" | "done",
+  existingStatus?: TaskStatus
+): TaskStatus {
+  if (draftStatus === "done") return "done";
+  if (existingStatus && LOCAL_RICH_STATUSES.includes(existingStatus)) return existingStatus;
+  return "open";
+}
 
 export function buildExternalTaskUpsert(
   draft: ExternalTaskDraft,
   source: TaskSourceId,
-  syncedAt: string
+  syncedAt: string,
+  existing?: ExistingExternalTask
 ) {
   return {
     source,
@@ -13,8 +31,8 @@ export function buildExternalTaskUpsert(
     title: draft.title,
     notes: draft.notes,
     due_date: draft.dueDate,
-    status: draft.status === "done" ? "done" : "open",
-    priority: "medium" as const,
+    status: resolveExternalSyncStatus(draft.status, existing?.status),
+    priority: existing?.priority ?? ("medium" as const),
     external_meta: draft.meta,
     synced_at: syncedAt,
     updated_at: syncedAt,

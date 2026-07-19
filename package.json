@@ -1,6 +1,6 @@
 {
   "name": "myself-dashboard",
-  "version": "1.8.3",
+  "version": "1.9.3",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:apply": "bash scripts/db-apply.sh",
-    "test": "node --import tsx --test lib/__tests__/phone.test.ts lib/__tests__/google-calendar-map.test.ts lib/__tests__/google-calendar-merge.test.ts lib/__tests__/life-periods.test.ts lib/__tests__/google-auth.test.ts lib/__tests__/delete-guard.test.ts lib/__tests__/habit-stats.test.ts lib/__tests__/data-integrity.test.ts lib/__tests__/timeline-zoom.test.ts lib/__tests__/task-source-merge.test.ts lib/__tests__/google-tasks-map.test.ts lib/__tests__/relationships-due.test.ts lib/__tests__/home-events.test.ts lib/__tests__/device-contact-map.test.ts lib/__tests__/mobile-redirect.test.ts lib/__tests__/google-tasks-redirect.test.ts lib/__tests__/timeline-engine.test.ts lib/__tests__/monday-ids.test.ts lib/__tests__/monday-map.test.ts lib/__tests__/monday-redirect.test.ts"
+    "test": "node --import tsx --test lib/__tests__/phone.test.ts lib/__tests__/google-calendar-map.test.ts lib/__tests__/google-calendar-merge.test.ts lib/__tests__/life-periods.test.ts lib/__tests__/google-auth.test.ts lib/__tests__/delete-guard.test.ts lib/__tests__/habit-stats.test.ts lib/__tests__/data-integrity.test.ts lib/__tests__/timeline-zoom.test.ts lib/__tests__/task-source-merge.test.ts lib/__tests__/google-tasks-map.test.ts lib/__tests__/relationships-due.test.ts lib/__tests__/home-events.test.ts lib/__tests__/device-contact-map.test.ts lib/__tests__/mobile-redirect.test.ts lib/__tests__/google-tasks-redirect.test.ts lib/__tests__/timeline-engine.test.ts lib/__tests__/monday-ids.test.ts lib/__tests__/monday-map.test.ts lib/__tests__/monday-redirect.test.ts lib/__tests__/github-map.test.ts lib/__tests__/github-repos.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

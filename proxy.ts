@@ -89,6 +89,12 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Local API-only: never serve the stale public/spa export — Expo runs on :8082
+  if (process.env.NODE_ENV === "development") {
+    const expo = new URL(req.nextUrl.pathname + req.nextUrl.search, "http://localhost:8082");
+    return NextResponse.redirect(expo);
+  }
+
   // Domain root UI → Expo SPA (auth is client-side via Bearer token)
   return rewriteToSpa(req);
 }

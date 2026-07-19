@@ -11,14 +11,16 @@ import { addTask, updateTaskStatus, deleteTask } from "./actions";
 import { TaskEditForm } from "./task-edit-form";
 
 function priorityTone(p: TaskPriority): "warn" | "accent" | "default" {
-  if (p === "high") return "warn";
+  if (p === "urgent" || p === "high") return "warn";
   if (p === "medium") return "accent";
   return "default";
 }
 
 const STATUS_CYCLE: Record<TaskStatus, TaskStatus> = {
   open: "in_progress",
-  in_progress: "done",
+  in_progress: "stuck",
+  stuck: "review",
+  review: "done",
   done: "open",
 };
 
@@ -59,6 +61,7 @@ export function TaskForm({
         </select>
       )}
       <select name="priority" className={inputClass} defaultValue="medium">
+        <option value="urgent">{t("common.urgent")}</option>
         <option value="high">{t("tasks.priorityHigh")}</option>
         <option value="medium">{t("tasks.priorityMedium")}</option>
         <option value="low">{t("tasks.priorityLow")}</option>
@@ -66,6 +69,8 @@ export function TaskForm({
       <select name="status" className={inputClass} defaultValue="open">
         <option value="open">{t("common.open")}</option>
         <option value="in_progress">{t("common.inProgress")}</option>
+        <option value="stuck">{t("common.stuck")}</option>
+        <option value="review">{t("common.review")}</option>
         <option value="done">{t("common.done")}</option>
       </select>
       <input type="date" name="due_date" className={inputClass} />
@@ -136,6 +141,7 @@ export function TaskList({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const priorityLabel: Record<TaskPriority, string> = {
+    urgent: t("common.urgent"),
     high: t("common.high"),
     medium: t("common.medium"),
     low: t("common.low"),
@@ -144,6 +150,8 @@ export function TaskList({
   const statusLabel: Record<TaskStatus, string> = {
     open: t("common.open"),
     in_progress: t("common.inProgress"),
+    stuck: t("common.stuck"),
+    review: t("common.review"),
     done: t("common.done"),
   };
 

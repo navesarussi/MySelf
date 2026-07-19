@@ -14,7 +14,8 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - Unify Google OAuth tokens (calendar + tasks) into one Google credential row with incremental scopes.
 - When a third external task source ships, consider `integration_settings` table if `settings` jsonb on `integration_tokens` becomes awkward.
 - [PENDING REFACTOR]: Prefer Monday OAuth 2.1 (expiring tokens + refresh) when app is migrated off legacy OAuth.
-- [PENDING REFACTOR]: Extract shared Settings “external source card” UI for Google Tasks + Monday.
+- [PENDING REFACTOR]: Extract shared Settings “external source card” UI for Google Tasks + Monday + GitHub.
+- [PENDING REFACTOR]: Split `mobile/src/components/github-settings.tsx` (grouped repo picker) under 200 lines.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/index.tsx` further (habits / relationships / stats sections) — still ~450 lines after goal/library modal extract.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/relationships.tsx` (device import + form + list) — ~330 lines after email/device picker.
 

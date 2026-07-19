@@ -34,9 +34,16 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
     router.push(href as `/${string}`);
   }
 
-  function logout() {
+  async function logout() {
     onClose();
-    confirmDelete(t("mobile.logoutConfirm"), () => signOut(), t("nav.logout"), t("common.cancel"));
+    confirmDelete(
+      t("mobile.logoutConfirm"),
+      () => {
+        void signOut().then(() => router.replace("/login"));
+      },
+      t("nav.logout"),
+      t("common.cancel")
+    );
   }
 
   return (

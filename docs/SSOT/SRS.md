@@ -121,8 +121,29 @@ Visual timeline supports deep zoom down to hourly divisions on a specific date (
 
 ### FR-TASK-01
 Dedicated Tasks tab (`/tasks`) separate from habits/commitments.
-Fields: title, `project_id` (references `projects`), priority (high|medium|low), status (open|in_progress|done), optional due_date.
-Filter by project and status. CRUD supported.
+Fields: title, `project_id` (references `projects`), priority (`urgent|high|medium|low`), status (`open|in_progress|stuck|review|done`), optional due_date.
+Filter/search/sort supported. CRUD supported.
+
+### FR-TASK-02
+Tasks screen uses a compact search bar plus a filter sheet (source, project, status, priority, overdue, sort). Active filters appear as removable chips. Default view hides `done` tasks.
+
+### FR-INT-TASKS-15
+User may connect one GitHub account via OAuth; select which repositories to sync (`selected_list_ids` = `owner/repo`).
+
+### FR-INT-TASKS-16
+Sync imports open Issues assigned to the connected user from selected repos into `myself.tasks` with `source = 'github'` (Pull Requests excluded).
+
+### FR-INT-TASKS-17
+Completing or reopening a GitHub-sourced task updates the Issue state; other local statuses (`stuck`, `review`, `in_progress`) do not write back.
+
+### FR-INT-TASKS-18
+GitHub-sourced title/due/notes are read-only in V1; priority and non-done local statuses may be edited locally.
+
+### FR-INT-TASKS-19
+Mobile Settings exposes GitHub connect/reconnect, repo picker grouped by owner (user/org), always-visible list, per-repo sync, sync status, Sync, and Disconnect.
+
+### FR-INT-TASKS-20
+External sync preserves local `in_progress|stuck|review` and priority while the remote item remains open; missing remote items are marked `done`.
 
 ### FR-TOAST-01
 After create / update / delete actions, show a short Hebrew toast (נוסף / עודכן / נמחק / error).

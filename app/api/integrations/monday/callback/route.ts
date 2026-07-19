@@ -7,10 +7,30 @@ import {
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import { getIntegrationToken, saveIntegrationToken } from "@/lib/integrations/tokens";
 import { consumeOAuthNext, consumeOAuthState } from "@/lib/integrations/oauth-state";
-import { appendTokenToRedirect } from "@/lib/integrations/mobile-redirect";
+import {
+  appendTokenToRedirect,
+  isAllowedAppRedirect,
+} from "@/lib/integrations/mobile-redirect";
 import { setFlashCookie } from "@/lib/flash";
 
 const APP_REDIRECT_COOKIE = "monday_oauth_app_redirect";
+
+function redirectToAppOrNext(
+  jar: Awaited<ReturnType<typeof cookies>>,
+  url: NextRequest["nextUrl"],
+  next: string
+) {
+  const appRedirect = jar.get(APP_REDIRECT_COOKIE)?.value;
+  jar.delete(APP_REDIRECT_COOKIE);
+  if (appRedirect && isAllowedAppRedirect(appRedirect)) {
+    const sessionToken = jar.get("session")?.value;
+    const target = sessionToken
+      ? appendTokenToRedirect(appRedirect, sessionToken)
+      : appRedirect;
+    return NextResponse.redirect(target);
+  }
+  return NextResponse.redirect(new URL(next, url.origin));
+}
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl;
@@ -20,14 +40,14 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     setFlashCookie(jar, "Monday connection cancelled", "error");
-    return NextResponse.redirect(new URL(next, url.origin));
+    return redirectToAppOrNext(jar, url, next);
   }
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   if (!code || !state || !(await consumeOAuthState(state))) {
     setFlashCookie(jar, "Invalid OAuth state — try again", "error");
-    return NextResponse.redirect(new URL(next, url.origin));
+    return redirectToAppOrNext(jar, url, next);
   }
 
   try {
@@ -50,23 +70,10 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const appRedirect = jar.get(APP_REDIRECT_COOKIE)?.value;
-    jar.delete(APP_REDIRECT_COOKIE);
-
-    if (appRedirect) {
-      const secret = process.env.AUTH_SECRET;
-      if (!secret) throw new Error("auth_secret_missing");
-
-      const sessionToken = jar.get("session")?.value;
-      if (!sessionToken) throw new Error("session_missing");
-
-      return NextResponse.redirect(appendTokenToRedirect(appRedirect, sessionToken));
-    }
-
     setFlashCookie(jar, "Monday connected — select boards to sync");
-    return NextResponse.redirect(new URL(next, url.origin));
+    return redirectToAppOrNext(jar, url, next);
   } catch {
     setFlashCookie(jar, "Monday connection failed", "error");
-    return NextResponse.redirect(new URL(next, url.origin));
+    return redirectToAppOrNext(jar, url, next);
   }
 }

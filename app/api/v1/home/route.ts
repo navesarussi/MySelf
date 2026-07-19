@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     supabase
       .from("tasks")
       .select("*, projects(name)")
-      .in("status", ["open", "in_progress"])
+      .in("status", ["open", "in_progress", "stuck", "review"])
       .order("created_at", { ascending: false }),
     supabase.from("projects").select("*").order("sort_order"),
     supabase

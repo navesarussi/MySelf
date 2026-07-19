@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
-import { getIntegrationToken } from "@/lib/integrations/tokens";
+import { getIntegrationToken, listIntegrationTokens } from "@/lib/integrations/tokens";
+import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import type { TaskSourceId } from "@/lib/integrations/task-sources/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -11,15 +12,29 @@ function isCronRequest(req: NextRequest) {
   return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
 }
 
+function syncedWithinDay(lastSyncAt: string | null | undefined): boolean {
+  if (!lastSyncAt) return false;
+  return Date.now() - new Date(lastSyncAt).getTime() < DAY_MS;
+}
+
 async function shouldSkipDailySync(provider: TaskSourceId): Promise<{ skip: boolean; reason?: string }> {
+  if (provider === MONDAY_PROVIDER) {
+    const accounts = await listIntegrationTokens(MONDAY_PROVIDER);
+    if (!accounts.length) return { skip: true, reason: "not_connected" };
+    if (accounts.some((a) => a.sync_status === "running")) {
+      return { skip: true, reason: "already_running" };
+    }
+    if (accounts.every((a) => syncedWithinDay(a.last_sync_at))) {
+      return { skip: true, reason: "synced_today" };
+    }
+    return { skip: false };
+  }
+
   const token = await getIntegrationToken(provider);
   if (!token) return { skip: true, reason: "not_connected" };
 
-  if (token.last_sync_at) {
-    const lastSync = new Date(token.last_sync_at).getTime();
-    if (Date.now() - lastSync < DAY_MS) {
-      return { skip: true, reason: "synced_today" };
-    }
+  if (syncedWithinDay(token.last_sync_at)) {
+    return { skip: true, reason: "synced_today" };
   }
 
   if (token.sync_status === "running") {

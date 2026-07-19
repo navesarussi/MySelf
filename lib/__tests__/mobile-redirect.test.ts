@@ -22,6 +22,7 @@ describe("isAllowedAppRedirect", () => {
 
   it("allows http localhost SPA paths for local web", () => {
     assert.equal(isAllowedAppRedirect("http://localhost:3000/auth"), true);
+    assert.equal(isAllowedAppRedirect("http://localhost:8082/settings"), true);
   });
 
   it("rejects foreign https hosts", () => {

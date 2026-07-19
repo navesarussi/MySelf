@@ -1,21 +1,23 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Platform, Text } from "react-native";
+import { Redirect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
-import { api } from "../src/api/resources";
-import { useApi, useMutate } from "../src/hooks";
-import { useI18n } from "../src/i18n";
-import { useLayoutDir } from "../src/layout-dir";
-import { useColors, tokens } from "../src/theme";
-import { useSession, API_URL } from "../src/session";
-import { Btn, Card, Chip, Row, Screen, SectionTitle, confirmDelete } from "../src/components/ui";
-import { getAppVersion } from "../src/version";
+import { api } from "../../src/api/resources";
+import { useApi, useMutate } from "../../src/hooks";
+import { useI18n } from "../../src/i18n";
+import { useLayoutDir } from "../../src/layout-dir";
+import { useColors, tokens } from "../../src/theme";
+import { useSession, API_URL } from "../../src/session";
+import { Btn, Card, Chip, Row, Screen, SectionTitle, confirmDelete } from "../../src/components/ui";
+import { getAppVersion } from "../../src/version";
 import {
   ALL_BOTTOM_TAB_IDS,
   TAB_LABEL_KEY,
   useNavPrefs,
-} from "../src/nav-prefs";
-import { MondaySettingsSection } from "../src/components/monday-settings";
+} from "../../src/nav-prefs";
+import { MondaySettingsSection } from "../../src/components/monday-settings";
+import { GithubSettingsSection } from "../../src/components/github-settings";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -23,8 +25,9 @@ export default function SettingsScreen() {
   const c = useColors();
   const { t, locale, setLocale } = useI18n();
   const { textStart, writingDirection } = useLayoutDir();
+  const router = useRouter();
   const version = getAppVersion();
-  const { signOut, token, serverUrl } = useSession();
+  const { ready, signOut, token, serverUrl } = useSession();
   const { run, busy } = useMutate();
   const { bottomTabs, toggleBottomTab } = useNavPrefs();
   const syncQ = useApi(api.syncStatus);
@@ -38,6 +41,13 @@ export default function SettingsScreen() {
   const savedListIds = googleTasksQ.data?.selected_list_ids ?? [];
   const listsDirty =
     [...selectedListIds].sort().join(",") !== [...savedListIds].sort().join(",");
+
+  async function logout() {
+    await signOut();
+    router.replace("/login");
+  }
+
+  if (ready && !token) return <Redirect href="/login" />;
 
   useEffect(() => {
     setSelectedListIds(savedListIds);
@@ -239,12 +249,28 @@ export default function SettingsScreen() {
         </Text>
       </Card>
 
-      <SectionTitle>{t("settings.googleCalendar")}</SectionTitle>
+      <SectionTitle
+        onAdd={connectGoogle}
+        addLabel={t("common.signInGoogle")}
+      >
+        {t("settings.googleCalendar")}
+      </SectionTitle>
       <Card>
         {syncQ.data?.connected ? (
           <>
             <Text style={{ color: c.good, textAlign: textStart, writingDirection }}>
-              ✓ {t("settings.connected")} · {syncQ.data.eventCount ?? 0} {t("settings.importedEvents")}
+              ✓ {t("settings.connected")}
+            </Text>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textSm,
+                marginTop: 4,
+                textAlign: textStart,
+                writingDirection,
+              }}
+            >
+              {t("settings.importedEventsCount", { count: syncQ.data.eventCount ?? 0 })}
             </Text>
             <Text
               style={{
@@ -297,13 +323,30 @@ export default function SettingsScreen() {
         ) : null}
       </Card>
 
-      <SectionTitle>{t("settings.googleTasks")}</SectionTitle>
+      <SectionTitle
+        onAdd={connectGoogleTasks}
+        addLabel={t("settings.connectGoogleTasks")}
+      >
+        {t("settings.googleTasks")}
+      </SectionTitle>
       <Card>
         {googleTasksQ.data?.connected ? (
           <>
             <Text style={{ color: c.good, textAlign: textStart, writingDirection }}>
-              ✓ {t("settings.connected")} · {googleTasksQ.data.taskCount ?? 0}{" "}
-              {t("settings.importedTasks")}
+              ✓ {t("settings.connected")}
+            </Text>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textSm,
+                marginTop: 4,
+                textAlign: textStart,
+                writingDirection,
+              }}
+            >
+              {t("settings.importedTasksCount", {
+                count: googleTasksQ.data.taskCount ?? 0,
+              })}
             </Text>
             <Text
               style={{
@@ -413,13 +456,15 @@ export default function SettingsScreen() {
 
       <MondaySettingsSection />
 
+      <GithubSettingsSection />
+
       <SectionTitle>{t("nav.logout")}</SectionTitle>
       <Card style={{ borderColor: c.warn }}>
         <Btn
           variant="warn"
           label={t("nav.logout")}
           onPress={() =>
-            confirmDelete(t("mobile.logoutConfirm"), () => signOut(), t("nav.logout"), t("common.cancel"))
+            confirmDelete(t("mobile.logoutConfirm"), () => void logout(), t("nav.logout"), t("common.cancel"))
           }
         />
       </Card>
