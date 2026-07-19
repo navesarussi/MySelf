@@ -167,9 +167,12 @@ export async function getValidGoogleTasksAccessToken(): Promise<string> {
   const row = await getIntegrationToken(GOOGLE_TASKS_PROVIDER);
   if (!row) throw new Error("not_connected");
 
-  const expires = new Date(row.expires_at).getTime();
-  if (Date.now() < expires - 60_000) return row.access_token;
+  if (row.expires_at) {
+    const expires = new Date(row.expires_at).getTime();
+    if (Date.now() < expires - 60_000) return row.access_token;
+  }
 
+  if (!row.refresh_token) throw new Error("missing_refresh_token");
   const refreshed = await refreshAccessToken(row.refresh_token);
   const expires_at = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
   await saveIntegrationToken({

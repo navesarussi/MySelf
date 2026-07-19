@@ -15,6 +15,7 @@ import {
   TAB_LABEL_KEY,
   useNavPrefs,
 } from "../src/nav-prefs";
+import { MondaySettingsSection } from "../src/components/monday-settings";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -409,6 +410,8 @@ export default function SettingsScreen() {
           </Text>
         ) : null}
       </Card>
+
+      <MondaySettingsSection />
 
       <SectionTitle>{t("nav.logout")}</SectionTitle>
       <Card style={{ borderColor: c.warn }}>

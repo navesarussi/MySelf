@@ -33,7 +33,12 @@ import { useColors, tokens } from "../../src/theme";
 const STATUSES: TaskStatus[] = ["open", "in_progress", "done"];
 const EXTERNAL_STATUSES: TaskStatus[] = ["open", "done"];
 const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
-const SOURCE_FILTERS: Array<typeof ALL_FILTER | TaskSource> = [ALL_FILTER, "manual", "google_tasks"];
+const SOURCE_FILTERS: Array<typeof ALL_FILTER | TaskSource> = [
+  ALL_FILTER,
+  "manual",
+  "google_tasks",
+  "monday",
+];
 
 type FormState = {
   id?: string;

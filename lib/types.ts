@@ -92,9 +92,10 @@ export type SyncProgress = {
 
 export type IntegrationToken = {
   provider: string;
+  account_key: string;
   access_token: string;
-  refresh_token: string;
-  expires_at: string;
+  refresh_token: string | null;
+  expires_at: string | null;
   connected_at: string;
   last_sync_at: string | null;
   sync_status: SyncStatus;
@@ -123,12 +124,16 @@ export type Project = {
 export type TaskPriority = "high" | "medium" | "low";
 export type TaskStatus = "open" | "in_progress" | "done";
 
-export type TaskSource = "manual" | "google_tasks";
+export type TaskSource = "manual" | "google_tasks" | "monday";
 
 export type TaskExternalMeta = {
   listTitle?: string;
   deepLink?: string;
   parentExternalId?: string;
+  account_key?: string;
+  account_name?: string;
+  statusColumnId?: string;
+  statusLabel?: string;
 };
 
 export type Task = {

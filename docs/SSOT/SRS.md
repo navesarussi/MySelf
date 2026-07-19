@@ -70,6 +70,27 @@ External-sourced task title/due/notes are read-only in V1. Priority may be edite
 ### FR-INT-TASKS-07
 Mobile Settings exposes Google Tasks connection, list picker, sync status, and Sync now. Website UI is out of scope.
 
+### FR-INT-TASKS-08
+User may connect one or more Monday.com accounts via OAuth; each account can be disconnected independently.
+
+### FR-INT-TASKS-09
+Per Monday account, user selects which boards to sync (`selected_list_ids`).
+
+### FR-INT-TASKS-10
+Sync imports items assigned to the connected user from selected boards that are not Done into `myself.tasks` with `source = 'monday'`.
+
+### FR-INT-TASKS-11
+Completing or reopening a Monday-sourced task updates Monday status; failure reverts local status and shows an error.
+
+### FR-INT-TASKS-12
+Monday-sourced title/due/notes are read-only in V1; priority may be edited locally.
+
+### FR-INT-TASKS-13
+Mobile Settings exposes Monday multi-account connect, board picker, sync status, Sync, and Disconnect.
+
+### FR-INT-TASKS-14
+`integration_tokens` supports multiple rows per provider via `account_key` (Google Tasks uses empty `account_key`).
+
 ### FR-INT-WA-01
 Optional phone number on relationships; when set, show WhatsApp quick-link via `wa.me`.
 

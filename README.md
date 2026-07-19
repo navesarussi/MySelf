@@ -24,6 +24,9 @@ npm run dev
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
 | `GOOGLE_REDIRECT_URI` | Callback, למשל `http://localhost:3000/api/auth/google/callback` |
 | `GOOGLE_TASKS_REDIRECT_URI` | Callback למשימות גוגל, בפרודקשן: `https://myselfapp.xyz/api/integrations/google-tasks/callback` |
+| `MONDAY_CLIENT_ID` | OAuth client ID מאפליקציית Monday Developer |
+| `MONDAY_CLIENT_SECRET` | OAuth client secret של Monday |
+| `MONDAY_REDIRECT_URI` | Callback ל-Monday, בפרודקשן: `https://myselfapp.xyz/api/integrations/monday/callback` |
 | `CRON_SECRET` | מחרוזת סודית לאימות סנכרון שבועי (Vercel Cron) |
 
 ## Google Sign-In + יומן
@@ -36,6 +39,16 @@ npm run dev
 4. ב-OAuth consent screen הוסף **Privacy policy URL**: `https://<domain>/privacy`
 5. מלא את משתני הסביבה של גוגל + `AUTH_SECRET` + `ALLOWED_GOOGLE_EMAIL`.
 6. בדף הכניסה לחץ **כניסה עם Google** — היומן מסתנכרן ברקע אחרי ההתחברות.
+
+## Monday.com (משימות)
+
+1. צור אפליקציה ב-[Monday Developer Center](https://developer.monday.com/).
+2. ב-OAuth הגדר scopes: `me:read`, `account:read`, `boards:read`, `boards:write`, `workspaces:read`.
+3. הוסף Redirect URI:
+   - `https://myselfapp.xyz/api/integrations/monday/callback`
+   - `http://localhost:3000/api/integrations/monday/callback` (פיתוח)
+4. מלא `MONDAY_CLIENT_ID`, `MONDAY_CLIENT_SECRET`, `MONDAY_REDIRECT_URI` ב-Vercel (Production).
+5. בהגדרות האפליקציה: **הוסף חשבון Monday** → בחר לוחות → Sync. אפשר לחבר אישי + עבודה בנפרד.
 
 ## פריסה ל-Vercel
 

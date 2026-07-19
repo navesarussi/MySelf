@@ -38,6 +38,16 @@ export type GoogleTasksStatusPayload = {
   selected_list_ids?: string[];
 };
 
+export type MondayAccount = {
+  account_key: string;
+  account_name: string;
+  account_slug: string | null;
+  connected: boolean;
+  last_sync_at?: string | null;
+  sync_status?: "idle" | "running" | "completed" | "failed";
+  selected_list_ids?: string[];
+};
+
 export type SyncStatusPayload = {
   connected: boolean;
   syncStatus?: "idle" | "running" | "completed" | "failed";
@@ -176,4 +186,18 @@ export const api = {
       method: "POST",
       body: provider ? { provider } : {},
     }),
+
+  mondayAccounts: (c: ApiConfig) =>
+    apiFetch<{ accounts: MondayAccount[] }>(c, "/integrations/monday/accounts"),
+  mondayBoards: (c: ApiConfig, accountKey: string) =>
+    apiFetch<{ id: string; title: string }[]>(
+      c,
+      `/integrations/monday/boards?account_key=${encodeURIComponent(accountKey)}`
+    ),
+  patchMondaySettings: (
+    c: ApiConfig,
+    body: { account_key: string; selected_list_ids: string[] }
+  ) => apiFetch(c, "/integrations/monday/settings", { method: "PATCH", body }),
+  disconnectMonday: (c: ApiConfig, body: { account_key: string }) =>
+    apiFetch(c, "/integrations/monday/disconnect", { method: "POST", body }),
 };

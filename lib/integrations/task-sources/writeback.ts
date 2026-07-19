@@ -15,6 +15,8 @@ export async function applyExternalStatusChange(task: Task, nextStatus: TaskStat
   if (nextStatus === "done") {
     await provider.complete(task.external_id, task.external_list_id);
   } else if (nextStatus === "open" && task.status === "done") {
-    await provider.reopen(task.external_id, task.external_list_id);
+    await provider.reopen(task.external_id, task.external_list_id, {
+      statusLabel: task.external_meta?.statusLabel,
+    });
   }
 }

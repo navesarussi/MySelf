@@ -1,9 +1,8 @@
-import type { TaskSource } from "@/lib/types";
-import type { ExternalTaskDraft } from "./types";
+import type { ExternalTaskDraft, TaskSourceId } from "./types";
 
 export function buildExternalTaskUpsert(
   draft: ExternalTaskDraft,
-  source: TaskSource,
+  source: TaskSourceId,
   syncedAt: string
 ) {
   return {

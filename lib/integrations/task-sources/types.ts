@@ -11,6 +11,10 @@ export type ExternalTaskDraft = {
     listTitle?: string;
     deepLink?: string;
     parentExternalId?: string;
+    account_key?: string;
+    account_name?: string;
+    statusColumnId?: string;
+    statusLabel?: string;
   };
 };
 
@@ -26,5 +30,9 @@ export interface TaskSourceProvider {
   listSources(): Promise<{ id: string; title: string }[]>;
   pullOpenTasks(selectedListIds: string[]): Promise<ExternalTaskDraft[]>;
   complete(externalId: string, listId: string): Promise<void>;
-  reopen(externalId: string, listId: string): Promise<void>;
+  reopen(
+    externalId: string,
+    listId: string,
+    meta?: { statusLabel?: string }
+  ): Promise<void>;
 }
