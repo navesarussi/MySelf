@@ -2,7 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "1.10.0",
+    "version": "1.10.1",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -17,7 +17,9 @@
         "ITSAppUsesNonExemptEncryption": false,
         "RCTNewArchEnabled": false,
         "NSContactsUsageDescription": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים.",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
