@@ -15,6 +15,7 @@ export const SOURCE_FILTERS: Array<typeof ALL_FILTER | TaskSource> = [
   ALL_FILTER,
   "manual",
   "google_tasks",
+  "gmail",
   "monday",
   "github",
 ];

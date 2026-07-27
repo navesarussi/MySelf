@@ -18,6 +18,8 @@ import {
 } from "../../src/nav-prefs";
 import { MondaySettingsSection } from "../../src/components/monday-settings";
 import { GithubSettingsSection } from "../../src/components/github-settings";
+import { PushSettingsSection } from "../../src/components/push-settings";
+import { unregisterPushToken } from "../../src/push/register";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -32,6 +34,7 @@ export default function SettingsScreen() {
   const { bottomTabs, toggleBottomTab } = useNavPrefs();
   const syncQ = useApi(api.syncStatus);
   const googleTasksQ = useApi(api.googleTasksStatus);
+  const gmailQ = useApi(api.gmailStatus);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [tasksSyncMessage, setTasksSyncMessage] = useState<string | null>(null);
   const [availableLists, setAvailableLists] = useState<{ id: string; title: string }[]>([]);
@@ -43,6 +46,13 @@ export default function SettingsScreen() {
     [...selectedListIds].sort().join(",") !== [...savedListIds].sort().join(",");
 
   async function logout() {
+    if (token && serverUrl) {
+      try {
+        await unregisterPushToken({ token, serverUrl });
+      } catch {
+        /* best-effort */
+      }
+    }
     await signOut();
     router.replace("/login");
   }
@@ -169,16 +179,47 @@ export default function SettingsScreen() {
     );
   }
 
+  async function connectGmail() {
+    const appRedirect =
+      Platform.OS === "web"
+        ? `${window.location.origin}/settings`
+        : ExpoLinking.createURL("/settings");
+    const connectUrl = `${API_URL}/api/integrations/gmail/connect?app_redirect=${encodeURIComponent(appRedirect)}`;
+    if (Platform.OS === "web") {
+      window.location.href = connectUrl;
+      return;
+    }
+    const result = await WebBrowser.openAuthSessionAsync(connectUrl, appRedirect);
+    if (result.type !== "cancel") {
+      await gmailQ.refresh();
+    }
+  }
+
+  function disconnectGmail() {
+    confirmDelete(
+      t("settings.gmailDisconnectConfirm"),
+      async () => {
+        await run((config) => api.disconnectGmail(config), {
+          success: "flash.gmailDisconnected",
+        });
+        gmailQ.refresh();
+      },
+      t("settings.gmailDisconnect"),
+      t("common.cancel")
+    );
+  }
+
   function refreshAll() {
     syncQ.refresh();
     googleTasksQ.refresh();
+    gmailQ.refresh();
   }
 
   return (
     <Screen
       title={t("settings.title")}
       subtitle={t("settings.subtitle")}
-      refreshing={syncQ.loading || googleTasksQ.loading}
+      refreshing={syncQ.loading || googleTasksQ.loading || gmailQ.loading}
       onRefresh={refreshAll}
     >
       <SectionTitle>{t("language.label")}</SectionTitle>
@@ -449,6 +490,50 @@ export default function SettingsScreen() {
           </Text>
         ) : null}
       </Card>
+
+      <SectionTitle onAdd={connectGmail} addLabel={t("settings.connectGmail")}>
+        {t("settings.gmail")}
+      </SectionTitle>
+      <Card>
+        {gmailQ.data?.connected ? (
+          <>
+            <Text style={{ color: c.good, textAlign: textStart, writingDirection }}>
+              ✓ {t("settings.connected")}
+            </Text>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textXs,
+                textAlign: textStart,
+                writingDirection,
+                marginTop: 4,
+              }}
+            >
+              {t("settings.gmailReconnectHint")}
+            </Text>
+            <Row style={{ marginTop: 10 }}>
+              <Btn
+                small
+                variant="ghost"
+                label={t("settings.gmailDisconnect")}
+                onPress={disconnectGmail}
+                disabled={busy}
+              />
+            </Row>
+          </>
+        ) : (
+          <>
+            <Text style={{ color: c.muted, textAlign: textStart, writingDirection }}>
+              {t("settings.gmailReconnectHint")}
+            </Text>
+            <Row style={{ marginTop: 10 }}>
+              <Btn small label={t("settings.connectGmail")} onPress={connectGmail} />
+            </Row>
+          </>
+        )}
+      </Card>
+
+      <PushSettingsSection />
 
       <MondaySettingsSection />
 

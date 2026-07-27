@@ -14,17 +14,18 @@ import { useFonts } from "expo-font";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
 import { SessionProvider } from "../src/session";
-import { I18nProvider, useI18n } from "../src/i18n";
+import { I18nProvider } from "../src/i18n";
 import { NavPrefsProvider } from "../src/nav-prefs";
 import { ThemeProvider, useColors } from "../src/theme";
 import { ToastProvider } from "../src/toast";
 import { ErrorBoundary } from "../src/components/error-boundary";
+import { usePushNotifications } from "../src/push/use-push";
 
 SplashScreen.preventAutoHideAsync();
 
 function AppStack() {
   const c = useColors();
-  const { t } = useI18n();
+  usePushNotifications();
 
   return (
     <>

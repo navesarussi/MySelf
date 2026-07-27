@@ -18,6 +18,21 @@ npx eas-cli init                 # מקשר את הפרויקט לחשבון (כ
 2. ב-App Store Connect: צור אפליקציה חדשה עם Bundle ID‏ `com.navesarussi.myself`
    (אם ה-Bundle ID עוד לא רשום — EAS ירשום אותו בשבילך בזמן ה-build הראשון).
 
+### Push Notifications (חד-פעמי — חובה לפני בדיקת פוש)
+
+1. [Apple Developer → Identifiers](https://developer.apple.com/account/resources/identifiers/list) →
+   `com.navesarussi.myself` → סמן **Push Notifications** → Save.
+2. הגדר APNs key ב-EAS (פעם אחת):
+
+```bash
+cd mobile
+npx eas-cli credentials
+# iOS → production → Push Notifications → Create / upload APNs Auth Key (.p8)
+```
+
+3. אחרי הוספת `expo-notifications` נדרש **build חדש** ל-TestFlight (לא OTA) —
+   entitlements משתנים. סימולטור ו-Expo Go לא מספיקים לבדיקת push אמיתי.
+
 ## אוטומציה מלאה (GitHub Actions)
 
 כל push ל-`main` שמשנה קבצים תחת `mobile/` מפעיל את

@@ -13,6 +13,78 @@
     {
       "path": "/api/integrations/data-integrity",
       "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 4 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 5 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 6 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 7 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 8 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 9 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 10 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 11 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 12 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 14 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 15 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 16 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 17 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 18 * * *"
+    },
+    {
+      "path": "/api/agent/motivate",
+      "schedule": "2 19 * * *"
+    },
+    {
+      "path": "/api/push/dispatch",
+      "schedule": "5 5 * * *"
+    },
+    {
+      "path": "/api/push/dispatch",
+      "schedule": "5 10 * * *"
+    },
+    {
+      "path": "/api/push/dispatch",
+      "schedule": "5 18 * * *"
     }
   ]
 }

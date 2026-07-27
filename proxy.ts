@@ -34,7 +34,8 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith("/privacy/") ||
     pathname.startsWith("/api/auth/google") ||
     pathname.startsWith("/api/integrations/google/callback") ||
-    pathname.startsWith("/api/integrations/google-tasks/callback")
+    pathname.startsWith("/api/integrations/google-tasks/callback") ||
+    pathname.startsWith("/api/agent/whatsapp/webhook")
   ) {
     return NextResponse.next();
   }

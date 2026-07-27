@@ -24,6 +24,7 @@ export function nextStatusForTask(task: Task): TaskStatus {
 
 export function taskSourceLabel(t: (key: string) => string, source: TaskSource) {
   if (source === "google_tasks") return t("tasks.source.google_tasks");
+  if (source === "gmail") return t("tasks.source.gmail");
   if (source === "monday") return t("tasks.source.monday");
   if (source === "github") return t("tasks.source.github");
   return t("tasks.source.manual");

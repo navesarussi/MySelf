@@ -2,7 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "1.9.6",
+    "version": "1.10.0",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -16,7 +16,8 @@
         "CFBundleDevelopmentRegion": "he",
         "ITSAppUsesNonExemptEncryption": false,
         "RCTNewArchEnabled": false,
-        "NSContactsUsageDescription": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים."
+        "NSContactsUsageDescription": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים.",
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -51,6 +52,15 @@
         "expo-contacts",
         {
           "contactsPermission": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0b0c10",
+          "sounds": [],
+          "enableBackgroundRemoteNotifications": true
         }
       ]
     ],

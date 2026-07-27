@@ -38,6 +38,11 @@ export type GoogleTasksStatusPayload = {
   selected_list_ids?: string[];
 };
 
+export type GmailStatusPayload = {
+  connected: boolean;
+  connectedAt?: string | null;
+};
+
 export type MondayAccount = {
   account_key: string;
   account_name: string;
@@ -195,6 +200,10 @@ export const api = {
     apiFetch(c, "/integrations/google-tasks/settings", { method: "PATCH", body }),
   disconnectGoogleTasks: (c: ApiConfig) =>
     apiFetch(c, "/integrations/google-tasks/disconnect", { method: "POST", body: {} }),
+
+  gmailStatus: (c: ApiConfig) => apiFetch<GmailStatusPayload>(c, "/integrations/gmail/status"),
+  disconnectGmail: (c: ApiConfig) =>
+    apiFetch(c, "/integrations/gmail/disconnect", { method: "POST", body: {} }),
   syncTaskSources: (
     c: ApiConfig,
     provider?: string,
@@ -242,4 +251,56 @@ export const api = {
     apiFetch(c, "/integrations/github/settings", { method: "PATCH", body }),
   disconnectGithub: (c: ApiConfig) =>
     apiFetch(c, "/integrations/github/disconnect", { method: "POST", body: {} }),
+
+  registerPushToken: (
+    c: ApiConfig,
+    body: { expo_push_token: string; platform: string; device_id?: string | null }
+  ) => apiFetch<{ ok: boolean }>(c, "/push/register", { method: "POST", body }),
+  unregisterPushToken: (c: ApiConfig, expo_push_token: string) =>
+    apiFetch<{ ok: boolean }>(c, "/push/register", {
+      method: "DELETE",
+      body: { expo_push_token },
+    }),
+  pushPreferences: (c: ApiConfig) =>
+    apiFetch<{
+      enabled: boolean;
+      agent: boolean;
+      relationships: boolean;
+      habits: boolean;
+      tasks: boolean;
+      timeline: boolean;
+      quiet_start_hour: number;
+      quiet_end_hour: number;
+      updated_at: string;
+    }>(c, "/push/preferences"),
+  patchPushPreferences: (
+    c: ApiConfig,
+    body: Partial<{
+      enabled: boolean;
+      agent: boolean;
+      relationships: boolean;
+      habits: boolean;
+      tasks: boolean;
+      timeline: boolean;
+      quiet_start_hour: number;
+      quiet_end_hour: number;
+    }>
+  ) =>
+    apiFetch<{
+      enabled: boolean;
+      agent: boolean;
+      relationships: boolean;
+      habits: boolean;
+      tasks: boolean;
+      timeline: boolean;
+      quiet_start_hour: number;
+      quiet_end_hour: number;
+      updated_at: string;
+    }>(c, "/push/preferences", { method: "PATCH", body }),
+  pushTest: (c: ApiConfig) =>
+    apiFetch<{ ok: boolean; sent?: number; failed?: number; reason?: string }>(
+      c,
+      "/push/test",
+      { method: "POST", body: {} }
+    ),
 };

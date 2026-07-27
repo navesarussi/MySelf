@@ -95,6 +95,30 @@ Mobile Settings exposes Monday multi-account connect, board picker, sync status,
 ### FR-INT-WA-01
 Optional phone number on relationships; when set, show WhatsApp quick-link via `wa.me`.
 
+### FR-AI-AGENT-01
+Server-side motivation agent with full read/write tool access to tasks, habits, goals/dreams, commitments, relationships, content library, timeline events, life periods, projects, and dig schedule.
+
+### FR-AI-AGENT-02
+Agent settings stored in `agent_settings` (enabled, WhatsApp phone, `dig_hours` 1–6 Jerusalem slots, tone, optional custom `system_prompt`). Exposed via `/api/v1/agent/settings`. Agent tools can read/update dig schedule.
+
+### FR-AI-AGENT-03
+Agent can create/update relationship (שמירת קשר) cards — not tasks — when asked to add people/contact reminders.
+
+### FR-AI-WA-01
+Bidirectional WhatsApp via Meta Cloud API webhook (`/api/agent/whatsapp/webhook`). Only the configured user phone may trigger the agent. Inbound text and voice notes (audio) are supported; voice notes are transcribed to Hebrew before the agent runs.
+
+### FR-AI-WA-02
+Scheduled motivation digs when Jerusalem wall-clock hour is in `dig_hours` (1–6 slots). Cron ticks multiple daily UTC times; only matching hours send.
+
+### FR-AI-GMAIL-01
+User connects Gmail via OAuth (`gmail.readonly` scope) from mobile Settings. Tokens stored in `integration_tokens` (`google_gmail` provider). The motivation agent has read-only tools `list_emails` and `read_email` to search and read message bodies when Gmail is connected.
+
+### FR-AI-GMAIL-02
+Morning motivation dig pre-fetches unread Gmail preview (`gmail_digest` in agent context) when Gmail is connected, so the dig may mention the most urgent unread email.
+
+### FR-AI-GMAIL-03
+Agent tool `create_task_from_email` creates a task with `source=gmail` and `external_id` = message id (idempotent). Used when the user asks to turn an email into a follow-up task.
+
 ### FR-REL-EMAIL
 Relationships may store an optional email. Mobile form and create/update APIs include the field.
 
@@ -167,6 +191,33 @@ Click period to edit or delete with precise dates. Default tab is visual view.
 ### FR-TL-02
 Seeded milestones: birth 2002-01-02, enlist 2021-12-23, release 2025-04-19.
 Seeded periods include childhood, high school, degree, mechina, Golan, army, relationship (from 2023-07-26 ongoing), post-release, Australia.
+
+### FR-PUSH-01
+Mobile app registers and unregisters an Expo push token via `/api/v1/push/register` (auth required). Tokens are stored per device; invalid tokens are removed after Expo delivery errors.
+
+### FR-PUSH-02
+Notification preferences (master enable + per-type: agent, relationships, habits, tasks, timeline) and quiet hours (default 22:00–07:00 Asia/Jerusalem) are stored in `notification_preferences` and exposed via `/api/v1/push/preferences`. Mobile Settings shows toggles and a test-send control.
+
+### FR-PUSH-03
+When the motivation agent runs and push is enabled, the dig text is also sent as a push notification (WhatsApp remains optional when a phone is configured).
+
+### FR-PUSH-03b
+When the agent mutates app data via a write tool (tasks, habits, goals, commitments, relationships, library, timeline, dig schedule, Gmail→task), a push notification is sent (type `agent`, respects agent preference toggle, bypasses quiet hours). Each action uses a unique ref id so multiple writes in one day all notify.
+
+### FR-PUSH-04
+Daily push summarizes relationships due today or overdue (`reminder_days` cadence), deep-linking to `/relationships`.
+
+### FR-PUSH-05
+Hourly dispatch reminds about habits not yet reported for the current report window (`report_time` / `last_checked_on`), deep-linking to `/habits`.
+
+### FR-PUSH-06
+Daily push summarizes open tasks with due date today or overdue, deep-linking to `/tasks`.
+
+### FR-PUSH-07
+Daily push summarizes timeline events for today, deep-linking to `/timeline`.
+
+### FR-PUSH-08
+Tapping a notification opens the relevant in-app screen via Expo Router (`data.screen`). Duplicate sends of the same type+ref for the same Jerusalem calendar day are suppressed via `notification_log`.
 
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
