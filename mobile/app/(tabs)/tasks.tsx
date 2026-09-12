@@ -55,6 +55,8 @@ type FormState = {
   status: TaskStatus;
   due_date: string;
   notes: string;
+  /** True while the full note is being fetched because the list sent a preview. */
+  notesLoading?: boolean;
   source?: TaskSource;
   external_meta?: TaskExternalMeta;
 };
@@ -166,7 +168,9 @@ export default function TasksScreen() {
           priority: form.priority,
           status: form.status,
           due_date: form.due_date || null,
-          notes: form.notes || null,
+          // Omitted while loading: the field still holds a preview, and a
+          // partial update leaves the stored note untouched.
+          ...(form.notesLoading ? {} : { notes: form.notes || null }),
         };
 
     const targetId = form.id;
@@ -285,6 +289,7 @@ export default function TasksScreen() {
 
   const openEdit = useCallback(
     (task: Task) => {
+      const needsFullNotes = Boolean(task.notes_truncated);
       setForm({
         id: task.id,
         title: task.title,
@@ -293,11 +298,30 @@ export default function TasksScreen() {
         status: task.status,
         due_date: task.due_date ?? "",
         notes: task.notes ?? "",
+        notesLoading: needsFullNotes,
         source: task.source,
         external_meta: task.external_meta,
       });
+
+      // The list only carries a preview. Pull the full note before the field
+      // becomes editable, so a save can never write the truncation back.
+      if (!needsFullNotes) return;
+      void (async () => {
+        try {
+          const full = await run((config) => api.task(config, task.id));
+          setForm((prev) =>
+            prev && prev.id === task.id
+              ? { ...prev, notes: full?.notes ?? prev.notes, notesLoading: false }
+              : prev
+          );
+        } catch {
+          setForm((prev) =>
+            prev && prev.id === task.id ? { ...prev, notesLoading: false } : prev
+          );
+        }
+      })();
     },
-    [defaultProjectId]
+    [defaultProjectId, run]
   );
 
   function removeTask(task: Task) {
@@ -495,7 +519,10 @@ export default function TasksScreen() {
                 <Input
                   value={form.notes}
                   onChangeText={(v) => setForm({ ...form, notes: v })}
-                  placeholder={t("tasks.notesPlaceholder")}
+                  placeholder={
+                    form.notesLoading ? t("common.loading") : t("tasks.notesPlaceholder")
+                  }
+                  editable={!form.notesLoading}
                   multiline
                 />
               </>

@@ -145,6 +145,8 @@ export type Task = {
   status: TaskStatus;
   due_date: string | null;
   notes: string | null;
+  /** List payloads send a `notes` preview; true means the full text needs `GET /tasks/:id`. */
+  notes_truncated?: boolean;
   source: TaskSource;
   external_id: string | null;
   external_list_id: string | null;

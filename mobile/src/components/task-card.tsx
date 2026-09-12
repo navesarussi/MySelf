@@ -152,6 +152,7 @@ export const TaskCard = React.memo(function TaskCard({
       ) : null}
       {task.notes ? (
         <Text
+          numberOfLines={3}
           style={{
             color: c.muted,
             fontSize: tokens.textXs,

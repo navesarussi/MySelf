@@ -5,6 +5,7 @@ import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthoriz
 import { dedupeTasks } from "@/lib/data-integrity";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
+import { TASK_SELECT, TaskJoin, previewNotes, projectNameFromJoin } from "@/lib/api/tasks";
 
 const PRIORITIES: TaskPriority[] = ["urgent", "high", "medium", "low"];
 const STATUSES: TaskStatus[] = ["open", "in_progress", "stuck", "review", "done"];
@@ -23,14 +24,6 @@ function revalidateTaskPaths() {
   revalidatePath("/tasks");
   revalidatePath("/projects");
   revalidatePath("/");
-}
-
-type TaskJoin = Task & { projects?: { name: string } | { name: string }[] | null };
-
-function projectNameFromJoin(projects: TaskJoin["projects"]): string | undefined {
-  if (!projects) return undefined;
-  if (Array.isArray(projects)) return projects[0]?.name;
-  return projects.name;
 }
 
 function sortTasks(tasks: Task[], sort: string | null): Task[] {
@@ -75,45 +68,71 @@ export async function GET(req: NextRequest) {
   const overdue = sp.get("overdue") === "1";
   const sort = sp.get("sort");
 
-  let query = getSupabase()
-    .from("tasks")
-    .select(
-      "id, title, project_id, priority, status, due_date, notes, source, external_id, external_list_id, external_meta, synced_at, created_at, updated_at, projects(name)"
-    );
-  if (project) query = query.eq("project_id", project);
-  if (status) {
-    const list = status.split(",").filter((s): s is TaskStatus => (STATUSES as string[]).includes(s));
-    if (list.length) query = query.in("status", list);
-  }
-  if (priority) {
-    const list = priority
-      .split(",")
-      .filter((p): p is TaskPriority => (PRIORITIES as string[]).includes(p));
-    if (list.length === 1) query = query.eq("priority", list[0]);
-    else if (list.length > 1) query = query.in("priority", list);
-  }
-  if (source) query = query.eq("source", source);
-  if (externalList) query = query.eq("external_list_id", externalList);
-  if (q) query = query.ilike("title", `%${q}%`);
-  if (overdue) {
-    const today = new Date().toISOString().slice(0, 10);
-    query = query.lt("due_date", today).neq("status", "done");
-  }
-
   const limit = Math.min(Math.max(Number(sp.get("limit") ?? 2500), 1), 5000);
-  query = query.limit(limit);
+  const doneLimit = Math.min(Math.max(Number(sp.get("done_limit") ?? 200), 0), 1000);
 
-  const { data, error } = await query;
-  if (error) return dbError();
+  // Rebuilt per query: a Supabase builder cannot be reused once awaited.
+  const filtered = () => {
+    let query = getSupabase().from("tasks").select(TASK_SELECT);
+    if (project) query = query.eq("project_id", project);
+    if (status) {
+      const list = status
+        .split(",")
+        .filter((s): s is TaskStatus => (STATUSES as string[]).includes(s));
+      if (list.length) query = query.in("status", list);
+    }
+    if (priority) {
+      const list = priority
+        .split(",")
+        .filter((p): p is TaskPriority => (PRIORITIES as string[]).includes(p));
+      if (list.length === 1) query = query.eq("priority", list[0]);
+      else if (list.length > 1) query = query.in("priority", list);
+    }
+    if (source) query = query.eq("source", source);
+    if (externalList) query = query.eq("external_list_id", externalList);
+    if (q) query = query.ilike("title", `%${q}%`);
+    if (overdue) {
+      const today = new Date().toISOString().slice(0, 10);
+      query = query.lt("due_date", today).neq("status", "done");
+    }
+    // Always order before limiting: without it Postgres is free to return any
+    // subset, so past the cap the rows that reach the client are arbitrary.
+    return query.order("updated_at", { ascending: false });
+  };
+
+  let rows: unknown[];
+  if (status || overdue) {
+    // Caller already scoped the statuses — one bounded query is enough.
+    const { data, error } = await filtered().limit(limit);
+    if (error) return dbError();
+    rows = data ?? [];
+  } else {
+    // Unscoped list: budget active and done separately so an ever-growing pile
+    // of done tasks can never crowd active work out of the response.
+    const [active, done] = await Promise.all([
+      filtered().neq("status", "done").limit(limit),
+      doneLimit > 0
+        ? filtered().eq("status", "done").limit(doneLimit)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (active.error || done.error) return dbError();
+    rows = [...(active.data ?? []), ...(done.data ?? [])];
+  }
+
   const tasks = dedupeTasks(
-    ((data ?? []) as unknown as TaskJoin[]).map((row) => ({
-      ...row,
-      project_name: projectNameFromJoin(row.projects),
-      projects: undefined,
-    }))
+    (rows as unknown as TaskJoin[]).map((row) => {
+      const preview = previewNotes(row.notes);
+      return {
+        ...row,
+        notes: preview.notes,
+        notes_truncated: preview.truncated,
+        project_name: projectNameFromJoin(row.projects),
+        projects: undefined,
+      };
+    })
   );
   const sorted = sortTasks(tasks, sort);
-  const rawCount = data?.length ?? 0;
+  const rawCount = rows.length;
   scheduleDataIntegrityCleanup(sorted.length < rawCount);
   return NextResponse.json(sorted);
 }

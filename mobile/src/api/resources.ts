@@ -122,6 +122,7 @@ export const api = {
   },
   createTask: (c: ApiConfig, body: Partial<Task>) =>
     apiFetch<Task>(c, "/tasks", { method: "POST", body }),
+  task: (c: ApiConfig, id: string) => apiFetch<Task>(c, `/tasks/${id}`),
   updateTask: (c: ApiConfig, id: string, body: Partial<Task>) =>
     apiFetch<Task>(c, `/tasks/${id}`, { method: "PATCH", body }),
   deleteTask: (c: ApiConfig, id: string) =>

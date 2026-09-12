@@ -4,6 +4,7 @@ import { getSupabase } from "@/lib/supabase";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { applyExternalStatusChange } from "@/lib/integrations/task-sources/writeback";
+import { TASK_SELECT, TaskJoin, projectNameFromJoin } from "@/lib/api/tasks";
 
 const PRIORITIES: TaskPriority[] = ["urgent", "high", "medium", "low"];
 const STATUSES: TaskStatus[] = ["open", "in_progress", "stuck", "review", "done"];
@@ -14,6 +15,28 @@ function revalidateTaskPaths() {
   revalidatePath("/tasks");
   revalidatePath("/projects");
   revalidatePath("/");
+}
+
+/** Full row for one task — the list sends a truncated `notes` preview. */
+export async function GET(req: NextRequest, { params }: Params) {
+  if (!(await isApiAuthorized(req))) return unauthorized();
+  const { id } = await params;
+  if (!id) return badRequest("id_required");
+
+  const { data, error } = await getSupabase()
+    .from("tasks")
+    .select(TASK_SELECT)
+    .eq("id", id)
+    .single();
+  if (error || !data) return dbError();
+
+  const row = data as unknown as TaskJoin;
+  return NextResponse.json({
+    ...row,
+    project_name: projectNameFromJoin(row.projects),
+    projects: undefined,
+    notes_truncated: false,
+  });
 }
 
 /** Partial update: only fields present in the body are written. */
