@@ -60,6 +60,52 @@ function statusTone(s: TaskStatus): "good" | "accent" | "warn" | "default" {
   return "default";
 }
 
+const CHECKBOX_SIZE = 22;
+
+function TaskDoneCheckbox({
+  done,
+  busy,
+  onPress,
+  checkedLabel,
+  uncheckedLabel,
+}: {
+  done: boolean;
+  busy?: boolean;
+  onPress: () => void;
+  checkedLabel: string;
+  uncheckedLabel: string;
+}) {
+  const c = useColors();
+
+  return (
+    <Pressable
+      unstable_pressDelay={0}
+      disabled={busy}
+      onPress={onPress}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: done, disabled: !!busy }}
+      accessibilityLabel={done ? checkedLabel : uncheckedLabel}
+      hitSlop={8}
+      style={({ pressed }) => [{ paddingTop: 1, opacity: busy ? 0.5 : pressed ? 0.6 : 1 }]}
+    >
+      <View
+        style={{
+          width: CHECKBOX_SIZE,
+          height: CHECKBOX_SIZE,
+          borderRadius: tokens.radiusSm / 2,
+          borderWidth: 2,
+          borderColor: done ? c.good : c.muted,
+          backgroundColor: done ? c.good : "transparent",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {done ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
+      </View>
+    </Pressable>
+  );
+}
+
 export const TaskCard = React.memo(function TaskCard({
   task,
   onToggleDone,
@@ -123,25 +169,16 @@ export const TaskCard = React.memo(function TaskCard({
   return (
     <Card style={{ opacity: done ? 0.55 : 1 }}>
       <Row style={{ alignItems: "flex-start", gap: 10 }}>
-        <Pressable
-          unstable_pressDelay={0}
-          disabled={busy}
+        <TaskDoneCheckbox
+          done={done}
+          busy={busy}
+          checkedLabel={t("common.done")}
+          uncheckedLabel={t("common.open")}
           onPress={() => {
             hapticImpact();
             onToggleDone(task);
           }}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: done, disabled: !!busy }}
-          accessibilityLabel={done ? t("common.done") : t("common.open")}
-          hitSlop={8}
-          style={({ pressed }) => [{ paddingTop: 1, opacity: busy ? 0.5 : pressed ? 0.6 : 1 }]}
-        >
-          <Ionicons
-            name={done ? "checkbox" : "checkbox-outline"}
-            size={22}
-            color={done ? c.good : c.muted}
-          />
-        </Pressable>
+        />
         {onPress ? (
           <Pressable
             unstable_pressDelay={0}
