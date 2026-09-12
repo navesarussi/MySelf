@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, notFound, readJson, unauthorized } from "@/lib/api/auth";
-import { updatePlanLinePlanned } from "@/lib/finance/plan-store";
+import { deletePlanLine, updatePlanLinePlanned } from "@/lib/finance/plan-store";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(req))) return unauthorized();
@@ -14,6 +14,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   } catch (err) {
     const msg = err instanceof Error ? err.message : "update_failed";
     if (msg === "not_found") return notFound();
+    return dbError();
+  }
+}
+
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await isApiAuthorized(_req))) return unauthorized();
+  const { id } = await ctx.params;
+  try {
+    await deletePlanLine(id);
+    return NextResponse.json({ ok: true });
+  } catch {
     return dbError();
   }
 }

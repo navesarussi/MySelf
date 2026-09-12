@@ -2,10 +2,12 @@ import { getSupabase } from "@/lib/supabase";
 import type { FinanceTransaction } from "@/lib/finance/ingest";
 import {
   buildMonthPlanView,
+  defaultPlanTemplate,
   seedPlanLines,
   type MonthPlanView,
   type PlanLineRow,
 } from "@/lib/finance/plan";
+import type { PlanLineType } from "@/lib/finance/expense-type";
 
 function prevMonth(month: string): string {
   const [y, m] = month.split("-").map(Number);
@@ -94,7 +96,8 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
     }
 
     const prevTxns = await fetchTransactions(prev);
-    const seeds = seedPlanLines(month, prevLines.length ? prevLines : null, prevTxns);
+    const currentTxns = await fetchTransactions(month);
+    const seeds = seedPlanLines(month, prevLines.length ? prevLines : null, prevTxns, currentTxns);
 
     const { data: created, error } = await supabase
       .from("finance_month_plans")
@@ -124,9 +127,31 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
     .eq("plan_id", planId)
     .order("sort_order");
 
-  const lines = (lineRows ?? []).map((r) => rowToLine(r as Record<string, unknown>));
+  let lines = (lineRows ?? []).map((r) => rowToLine(r as Record<string, unknown>));
+  lines = await ensureTemplateLines(planId!, lines);
+
   const txns = await fetchTransactions(month);
   return buildMonthPlanView(month, planId!, lines, txns);
+}
+
+async function ensureTemplateLines(planId: string, lines: PlanLineRow[]): Promise<PlanLineRow[]> {
+  const template = defaultPlanTemplate();
+  const existingKeys = new Set(lines.map((l) => `${l.line_type}:${l.category ?? l.name}`));
+  const missing = template.filter((t) => !existingKeys.has(`${t.line_type}:${t.category ?? t.name}`));
+  if (missing.length === 0) return lines;
+
+  const start = lines.length;
+  const inserts = missing.map((s, i) => ({
+    plan_id: planId,
+    line_type: s.line_type,
+    name: s.name,
+    category: s.category,
+    planned_amount: s.planned_amount,
+    sort_order: start + i,
+  }));
+  const { data, error } = await getSupabase().from("finance_plan_lines").insert(inserts).select("*");
+  if (error) return lines;
+  return [...lines, ...(data ?? []).map((r) => rowToLine(r as Record<string, unknown>))];
 }
 
 export async function updatePlanLinePlanned(
@@ -143,4 +168,35 @@ export async function updatePlanLinePlanned(
   if (error) throw new Error(error.message);
   if (!data) throw new Error("not_found");
   return rowToLine(data as Record<string, unknown>);
+}
+
+export async function addPlanLine(input: {
+  month: string;
+  line_type: PlanLineType;
+  name: string;
+  category?: string | null;
+  planned_amount: number;
+}): Promise<PlanLineRow> {
+  const plan = await getOrCreateMonthPlan(input.month);
+  const now = new Date().toISOString();
+  const { data, error } = await getSupabase()
+    .from("finance_plan_lines")
+    .insert({
+      plan_id: plan.plan_id,
+      line_type: input.line_type,
+      name: input.name.trim(),
+      category: input.category ?? null,
+      planned_amount: input.planned_amount,
+      sort_order: 99,
+      updated_at: now,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "create_failed");
+  return rowToLine(data as Record<string, unknown>);
+}
+
+export async function deletePlanLine(lineId: string): Promise<void> {
+  const { error } = await getSupabase().from("finance_plan_lines").delete().eq("id", lineId);
+  if (error) throw new Error(error.message);
 }

@@ -7,7 +7,8 @@ import { useSession } from "../src/session";
 import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
-import { queryClient, queryKeys, useApiMutation } from "../src/query";
+import { queryClient, queryKeys, useApiMutation, decFinanceUncategorizedInHome } from "../src/query";
+import type { HomePayload } from "../src/api/resources";
 import { Btn, Card, Chip, ErrorNote, Input, Loading, Screen } from "../src/components/ui";
 import type { FinanceTransaction } from "@/lib/finance/types";
 
@@ -42,6 +43,10 @@ export default function FinanceCategorizeScreen() {
     if (!token || !id) return;
     setError(null);
     const month = txn?.txn_date.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
+    const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+      decFinanceUncategorizedInHome(old)
+    );
     await run(
       (cfg) =>
         api.categorizeFinanceTransaction(
@@ -53,10 +58,12 @@ export default function FinanceCategorizeScreen() {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.financeCashflow(month) });
           void queryClient.invalidateQueries({ queryKey: queryKeys.financeTransactions(month) });
-          void queryClient.invalidateQueries({ queryKey: queryKeys.home });
           router.back();
         },
-        onError: () => setError("save_failed"),
+        onError: () => {
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+          setError("save_failed");
+        },
       }
     );
   }

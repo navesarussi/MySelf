@@ -1,5 +1,5 @@
 import type { HomePayload } from "../api/resources";
-import type { Habit, Relationship, Task } from "@/lib/types";
+import type { ContentEntry, Goal, Habit, Relationship, Task, TimelineEvent } from "@/lib/types";
 
 /**
  * Pure, immutable array update helpers for optimistic updates and rollbacks.
@@ -107,5 +107,147 @@ export function patchRelationshipInHome(
     relationships: home.relationships.map((r) =>
       r.id === relId ? { ...r, ...patch } : r
     ),
+  };
+}
+
+export function removeHabitFromHome(
+  home: HomePayload | undefined,
+  habitId: string
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    habits: home.habits.filter((h) => h.id !== habitId),
+  };
+}
+
+export function removeRelationshipFromHome(
+  home: HomePayload | undefined,
+  relId: string
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    relationships: home.relationships.filter((r) => r.id !== relId),
+  };
+}
+
+export function setGoalStatusInHome(
+  home: HomePayload | undefined,
+  goal: Goal,
+  nextStatus: Goal["status"]
+): HomePayload | undefined {
+  if (!home) return undefined;
+  if (nextStatus === "done") {
+    const wasActive = home.activeGoals.some((g) => g.id === goal.id);
+    return {
+      ...home,
+      activeGoals: home.activeGoals.filter((g) => g.id !== goal.id),
+      doneGoalsCount: wasActive ? home.doneGoalsCount + 1 : home.doneGoalsCount,
+    };
+  }
+  const exists = home.activeGoals.some((g) => g.id === goal.id);
+  return {
+    ...home,
+    activeGoals: exists
+      ? home.activeGoals.map((g) => (g.id === goal.id ? { ...g, status: "active" } : g))
+      : [...home.activeGoals, { ...goal, status: "active" }],
+    doneGoalsCount: Math.max(0, home.doneGoalsCount - 1),
+  };
+}
+
+export function patchGoalInHome(
+  home: HomePayload | undefined,
+  goalId: string,
+  patch: Partial<Goal>
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    activeGoals: home.activeGoals.map((g) => (g.id === goalId ? { ...g, ...patch } : g)),
+  };
+}
+
+export function removeGoalFromHome(
+  home: HomePayload | undefined,
+  goalId: string
+): HomePayload | undefined {
+  if (!home) return undefined;
+  const wasActive = home.activeGoals.some((g) => g.id === goalId);
+  return {
+    ...home,
+    activeGoals: home.activeGoals.filter((g) => g.id !== goalId),
+    doneGoalsCount: wasActive ? Math.max(0, home.doneGoalsCount - 1) : home.doneGoalsCount,
+  };
+}
+
+export function removeCommitmentFromHome(
+  home: HomePayload | undefined,
+  commitmentId: string
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    pendingCommitments: home.pendingCommitments.filter((c) => c.id !== commitmentId),
+  };
+}
+
+export function patchLibraryEntryInHome(
+  home: HomePayload | undefined,
+  entryId: string,
+  patch: Partial<Pick<ContentEntry, "id" | "title" | "category" | "tags" | "updated_at">>
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    libraryEntries: home.libraryEntries.map((e) =>
+      e.id === entryId ? { ...e, ...patch } : e
+    ),
+  };
+}
+
+export function removeLibraryEntryFromHome(
+  home: HomePayload | undefined,
+  entryId: string
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    libraryEntries: home.libraryEntries.filter((e) => e.id !== entryId),
+  };
+}
+
+export function patchEventInHome(
+  home: HomePayload | undefined,
+  eventId: string,
+  patch: Partial<TimelineEvent>
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    recentEvents: home.recentEvents.map((e) =>
+      e.id === eventId ? { ...e, ...patch } : e
+    ),
+  };
+}
+
+export function removeEventFromHome(
+  home: HomePayload | undefined,
+  eventId: string
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    recentEvents: home.recentEvents.filter((e) => e.id !== eventId),
+  };
+}
+
+export function decFinanceUncategorizedInHome(
+  home: HomePayload | undefined
+): HomePayload | undefined {
+  if (!home) return undefined;
+  return {
+    ...home,
+    financeUncategorizedCount: Math.max(0, home.financeUncategorizedCount - 1),
   };
 }

@@ -9,8 +9,11 @@ import { useColors, tokens } from "../../src/theme";
 import { useApiQuery, useApiMutation, queryKeys, queryClient } from "../../src/query";
 import { PLAN_SECTION_ORDER } from "@/lib/finance/expense-type";
 import type { MonthPlanView } from "@/lib/finance/plan";
+import type { PlanLineType } from "@/lib/finance/expense-type";
 import { PlanSectionBlock } from "../../src/components/finance/plan-section";
 import { WeekStrip } from "../../src/components/finance/week-strip";
+import { RemainingWeekCard } from "../../src/components/finance/remaining-week";
+import { AddPlanLineModal } from "../../src/components/finance/add-plan-line-modal";
 import {
   Card,
   EmptyState,
@@ -74,6 +77,8 @@ export default function FinanceScreen() {
   const { run } = useApiMutation();
   const [month, setMonth] = useState(monthKey());
   const [showTxns, setShowTxns] = useState(false);
+  const [showAllUncat, setShowAllUncat] = useState(false);
+  const [addType, setAddType] = useState<PlanLineType | null>(null);
   const isCurrentMonth = month === monthKey();
 
   const { data: plan, loading: planLoading, error: planError, refresh: refreshPlan } = useApiQuery(
@@ -105,6 +110,35 @@ export default function FinanceScreen() {
   async function savePlanned(lineId: string, amount: number) {
     await run(
       (cfg) => api.patchFinancePlanLine(cfg, lineId, amount),
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) });
+        },
+      }
+    );
+  }
+
+  async function addLine(name: string, amount: number) {
+    if (!addType) return;
+    await run(
+      (cfg) =>
+        api.addFinancePlanLine(cfg, {
+          month,
+          line_type: addType,
+          name,
+          planned_amount: amount,
+        }),
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) });
+        },
+      }
+    );
+  }
+
+  async function deleteLine(lineId: string) {
+    await run(
+      (cfg) => api.deleteFinancePlanLine(cfg, lineId),
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) });
@@ -153,12 +187,21 @@ export default function FinanceScreen() {
         </Card>
       ) : null}
 
+      {view?.weekly_pace ? <RemainingWeekCard pace={view.weekly_pace} /> : null}
+
       {uncategorized.length > 0 ? (
         <>
-          <SectionTitle>{t("finance.uncategorized")}</SectionTitle>
-          {uncategorized.map((txn) => (
+          <SectionTitle>{t("finance.uncategorized")} ({uncategorized.length})</SectionTitle>
+          {(showAllUncat ? uncategorized : uncategorized.slice(0, 3)).map((txn) => (
             <TxnRow key={txn.id} txn={txn} onPress={() => openCategorize(txn.id)} />
           ))}
+          {uncategorized.length > 3 ? (
+            <Pressable onPress={() => setShowAllUncat((v) => !v)} style={{ marginBottom: 8 }}>
+              <Text style={{ color: c.accent, textAlign: textStart, writingDirection }}>
+                {showAllUncat ? t("finance.showLess") : t("finance.showMore", { count: String(uncategorized.length - 3) })}
+              </Text>
+            </Pressable>
+          ) : null}
         </>
       ) : null}
 
@@ -169,6 +212,8 @@ export default function FinanceScreen() {
               key={type}
               section={view.sections[type]}
               onSavePlanned={(id, amount) => void savePlanned(id, amount)}
+              onAdd={type === "planned" || type === "savings" ? () => setAddType(type) : undefined}
+              onDelete={type === "planned" || type === "savings" ? (id) => void deleteLine(id) : undefined}
             />
           ))}
           {view.weeks.length > 0 ? <WeekStrip weeks={view.weeks} /> : null}
@@ -188,6 +233,15 @@ export default function FinanceScreen() {
             <TxnRow key={txn.id} txn={txn} onPress={() => openCategorize(txn.id)} />
           ))}
         </>
+      ) : null}
+
+      {addType ? (
+        <AddPlanLineModal
+          visible
+          lineType={addType}
+          onClose={() => setAddType(null)}
+          onSave={(name, amount) => void addLine(name, amount)}
+        />
       ) : null}
     </Screen>
   );

@@ -9,9 +9,11 @@ import type { PlanLineView } from "@/lib/finance/plan";
 export function PlanLineRow({
   line,
   onSavePlanned,
+  onDelete,
 }: {
   line: PlanLineView;
   onSavePlanned: (id: string, amount: number) => void;
+  onDelete?: () => void;
 }) {
   const c = useColors();
   const { t } = useI18n();
@@ -115,6 +117,16 @@ export function PlanLineRow({
                     }
                   }}
                 />
+                {onDelete ? (
+                  <Btn
+                    label={t("finance.deleteLine")}
+                    variant="ghost"
+                    onPress={() => {
+                      onDelete();
+                      setEditOpen(false);
+                    }}
+                  />
+                ) : null}
               </View>
             </View>
           </Pressable>

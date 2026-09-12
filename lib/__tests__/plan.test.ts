@@ -37,9 +37,16 @@ describe("seedPlanLines", () => {
         sort_order: 0,
       },
     ];
-    const lines = seedPlanLines("2026-09", prev, [], 0);
+    const lines = seedPlanLines("2026-09", prev, []);
     assert.equal(lines.length, 1);
     assert.equal(lines[0].planned_amount, 5000);
+  });
+
+  it("uses template when no previous plan", () => {
+    const lines = seedPlanLines("2026-09", null, []);
+    assert.ok(lines.some((l) => l.line_type === "savings"));
+    assert.ok(lines.some((l) => l.name === "מזון"));
+    assert.ok(lines.length >= 8);
   });
 });
 

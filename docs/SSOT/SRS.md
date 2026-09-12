@@ -238,7 +238,10 @@ Home dashboard shows a stat tile when `financeUncategorizedCount > 0`, linking t
 Monthly cash-flow plan with line types: income, fixed, variable, planned, savings. Plan auto-seeded from previous month; user edits planned amounts per line.
 
 ### FR-FIN-07
-Finance dashboard shows planned vs actual per section, weekly expense bars, and collapsible transaction list.
+Finance dashboard shows planned vs actual per section, weekly expense bars, remaining variable budget for the current week, and collapsible transaction list.
+
+### FR-FIN-08
+User can add and delete planned expense lines and savings pots on the monthly plan.
 
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.

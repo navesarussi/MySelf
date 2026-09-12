@@ -1,6 +1,8 @@
 import type { FinanceTransaction } from "@/lib/finance/ingest";
 import { lineTypeForCategory, type PlanLineType, PLAN_SECTION_ORDER } from "@/lib/finance/expense-type";
-import { weekBucketsForMonth, type WeekBucket } from "@/lib/finance/weekly";
+import { weekBucketsForMonth, weeklyVariablePace, type WeekBucket, type WeeklyPace } from "@/lib/finance/weekly";
+
+export type { PlanLineType };
 
 export type PlanLineRow = {
   id: string;
@@ -35,6 +37,7 @@ export type MonthPlanView = {
     savings_planned: number;
   };
   weeks: WeekBucket[];
+  weekly_pace: WeeklyPace | null;
 };
 
 function round2(n: number): number {
@@ -86,12 +89,41 @@ function groupActuals(txns: FinanceTransaction[], month: string): SeedGroup[] {
   return groups;
 }
 
-/** Build default plan lines from previous plan or previous month actuals. */
+export function defaultPlanTemplate(): Omit<PlanLineRow, "id" | "plan_id">[] {
+  const rows: Omit<PlanLineRow, "id" | "plan_id">[] = [
+    { line_type: "income", name: "הכנסות", category: null, planned_amount: 0, sort_order: 0 },
+    { line_type: "fixed", name: "בית", category: "בית", planned_amount: 0, sort_order: 1 },
+    { line_type: "fixed", name: "מנויים", category: "מנויים", planned_amount: 0, sort_order: 2 },
+    { line_type: "variable", name: "מזון", category: "מזון", planned_amount: 0, sort_order: 3 },
+    { line_type: "variable", name: "תחבורה", category: "תחבורה", planned_amount: 0, sort_order: 4 },
+    { line_type: "variable", name: "בילויים", category: "בילויים", planned_amount: 0, sort_order: 5 },
+    { line_type: "variable", name: "קניות", category: "קניות", planned_amount: 0, sort_order: 6 },
+    { line_type: "variable", name: "בריאות", category: "בריאות", planned_amount: 0, sort_order: 7 },
+    { line_type: "variable", name: "אחר", category: "אחר", planned_amount: 0, sort_order: 8 },
+    { line_type: "savings", name: "חיסכון", category: null, planned_amount: 0, sort_order: 9 },
+  ];
+  return rows;
+}
+
+function applyActualsToTemplate(
+  template: Omit<PlanLineRow, "id" | "plan_id">[],
+  groups: SeedGroup[]
+): Omit<PlanLineRow, "id" | "plan_id">[] {
+  const byKey = new Map(groups.map((g) => [`${g.line_type}:${g.category ?? g.name}`, g]));
+  return template.map((line) => {
+    const key = `${line.line_type}:${line.category ?? line.name}`;
+    const hit = byKey.get(key);
+    if (!hit) return line;
+    return { ...line, planned_amount: round2(hit.amount) };
+  });
+}
+
+/** Build default plan lines from previous plan, previous actuals, or current month. */
 export function seedPlanLines(
   month: string,
   prevLines: PlanLineRow[] | null,
   prevMonthTxns: FinanceTransaction[],
-  savingsDefault = 0
+  currentMonthTxns: FinanceTransaction[] = []
 ): Omit<PlanLineRow, "id" | "plan_id">[] {
   if (prevLines && prevLines.length > 0) {
     return prevLines.map((l, i) => ({
@@ -104,36 +136,10 @@ export function seedPlanLines(
   }
 
   const sourceMonth = prevMonth(month);
-  const groups = groupActuals(prevMonthTxns, sourceMonth);
-  const lines: Omit<PlanLineRow, "id" | "plan_id">[] = groups.map((g, i) => ({
-    line_type: g.line_type,
-    name: g.name,
-    category: g.category,
-    planned_amount: round2(g.amount),
-    sort_order: i,
-  }));
-
-  if (savingsDefault > 0) {
-    lines.push({
-      line_type: "savings",
-      name: "חיסכון",
-      category: null,
-      planned_amount: round2(savingsDefault),
-      sort_order: lines.length,
-    });
-  }
-
-  if (lines.length === 0) {
-    lines.push({
-      line_type: "income",
-      name: "הכנסות",
-      category: null,
-      planned_amount: 0,
-      sort_order: 0,
-    });
-  }
-
-  return lines;
+  const fromPrev = groupActuals(prevMonthTxns, sourceMonth);
+  const fromCurrent = groupActuals(currentMonthTxns, month);
+  const groups = fromPrev.length > 0 ? fromPrev : fromCurrent;
+  return applyActualsToTemplate(defaultPlanTemplate(), groups);
 }
 
 function txnCategoryKey(t: FinanceTransaction, kind: "income" | "expense"): string {
@@ -204,6 +210,7 @@ export function buildMonthPlanView(
     sections.planned.actual_total;
   const savings_planned = sections.savings.planned_total;
 
+  const weeks = weekBucketsForMonth(month, txns);
   return {
     month,
     plan_id: planId,
@@ -217,6 +224,7 @@ export function buildMonthPlanView(
       net_actual: round2(actual_income - actual_expense),
       savings_planned,
     },
-    weeks: weekBucketsForMonth(month, txns),
+    weeks,
+    weekly_pace: weeklyVariablePace(weeks, sections.variable.planned_total),
   };
 }

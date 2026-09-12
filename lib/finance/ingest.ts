@@ -194,8 +194,8 @@ export async function ingestFinanceTransactions(
 
     if (input.category && !input.needs_categorization) {
       history.unshift({
-        merchant: input.merchant,
-        description: input.description,
+        merchant: input.merchant ?? null,
+        description: input.description ?? "",
         category: input.category,
       });
     }

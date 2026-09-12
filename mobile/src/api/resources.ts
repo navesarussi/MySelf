@@ -329,6 +329,12 @@ export const api = {
       method: "PATCH",
       body: { planned_amount },
     }),
+  addFinancePlanLine: (
+    c: ApiConfig,
+    body: { month: string; line_type: string; name: string; planned_amount: number; category?: string | null }
+  ) => apiFetch<PlanLineRow>(c, "/finance/plan/lines", { method: "POST", body }),
+  deleteFinancePlanLine: (c: ApiConfig, lineId: string) =>
+    apiFetch<{ ok: boolean }>(c, `/finance/plan/lines/${lineId}`, { method: "DELETE" }),
   financeTransactions: (
     c: ApiConfig,
     params: { month?: string; uncategorized?: boolean; limit?: number }
