@@ -1,59 +1,15 @@
 import { getSupabase } from "@/lib/supabase";
 import { notifyUser } from "@/lib/push/notify";
 import { financeExternalKey, type FinanceSource } from "@/lib/finance/external-key";
-import {
-  inferTxnKind,
-  inferredCategory,
-  shouldSkipCategorizationPrompt,
-} from "@/lib/finance/classify";
-import {
-  suggestCategoryFromHistory,
-  type MerchantCategoryRow,
-} from "@/lib/finance/merchant-category";
+import { inferTxnKind, inferredCategory, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
+import { loadCategoryHistory, suggestCategoryFromHistory, type MerchantCategoryRow } from "@/lib/finance/merchant-category";
+import { fetchMerchantRulesMap, matchMerchantRule, resolveExpenseType, type MerchantRule } from "@/lib/finance/merchant-rules";
+import type { FinanceIngestInput, FinanceTransaction, FinanceTxnKind, FinanceTxnStatus } from "@/lib/finance/types";
 
-export type FinanceTxnKind = "income" | "expense";
-export type FinanceTxnStatus = "pending" | "completed";
+export type { FinanceIngestInput, FinanceTransaction, FinanceTxnKind, FinanceTxnStatus };
 
-export type FinanceIngestInput = {
-  source: FinanceSource;
-  txn_date: string;
-  amount: number;
-  kind?: FinanceTxnKind;
-  currency?: string;
-  description?: string;
-  merchant?: string | null;
-  account_number?: string | null;
-  card_name?: string | null;
-  status?: FinanceTxnStatus;
-  identifier?: string | number | null;
-  external_key?: string;
-  category?: string | null;
-  purpose_note?: string | null;
-  needs_categorization?: boolean;
-};
-
-export type FinanceTransaction = {
-  id: string;
-  source: FinanceSource;
-  external_key: string;
-  txn_date: string;
-  amount: number;
-  kind: FinanceTxnKind;
-  currency: string;
-  description: string;
-  merchant: string | null;
-  account_number: string | null;
-  card_name: string | null;
-  status: FinanceTxnStatus;
-  category: string | null;
-  purpose_note: string | null;
-  needs_categorization: boolean;
-  categorized_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
+export function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
+  const expType = row.expense_type;
   return {
     id: String(row.id),
     source: row.source as FinanceSource,
@@ -69,6 +25,8 @@ function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
     status: row.status as FinanceTxnStatus,
     category: row.category != null ? String(row.category) : null,
     purpose_note: row.purpose_note != null ? String(row.purpose_note) : null,
+    expense_type: expType === "fixed" || expType === "variable" ? expType : null,
+    is_internal: Boolean(row.is_internal),
     needs_categorization: Boolean(row.needs_categorization),
     categorized_at: row.categorized_at != null ? String(row.categorized_at) : null,
     created_at: String(row.created_at),
@@ -76,15 +34,7 @@ function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
   };
 }
 
-function normalizeInput(input: FinanceIngestInput): Omit<FinanceIngestInput, "external_key"> & {
-  external_key: string;
-  amount: number;
-  kind: FinanceTxnKind;
-  description: string;
-  currency: string;
-  status: FinanceTxnStatus;
-  needs_categorization: boolean;
-} {
+function normalizeInput(input: FinanceIngestInput) {
   const amount = Math.abs(Number(input.amount));
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("invalid_amount");
   const txn_date = input.txn_date.trim();
@@ -92,16 +42,22 @@ function normalizeInput(input: FinanceIngestInput): Omit<FinanceIngestInput, "ex
 
   const description = (input.description ?? input.merchant ?? "").trim() || "תנועה";
   const merchant = input.merchant?.trim() || null;
-  const kind = inferTxnKind({
-    kind: input.kind,
-    description,
-    merchant,
-  });
+  const kind = inferTxnKind({ kind: input.kind, description, merchant });
   const autoCat = inferredCategory({ description, merchant, kind });
   const hasCategory = Boolean(input.category?.trim() || autoCat);
   const skipPrompt = shouldSkipCategorizationPrompt({ description, merchant, kind });
-  const needs_categorization =
-    input.needs_categorization ?? !(hasCategory || skipPrompt);
+  const needs_categorization = input.needs_categorization ?? !(hasCategory || skipPrompt);
+  const external_key =
+    input.external_key?.trim() ||
+    financeExternalKey({
+      source: input.source,
+      account_number: input.account_number,
+      identifier: input.identifier,
+      txn_date,
+      amount,
+      description,
+      merchant,
+    });
 
   return {
     ...input,
@@ -115,17 +71,9 @@ function normalizeInput(input: FinanceIngestInput): Omit<FinanceIngestInput, "ex
     needs_categorization: hasCategory ? false : needs_categorization,
     category: hasCategory ? (input.category?.trim() || autoCat) : null,
     purpose_note: input.purpose_note?.trim() || null,
-    external_key:
-      input.external_key?.trim() ||
-      financeExternalKey({
-        source: input.source,
-        account_number: input.account_number,
-        identifier: input.identifier,
-        txn_date,
-        amount,
-        description,
-        merchant,
-      }),
+    expense_type: input.expense_type ?? null,
+    is_internal: Boolean(input.is_internal),
+    external_key,
   };
 }
 
@@ -139,51 +87,51 @@ async function notifyCategorize(txn: FinanceTransaction): Promise<void> {
     {
       title: "תנועה חדשה",
       body: `${sign}₪${txn.amount.toFixed(2)} · ${label} — ${ask}`,
-      data: {
-        screen: `/finance-categorize?id=${txn.id}`,
-      },
+      data: { screen: `/finance-categorize?id=${txn.id}` },
     },
     txn.id,
     { bypassQuiet: true }
   );
 }
 
-export type IngestResult = {
-  created: FinanceTransaction[];
-  skipped: number;
-};
-
-async function loadCategoryHistory(): Promise<MerchantCategoryRow[]> {
-  const { data } = await getSupabase()
-    .from("finance_transactions")
-    .select("merchant, description, category")
-    .eq("needs_categorization", false)
-    .not("category", "is", null)
-    .order("categorized_at", { ascending: false })
-    .limit(500);
-  return (data ?? []) as MerchantCategoryRow[];
-}
-
-function applyMerchantSuggestion(
-  input: ReturnType<typeof normalizeInput>,
+function applyRules(
+  item: ReturnType<typeof normalizeInput>,
+  rulesMap: Map<string, MerchantRule>,
   history: MerchantCategoryRow[]
-): ReturnType<typeof normalizeInput> {
-  if (input.category || input.kind !== "expense") return input;
-  const suggested = suggestCategoryFromHistory(input.merchant, input.description, history);
-  if (!suggested) return input;
-  return { ...input, category: suggested, needs_categorization: false };
+) {
+  const rule = matchMerchantRule(item.merchant, item.description, rulesMap);
+  if (rule) {
+    const category = item.category || rule.category || null;
+    const kind = item.kind;
+    const expense_type =
+      kind === "expense"
+        ? (resolveExpenseType({ category, kind, explicitExpenseType: item.expense_type, rule }) as "fixed" | "variable")
+        : null;
+    return {
+      ...item,
+      category,
+      expense_type,
+      purpose_note: item.purpose_note || rule.default_note || null,
+      needs_categorization: Boolean(category) ? false : item.needs_categorization,
+    };
+  }
+
+  if (item.category || item.kind !== "expense") return item;
+  const suggested = suggestCategoryFromHistory(item.merchant, item.description, history);
+  if (!suggested) return item;
+  const expense_type = resolveExpenseType({ category: suggested, kind: "expense" }) as "fixed" | "variable";
+  return { ...item, category: suggested, expense_type, needs_categorization: false };
 }
 
-export async function ingestFinanceTransactions(
-  inputs: FinanceIngestInput[]
-): Promise<IngestResult> {
+export type IngestResult = { created: FinanceTransaction[]; skipped: number };
+
+export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): Promise<IngestResult> {
   const created: FinanceTransaction[] = [];
   let skipped = 0;
-  const history = await loadCategoryHistory();
+  const [history, rulesMap] = await Promise.all([loadCategoryHistory(), fetchMerchantRulesMap()]);
 
   for (const raw of inputs) {
-    let input = normalizeInput(raw);
-    input = applyMerchantSuggestion(input, history);
+    const input = applyRules(normalizeInput(raw), rulesMap, history);
     const now = new Date().toISOString();
     const row = {
       source: input.source,
@@ -199,6 +147,8 @@ export async function ingestFinanceTransactions(
       status: input.status,
       category: input.category,
       purpose_note: input.purpose_note,
+      expense_type: input.kind === "expense" ? input.expense_type ?? null : null,
+      is_internal: input.is_internal,
       needs_categorization: input.needs_categorization,
       categorized_at: input.category ? now : null,
       updated_at: now,
@@ -212,12 +162,7 @@ export async function ingestFinanceTransactions(
       });
     }
 
-    const { data, error } = await getSupabase()
-      .from("finance_transactions")
-      .insert(row)
-      .select("*")
-      .maybeSingle();
-
+    const { data, error } = await getSupabase().from("finance_transactions").insert(row).select("*").maybeSingle();
     if (error) {
       if (error.code === "23505") {
         skipped += 1;
@@ -229,7 +174,6 @@ export async function ingestFinanceTransactions(
       skipped += 1;
       continue;
     }
-
     const txn = rowToTxn(data as Record<string, unknown>);
     created.push(txn);
     await notifyCategorize(txn);

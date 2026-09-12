@@ -16,6 +16,8 @@ function txn(partial: Partial<FinanceTransaction> & Pick<FinanceTransaction, "tx
     status: "completed",
     category: null,
     purpose_note: null,
+    expense_type: null,
+    is_internal: false,
     needs_categorization: false,
     categorized_at: null,
     created_at: "",

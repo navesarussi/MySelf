@@ -1,7 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildMonthPlanView, seedPlanLines, type PlanLineRow } from "../finance/plan";
+import {
+  actualForLine,
+  buildMonthPlanView,
+  groupActuals,
+  seedPlanLines,
+  type PlanLineRow,
+} from "../finance/plan";
 import type { FinanceTransaction } from "../finance/ingest";
+import type { MerchantRule } from "../finance/merchant-rules";
 
 function txn(p: Partial<FinanceTransaction> & Pick<FinanceTransaction, "txn_date" | "amount" | "kind">): FinanceTransaction {
   return {
@@ -16,6 +23,8 @@ function txn(p: Partial<FinanceTransaction> & Pick<FinanceTransaction, "txn_date
     status: "completed",
     category: null,
     purpose_note: null,
+    expense_type: null,
+    is_internal: false,
     needs_categorization: false,
     categorized_at: null,
     created_at: "",
@@ -84,5 +93,121 @@ describe("buildMonthPlanView", () => {
     assert.equal(view.totals.actual_income, 8000);
     assert.equal(view.sections.variable.actual_total, 300);
     assert.equal(view.weeks.length >= 4, true);
+  });
+});
+
+describe("expense_type and merchant rules in plan", () => {
+  it("groupActuals respects transaction explicit expense_type", () => {
+    const txns = [
+      txn({
+        txn_date: "2026-09-01",
+        amount: 70,
+        kind: "expense",
+        category: "מזון",
+        expense_type: "fixed",
+      }),
+    ];
+    const groups = groupActuals(txns, "2026-09");
+    const foodGroup = groups.find((g) => g.category === "מזון");
+    assert.ok(foodGroup);
+    assert.equal(foodGroup.line_type, "fixed");
+  });
+
+  it("groupActuals and actualForLine skip is_internal transactions", () => {
+    const txns = [
+      txn({
+        txn_date: "2026-09-01",
+        amount: 500,
+        kind: "expense",
+        category: "מזון",
+        is_internal: true,
+      }),
+    ];
+    const groups = groupActuals(txns, "2026-09");
+    assert.equal(groups.length, 0);
+
+    const line: PlanLineRow = {
+      id: "1",
+      plan_id: "p",
+      line_type: "variable",
+      name: "מזון",
+      category: "מזון",
+      planned_amount: 1000,
+      sort_order: 0,
+    };
+    assert.equal(actualForLine(line, txns, "2026-09"), 0);
+  });
+
+  it("actualForLine matches expense_type override to fixed line", () => {
+    const fixedLine: PlanLineRow = {
+      id: "f",
+      plan_id: "p",
+      line_type: "fixed",
+      name: "מזון",
+      category: "מזון",
+      planned_amount: 100,
+      sort_order: 0,
+    };
+    const varLine: PlanLineRow = {
+      id: "v",
+      plan_id: "p",
+      line_type: "variable",
+      name: "מזון",
+      category: "מזון",
+      planned_amount: 500,
+      sort_order: 1,
+    };
+    const txns = [
+      txn({
+        txn_date: "2026-09-02",
+        amount: 80,
+        kind: "expense",
+        category: "מזון",
+        expense_type: "fixed",
+      }),
+      txn({
+        txn_date: "2026-09-03",
+        amount: 120,
+        kind: "expense",
+        category: "מזון",
+        expense_type: "variable",
+      }),
+    ];
+    assert.equal(actualForLine(fixedLine, txns, "2026-09"), 80);
+    assert.equal(actualForLine(varLine, txns, "2026-09"), 120);
+  });
+
+  it("actualForLine resolves expense_type using rulesMap when not on txn", () => {
+    const rulesMap = new Map<string, MerchantRule>([
+      [
+        "netflix",
+        {
+          merchant_key: "netflix",
+          category: "מזון",
+          expense_type: "fixed",
+          kind: "expense",
+          default_note: null,
+        },
+      ],
+    ]);
+    const fixedLine: PlanLineRow = {
+      id: "f",
+      plan_id: "p",
+      line_type: "fixed",
+      name: "מזון",
+      category: "מזון",
+      planned_amount: 100,
+      sort_order: 0,
+    };
+    const txns = [
+      txn({
+        txn_date: "2026-09-04",
+        amount: 60,
+        kind: "expense",
+        category: "מזון",
+        merchant: "Netflix",
+      }),
+    ];
+    assert.equal(actualForLine(fixedLine, txns, "2026-09", rulesMap), 60);
   });
 });

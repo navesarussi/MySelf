@@ -295,6 +295,11 @@ export const messages = {
       allTransactions: "כל התנועות",
       suggestedCategory: "הצעה מהיסטוריה: {category}",
       shortcutHint: "חבר קיצור iOS ל-Apple Pay — docs/finance/ios-shortcut-he.md",
+      expenseTypeFixed: "קבועה",
+      expenseTypeVariable: "משתנה",
+      expenseTypeLabel: "סוג הוצאה",
+      rememberRule: "זכור לעתיד",
+      switchLineType: "העבר ל{target}",
     },
     projects: {
       title: "פרויקטים",
@@ -914,6 +919,11 @@ export const messages = {
       allTransactions: "All transactions",
       suggestedCategory: "Suggested from history: {category}",
       shortcutHint: "Set up the iOS Shortcut for Apple Pay — docs/finance/ios-shortcut-he.md",
+      expenseTypeFixed: "Fixed",
+      expenseTypeVariable: "Variable",
+      expenseTypeLabel: "Expense Type",
+      rememberRule: "Remember for future",
+      switchLineType: "Switch to {target}",
     },
     projects: {
       title: "Projects",

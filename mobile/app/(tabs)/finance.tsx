@@ -86,6 +86,14 @@ export default function FinanceScreen() {
     });
   }
 
+  async function changeLineType(lineId: string, line_type: PlanLineType) {
+    await run((cfg) => api.patchFinancePlanLine(cfg, lineId, { line_type }), {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) });
+      },
+    });
+  }
+
   async function addLine(name: string, amount: number) {
     if (!addType) return;
     await run(
@@ -142,6 +150,7 @@ export default function FinanceScreen() {
               key={type}
               section={view.sections[type]}
               onSavePlanned={(id, amount) => void savePlanned(id, amount)}
+              onChangeLineType={(id, lt) => void changeLineType(id, lt)}
               onAdd={type === "planned" || type === "savings" ? () => setAddType(type) : undefined}
               onDelete={
                 type === "planned" || type === "savings" ? (id) => void deleteLine(id) : undefined

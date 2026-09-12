@@ -11,45 +11,17 @@ import {
 } from "@/lib/api/auth";
 import { isFinanceCategory } from "@/lib/finance/categories";
 import {
+  loadCategoryHistory,
   suggestCategoryFromHistory,
-  type MerchantCategoryRow,
 } from "@/lib/finance/merchant-category";
+import {
+  findMerchantRule,
+  resolveExpenseType,
+  upsertMerchantRule,
+  type ExpenseType,
+} from "@/lib/finance/merchant-rules";
 import { getSupabase } from "@/lib/supabase";
-import type { FinanceTransaction } from "@/lib/finance/ingest";
-
-function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
-  return {
-    id: String(row.id),
-    source: row.source as FinanceTransaction["source"],
-    external_key: String(row.external_key),
-    txn_date: String(row.txn_date),
-    amount: Number(row.amount),
-    kind: row.kind as FinanceTransaction["kind"],
-    currency: String(row.currency ?? "ILS"),
-    description: String(row.description ?? ""),
-    merchant: row.merchant != null ? String(row.merchant) : null,
-    account_number: row.account_number != null ? String(row.account_number) : null,
-    card_name: row.card_name != null ? String(row.card_name) : null,
-    status: row.status as FinanceTransaction["status"],
-    category: row.category != null ? String(row.category) : null,
-    purpose_note: row.purpose_note != null ? String(row.purpose_note) : null,
-    needs_categorization: Boolean(row.needs_categorization),
-    categorized_at: row.categorized_at != null ? String(row.categorized_at) : null,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  };
-}
-
-async function loadCategoryHistory(): Promise<MerchantCategoryRow[]> {
-  const { data } = await getSupabase()
-    .from("finance_transactions")
-    .select("merchant, description, category")
-    .eq("needs_categorization", false)
-    .not("category", "is", null)
-    .order("categorized_at", { ascending: false })
-    .limit(500);
-  return (data ?? []) as MerchantCategoryRow[];
-}
+import { rowToTxn } from "@/lib/finance/ingest";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(_req))) return unauthorized();
@@ -65,35 +37,95 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   if (!data) return notFound();
 
   const txn = rowToTxn(data as Record<string, unknown>);
+  const rule = await findMerchantRule(txn.merchant, txn.description);
   const history = await loadCategoryHistory();
-  const suggested_category = txn.needs_categorization
-    ? suggestCategoryFromHistory(txn.merchant, txn.description, history)
-    : null;
 
-  return NextResponse.json({ ...txn, suggested_category });
+  const suggested_category =
+    txn.category ??
+    rule?.category ??
+    (txn.needs_categorization
+      ? suggestCategoryFromHistory(txn.merchant, txn.description, history)
+      : null);
+
+  const suggested_expense_type =
+    txn.expense_type ??
+    rule?.expense_type ??
+    (suggested_category && txn.kind === "expense"
+      ? resolveExpenseType({ category: suggested_category, kind: "expense", rule })
+      : null);
+
+  return NextResponse.json({
+    ...txn,
+    suggested_category,
+    suggested_expense_type,
+    default_note: rule?.default_note ?? null,
+  });
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await ctx.params;
   const body = await readJson(req);
-  const category = str(body.category);
-  const purpose_note = optStr(body.purpose_note);
+
+  const { data: existing, error: fetchErr } = await getSupabase()
+    .from("finance_transactions")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchErr) return dbError();
+  if (!existing) return notFound();
+
+  const current = rowToTxn(existing as Record<string, unknown>);
   const skip = body.skip === true;
-
-  if (!skip && !category) return badRequest("category_required");
-  if (category && !isFinanceCategory(category)) return badRequest("invalid_category");
-
   const now = new Date().toISOString();
-  const patch = skip
-    ? { needs_categorization: false, updated_at: now }
-    : {
+
+  if (skip) {
+    const { data, error } = await getSupabase()
+      .from("finance_transactions")
+      .update({ needs_categorization: false, updated_at: now })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) return dbError();
+    return NextResponse.json(rowToTxn(data as Record<string, unknown>));
+  }
+
+  const category = str(body.category) || current.category;
+  if (!category) return badRequest("category_required");
+  if (!isFinanceCategory(category)) return badRequest("invalid_category");
+
+  const purpose_note = body.purpose_note !== undefined ? optStr(body.purpose_note) : current.purpose_note;
+  const rawExpenseType = str(body.expense_type);
+  const expense_type: ExpenseType | null =
+    rawExpenseType === "fixed" || rawExpenseType === "variable"
+      ? rawExpenseType
+      : current.kind === "expense"
+        ? (current.expense_type ?? (resolveExpenseType({ category, kind: "expense" }) as ExpenseType))
+        : null;
+
+  const remember_rule = body.remember_rule === true;
+  if (remember_rule) {
+    const merchantKey = current.merchant || current.description;
+    if (merchantKey) {
+      await upsertMerchantRule({
+        merchant_key: merchantKey,
         category,
-        purpose_note,
-        needs_categorization: false,
-        categorized_at: now,
-        updated_at: now,
-      };
+        expense_type,
+        kind: current.kind,
+        default_note: purpose_note,
+      });
+    }
+  }
+
+  const patch: Record<string, unknown> = {
+    category,
+    purpose_note,
+    expense_type,
+    needs_categorization: false,
+    categorized_at: current.categorized_at || now,
+    updated_at: now,
+  };
 
   const { data, error } = await getSupabase()
     .from("finance_transactions")

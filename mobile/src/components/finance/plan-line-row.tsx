@@ -3,16 +3,18 @@ import { Modal, Pressable, Text, TextInput, View } from "react-native";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
-import { Btn, Row } from "../ui";
-import type { PlanLineView } from "@/lib/finance/plan";
+import { Btn, Chip, Row } from "../ui";
+import type { PlanLineType, PlanLineView } from "@/lib/finance/plan";
 
 export function PlanLineRow({
   line,
   onSavePlanned,
+  onChangeLineType,
   onDelete,
 }: {
   line: PlanLineView;
   onSavePlanned: (id: string, amount: number) => void;
+  onChangeLineType?: (id: string, lineType: PlanLineType) => void;
   onDelete?: () => void;
 }) {
   const c = useColors();
@@ -20,6 +22,9 @@ export function PlanLineRow({
   const { textStart, writingDirection } = useLayoutDir();
   const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState(String(line.planned_amount));
+  const [draftType, setDraftType] = useState<PlanLineType>(line.line_type);
+
+  const canToggleType = line.line_type === "fixed" || line.line_type === "variable";
 
   const pct =
     line.planned_amount > 0
@@ -31,7 +36,13 @@ export function PlanLineRow({
 
   return (
     <>
-      <Pressable onPress={() => { setDraft(String(line.planned_amount)); setEditOpen(true); }}>
+      <Pressable
+        onPress={() => {
+          setDraft(String(line.planned_amount));
+          setDraftType(line.line_type);
+          setEditOpen(true);
+        }}
+      >
         <View style={{ marginBottom: 10 }}>
           <Row>
             <Text style={{ color: c.ink, flex: 1, textAlign: textStart, writingDirection }}>{line.name}</Text>
@@ -106,15 +117,39 @@ export function PlanLineRow({
                   writingDirection,
                 }}
               />
-              <View style={{ marginTop: 12, gap: 8 }}>
+
+              {canToggleType ? (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>
+                    {t("finance.expenseTypeLabel")}
+                  </Text>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <Chip
+                      label={t("finance.expenseTypeFixed")}
+                      active={draftType === "fixed"}
+                      onPress={() => setDraftType("fixed")}
+                    />
+                    <Chip
+                      label={t("finance.expenseTypeVariable")}
+                      active={draftType === "variable"}
+                      onPress={() => setDraftType("variable")}
+                    />
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={{ marginTop: 16, gap: 8 }}>
                 <Btn
                   label={t("finance.saveCategory")}
                   onPress={() => {
                     const n = Number(draft);
                     if (Number.isFinite(n) && n >= 0) {
                       onSavePlanned(line.id, n);
-                      setEditOpen(false);
                     }
+                    if (canToggleType && draftType !== line.line_type && onChangeLineType) {
+                      onChangeLineType(line.id, draftType);
+                    }
+                    setEditOpen(false);
                   }}
                 />
                 {onDelete ? (

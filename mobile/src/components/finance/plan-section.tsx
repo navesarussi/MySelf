@@ -18,11 +18,13 @@ const SECTION_KEYS: Record<PlanLineType, string> = {
 export function PlanSectionBlock({
   section,
   onSavePlanned,
+  onChangeLineType,
   onAdd,
   onDelete,
 }: {
   section: PlanSectionView;
   onSavePlanned: (id: string, amount: number) => void;
+  onChangeLineType?: (id: string, lineType: PlanLineType) => void;
   onAdd?: () => void;
   onDelete?: (id: string) => void;
 }) {
@@ -53,6 +55,7 @@ export function PlanSectionBlock({
               key={line.id}
               line={line}
               onSavePlanned={onSavePlanned}
+              onChangeLineType={onChangeLineType}
               onDelete={canAdd && onDelete ? () => onDelete(line.id) : undefined}
             />
           ))

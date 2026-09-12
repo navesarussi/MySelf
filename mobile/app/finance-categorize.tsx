@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FINANCE_CATEGORIES } from "@/lib/finance/categories";
+import { lineTypeForCategory } from "@/lib/finance/expense-type";
 import { api } from "../src/api/resources";
 import { useSession } from "../src/session";
 import { useI18n } from "../src/i18n";
@@ -10,7 +11,14 @@ import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, decFinanceUncategorizedInHome } from "../src/query";
 import type { HomePayload } from "../src/api/resources";
 import { Btn, Card, Chip, ErrorNote, Input, Loading, Screen } from "../src/components/ui";
+import { ExpenseTypeChips, RememberRuleToggle } from "../src/components/finance/categorize-controls";
 import type { FinanceTransaction } from "@/lib/finance/types";
+
+type TxnDetail = FinanceTransaction & {
+  suggested_category?: string | null;
+  suggested_expense_type?: "fixed" | "variable" | null;
+  default_note?: string | null;
+};
 
 export default function FinanceCategorizeScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -20,10 +28,10 @@ export default function FinanceCategorizeScreen() {
   const router = useRouter();
   const { token, serverUrl } = useSession();
   const { run, isPending } = useApiMutation();
-  const [txn, setTxn] = useState<(FinanceTransaction & { suggested_category?: string | null }) | null>(
-    null
-  );
+  const [txn, setTxn] = useState<TxnDetail | null>(null);
   const [category, setCategory] = useState<string | null>(null);
+  const [expenseType, setExpenseType] = useState<"fixed" | "variable">("variable");
+  const [rememberRule, setRememberRule] = useState<boolean>(true);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -33,11 +41,28 @@ export default function FinanceCategorizeScreen() {
       .financeTransaction({ token, serverUrl }, id)
       .then((row) => {
         setTxn(row);
-        if (row.suggested_category) setCategory(row.suggested_category);
-        if (row.purpose_note) setNote(row.purpose_note);
+        const cat = row.category || row.suggested_category;
+        if (cat) setCategory(cat);
+        if (row.purpose_note || row.default_note) setNote(row.purpose_note || row.default_note || "");
+        if (row.expense_type) {
+          setExpenseType(row.expense_type);
+        } else if (row.suggested_expense_type) {
+          setExpenseType(row.suggested_expense_type);
+        } else if (cat) {
+          const resolved = lineTypeForCategory(cat, "expense");
+          if (resolved === "fixed" || resolved === "variable") setExpenseType(resolved);
+        }
       })
       .catch(() => setError("load_failed"));
   }, [token, serverUrl, id]);
+
+  const onSelectCategory = (cat: string) => {
+    setCategory(cat);
+    if (!txn?.expense_type) {
+      const resolved = lineTypeForCategory(cat, "expense");
+      if (resolved === "fixed" || resolved === "variable") setExpenseType(resolved);
+    }
+  };
 
   async function save(skip = false) {
     if (!token || !id) return;
@@ -52,12 +77,20 @@ export default function FinanceCategorizeScreen() {
         api.categorizeFinanceTransaction(
           cfg,
           id,
-          skip ? { skip: true } : { category: category!, purpose_note: note || null }
+          skip
+            ? { skip: true }
+            : {
+                category: category!,
+                purpose_note: note || null,
+                expense_type: txn?.kind === "expense" ? expenseType : null,
+                remember_rule: rememberRule,
+              }
         ),
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.financeCashflow(month) });
           void queryClient.invalidateQueries({ queryKey: queryKeys.financeTransactions(month) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) });
           router.back();
         },
         onError: () => {
@@ -80,10 +113,11 @@ export default function FinanceCategorizeScreen() {
 
   const label = txn?.merchant || txn?.description || "";
   const busy = isPending();
+  const isExpense = txn?.kind === "expense";
 
   return (
     <Screen
-      title={t(txn?.kind === "income" ? "finance.categorizeTitleIncome" : "finance.categorizeTitle")}
+      title={t(isExpense ? "finance.categorizeTitle" : "finance.categorizeTitleIncome")}
       subtitle={label}
     >
       {error ? <ErrorNote message={error} /> : null}
@@ -103,9 +137,15 @@ export default function FinanceCategorizeScreen() {
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: 12 }}>
         {FINANCE_CATEGORIES.map((cat) => (
-          <Chip key={cat} label={cat} active={category === cat} onPress={() => setCategory(cat)} />
+          <Chip key={cat} label={cat} active={category === cat} onPress={() => onSelectCategory(cat)} />
         ))}
       </View>
+
+      {isExpense ? (
+        <ExpenseTypeChips value={expenseType} onChange={setExpenseType} />
+      ) : null}
+
+      <RememberRuleToggle value={rememberRule} onToggle={() => setRememberRule((v) => !v)} />
 
       <Input
         value={note}
