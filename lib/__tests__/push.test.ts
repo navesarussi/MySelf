@@ -52,6 +52,7 @@ describe("isTypeEnabled", () => {
     habits: true,
     tasks: true,
     timeline: true,
+    finance: true,
     quiet_start_hour: 22,
     quiet_end_hour: 7,
     updated_at: new Date().toISOString(),

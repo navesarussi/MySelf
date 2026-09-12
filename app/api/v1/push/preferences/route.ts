@@ -29,6 +29,7 @@ export async function PATCH(req: NextRequest) {
     "habits",
     "tasks",
     "timeline",
+    "finance",
   ] as const) {
     if (key in body) patch[key] = Boolean(body[key]);
   }

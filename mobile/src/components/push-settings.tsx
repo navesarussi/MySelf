@@ -15,6 +15,7 @@ type Prefs = {
   habits: boolean;
   tasks: boolean;
   timeline: boolean;
+  finance: boolean;
 };
 
 const TYPE_KEYS: (keyof Omit<Prefs, "enabled">)[] = [
@@ -23,6 +24,7 @@ const TYPE_KEYS: (keyof Omit<Prefs, "enabled">)[] = [
   "habits",
   "tasks",
   "timeline",
+  "finance",
 ];
 
 function toPrefs(p: Prefs): Prefs {
@@ -33,6 +35,7 @@ function toPrefs(p: Prefs): Prefs {
     habits: p.habits,
     tasks: p.tasks,
     timeline: p.timeline,
+    finance: p.finance,
   };
 }
 

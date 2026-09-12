@@ -15,6 +15,7 @@ import {
 import { useColors, tokens } from "../theme";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
+import { hapticImpact, hapticSelection } from "../haptics";
 
 export function Screen({
   title,
@@ -133,13 +134,18 @@ export function Chip({
   const { writingDirection } = useLayoutDir();
   return (
     <Pressable
-      onPress={onPress}
-      style={{
+      unstable_pressDelay={0}
+      onPress={() => {
+        hapticSelection();
+        onPress();
+      }}
+      style={({ pressed }) => ({
         backgroundColor: active ? c.accent : c.border + "80",
         borderRadius: 999,
         paddingHorizontal: 12,
         paddingVertical: 6,
-      }}
+        opacity: pressed ? 0.7 : 1,
+      })}
     >
       <Text
         style={{
@@ -174,18 +180,22 @@ export function Btn({
   const fg = variant === "primary" ? c.bg : variant === "warn" ? c.warn : c.muted;
   return (
     <Pressable
-      onPress={onPress}
+      unstable_pressDelay={0}
+      onPress={() => {
+        hapticImpact();
+        onPress();
+      }}
       disabled={disabled}
-      style={{
+      style={({ pressed }) => ({
         backgroundColor: bg,
         borderRadius: tokens.radiusSm,
         paddingHorizontal: small ? 10 : 16,
         paddingVertical: small ? 5 : 9,
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.5 : pressed ? 0.7 : 1,
         borderWidth: variant === "ghost" ? 1 : 0,
         borderColor: c.border,
         alignItems: "center",
-      }}
+      })}
     >
       <Text
         style={{
@@ -424,3 +434,5 @@ export function confirmDelete(title: string, onConfirm: () => void, confirmLabel
     { text: confirmLabel, style: "destructive", onPress: onConfirm },
   ]);
 }
+
+export { ScreenList, type ScreenListProps } from "./screen-list";

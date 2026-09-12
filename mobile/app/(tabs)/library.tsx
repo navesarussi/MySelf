@@ -1,11 +1,18 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
-import { useApi, useMutate } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
+import {
+  useApiQuery,
+  useApiMutation,
+  queryKeys,
+  queryClient,
+  patchItemInList,
+  removeItemFromList,
+} from "../../src/query";
 import {
   Badge,
   Btn,
@@ -17,6 +24,7 @@ import {
   Loading,
   Row,
   Screen,
+  ScreenList,
   confirmDelete,
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
@@ -39,21 +47,31 @@ export default function LibraryScreen() {
   const { textStart, textLtr, writingDirection } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
-  const { run, busy } = useMutate();
+  const { run, busy, isPending } = useApiMutation();
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory] = useState<string>(ALL_FILTER);
   const [form, setForm] = useState<FormState | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const entriesQ = useApi(
-    (config) =>
-      api.library(config, {
-        q: search || undefined,
-        category: category !== ALL_FILTER ? category : undefined,
-      }),
-    [search, category]
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const activeParams = useMemo(
+    () => ({
+      q: debouncedSearch.trim() || undefined,
+      category: category !== ALL_FILTER ? category : undefined,
+    }),
+    [debouncedSearch, category]
   );
+
+  const libraryKey = useMemo(() => queryKeys.library(activeParams), [activeParams]);
+  const entriesQ = useApiQuery(libraryKey, (config) => api.library(config, activeParams));
 
   useEffect(() => {
     if (params.add === "entry" || params.add === "1") {
@@ -68,95 +86,169 @@ export default function LibraryScreen() {
     [entries]
   );
 
-  async function submit() {
+  const submit = useCallback(async () => {
     if (!form || !form.title.trim() || !form.body.trim()) return;
     const body = { title: form.title, category: form.category, body: form.body, tags: form.tags };
-    if (form.id) await run((config) => api.updateEntry(config, form.id!, body), { success: "flash.entryUpdated" });
-    else await run((config) => api.createEntry(config, body), { success: "flash.entryAdded" });
+    const targetId = form.id;
     setForm(null);
-    entriesQ.refresh();
-  }
 
-  function removeEntry(entry: ContentEntry) {
-    confirmDelete(
-      `${t("library.deleteEntry")}: ${entry.title}?`,
-      async () => {
-        await run((config) => api.deleteEntry(config, entry.id), { success: "flash.entryDeleted" });
-        setForm(null);
-        entriesQ.refresh();
-      },
-      t("common.delete"),
-      t("common.cancel")
-    );
-  }
+    if (targetId) {
+      await run((config) => api.updateEntry(config, targetId, body), {
+        itemId: targetId,
+        flash: { success: "flash.entryUpdated" },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<ContentEntry[]>(libraryKey, (old) =>
+              patchItemInList(old, targetId, updated)
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.libraryAll });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    } else {
+      await run((config) => api.createEntry(config, body), {
+        flash: { success: "flash.entryAdded" },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.libraryAll });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    }
+  }, [form, libraryKey, run]);
+
+  const removeEntry = useCallback(
+    (entry: ContentEntry) => {
+      confirmDelete(
+        `${t("library.deleteEntry")}: ${entry.title}?`,
+        async () => {
+          const prevEntries = queryClient.getQueryData<ContentEntry[]>(libraryKey);
+          queryClient.setQueryData<ContentEntry[]>(libraryKey, (old) =>
+            removeItemFromList(old, entry.id)
+          );
+          setForm(null);
+
+          await run((config) => api.deleteEntry(config, entry.id), {
+            itemId: entry.id,
+            flash: { success: "flash.entryDeleted" },
+            onError: () => {
+              if (prevEntries) queryClient.setQueryData(libraryKey, prevEntries);
+            },
+            onSuccess: () => {
+              queryClient.invalidateQueries({ queryKey: queryKeys.libraryAll });
+              queryClient.invalidateQueries({ queryKey: queryKeys.home });
+            },
+          });
+        },
+        t("common.delete"),
+        t("common.cancel")
+      );
+    },
+    [libraryKey, run, t]
+  );
+
+  const renderItem = useCallback(
+    ({ item: entry }: { item: ContentEntry }) => {
+      const open = expanded === entry.id;
+      return (
+        <Card key={entry.id}>
+          <Pressable
+            unstable_pressDelay={0}
+            onPress={() => setExpanded(open ? null : entry.id)}
+          >
+            <Row>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>
+                  {entry.title}
+                </Text>
+                <Row style={{ justifyContent: "flex-start", marginTop: 4 }} wrap>
+                  <Badge label={entry.category} tone="accent" />
+                  {entry.tags.map((tag) => (
+                    <Badge key={tag} label={tag} />
+                  ))}
+                </Row>
+              </View>
+            </Row>
+            <Text
+              style={{
+                color: c.muted,
+                fontSize: tokens.textSm,
+                lineHeight: 20,
+                textAlign: textStart,
+                writingDirection,
+                marginTop: 6,
+              }}
+              numberOfLines={open ? undefined : 3}
+            >
+              {entry.body}
+            </Text>
+          </Pressable>
+          {open ? (
+            <Row style={{ marginTop: 8 }}>
+              <Btn
+                small
+                variant="ghost"
+                label={t("common.edit")}
+                onPress={() =>
+                  setForm({
+                    id: entry.id,
+                    title: entry.title,
+                    category: entry.category,
+                    body: entry.body,
+                    tags: entry.tags.join(", "),
+                  })
+                }
+              />
+              <Btn
+                small
+                variant="warn"
+                label={t("common.delete")}
+                onPress={() => removeEntry(entry)}
+                disabled={isPending(entry.id)}
+              />
+            </Row>
+          ) : null}
+        </Card>
+      );
+    },
+    [expanded, c, textStart, writingDirection, t, isPending, removeEntry]
+  );
+
+  const keyExtractor = useCallback((item: ContentEntry) => item.id, []);
+
+  const headerExtra = useMemo(
+    () => (
+      <View>
+        <Input value={search} onChangeText={setSearch} placeholder={t("library.searchPlaceholder")} />
+        {categories.length > 0 ? (
+          <Row wrap style={{ marginBottom: 12 }}>
+            <Chip label={t("library.allCategories")} active={category === ALL_FILTER} onPress={() => setCategory(ALL_FILTER)} />
+            {categories.map((cat) => (
+              <Chip key={cat} label={cat} active={category === cat} onPress={() => setCategory(cat)} />
+            ))}
+          </Row>
+        ) : null}
+        {entriesQ.error ? <ErrorNote message={entriesQ.error} onRetry={entriesQ.refresh} /> : null}
+        {entriesQ.loading && !entriesQ.data ? <Loading /> : null}
+      </View>
+    ),
+    [search, t, categories, category, entriesQ.error, entriesQ.loading, entriesQ.data, entriesQ.refresh]
+  );
 
   return (
-    <Screen
-      title={t("library.title")}
-      subtitle={t("library.subtitle")}
-      refreshing={entriesQ.loading}
-      onRefresh={entriesQ.refresh}
-      headerRight={<Btn small label={t("library.addEntry")} onPress={() => setForm(emptyForm)} />}
-    >
-      <Input value={search} onChangeText={setSearch} placeholder={t("library.searchPlaceholder")} />
-      {categories.length > 0 ? (
-        <Row wrap style={{ marginBottom: 12 }}>
-          <Chip label={t("library.allCategories")} active={category === ALL_FILTER} onPress={() => setCategory(ALL_FILTER)} />
-          {categories.map((cat) => (
-            <Chip key={cat} label={cat} active={category === cat} onPress={() => setCategory(cat)} />
-          ))}
-        </Row>
-      ) : null}
-
-      {entriesQ.error ? <ErrorNote message={entriesQ.error} onRetry={entriesQ.refresh} /> : null}
-      {entriesQ.loading && !entriesQ.data ? <Loading /> : null}
-      {entriesQ.data && entries.length === 0 ? <EmptyState text={t("library.noResults")} /> : null}
-
-      {entries.map((entry) => {
-        const open = expanded === entry.id;
-        return (
-          <Card key={entry.id}>
-            <Pressable onPress={() => setExpanded(open ? null : entry.id)}>
-              <Row>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>{entry.title}</Text>
-                  <Row style={{ justifyContent: "flex-start", marginTop: 4 }} wrap>
-                    <Badge label={entry.category} tone="accent" />
-                    {entry.tags.map((tag) => (
-                      <Badge key={tag} label={tag} />
-                    ))}
-                  </Row>
-                </View>
-              </Row>
-              <Text
-                style={{ color: c.muted, fontSize: tokens.textSm, lineHeight: 20, textAlign: textStart, writingDirection, marginTop: 6 }}
-                numberOfLines={open ? undefined : 3}
-              >
-                {entry.body}
-              </Text>
-            </Pressable>
-            {open ? (
-              <Row style={{ marginTop: 8 }}>
-                <Btn
-                  small
-                  variant="ghost"
-                  label={t("common.edit")}
-                  onPress={() =>
-                    setForm({
-                      id: entry.id,
-                      title: entry.title,
-                      category: entry.category,
-                      body: entry.body,
-                      tags: entry.tags.join(", "),
-                    })
-                  }
-                />
-                <Btn small variant="warn" label={t("common.delete")} onPress={() => removeEntry(entry)} />
-              </Row>
-            ) : null}
-          </Card>
-        );
-      })}
+    <>
+      <ScreenList
+        title={t("library.title")}
+        subtitle={t("library.subtitle")}
+        refreshing={entriesQ.loading}
+        onRefresh={entriesQ.refresh}
+        headerRight={<Btn small label={t("library.addEntry")} onPress={() => setForm(emptyForm)} />}
+        headerExtra={headerExtra}
+        data={entries}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListEmptyComponent={entriesQ.data && entries.length === 0 ? <EmptyState text={t("library.noResults")} /> : null}
+      />
 
       <FormModal
         visible={form !== null}
@@ -190,6 +282,6 @@ export default function LibraryScreen() {
           </View>
         ) : null}
       </FormModal>
-    </Screen>
+    </>
   );
 }

@@ -8,6 +8,7 @@ const DEFAULTS: NotificationPreferences = {
   habits: true,
   tasks: true,
   timeline: true,
+  finance: true,
   quiet_start_hour: 22,
   quiet_end_hour: 7,
   updated_at: new Date().toISOString(),
@@ -21,6 +22,7 @@ function rowToPrefs(row: Record<string, unknown>): NotificationPreferences {
     habits: Boolean(row.habits),
     tasks: Boolean(row.tasks),
     timeline: Boolean(row.timeline),
+    finance: Boolean(row.finance ?? true),
     quiet_start_hour: Number(row.quiet_start_hour ?? 22),
     quiet_end_hour: Number(row.quiet_end_hour ?? 7),
     updated_at: String(row.updated_at ?? new Date().toISOString()),
@@ -52,6 +54,7 @@ export async function updateNotificationPreferences(
     "habits",
     "tasks",
     "timeline",
+    "finance",
   ] as const) {
     if (patch[key] !== undefined) body[key] = Boolean(patch[key]);
   }

@@ -25,7 +25,8 @@ export async function GET(req: NextRequest) {
     tasksRes,
     projectsRes,
     libraryRes,
-    allTasksRes,
+    openTasksCountRes,
+    inProgressTasksCountRes,
   ] = await Promise.all([
     supabase.from("habits").select("*").eq("archived", false),
     supabase.from("goals").select("*").eq("status", "active"),
@@ -41,22 +42,30 @@ export async function GET(req: NextRequest) {
       .order("name"),
     supabase
       .from("timeline_events")
-      .select("*")
+      .select("id, title, summary, source, event_date, event_time, hidden_at")
       .is("hidden_at", null)
       .order("event_date", { ascending: false })
-      .limit(200),
+      .limit(60),
     supabase
       .from("tasks")
       .select("*, projects(name)")
       .in("status", ["open", "in_progress", "stuck", "review"])
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(25),
     supabase.from("projects").select("*").order("sort_order"),
     supabase
       .from("content_entries")
       .select("id, title, category, tags, body, updated_at")
       .order("updated_at", { ascending: false })
       .limit(20),
-    supabase.from("tasks").select("id, status"),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "open"),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "in_progress"),
   ]);
 
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
@@ -75,7 +84,6 @@ export async function GET(req: NextRequest) {
       activeGoals.length < (goalsRes.data?.length ?? 0) ||
       openTasks.length < ((tasksRes.data as TaskRow[] | null)?.length ?? 0)
   );
-  const allTasks = (allTasksRes.data as Pick<Task, "status">[]) || [];
 
   return NextResponse.json({
     habits,
@@ -88,7 +96,7 @@ export async function GET(req: NextRequest) {
     openTasks,
     projects: projectsRes.data || [],
     libraryEntries: libraryRes.data || [],
-    openTasksCount: allTasks.filter((t) => t.status === "open").length,
-    inProgressTasksCount: allTasks.filter((t) => t.status === "in_progress").length,
+    openTasksCount: openTasksCountRes.count || 0,
+    inProgressTasksCount: inProgressTasksCountRes.count || 0,
   });
 }

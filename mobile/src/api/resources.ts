@@ -11,6 +11,7 @@ import type {
   TimelineEventLink,
 } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
+import type { FinanceCashflow, FinanceTransaction } from "@/lib/finance/types";
 
 export type HomePayload = {
   habits: Habit[];
@@ -211,7 +212,13 @@ export const api = {
     provider?: string,
     opts?: { account_key?: string; list_ids?: string[] }
   ) =>
-    apiFetch(c, "/integrations/task-sources/sync", {
+    apiFetch<{
+      ok: boolean;
+      provider?: string;
+      imported?: number;
+      markedDone?: number;
+      alreadyRunning?: boolean;
+    }>(c, "/integrations/task-sources/sync", {
       method: "POST",
       body: {
         ...(provider ? { provider } : {}),
@@ -271,6 +278,7 @@ export const api = {
       habits: boolean;
       tasks: boolean;
       timeline: boolean;
+      finance: boolean;
       quiet_start_hour: number;
       quiet_end_hour: number;
       updated_at: string;
@@ -284,6 +292,7 @@ export const api = {
       habits: boolean;
       tasks: boolean;
       timeline: boolean;
+      finance: boolean;
       quiet_start_hour: number;
       quiet_end_hour: number;
     }>
@@ -295,6 +304,7 @@ export const api = {
       habits: boolean;
       tasks: boolean;
       timeline: boolean;
+      finance: boolean;
       quiet_start_hour: number;
       quiet_end_hour: number;
       updated_at: string;
@@ -305,4 +315,23 @@ export const api = {
       "/push/test",
       { method: "POST", body: {} }
     ),
+
+  financeCashflow: (c: ApiConfig, month: string) =>
+    apiFetch<FinanceCashflow>(c, `/finance/cashflow?month=${encodeURIComponent(month)}`),
+  financeTransactions: (
+    c: ApiConfig,
+    params: { month?: string; uncategorized?: boolean; limit?: number }
+  ) => {
+    const sp = new URLSearchParams();
+    if (params.month) sp.set("month", params.month);
+    if (params.uncategorized) sp.set("uncategorized", "1");
+    if (params.limit) sp.set("limit", String(params.limit));
+    const q = sp.toString();
+    return apiFetch<FinanceTransaction[]>(c, `/finance/transactions${q ? `?${q}` : ""}`);
+  },
+  categorizeFinanceTransaction: (
+    c: ApiConfig,
+    id: string,
+    body: { category: string; purpose_note?: string | null } | { skip: true }
+  ) => apiFetch<FinanceTransaction>(c, `/finance/transactions/${id}`, { method: "PATCH", body }),
 };

@@ -221,3 +221,13 @@ Tapping a notification opens the relevant in-app screen via Expo Router (`data.s
 
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
+
+### NFR-UX-01
+Status, habit check-in, and contacted-today interactions update the UI immediately before network response; failure rolls back optimistic state and shows an error toast (FR-TOAST-01).
+
+### NFR-UX-02
+Tab switches do not remount frozen screens; warm cache avoids loading indicators on return.
+
+### NFR-UX-03
+Entity lists virtualize (`FlatList` / `ScreenList`); modal editors are hoisted to a single instance per screen rather than instantiated per card.
+

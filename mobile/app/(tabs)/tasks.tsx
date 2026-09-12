@@ -1,10 +1,20 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
-import { useApi, useMutate } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
+import {
+  useApiQuery,
+  useApiMutation,
+  queryKeys,
+  queryClient,
+  patchItemInList,
+  removeItemFromList,
+  patchTaskInHome,
+  removeTaskFromHome,
+} from "../../src/query";
+import type { HomePayload } from "../../src/api/resources";
 import {
   Btn,
   Chip,
@@ -15,6 +25,7 @@ import {
   Loading,
   Row,
   Screen,
+  ScreenList,
   confirmDelete,
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
@@ -63,35 +74,45 @@ export default function TasksScreen() {
   const { textLtr, textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
-  const { run, busy } = useMutate();
+  const { run, isPending, busy } = useApiMutation();
   const [filter, setFilter] = useState<TasksFilterState>(defaultTasksFilter);
+  const [debouncedQ, setDebouncedQ] = useState(filter.q);
   const [form, setForm] = useState<FormState | null>(null);
   const listOptionsRef = useRef<Array<{ id: string; title: string }>>([]);
 
-  const projectsQ = useApi(api.projects);
-  const tasksQ = useApi(
-    (config) =>
-      api.tasks(config, {
-        project: filter.project !== ALL_FILTER ? filter.project : undefined,
-        status: filter.status.length ? filter.status.join(",") : undefined,
-        priority: filter.priority.length ? filter.priority.join(",") : undefined,
-        source: filter.source !== ALL_FILTER ? filter.source : undefined,
-        external_list: filter.externalList !== ALL_FILTER ? filter.externalList : undefined,
-        q: filter.q.trim() || undefined,
-        overdue: filter.overdue || undefined,
-        sort: filter.sort,
-      }),
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQ(filter.q);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filter.q]);
+
+  const activeParams = useMemo(
+    () => ({
+      project: filter.project !== ALL_FILTER ? filter.project : undefined,
+      status: filter.status.length ? filter.status.join(",") : undefined,
+      priority: filter.priority.length ? filter.priority.join(",") : undefined,
+      source: filter.source !== ALL_FILTER ? filter.source : undefined,
+      external_list: filter.externalList !== ALL_FILTER ? filter.externalList : undefined,
+      q: debouncedQ.trim() || undefined,
+      overdue: filter.overdue || undefined,
+      sort: filter.sort,
+    }),
     [
       filter.project,
-      filter.status.join(","),
-      filter.priority.join(","),
+      filter.status,
+      filter.priority,
       filter.source,
       filter.externalList,
-      filter.q,
+      debouncedQ,
       filter.overdue,
       filter.sort,
     ]
   );
+
+  const tasksQueryKey = useMemo(() => queryKeys.tasks(activeParams), [activeParams]);
+  const projectsQ = useApiQuery(queryKeys.projects, api.projects);
+  const tasksQ = useApiQuery(tasksQueryKey, (config) => api.tasks(config, activeParams));
 
   const projects = projectsQ.data ?? [];
   const defaultProjectId = useMemo(
@@ -148,99 +169,212 @@ export default function TasksScreen() {
           notes: form.notes || null,
         };
 
-    if (form.id) {
-      await run((config) => api.updateTask(config, form.id!, body), {
-        success: "flash.taskUpdated",
-        error: "flash.taskUpdateError",
+    const targetId = form.id;
+    setForm(null);
+
+    if (targetId) {
+      await run((config) => api.updateTask(config, targetId, body), {
+        itemId: targetId,
+        flash: {
+          success: "flash.taskUpdated",
+          error: "flash.taskUpdateError",
+        },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+              patchItemInList(old, targetId, updated)
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
       });
     } else {
       await run((config) => api.createTask(config, body), {
-        success: "flash.taskAdded",
-        error: "flash.taskAddError",
+        flash: {
+          success: "flash.taskAdded",
+          error: "flash.taskAddError",
+        },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
       });
     }
-    setForm(null);
-    tasksQ.refresh();
   }
 
-  async function advance(task: Task) {
-    await run((config) => api.updateTask(config, task.id, { status: nextStatusForTask(task) }), {
-      success: "flash.taskUpdated",
-      error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
-    });
-    tasksQ.refresh();
-  }
+  const advance = useCallback(
+    async (task: Task) => {
+      const next = nextStatusForTask(task);
+      const prevTasks = queryClient.getQueryData<Task[]>(tasksQueryKey);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
 
-  async function toggleDone(task: Task) {
-    const next = task.status === "done" ? "open" : "done";
-    await run((config) => api.updateTask(config, task.id, { status: next }), {
-      success: "flash.taskUpdated",
-      error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
-    });
-    tasksQ.refresh();
-  }
+      queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+        patchItemInList(old, task.id, { status: next })
+      );
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+        patchTaskInHome(old, task.id, { status: next })
+      );
 
-  function openEdit(task: Task) {
-    setForm({
-      id: task.id,
-      title: task.title,
-      project_id: task.project_id ?? defaultProjectId,
-      priority: task.priority,
-      status: task.status,
-      due_date: task.due_date ?? "",
-      notes: task.notes ?? "",
-      source: task.source,
-      external_meta: task.external_meta,
-    });
-  }
+      await run((config) => api.updateTask(config, task.id, { status: next }), {
+        itemId: task.id,
+        flash: {
+          success: "flash.taskUpdated",
+          error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
+        },
+        onError: () => {
+          if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+        },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+              patchItemInList(old, task.id, updated)
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    },
+    [queryClient, tasksQueryKey, run]
+  );
+
+  const toggleDone = useCallback(
+    async (task: Task) => {
+      const next = task.status === "done" ? "open" : "done";
+      const prevTasks = queryClient.getQueryData<Task[]>(tasksQueryKey);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+
+      queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+        patchItemInList(old, task.id, { status: next })
+      );
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+        patchTaskInHome(old, task.id, { status: next })
+      );
+
+      await run((config) => api.updateTask(config, task.id, { status: next }), {
+        itemId: task.id,
+        flash: {
+          success: "flash.taskUpdated",
+          error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
+        },
+        onError: () => {
+          if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+        },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+              patchItemInList(old, task.id, updated)
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    },
+    [queryClient, tasksQueryKey, run]
+  );
+
+  const openEdit = useCallback(
+    (task: Task) => {
+      setForm({
+        id: task.id,
+        title: task.title,
+        project_id: task.project_id ?? defaultProjectId,
+        priority: task.priority,
+        status: task.status,
+        due_date: task.due_date ?? "",
+        notes: task.notes ?? "",
+        source: task.source,
+        external_meta: task.external_meta,
+      });
+    },
+    [defaultProjectId]
+  );
 
   function removeTask(task: Task) {
     confirmDelete(
       `${t("common.delete")}: ${task.title}?`,
       async () => {
-        await run((config) => api.deleteTask(config, task.id), {
-          success: "flash.taskDeleted",
-          error: "flash.taskDeleteError",
-        });
+        const prevTasks = queryClient.getQueryData<Task[]>(tasksQueryKey);
+        const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+
+        queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+          removeItemFromList(old, task.id)
+        );
+        queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+          removeTaskFromHome(old, task.id)
+        );
         setForm(null);
-        tasksQ.refresh();
+
+        await run((config) => api.deleteTask(config, task.id), {
+          itemId: task.id,
+          flash: {
+            success: "flash.taskDeleted",
+            error: "flash.taskDeleteError",
+          },
+          onError: () => {
+            if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
+            if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+          },
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+            queryClient.invalidateQueries({ queryKey: queryKeys.home });
+          },
+        });
       },
       t("common.delete"),
       t("common.cancel")
     );
   }
 
-  return (
-    <Screen
-      title={t("tasks.title")}
-      subtitle={t("tasks.subtitleAlt")}
-      refreshing={tasksQ.loading}
-      onRefresh={tasksQ.refresh}
-      headerRight={
-        <Btn small label={`+ ${t("tasks.addTask")}`} onPress={() => setForm(emptyForm(defaultProjectId))} />
-      }
-    >
-      <TasksFilterBar
-        value={filter}
-        onChange={setFilter}
-        projects={projects}
-        listOptions={listOptionsRef.current}
+  const renderItem = useCallback(
+    ({ item }: { item: Task }) => (
+      <TaskCard
+        task={item}
+        busy={isPending(item.id)}
+        onToggleDone={toggleDone}
+        onAdvanceStatus={advance}
+        onPress={openEdit}
       />
+    ),
+    [isPending, toggleDone, advance, openEdit]
+  );
 
-      {tasksQ.error ? <ErrorNote message={tasksQ.error} onRetry={tasksQ.refresh} /> : null}
-      {tasksQ.loading && !tasksQ.data ? <Loading /> : null}
-      {tasksQ.data && tasks.length === 0 ? <EmptyState text={t("tasks.empty")} /> : null}
+  const keyExtractor = useCallback((item: Task) => item.id, []);
 
-      {tasks.map((task) => (
-        <TaskCard
-          key={task.id}
-          task={task}
-          busy={busy}
-          onToggleDone={toggleDone}
-          onAdvanceStatus={advance}
-          onPress={openEdit}
+  const listHeader = useMemo(
+    () => (
+      <View>
+        <TasksFilterBar
+          value={filter}
+          onChange={setFilter}
+          projects={projects}
+          listOptions={listOptionsRef.current}
         />
-      ))}
+        {tasksQ.error ? <ErrorNote message={tasksQ.error} onRetry={tasksQ.refresh} /> : null}
+        {tasksQ.loading && !tasksQ.data ? <Loading /> : null}
+      </View>
+    ),
+    [filter, projects, tasksQ.error, tasksQ.loading, tasksQ.data, tasksQ.refresh]
+  );
+
+  return (
+    <>
+      <ScreenList
+        title={t("tasks.title")}
+        subtitle={t("tasks.subtitleAlt")}
+        refreshing={tasksQ.loading}
+        onRefresh={tasksQ.refresh}
+        headerRight={
+          <Btn small label={`+ ${t("tasks.addTask")}`} onPress={() => setForm(emptyForm(defaultProjectId))} />
+        }
+        headerExtra={listHeader}
+        data={tasks}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListEmptyComponent={tasksQ.data && tasks.length === 0 ? <EmptyState text={t("tasks.empty")} /> : null}
+      />
 
       <FormModal
         visible={form !== null}
@@ -362,6 +496,6 @@ export default function TasksScreen() {
           </View>
         ) : null}
       </FormModal>
-    </Screen>
+    </>
   );
 }

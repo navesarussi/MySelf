@@ -9,7 +9,8 @@ export type BottomTabId =
   | "habits"
   | "relationships"
   | "goals"
-  | "library";
+  | "library"
+  | "finance";
 
 export const ALL_BOTTOM_TAB_IDS: BottomTabId[] = [
   "index",
@@ -19,6 +20,7 @@ export const ALL_BOTTOM_TAB_IDS: BottomTabId[] = [
   "relationships",
   "goals",
   "library",
+  "finance",
 ];
 
 export const DEFAULT_BOTTOM_TABS: BottomTabId[] = ["index", "tasks", "habits", "relationships"];
@@ -118,6 +120,7 @@ export const TAB_LABEL_KEY: Record<BottomTabId, string> = {
   relationships: "nav.relationships",
   goals: "nav.goals",
   library: "nav.library",
+  finance: "nav.finance",
 };
 
 export const TAB_HREF: Record<BottomTabId, `/${string}`> = {
@@ -128,6 +131,7 @@ export const TAB_HREF: Record<BottomTabId, `/${string}`> = {
   relationships: "/relationships",
   goals: "/goals",
   library: "/library",
+  finance: "/finance",
 };
 
 export const TAB_ICON: Record<
@@ -139,6 +143,7 @@ export const TAB_ICON: Record<
   | "people-outline"
   | "flag-outline"
   | "book-outline"
+  | "wallet-outline"
 > = {
   index: "home-outline",
   tasks: "checkbox-outline",
@@ -147,4 +152,5 @@ export const TAB_ICON: Record<
   relationships: "people-outline",
   goals: "flag-outline",
   library: "book-outline",
+  finance: "wallet-outline",
 };

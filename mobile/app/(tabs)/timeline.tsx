@@ -2,10 +2,17 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
-import { useApi, useMutate } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
+import {
+  useApiQuery,
+  useApiMutation,
+  queryKeys,
+  queryClient,
+  patchItemInList,
+  removeItemFromList,
+} from "../../src/query";
 import {
   Badge,
   Btn,
@@ -56,11 +63,11 @@ export default function TimelineScreen() {
   const { textStart, textLtr, writingDirection } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
-  const { run, busy } = useMutate();
+  const { run, busy, isPending } = useApiMutation();
 
-  const eventsQ = useApi(api.timelineEvents);
-  const periodsQ = useApi(api.periods);
-  const syncQ = useApi(api.syncStatus);
+  const eventsQ = useApiQuery(queryKeys.timelineEvents, api.timelineEvents);
+  const periodsQ = useApiQuery(queryKeys.periods, api.periods);
+  const syncQ = useApiQuery(queryKeys.syncStatus, api.syncStatus);
   const [eventForm, setEventForm] = useState<EventForm | null>(null);
   const [periodForm, setPeriodForm] = useState<PeriodForm | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -113,10 +120,32 @@ export default function TimelineScreen() {
       description: eventForm.description || null,
       category: eventForm.category || null,
     };
-    if (eventForm.id) await run((config) => api.updateEvent(config, eventForm.id!, body), { success: "flash.eventUpdated", error: "flash.eventUpdateError" });
-    else await run((config) => api.createEvent(config, body), { success: "flash.eventAdded", error: "flash.eventAddError" });
+    const targetId = eventForm.id;
     setEventForm(null);
-    eventsQ.refresh();
+
+    if (targetId) {
+      await run((config) => api.updateEvent(config, targetId, body), {
+        itemId: targetId,
+        flash: { success: "flash.eventUpdated", error: "flash.eventUpdateError" },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<TimelineEvent[]>(queryKeys.timelineEvents, (old) =>
+              patchItemInList(old, targetId, updated)
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    } else {
+      await run((config) => api.createEvent(config, body), {
+        flash: { success: "flash.eventAdded", error: "flash.eventAddError" },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    }
   }
 
   function removeEvent(ev: TimelineEvent) {
@@ -127,12 +156,26 @@ export default function TimelineScreen() {
         title: displayTitle(ev),
       }),
       async () => {
-        await run((config) => api.deleteEvent(config, ev.id), {
-          success: google ? "flash.eventHidden" : "flash.eventDeleted",
-          error: google ? "flash.eventHideError" : "flash.eventDeleteError",
-        });
+        const prevEvents = queryClient.getQueryData<TimelineEvent[]>(queryKeys.timelineEvents);
+        queryClient.setQueryData<TimelineEvent[]>(queryKeys.timelineEvents, (old) =>
+          removeItemFromList(old, ev.id)
+        );
         setEventForm(null);
-        eventsQ.refresh();
+
+        await run((config) => api.deleteEvent(config, ev.id), {
+          itemId: ev.id,
+          flash: {
+            success: google ? "flash.eventHidden" : "flash.eventDeleted",
+            error: google ? "flash.eventHideError" : "flash.eventDeleteError",
+          },
+          onError: () => {
+            if (prevEvents) queryClient.setQueryData(queryKeys.timelineEvents, prevEvents);
+          },
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
+            queryClient.invalidateQueries({ queryKey: queryKeys.home });
+          },
+        });
       },
       google ? t("timeline.hideEvent") : t("common.delete"),
       t("common.cancel")
@@ -148,22 +191,55 @@ export default function TimelineScreen() {
       color: periodForm.color,
       kind: periodForm.kind,
     };
-    if (periodForm.id) await run((config) => api.updatePeriod(config, periodForm.id!, body), { success: "flash.periodUpdated", error: "flash.periodUpdateError" });
-    else await run((config) => api.createPeriod(config, body), { success: "flash.periodAdded", error: "flash.periodAddError" });
+    const targetId = periodForm.id;
     setPeriodForm(null);
-    periodsQ.refresh();
+
+    if (targetId) {
+      await run((config) => api.updatePeriod(config, targetId, body), {
+        itemId: targetId,
+        flash: { success: "flash.periodUpdated", error: "flash.periodUpdateError" },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<LifePeriod[]>(queryKeys.periods, (old) =>
+              patchItemInList(old, targetId, updated)
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.periods });
+        },
+      });
+    } else {
+      await run((config) => api.createPeriod(config, body), {
+        flash: { success: "flash.periodAdded", error: "flash.periodAddError" },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.periods });
+        },
+      });
+    }
   }
 
   function removePeriod(p: LifePeriod) {
     confirmDelete(
       t("timeline.deleteConfirmPeriod", { title: p.title }),
       async () => {
-        await run((config) => api.deletePeriod(config, p.id), {
-          success: "flash.periodDeleted",
-          error: "flash.periodDeleteError",
-        });
+        const prevPeriods = queryClient.getQueryData<LifePeriod[]>(queryKeys.periods);
+        queryClient.setQueryData<LifePeriod[]>(queryKeys.periods, (old) =>
+          removeItemFromList(old, p.id)
+        );
         setPeriodForm(null);
-        periodsQ.refresh();
+
+        await run((config) => api.deletePeriod(config, p.id), {
+          itemId: p.id,
+          flash: {
+            success: "flash.periodDeleted",
+            error: "flash.periodDeleteError",
+          },
+          onError: () => {
+            if (prevPeriods) queryClient.setQueryData(queryKeys.periods, prevPeriods);
+          },
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.periods });
+          },
+        });
       },
       t("common.delete"),
       t("common.cancel")

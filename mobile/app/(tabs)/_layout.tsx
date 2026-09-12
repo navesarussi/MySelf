@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Redirect, Tabs } from "expo-router";
+import { enableFreeze } from "react-native-screens";
 import { useSession } from "../../src/session";
 import { useI18n } from "../../src/i18n";
 import { Loading } from "../../src/components/ui";
@@ -10,12 +11,26 @@ import { MoreMenuModal } from "../../src/components/more-menu";
 import { CenteredTabBar } from "../../src/components/centered-tab-bar";
 import { TAB_LABEL_KEY, type BottomTabId, useNavPrefs } from "../../src/nav-prefs";
 
+enableFreeze(true);
+
 export default function TabsLayout() {
   const { ready, token } = useSession();
   const { t } = useI18n();
   const { ready: prefsReady, isBottomTab } = useNavPrefs();
   const [addOpen, setAddOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const renderTabBar = useCallback(
+    (props: Parameters<NonNullable<React.ComponentProps<typeof Tabs>["tabBar"]>>[0]) => (
+      <CenteredTabBar {...props} onAddPress={() => setAddOpen((v) => !v)} />
+    ),
+    []
+  );
+
+  const renderHeader = useCallback(
+    () => <AppTopBar onMenuPress={() => setMoreOpen(true)} />,
+    []
+  );
 
   if (!ready || !prefsReady) return <Loading />;
   if (!token) return <Redirect href="/login" />;
@@ -31,13 +46,12 @@ export default function TabsLayout() {
   return (
     <>
       <Tabs
-        tabBar={(props) => (
-          <CenteredTabBar {...props} onAddPress={() => setAddOpen((v) => !v)} />
-        )}
+        tabBar={renderTabBar}
         screenOptions={{
           headerShown: true,
-          header: () => <AppTopBar onMenuPress={() => setMoreOpen(true)} />,
+          header: renderHeader,
           headerShadowVisible: false,
+          freezeOnBlur: true,
         }}
       >
         <Tabs.Screen name="tasks" options={tabOptions("tasks")} />
@@ -53,6 +67,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="relationships" options={tabOptions("relationships")} />
         <Tabs.Screen name="goals" options={tabOptions("goals")} />
         <Tabs.Screen name="library" options={tabOptions("library")} />
+        <Tabs.Screen name="finance" options={tabOptions("finance")} />
         <Tabs.Screen name="index" options={tabOptions("index")} />
         <Tabs.Screen
           name="settings"

@@ -6,6 +6,7 @@ export type NotificationType =
   | "habits"
   | "tasks"
   | "timeline"
+  | "finance"
   | "test";
 
 export type NotificationPreferences = {
@@ -15,6 +16,7 @@ export type NotificationPreferences = {
   habits: boolean;
   tasks: boolean;
   timeline: boolean;
+  finance: boolean;
   quiet_start_hour: number;
   quiet_end_hour: number;
   updated_at: string;

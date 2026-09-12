@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "./session";
 import { ApiError } from "./api/client";
 import type { ApiConfig } from "./api/client";
-import { useI18n } from "./i18n";
-import { useToast } from "./toast";
+import { useApiMutation } from "./query/use-api-mutation";
 
 export type MutateFlash = {
   success?: string;
@@ -52,39 +51,10 @@ export function useApi<T>(
   return { data, loading, error, refresh: load };
 }
 
-/** Config + runner for one-off mutations from event handlers. */
+/** Config + runner for one-off mutations from event handlers. Delegated to useApiMutation. */
 export function useMutate() {
-  const { token, serverUrl, signOut } = useSession();
-  const { t } = useI18n();
-  const { show: showToast } = useToast();
-  const [busy, setBusy] = useState(false);
-
-  const run = useCallback(
-    async <T>(fn: (config: ApiConfig) => Promise<T>, flash?: MutateFlash): Promise<T | null> => {
-      if (!token || !serverUrl) return null;
-      setBusy(true);
-      try {
-        const result = await fn({ token, serverUrl });
-        if (flash?.success) showToast(t(flash.success, flash.successParams), "success");
-        return result;
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
-          await signOut();
-        } else {
-          const apiMsg = err instanceof ApiError ? err.message : "";
-          if (flash?.error) showToast(t(flash.error), "error");
-          else if (apiMsg && apiMsg !== "db_error") showToast(apiMsg, "error");
-          else showToast(t("common.error"), "error");
-        }
-        return null;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [token, serverUrl, signOut, showToast, t]
-  );
-
-  return { run, busy };
+  const { run, busy, isPending } = useApiMutation();
+  return { run, busy, isPending };
 }
 
 export const todayLocalISO = () => {

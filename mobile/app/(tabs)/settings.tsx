@@ -4,7 +4,6 @@ import { Redirect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
 import { api } from "../../src/api/resources";
-import { useApi, useMutate } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
@@ -20,6 +19,7 @@ import { MondaySettingsSection } from "../../src/components/monday-settings";
 import { GithubSettingsSection } from "../../src/components/github-settings";
 import { PushSettingsSection } from "../../src/components/push-settings";
 import { unregisterPushToken } from "../../src/push/register";
+import { useApiQuery, useApiMutation, queryKeys } from "../../src/query";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -30,11 +30,11 @@ export default function SettingsScreen() {
   const router = useRouter();
   const version = getAppVersion();
   const { ready, signOut, token, serverUrl } = useSession();
-  const { run, busy } = useMutate();
+  const { run, busy } = useApiMutation();
   const { bottomTabs, toggleBottomTab } = useNavPrefs();
-  const syncQ = useApi(api.syncStatus);
-  const googleTasksQ = useApi(api.googleTasksStatus);
-  const gmailQ = useApi(api.gmailStatus);
+  const syncQ = useApiQuery(queryKeys.syncStatus, api.syncStatus);
+  const googleTasksQ = useApiQuery(queryKeys.googleTasksStatus, api.googleTasksStatus);
+  const gmailQ = useApiQuery(queryKeys.gmailStatus, api.gmailStatus);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [tasksSyncMessage, setTasksSyncMessage] = useState<string | null>(null);
   const [availableLists, setAvailableLists] = useState<{ id: string; title: string }[]>([]);

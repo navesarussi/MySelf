@@ -2,11 +2,20 @@ import React, { useMemo, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { differenceInCalendarDays } from "date-fns";
-import { api } from "../../src/api/resources";
-import { useApi, useMutate, todayLocalISO } from "../../src/hooks";
+import { api, type HomePayload } from "../../src/api/resources";
+import { todayLocalISO } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
+import {
+  useApiQuery,
+  useApiMutation,
+  queryKeys,
+  queryClient,
+  patchTaskInHome,
+  patchHabitInHome,
+  patchRelationshipInHome,
+} from "../../src/query";
 import { Badge, Btn, Card, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
 import { HomeStatsGrid, type HomeStatItem } from "../../src/components/home-stats-grid";
 import { NEXT_STATUS, TaskCard } from "../../src/components/task-card";
@@ -33,8 +42,8 @@ export default function HomeScreen() {
   const { t, locale } = useI18n();
   const { textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
-  const { data, loading, error, refresh } = useApi(api.home);
-  const { run } = useMutate();
+  const { data, loading, error, refresh } = useApiQuery(queryKeys.home, api.home);
+  const { run, isPending } = useApiMutation();
   const [goalForm, setGoalForm] = useState<Goal | null>(null);
   const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags" | "body"> | null>(null);
 
@@ -163,18 +172,46 @@ export default function HomeScreen() {
   ]);
 
   async function toggleTaskDone(task: Task) {
-    await run(
-      (config) => api.updateTask(config, task.id, { status: task.status === "done" ? "open" : "done" }),
-      { success: "flash.taskUpdated" }
+    const next = task.status === "done" ? "open" : "done";
+    const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+      patchTaskInHome(old, task.id, { status: next })
     );
-    refresh();
+
+    await run(
+      (config) => api.updateTask(config, task.id, { status: next }),
+      {
+        itemId: task.id,
+        flash: { success: "flash.taskUpdated" },
+        onError: () => {
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+        },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      }
+    );
   }
 
   async function advanceTaskStatus(task: Task) {
-    await run((config) => api.updateTask(config, task.id, { status: NEXT_STATUS[task.status] }), {
-      success: "flash.taskUpdated",
+    const next = NEXT_STATUS[task.status];
+    const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+      patchTaskInHome(old, task.id, { status: next })
+    );
+
+    await run((config) => api.updateTask(config, task.id, { status: next }), {
+      itemId: task.id,
+      flash: { success: "flash.taskUpdated" },
+      onError: () => {
+        if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+        queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      },
     });
-    refresh();
   }
 
   return (
@@ -220,39 +257,48 @@ export default function HomeScreen() {
               <HabitCard
                 key={h.id}
                 habit={h}
+                busy={isPending(h.id)}
+                onPress={() => router.push("/habits")}
                 onCheckIn={async () => {
-                  await run((config) => api.reportHabit(config, h.id, "check_in"), { success: "flash.checkInRecorded" });
-                  refresh();
+                  const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+                  const todayStr = habitReportDay(h.report_time);
+                  queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+                    patchHabitInHome(old, h.id, {
+                      last_checked_on: todayStr,
+                      streak_count: (h.streak_count ?? 0) + 1,
+                    })
+                  );
+                  await run((config) => api.reportHabit(config, h.id, "check_in"), {
+                    itemId: h.id,
+                    flash: { success: "flash.checkInRecorded" },
+                    onError: () => {
+                      if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+                    },
+                    onSuccess: () => {
+                      queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+                      queryClient.invalidateQueries({ queryKey: queryKeys.home });
+                    },
+                  });
                 }}
                 onReportFall={async () => {
-                  await run((config) => api.reportHabit(config, h.id, "fall"), { success: "flash.fallRecorded" });
-                  refresh();
+                  await run((config) => api.reportHabit(config, h.id, "fall"), {
+                    itemId: h.id,
+                    flash: { success: "flash.fallRecorded" },
+                    onSuccess: () => {
+                      queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+                      queryClient.invalidateQueries({ queryKey: queryKeys.home });
+                    },
+                  });
                 }}
                 onReset={async () => {
-                  await run((config) => api.reportHabit(config, h.id, "reset"), { success: "flash.streakReset" });
-                  refresh();
-                }}
-                onSave={async (fields) => {
-                  await run(
-                    (config) =>
-                      api.updateHabit(config, h.id, {
-                        name: fields.name,
-                        kind: fields.kind,
-                        target_note: fields.target_note || null,
-                        report_time: fields.report_time || null,
-                        streak_count: Number(fields.streak_count) || 0,
-                        best_streak: Number(fields.best_streak) || 0,
-                        total_success_days: Number(fields.total_success_days) || 0,
-                        failure_count: Number(fields.failure_count) || 0,
-                        last_checked_on: fields.last_checked_on || null,
-                      }),
-                    { success: "flash.habitUpdated" }
-                  );
-                  refresh();
-                }}
-                onDelete={async () => {
-                  await run((config) => api.deleteHabit(config, h.id), { success: "flash.habitDeleted" });
-                  refresh();
+                  await run((config) => api.reportHabit(config, h.id, "reset"), {
+                    itemId: h.id,
+                    flash: { success: "flash.streakReset" },
+                    onSuccess: () => {
+                      queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+                      queryClient.invalidateQueries({ queryKey: queryKeys.home });
+                    },
+                  });
                 }}
               />
             ))
@@ -302,11 +348,28 @@ export default function HomeScreen() {
                   <Btn
                     small
                     label={t("common.done")}
+                    disabled={isPending(cm.id)}
                     onPress={async () => {
+                      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+                      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+                        old
+                          ? {
+                              ...old,
+                              pendingCommitments: old.pendingCommitments.filter((c) => c.id !== cm.id),
+                            }
+                          : undefined
+                      );
                       await run((config) => api.setCommitmentStatus(config, cm.id, "done"), {
-                        success: "flash.commitmentUpdated",
+                        itemId: cm.id,
+                        flash: { success: "flash.commitmentUpdated" },
+                        onError: () => {
+                          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+                        },
+                        onSuccess: () => {
+                          queryClient.invalidateQueries({ queryKey: queryKeys.commitments });
+                          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+                        },
                       });
-                      refresh();
                     }}
                   />
                 </Row>
@@ -324,6 +387,7 @@ export default function HomeScreen() {
               <TaskCard
                 key={task.id}
                 task={task}
+                busy={isPending(task.id)}
                 onToggleDone={toggleTaskDone}
                 onAdvanceStatus={advanceTaskStatus}
               />
@@ -367,13 +431,28 @@ export default function HomeScreen() {
                       <Btn
                         small
                         label={t("relationships.contactedToday")}
+                        disabled={isPending(r.id)}
                         onPress={async () => {
+                          const todayISOStr = todayLocalISO();
+                          const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+                          queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+                            patchRelationshipInHome(old, r.id, { last_contact_date: todayISOStr })
+                          );
                           await run(
                             (config) =>
-                              api.updateRelationship(config, r.id, { last_contact_date: todayLocalISO() }),
-                            { success: "flash.contactUpdated" }
+                              api.updateRelationship(config, r.id, { last_contact_date: todayISOStr }),
+                            {
+                              itemId: r.id,
+                              flash: { success: "flash.contactUpdated" },
+                              onError: () => {
+                                if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+                              },
+                              onSuccess: () => {
+                                queryClient.invalidateQueries({ queryKey: queryKeys.relationships });
+                                queryClient.invalidateQueries({ queryKey: queryKeys.home });
+                              },
+                            }
                           );
-                          refresh();
                         }}
                       />
                     </View>

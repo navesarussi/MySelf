@@ -5,7 +5,7 @@ import * as Notifications from "expo-notifications";
 import { useSession } from "../session";
 import { registerPushToken } from "./register";
 
-const ALLOWED_SCREENS = new Set([
+const ALLOWED_PATHS = new Set([
   "/",
   "/habits",
   "/relationships",
@@ -14,13 +14,16 @@ const ALLOWED_SCREENS = new Set([
   "/settings",
   "/goals",
   "/library",
+  "/finance",
+  "/finance-categorize",
 ]);
 
 function screenFromData(data: Record<string, unknown> | undefined): string | null {
   const raw = data?.screen;
   if (typeof raw !== "string") return null;
   const screen = raw.startsWith("/") ? raw : `/${raw}`;
-  return ALLOWED_SCREENS.has(screen) ? screen : null;
+  const path = screen.split("?")[0];
+  return ALLOWED_PATHS.has(path) ? screen : null;
 }
 
 /** Registers push token after login and navigates on notification tap. */

@@ -20,6 +20,8 @@ import { ThemeProvider, useColors } from "../src/theme";
 import { ToastProvider } from "../src/toast";
 import { ErrorBoundary } from "../src/components/error-boundary";
 import { usePushNotifications } from "../src/push/use-push";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "../src/query/client";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,6 +44,10 @@ function AppStack() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="timeline-full" options={{ headerShown: false, animation: "fade" }} />
+        <Stack.Screen
+          name="finance-categorize"
+          options={{ title: "Finance", presentation: "modal" }}
+        />
       </Stack>
     </>
   );
@@ -70,19 +76,21 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <I18nProvider>
-            <NavPrefsProvider>
-              <SessionProvider>
-                <ToastProvider>
-                  <ErrorBoundary>
-                    <AppStack />
-                  </ErrorBoundary>
-                </ToastProvider>
-              </SessionProvider>
-            </NavPrefsProvider>
-          </I18nProvider>
-        </ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <I18nProvider>
+              <NavPrefsProvider>
+                <SessionProvider>
+                  <ToastProvider>
+                    <ErrorBoundary>
+                      <AppStack />
+                    </ErrorBoundary>
+                  </ToastProvider>
+                </SessionProvider>
+              </NavPrefsProvider>
+            </I18nProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { Animated, Text, View } from "react-native";
 import { useColors, tokens } from "./theme";
 import { useLayoutDir } from "./layout-dir";
@@ -35,8 +35,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [opacity]
   );
 
+  const value = useMemo(() => ({ show }), [show]);
+
   return (
-    <ToastContext.Provider value={{ show }}>
+    <ToastContext.Provider value={value}>
       {children}
       {message ? (
         <Animated.View

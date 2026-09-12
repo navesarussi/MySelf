@@ -1,13 +1,22 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Linking as RNLinking, Platform, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Contacts from "expo-contacts";
 import { differenceInCalendarDays } from "date-fns";
-import { api } from "../../src/api/resources";
-import { useApi, useMutate, todayLocalISO } from "../../src/hooks";
+import { api, type HomePayload } from "../../src/api/resources";
+import { todayLocalISO } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
+import {
+  useApiQuery,
+  useApiMutation,
+  queryKeys,
+  queryClient,
+  patchItemInList,
+  removeItemFromList,
+  patchRelationshipInHome,
+} from "../../src/query";
 import {
   Badge,
   Btn,
@@ -20,9 +29,11 @@ import {
   Loading,
   Row,
   Screen,
+  ScreenList,
   confirmDelete,
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
+import { RelationshipCard } from "../../src/components/relationship-card";
 import { whatsappUrl } from "@/lib/integrations/phone";
 import { mapDeviceContact } from "@/lib/device-contact-map";
 import type { Relationship } from "@/lib/types";
@@ -82,12 +93,12 @@ export default function RelationshipsScreen() {
   const { textStart, textLtr, writingDirection } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
-  const { run, busy } = useMutate();
+  const { run, isPending, busy } = useApiMutation();
   const [groupFilter, setGroupFilter] = useState<string>(ALL_FILTER);
   const [form, setForm] = useState<FormState | null>(null);
 
-  const relQ = useApi(api.relationships);
-  const projectsQ = useApi(api.projects);
+  const relQ = useApiQuery(queryKeys.relationships, api.relationships);
+  const projectsQ = useApiQuery(queryKeys.projects, api.projects);
   const projects = projectsQ.data ?? [];
   const defaultProjectId = useMemo(
     () => projects.find((p) => p.name === "כללי")?.id ?? projects[0]?.id ?? "",
@@ -152,12 +163,41 @@ export default function RelationshipsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relationships, groupFilter]);
 
-  async function contactedToday(r: Relationship) {
-    await run((config) => api.updateRelationship(config, r.id, { last_contact_date: todayLocalISO() }), {
-      success: "flash.contactUpdated",
-    });
-    relQ.refresh();
-  }
+  const contactedToday = useCallback(
+    async (r: Relationship) => {
+      const todayISOStr = todayLocalISO();
+      const prevRel = queryClient.getQueryData<Relationship[]>(queryKeys.relationships);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+
+      queryClient.setQueryData<Relationship[]>(queryKeys.relationships, (old) =>
+        patchItemInList(old, r.id, { last_contact_date: todayISOStr })
+      );
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+        patchRelationshipInHome(old, r.id, { last_contact_date: todayISOStr })
+      );
+
+      await run(
+        (config) => api.updateRelationship(config, r.id, { last_contact_date: todayISOStr }),
+        {
+          itemId: r.id,
+          flash: { success: "flash.contactUpdated" },
+          onError: () => {
+            if (prevRel) queryClient.setQueryData(queryKeys.relationships, prevRel);
+            if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+          },
+          onSuccess: (updated) => {
+            if (updated) {
+              queryClient.setQueryData<Relationship[]>(queryKeys.relationships, (old) =>
+                patchItemInList(old, r.id, updated)
+              );
+            }
+            queryClient.invalidateQueries({ queryKey: queryKeys.home });
+          },
+        }
+      );
+    },
+    [run]
+  );
 
   async function submit() {
     if (!form || !form.name.trim() || !form.project_id) return;
@@ -170,119 +210,134 @@ export default function RelationshipsScreen() {
       notes: form.notes || null,
       project_id: form.project_id,
     };
-    const result = form.id
-      ? await run((config) => api.updateRelationship(config, form.id!, body), {
+    const targetId = form.id;
+    setForm(null);
+
+    if (targetId) {
+      await run((config) => api.updateRelationship(config, targetId, body), {
+        itemId: targetId,
+        flash: {
           success: "flash.relationshipUpdated",
           error: "flash.relationshipUpdateError",
-        })
-      : await run((config) => api.createRelationship(config, body), {
+        },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<Relationship[]>(queryKeys.relationships, (old) =>
+              patchItemInList(old, targetId, updated)
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    } else {
+      await run((config) => api.createRelationship(config, body), {
+        flash: {
           success: "flash.relationshipAdded",
           error: "flash.relationshipAddError",
-        });
-    if (!result) return;
-    setForm(null);
-    relQ.refresh();
+        },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.relationships });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    }
   }
 
   function removeRelationship(r: Relationship) {
     confirmDelete(
       `${t("common.delete")}: ${r.name}?`,
       async () => {
-        await run((config) => api.deleteRelationship(config, r.id), { success: "flash.relationshipDeleted" });
+        const prevRel = queryClient.getQueryData<Relationship[]>(queryKeys.relationships);
+        queryClient.setQueryData<Relationship[]>(queryKeys.relationships, (old) =>
+          removeItemFromList(old, r.id)
+        );
         setForm(null);
-        relQ.refresh();
+
+        await run((config) => api.deleteRelationship(config, r.id), {
+          itemId: r.id,
+          flash: { success: "flash.relationshipDeleted" },
+          onError: () => {
+            if (prevRel) queryClient.setQueryData(queryKeys.relationships, prevRel);
+          },
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.relationships });
+            queryClient.invalidateQueries({ queryKey: queryKeys.home });
+          },
+        });
       },
       t("common.delete"),
       t("common.cancel")
     );
   }
 
+  const handleCardPress = useCallback((r: Relationship) => {
+    setForm({
+      id: r.id,
+      name: r.name,
+      group_name: r.group_name ?? "",
+      reminder_days: r.reminder_days != null ? String(r.reminder_days) : DEFAULT_CADENCE_DAYS,
+      phone: r.phone ?? "",
+      email: r.email ?? "",
+      notes: r.notes ?? "",
+      project_id: r.project_id,
+      importedFromDevice: false,
+    });
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: Relationship }) => (
+      <RelationshipCard
+        relationship={item}
+        today={today}
+        busy={isPending(item.id)}
+        onPress={handleCardPress}
+        onContactedToday={contactedToday}
+      />
+    ),
+    [today, isPending, handleCardPress, contactedToday]
+  );
+
+  const keyExtractor = useCallback((item: Relationship) => item.id, []);
+
+  const headerExtra = useMemo(
+    () => (
+      <View>
+        {groups.length > 0 ? (
+          <Row wrap style={{ marginBottom: 12 }}>
+            <Chip label={t("common.all")} active={groupFilter === ALL_FILTER} onPress={() => setGroupFilter(ALL_FILTER)} />
+            {groups.map((g) => (
+              <Chip key={g} label={g} active={groupFilter === g} onPress={() => setGroupFilter(g)} />
+            ))}
+          </Row>
+        ) : null}
+        {relQ.error ? <ErrorNote message={relQ.error} onRetry={relQ.refresh} /> : null}
+        {relQ.loading && !relQ.data ? <Loading /> : null}
+      </View>
+    ),
+    [groups, groupFilter, t, relQ.error, relQ.loading, relQ.data, relQ.refresh]
+  );
+
   return (
-    <Screen
-      title={t("relationships.title")}
-      subtitle={t("relationships.subtitle")}
-      refreshing={relQ.loading}
-      onRefresh={relQ.refresh}
-      headerRight={
-        <Btn
-          small
-          label={`+ ${t("relationships.addContact")}`}
-          onPress={() => void startCreate()}
-          disabled={!defaultProjectId}
-        />
-      }
-    >
-      {groups.length > 0 ? (
-        <Row wrap style={{ marginBottom: 12 }}>
-          <Chip label={t("common.all")} active={groupFilter === ALL_FILTER} onPress={() => setGroupFilter(ALL_FILTER)} />
-          {groups.map((g) => (
-            <Chip key={g} label={g} active={groupFilter === g} onPress={() => setGroupFilter(g)} />
-          ))}
-        </Row>
-      ) : null}
-
-      {relQ.error ? <ErrorNote message={relQ.error} onRetry={relQ.refresh} /> : null}
-      {relQ.loading && !relQ.data ? <Loading /> : null}
-      {relQ.data && filtered.length === 0 ? <EmptyState text={t("relationships.empty")} /> : null}
-
-      {filtered.map((r) => {
-        const days = daysSince(r, today);
-        const overdue = isOverdue(r, today);
-        const wa = r.phone ? whatsappUrl(r.phone) : null;
-        return (
-          <Card key={r.id} style={overdue ? { borderColor: c.warn } : undefined}>
-            <Row>
-              <Pressable
-                style={{ flex: 1 }}
-                onPress={() =>
-                  setForm({
-                    id: r.id,
-                    name: r.name,
-                    group_name: r.group_name ?? "",
-                    reminder_days: r.reminder_days != null ? String(r.reminder_days) : DEFAULT_CADENCE_DAYS,
-                    phone: r.phone ?? "",
-                    email: r.email ?? "",
-                    notes: r.notes ?? "",
-                    project_id: r.project_id,
-                    importedFromDevice: false,
-                  })
-                }
-              >
-                <Row style={{ justifyContent: "flex-start" }} wrap>
-                  <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>{r.name}</Text>
-                  {r.group_name ? <Badge label={r.group_name} /> : null}
-                </Row>
-                <Text
-                  style={{
-                    color: overdue ? c.warn : c.muted,
-                    fontSize: tokens.textXs,
-                    textAlign: textStart, writingDirection,
-                    marginTop: 2,
-                  }}
-                >
-                  {days === null ? t("relationships.noContactLogged") : t("relationships.lastContactDays", { days })}
-                </Text>
-                {r.email ? (
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
-                    {r.email}
-                  </Text>
-                ) : null}
-                {r.notes ? (
-                  <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 4 }}>
-                    {r.notes}
-                  </Text>
-                ) : null}
-              </Pressable>
-            </Row>
-            <Row style={{ marginTop: 10 }}>
-              <Btn small label={t("relationships.contactedToday")} onPress={() => contactedToday(r)} disabled={busy} />
-              {wa ? (
-                <Btn small variant="ghost" label={t("common.whatsapp")} onPress={() => RNLinking.openURL(wa)} />
-              ) : null}
-            </Row>
-          </Card>
-        );
-      })}
+    <>
+      <ScreenList
+        title={t("relationships.title")}
+        subtitle={t("relationships.subtitle")}
+        refreshing={relQ.loading}
+        onRefresh={relQ.refresh}
+        headerRight={
+          <Btn
+            small
+            label={`+ ${t("relationships.addContact")}`}
+            onPress={() => void startCreate()}
+            disabled={!defaultProjectId}
+          />
+        }
+        headerExtra={headerExtra}
+        data={filtered}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListEmptyComponent={relQ.data && filtered.length === 0 ? <EmptyState text={t("relationships.empty")} /> : null}
+      />
 
       <FormModal
         visible={form !== null}
@@ -363,6 +418,6 @@ export default function RelationshipsScreen() {
           </View>
         ) : null}
       </FormModal>
-    </Screen>
+    </>
   );
 }

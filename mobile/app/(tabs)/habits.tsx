@@ -1,10 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { api } from "../../src/api/resources";
-import { useApi, useMutate } from "../../src/hooks";
+import { api, type HomePayload } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
+import {
+  useApiQuery,
+  useApiMutation,
+  queryKeys,
+  queryClient,
+  patchItemInList,
+  removeItemFromList,
+  patchHabitInHome,
+} from "../../src/query";
+import type { Habit } from "@/lib/types";
 import {
   Btn,
   Chip,
@@ -14,10 +23,12 @@ import {
   Label,
   Loading,
   Row,
-  Screen,
+  ScreenList,
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
 import { HabitCard } from "../../src/components/habit-card";
+import { HabitDetailsModal } from "../../src/components/habit-details-modal";
+import { HabitEditModal, type HabitEditFields } from "../../src/components/habit-edit-modal";
 import { dedupeHabits, sortHabitsByOldestReport } from "@/lib/habit-stats";
 
 type AddFormState = {
@@ -39,9 +50,11 @@ export default function HabitsScreen() {
   const { textLtr } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
-  const { data, loading, error, refresh } = useApi(api.habits);
-  const { run, busy } = useMutate();
+  const { data, loading, error, refresh } = useApiQuery(queryKeys.habits, api.habits);
+  const { run, busy, isPending } = useApiMutation();
   const [addForm, setAddForm] = useState<AddFormState | null>(null);
+  const [viewingHabit, setViewingHabit] = useState<Habit | null>(null);
+  const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
 
   useEffect(() => {
     if (params.add === "habit" || params.add === "1") {
@@ -52,75 +65,202 @@ export default function HabitsScreen() {
 
   const habits = useMemo(() => sortHabitsByOldestReport(dedupeHabits(data ?? [])), [data]);
 
+  const handleCheckIn = useCallback(
+    async (h: Habit) => {
+      const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+
+      queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
+        patchItemInList(old, h.id, {
+          streak_count: (h.streak_count ?? 0) + 1,
+          last_checked_on: new Date().toISOString().slice(0, 10),
+        })
+      );
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+        patchHabitInHome(old, h.id, {
+          streak_count: (h.streak_count ?? 0) + 1,
+          last_checked_on: new Date().toISOString().slice(0, 10),
+        })
+      );
+
+      await run((config) => api.reportHabit(config, h.id, "check_in"), {
+        itemId: h.id,
+        flash: { success: "flash.checkInRecorded" },
+        onError: () => {
+          if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+        },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    },
+    [run]
+  );
+
+  const handleReportFall = useCallback(
+    async (h: Habit) => {
+      await run((config) => api.reportHabit(config, h.id, "fall"), {
+        itemId: h.id,
+        flash: { success: "flash.fallRecorded" },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    },
+    [run]
+  );
+
+  const handleReset = useCallback(
+    async (h: Habit) => {
+      await run((config) => api.reportHabit(config, h.id, "reset"), {
+        itemId: h.id,
+        flash: { success: "flash.streakReset" },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    },
+    [run]
+  );
+
+  const handleSave = useCallback(
+    async (fields: HabitEditFields) => {
+      if (!editingHabit) return;
+      const h = editingHabit;
+      const body = {
+        name: fields.name,
+        kind: fields.kind,
+        target_note: fields.target_note || null,
+        report_time: fields.report_time || null,
+        streak_count: Number(fields.streak_count) || 0,
+        best_streak: Number(fields.best_streak) || 0,
+        total_success_days: Number(fields.total_success_days) || 0,
+        failure_count: Number(fields.failure_count) || 0,
+        last_checked_on: fields.last_checked_on || null,
+      };
+      setEditingHabit(null);
+      await run((config) => api.updateHabit(config, h.id, body), {
+        itemId: h.id,
+        flash: { success: "flash.habitUpdated" },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
+              patchItemInList(old, h.id, updated)
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      });
+    },
+    [editingHabit, run]
+  );
+
+  const handleDelete = useCallback(async () => {
+    if (!editingHabit) return;
+    const h = editingHabit;
+    setEditingHabit(null);
+    setViewingHabit(null);
+    const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
+    queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => removeItemFromList(old, h.id));
+    await run((config) => api.deleteHabit(config, h.id), {
+      itemId: h.id,
+      flash: { success: "flash.habitDeleted" },
+      onError: () => {
+        if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+        queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      },
+    });
+  }, [editingHabit, run]);
+
   async function submitAdd() {
     if (!addForm || !addForm.name.trim()) return;
-    await run(
-      (config) =>
-        api.createHabit(config, {
-          name: addForm.name,
-          kind: addForm.kind,
-          target_note: addForm.target_note || null,
-          report_time: addForm.report_time || null,
-        }),
-      { success: "flash.habitAdded" }
-    );
+    const body = {
+      name: addForm.name,
+      kind: addForm.kind,
+      target_note: addForm.target_note || null,
+      report_time: addForm.report_time || null,
+    };
     setAddForm(null);
-    refresh();
+    await run((config) => api.createHabit(config, body), {
+      flash: { success: "flash.habitAdded" },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+        queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      },
+    });
   }
 
-  return (
-    <Screen
-      title={t("habits.title")}
-      subtitle={t("habits.subtitle")}
-      refreshing={loading}
-      onRefresh={refresh}
-      headerRight={<Btn small label={t("habits.addNew")} onPress={() => setAddForm(emptyForm)} />}
-    >
-      {error ? <ErrorNote message={error} onRetry={refresh} /> : null}
-      {loading && !data ? <Loading /> : null}
-      {data && habits.length === 0 ? <EmptyState text={t("home.noHabits")} /> : null}
+  const renderItem = useCallback(
+    ({ item }: { item: Habit }) => (
+      <HabitCard
+        habit={item}
+        busy={isPending(item.id)}
+        onPress={setViewingHabit}
+        onEdit={setEditingHabit}
+        onReset={handleReset}
+        onCheckIn={handleCheckIn}
+        onReportFall={handleReportFall}
+      />
+    ),
+    [isPending, handleReset, handleCheckIn, handleReportFall]
+  );
 
-      {habits.map((h) => (
-        <HabitCard
-          key={h.id}
-          habit={h}
-          busy={busy}
-          onCheckIn={async () => {
-            await run((config) => api.reportHabit(config, h.id, "check_in"), { success: "flash.checkInRecorded" });
-            refresh();
-          }}
-          onReportFall={async () => {
-            await run((config) => api.reportHabit(config, h.id, "fall"), { success: "flash.fallRecorded" });
-            refresh();
-          }}
-          onReset={async () => {
-            await run((config) => api.reportHabit(config, h.id, "reset"), { success: "flash.streakReset" });
-            refresh();
-          }}
-          onSave={async (fields) => {
-            await run(
-              (config) =>
-                api.updateHabit(config, h.id, {
-                  name: fields.name,
-                  kind: fields.kind,
-                  target_note: fields.target_note || null,
-                  report_time: fields.report_time || null,
-                  streak_count: Number(fields.streak_count) || 0,
-                  best_streak: Number(fields.best_streak) || 0,
-                  total_success_days: Number(fields.total_success_days) || 0,
-                  failure_count: Number(fields.failure_count) || 0,
-                  last_checked_on: fields.last_checked_on || null,
-                }),
-              { success: "flash.habitUpdated" }
-            );
-            refresh();
-          }}
-          onDelete={async () => {
-            await run((config) => api.deleteHabit(config, h.id), { success: "flash.habitDeleted" });
-            refresh();
-          }}
-        />
-      ))}
+  const keyExtractor = useCallback((item: Habit) => item.id, []);
+
+  const headerExtra = useMemo(
+    () => (
+      <View>
+        {error ? <ErrorNote message={error} onRetry={refresh} /> : null}
+        {loading && !data ? <Loading /> : null}
+      </View>
+    ),
+    [error, loading, data, refresh]
+  );
+
+  return (
+    <>
+      <ScreenList
+        title={t("habits.title")}
+        subtitle={t("habits.subtitle")}
+        refreshing={loading}
+        onRefresh={refresh}
+        headerRight={<Btn small label={t("habits.addNew")} onPress={() => setAddForm(emptyForm)} />}
+        headerExtra={headerExtra}
+        data={habits}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListEmptyComponent={data && habits.length === 0 ? <EmptyState text={t("home.noHabits")} /> : null}
+      />
+
+      <HabitDetailsModal
+        habit={viewingHabit}
+        visible={viewingHabit !== null}
+        onClose={() => setViewingHabit(null)}
+        onEdit={(h) => {
+          setViewingHabit(null);
+          setEditingHabit(h);
+        }}
+        onCheckIn={handleCheckIn}
+        onReportFall={handleReportFall}
+        busy={viewingHabit ? isPending(viewingHabit.id) : false}
+      />
+
+      <HabitEditModal
+        habit={editingHabit}
+        visible={editingHabit !== null}
+        onClose={() => setEditingHabit(null)}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        saving={editingHabit ? isPending(editingHabit.id) : false}
+      />
 
       <FormModal
         visible={addForm !== null}
@@ -133,10 +273,22 @@ export default function HabitsScreen() {
         {addForm ? (
           <View>
             <Label>{t("habits.name")}</Label>
-            <Input value={addForm.name} onChangeText={(v) => setAddForm({ ...addForm, name: v })} placeholder={t("habits.namePlaceholder")} />
+            <Input
+              value={addForm.name}
+              onChangeText={(v) => setAddForm({ ...addForm, name: v })}
+              placeholder={t("habits.namePlaceholder")}
+            />
             <Row style={{ marginBottom: 8 }}>
-              <Chip label={t("habits.buildNew")} active={addForm.kind === "build"} onPress={() => setAddForm({ ...addForm, kind: "build" })} />
-              <Chip label={t("habits.quitBad")} active={addForm.kind === "quit"} onPress={() => setAddForm({ ...addForm, kind: "quit" })} />
+              <Chip
+                label={t("habits.buildNew")}
+                active={addForm.kind === "build"}
+                onPress={() => setAddForm({ ...addForm, kind: "build" })}
+              />
+              <Chip
+                label={t("habits.quitBad")}
+                active={addForm.kind === "quit"}
+                onPress={() => setAddForm({ ...addForm, kind: "quit" })}
+              />
             </Row>
             <Input
               value={addForm.target_note}
@@ -154,6 +306,6 @@ export default function HabitsScreen() {
           </View>
         ) : null}
       </FormModal>
-    </Screen>
+    </>
   );
 }

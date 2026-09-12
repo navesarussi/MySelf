@@ -1,9 +1,11 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
-import { Badge, Btn, Card, Row } from "./ui";
+import { Badge, Card, Row } from "./ui";
+import { hapticImpact, hapticSelection } from "../haptics";
 import type { Task, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
 
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
@@ -58,7 +60,7 @@ function statusTone(s: TaskStatus): "good" | "accent" | "warn" | "default" {
   return "default";
 }
 
-export function TaskCard({
+export const TaskCard = React.memo(function TaskCard({
   task,
   onToggleDone,
   onAdvanceStatus,
@@ -120,21 +122,40 @@ export function TaskCard({
 
   return (
     <Card style={{ opacity: done ? 0.55 : 1 }}>
-      <Row style={{ alignItems: "flex-start", gap: 8 }}>
+      <Row style={{ alignItems: "flex-start", gap: 10 }}>
+        <Pressable
+          unstable_pressDelay={0}
+          disabled={busy}
+          onPress={() => {
+            hapticImpact();
+            onToggleDone(task);
+          }}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: done, disabled: !!busy }}
+          accessibilityLabel={done ? t("common.done") : t("common.open")}
+          hitSlop={8}
+          style={({ pressed }) => [{ paddingTop: 1, opacity: busy ? 0.5 : pressed ? 0.6 : 1 }]}
+        >
+          <Ionicons
+            name={done ? "checkbox" : "checkbox-outline"}
+            size={22}
+            color={done ? c.good : c.muted}
+          />
+        </Pressable>
         {onPress ? (
-          <Pressable style={{ flex: 1 }} onPress={() => onPress(task)}>
+          <Pressable
+            unstable_pressDelay={0}
+            style={({ pressed }) => [{ flex: 1, opacity: pressed ? 0.7 : 1 }]}
+            onPress={() => {
+              hapticSelection();
+              onPress(task);
+            }}
+          >
             {titleBlock}
           </Pressable>
         ) : (
           titleBlock
         )}
-        <Btn
-          small
-          label={t("common.done")}
-          variant={done ? "ghost" : "primary"}
-          disabled={busy}
-          onPress={() => onToggleDone(task)}
-        />
       </Row>
       <Row style={{ marginTop: 8, justifyContent: "flex-start" }} wrap>
         {task.project_name ? <Badge label={task.project_name} /> : null}
@@ -143,12 +164,20 @@ export function TaskCard({
         ) : null}
         <Badge label={taskPriorityLabel(t, task.priority)} tone={priorityTone(task.priority)} />
         {task.due_date ? <Badge label={`${t("common.due")}: ${task.due_date}`} /> : null}
-        <Pressable onPress={() => onAdvanceStatus?.(task)} disabled={busy || !onAdvanceStatus}>
+        <Pressable
+          unstable_pressDelay={0}
+          onPress={() => {
+            hapticImpact();
+            onAdvanceStatus?.(task);
+          }}
+          disabled={busy || !onAdvanceStatus}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
           <Badge label={taskStatusLabel(t, task.status)} tone={statusTone(task.status)} />
         </Pressable>
       </Row>
     </Card>
   );
-}
+});
 
 export { NEXT_STATUS };
