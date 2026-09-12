@@ -6,7 +6,14 @@ type ExistingRow = {
   hidden_at: string | null;
 };
 
-export function buildUpsertPayload(mapped: MappedGoogleEvent, existing: ExistingRow | null) {
+type UpsertPayload = MappedGoogleEvent & {
+  synced_at: string;
+  title_override?: string;
+  description_override?: string;
+  hidden_at?: string;
+};
+
+export function buildUpsertPayload(mapped: MappedGoogleEvent, existing: ExistingRow | null): UpsertPayload {
   const base = {
     ...mapped,
     synced_at: new Date().toISOString(),

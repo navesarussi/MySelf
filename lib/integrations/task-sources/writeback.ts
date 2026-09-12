@@ -3,7 +3,7 @@ import { getTaskSourceProvider } from "./registry";
 
 /** External providers only understand done ↔ not-done. */
 export async function applyExternalStatusChange(task: Task, nextStatus: TaskStatus): Promise<void> {
-  if (task.source === "manual") return;
+  if (task.source === "manual" || task.source === "gmail") return;
   if (!task.external_id || !task.external_list_id) {
     throw new Error("external_missing_ids");
   }
