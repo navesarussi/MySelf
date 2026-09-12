@@ -4,6 +4,7 @@ import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
 import { api, type MondayAccount } from "../api/resources";
 import { useApiQuery, useApiMutation, queryKeys, queryClient, syncMondayWithPoll } from "../query";
+import { useSyncProgress } from "./use-sync-progress";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
@@ -25,6 +26,9 @@ export function MondaySettingsSection() {
   const [loadingBoards, setLoadingBoards] = useState<string | null>(null);
   const [boardsOpen, setBoardsOpen] = useState<Record<string, boolean>>({});
   const [syncingBoard, setSyncingBoard] = useState<string | null>(null);
+  const syncProgress = useSyncProgress();
+  const statusLabel =
+    (syncingBoard || busy) && syncProgress.progress ? syncProgress.text : message;
 
   const accounts = accountsQ.data?.accounts ?? [];
 
@@ -111,9 +115,12 @@ export function MondaySettingsSection() {
   async function syncBoard(accountKey: string, boardId: string) {
     const key = `${accountKey}:${boardId}`;
     setSyncingBoard(key);
+    syncProgress.reset();
     setMessage(t("settings.syncing"));
     try {
-      const result = await run((config) => syncMondayWithPoll(config, accountKey, [boardId]));
+      const result = await run((config) =>
+        syncMondayWithPoll(config, accountKey, [boardId], syncProgress.onProgress)
+      );
       if (result?.ok) {
         await accountsQ.refresh();
         setMessage(t("flash.tasksSynced", { count: 0 }));
@@ -125,6 +132,7 @@ export function MondaySettingsSection() {
       setMessage(t("settings.syncFailed"));
     } finally {
       setSyncingBoard(null);
+      syncProgress.reset();
     }
   }
 
@@ -281,7 +289,11 @@ export function MondaySettingsSection() {
                           {active ? (
                             <Btn
                               small
-                              label={t("common.syncNow")}
+                              label={
+                                syncingBoard === syncKey
+                                  ? syncProgress.text
+                                  : t("common.syncNow")
+                              }
                               onPress={() => syncBoard(account.account_key, board.id)}
                               disabled={busy || syncingBoard === syncKey}
                             />
@@ -346,7 +358,7 @@ export function MondaySettingsSection() {
         </Text>
       )}
 
-      {message ? (
+      {statusLabel ? (
         <Text
           style={{
             color: c.accent,
@@ -356,7 +368,7 @@ export function MondaySettingsSection() {
             marginBottom: 8,
           }}
         >
-          {message}
+          {statusLabel}
         </Text>
       ) : null}
     </>

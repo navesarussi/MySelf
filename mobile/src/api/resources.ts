@@ -37,6 +37,7 @@ export type HomePayload = {
 export type GoogleTasksStatusPayload = {
   connected: boolean;
   syncStatus?: "idle" | "running" | "completed" | "failed";
+  syncProgress?: SyncProgress | null;
   lastSyncAt?: string | null;
   taskCount?: number;
   selected_list_ids?: string[];
@@ -49,6 +50,13 @@ export type GmailStatusPayload = {
   connectedAt?: string | null;
 };
 
+export type SyncProgress = {
+  phase: "fetching" | "upserting" | "cleanup";
+  total: number;
+  processed: number;
+  imported: number;
+};
+
 export type MondayAccount = {
   account_key: string;
   account_name: string;
@@ -56,6 +64,7 @@ export type MondayAccount = {
   connected: boolean;
   last_sync_at?: string | null;
   sync_status?: "idle" | "running" | "completed" | "failed";
+  sync_progress?: SyncProgress | null;
   selected_list_ids?: string[];
   task_count?: number;
   task_count_by_board?: Record<string, number>;
@@ -64,7 +73,7 @@ export type MondayAccount = {
 export type SyncStatusPayload = {
   connected: boolean;
   syncStatus?: "idle" | "running" | "completed" | "failed";
-  syncProgress?: { total: number; processed: number } | null;
+  syncProgress?: SyncProgress | null;
   lastSyncAt?: string | null;
   eventCount?: number;
 };
@@ -269,6 +278,7 @@ export const api = {
     apiFetch<{
       connected: boolean;
       syncStatus?: "idle" | "running" | "completed" | "failed";
+      syncProgress?: SyncProgress | null;
       lastSyncAt?: string | null;
       taskCount?: number;
       task_count_by_repo?: Record<string, number>;

@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         connected: false,
         syncStatus: "idle" as const,
+        syncProgress: null,
         lastSyncAt: null,
         taskCount: 0,
         task_count_by_repo: {},
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       connected: true,
       syncStatus: token.sync_status ?? "idle",
+      syncProgress: token.sync_progress ?? null,
       lastSyncAt: token.last_sync_at ?? null,
       taskCount: Object.values(task_count_by_repo).reduce((a, b) => a + b, 0),
       task_count_by_repo,

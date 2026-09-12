@@ -18,6 +18,7 @@ import {
 import { MondaySettingsSection } from "../../src/components/monday-settings";
 import { GithubSettingsSection } from "../../src/components/github-settings";
 import { PushSettingsSection } from "../../src/components/push-settings";
+import { useSyncProgress } from "../../src/components/use-sync-progress";
 import { unregisterPushToken } from "../../src/push/register";
 import {
   useApiQuery,
@@ -44,6 +45,9 @@ export default function SettingsScreen() {
   const gmailQ = useApiQuery(queryKeys.gmailStatus, api.gmailStatus);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [tasksSyncMessage, setTasksSyncMessage] = useState<string | null>(null);
+  const tasksSyncProgress = useSyncProgress();
+  const tasksSyncLabel =
+    tasksSyncProgress.progress ? tasksSyncProgress.text : tasksSyncMessage;
   const [availableLists, setAvailableLists] = useState<{ id: string; title: string }[]>([]);
   const [selectedListIds, setSelectedListIds] = useState<string[]>([]);
   const [listsLoading, setListsLoading] = useState(false);
@@ -159,9 +163,12 @@ export default function SettingsScreen() {
   }
 
   async function runTasksSync() {
+    tasksSyncProgress.reset();
     setTasksSyncMessage(t("settings.syncing"));
     try {
-      const result = await run((config) => syncGoogleTasksWithPoll(config));
+      const result = await run((config) =>
+        syncGoogleTasksWithPoll(config, tasksSyncProgress.onProgress)
+      );
       if (result?.ok) {
         const refreshed = await googleTasksQ.refresh();
         setTasksSyncMessage(
@@ -173,6 +180,8 @@ export default function SettingsScreen() {
       }
     } catch {
       setTasksSyncMessage(t("settings.syncFailed"));
+    } finally {
+      tasksSyncProgress.reset();
     }
   }
 
@@ -477,7 +486,7 @@ export default function SettingsScreen() {
             </Row>
           </>
         )}
-        {tasksSyncMessage ? (
+        {tasksSyncLabel ? (
           <Text
             style={{
               color: c.accent,
@@ -486,7 +495,7 @@ export default function SettingsScreen() {
               marginTop: 8,
             }}
           >
-            {tasksSyncMessage}
+            {tasksSyncLabel}
           </Text>
         ) : null}
       </Card>

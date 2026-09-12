@@ -9,6 +9,7 @@ import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
 import { useSession, API_URL } from "../session";
 import { Btn, Card, Chip, Row, SectionTitle, confirmDelete } from "./ui";
+import { useSyncProgress } from "./use-sync-progress";
 import { groupGithubReposByOwner } from "@/lib/integrations/task-sources/github/repos";
 
 type RepoItem = { id: string; title: string; owner: string; name: string };
@@ -25,8 +26,12 @@ export function GithubSettingsSection() {
   const [selected, setSelected] = useState<string[]>([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [syncingRepo, setSyncingRepo] = useState<string | null>(null);
+  const syncProgress = useSyncProgress();
   const [reposOpen, setReposOpen] = useState(false);
   const [ownerOpen, setOwnerOpen] = useState<Record<string, boolean>>({});
+
+  const syncing = Boolean(syncingRepo) || busy;
+  const statusLabel = syncing && syncProgress.progress ? syncProgress.text : message;
 
   const saved = statusQ.data?.selected_list_ids ?? [];
   const counts = statusQ.data?.task_count_by_repo ?? {};
@@ -84,9 +89,12 @@ export function GithubSettingsSection() {
 
   async function syncRepo(repoId: string) {
     setSyncingRepo(repoId);
+    syncProgress.reset();
     setMessage(t("settings.syncing"));
     try {
-      const result = await run((config) => syncGithubWithPoll(config, [repoId]));
+      const result = await run((config) =>
+        syncGithubWithPoll(config, [repoId], syncProgress.onProgress)
+      );
       if (result?.ok) {
         const refreshed = await statusQ.refresh();
         setMessage(t("flash.tasksSynced", { count: refreshed?.taskCount ?? 0 }));
@@ -98,13 +106,17 @@ export function GithubSettingsSection() {
       setMessage(t("settings.syncFailed"));
     } finally {
       setSyncingRepo(null);
+      syncProgress.reset();
     }
   }
 
   async function syncNow() {
+    syncProgress.reset();
     setMessage(t("settings.syncing"));
     try {
-      const result = await run((config) => syncGithubWithPoll(config));
+      const result = await run((config) =>
+        syncGithubWithPoll(config, undefined, syncProgress.onProgress)
+      );
       if (result?.ok) {
         const refreshed = await statusQ.refresh();
         setMessage(t("flash.tasksSynced", { count: refreshed?.taskCount ?? 0 }));
@@ -114,6 +126,8 @@ export function GithubSettingsSection() {
       }
     } catch {
       setMessage(t("settings.syncFailed"));
+    } finally {
+      syncProgress.reset();
     }
   }
 
@@ -294,7 +308,7 @@ export function GithubSettingsSection() {
                                       small
                                       label={
                                         syncingRepo === repo.id
-                                          ? t("settings.syncing")
+                                          ? syncProgress.text
                                           : t("common.syncNow")
                                       }
                                       onPress={() => syncRepo(repo.id)}
@@ -368,7 +382,7 @@ export function GithubSettingsSection() {
         </Card>
       )}
 
-      {message ? (
+      {statusLabel ? (
         <Text
           style={{
             color: c.accent,
@@ -378,7 +392,7 @@ export function GithubSettingsSection() {
             marginTop: 8,
           }}
         >
-          {message}
+          {statusLabel}
         </Text>
       ) : null}
     </View>

@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         connected: false,
         syncStatus: "idle" as const,
+        syncProgress: null,
         lastSyncAt: null,
         taskCount: 0,
         selected_list_ids: [],
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       connected: true,
       syncStatus: token.sync_status ?? "idle",
+      syncProgress: token.sync_progress ?? null,
       lastSyncAt: token.last_sync_at ?? null,
       taskCount: count ?? 0,
       selected_list_ids: settings.selected_list_ids ?? [],

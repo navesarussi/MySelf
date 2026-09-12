@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
           connected: true,
           last_sync_at: row.last_sync_at,
           sync_status: row.sync_status,
+          sync_progress: row.sync_progress ?? null,
           selected_list_ids: (settings.selected_list_ids as string[]) ?? [],
           task_count,
           task_count_by_board,
