@@ -10,3 +10,4 @@ supabase/.temp/
 tsconfig.tsbuildinfo
 .worktrees/
 public/spa/
+*.ipa
