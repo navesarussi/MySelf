@@ -243,6 +243,21 @@ Finance dashboard shows planned vs actual per section, weekly expense bars, rema
 ### FR-FIN-08
 User can add and delete planned expense lines and savings pots on the monthly plan.
 
+### FR-FIN-09
+Transaction categorization captures `expense_type` (`fixed` vs `variable` for expenses) and an optional remember-rule toggle to persist merchant classification (`finance_merchant_rules`) across future months for planning and actuals.
+
+### FR-FIN-10
+Monthly cash-flow plan lines inherit `line_type` from merchant rules when seeding new category lines, overriding static category defaults. Users may also toggle a plan line type between fixed and variable.
+
+### FR-FIN-11
+Users can edit notes (`purpose_note`), category, and expense type on categorized transactions for both expenses and incomes.
+
+### FR-FIN-12
+Transaction ingestion supports MAX and Visa Cal credit card providers alongside Leumi and Apple Pay, populating merchant details and auto-applying matched merchant rules on ingest.
+
+### FR-FIN-13
+Reconciliation detects internal batch charges (e.g. credit card settlement debits in bank statements) and marks them `is_internal = true`, excluding them from expense cash-flow totals and plan actuals to prevent double counting.
+
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
 
@@ -256,7 +271,7 @@ Tab switches do not remount frozen screens; warm cache avoids loading indicators
 Entity lists virtualize (`FlatList` / `ScreenList`); modal editors are hoisted to a single instance per screen rather than instantiated per card.
 
 ### NFR-UX-04
-List endpoints omit unused columns and hidden timeline rows (SQL `hidden_at` filter). Library lists send a body preview; editors fetch the full row. Timeline lists are cursor-paginated (default 1500 rows/page) with truncated description previews (200 chars); event detail fetches the full row via `GET /timeline/events/:id`. Finance cashflow aggregates from lean transaction columns only (`txn_date`, `amount`, `kind`, `category`, `needs_categorization`). Tasks lists send a 200-char `notes` preview with a `notes_truncated` flag; the editor fetches the full note from `GET /tasks/:id` and keeps the field read-only until it arrives, so a preview can never be saved over the stored note. Task queries always order by `updated_at` before limiting, and an unscoped list budgets active (default 2500) and done (default 200, `done_limit`) separately so done tasks cannot crowd out active work. Filter/month changes keep previous results on screen (`keepPreviousData`).
+List endpoints omit unused columns and hidden timeline rows (SQL `hidden_at` filter). Library lists send a body preview; editors fetch the full row. Timeline lists are cursor-paginated (default 1500 rows/page) with truncated description previews (200 chars); event detail fetches the full row via `GET /timeline/events/:id`. Finance cashflow aggregates from lean transaction columns only (`txn_date`, `amount`, `kind`, `category`, `needs_categorization`). Tasks lists send a 200-char `notes` preview with a `notes_truncated` flag; the editor fetches the full note from `GET /tasks/:id` and keeps the field read-only until it arrives, so a preview can never be saved over the stored note. The preview is gated on the `X-App-Version` header (sent by the mobile client on every request): a native build older than the version that shipped this behavior (`lib/api/client-version.ts`, checked in `app/api/v1/tasks/route.ts`) keeps receiving full, unpreviewed notes, since that old binary's editor has no code to fetch or wait for the full text and would otherwise save the truncation back. The Expo web export has no such gap — it is rebuilt on every deploy — so this only guards native installs that haven't updated yet. Task queries always order by `updated_at` before limiting, and an unscoped list budgets active (default 2500) and done (default 200, `done_limit`) separately so done tasks cannot crowd out active work. Filter/month changes keep previous results on screen (`keepPreviousData`).
 
 ### NFR-UX-06
 Manual Google Calendar sync (`POST /api/v1/sync`) and external task-source sync (`POST /api/v1/integrations/task-sources/sync`) return immediately and run in the background (`after`); the client polls the provider status endpoint until `syncStatus` is no longer `running`. The route claims the sync lock synchronously (`tryStartSync`) before responding, so a poll that starts the instant the response lands always observes `running`; a second request while one is in flight returns `alreadyRunning` instead of starting a duplicate. App shell prefetch warms timeline events page 1 and life periods alongside home/habits/projects. While a sync runs, the settings sections render the live `sync_progress` snapshot (phase plus processed/total) reported by the status endpoints.

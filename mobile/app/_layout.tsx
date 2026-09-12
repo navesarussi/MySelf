@@ -14,6 +14,8 @@ import { useFonts } from "expo-font";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
 import { SessionProvider } from "../src/session";
+import { setAppVersion } from "../src/api/client";
+import { getAppVersion } from "../src/version";
 import { I18nProvider } from "../src/i18n";
 import { NavPrefsProvider } from "../src/nav-prefs";
 import { ThemeProvider, useColors } from "../src/theme";
@@ -25,6 +27,10 @@ import { queryClient } from "../src/query/client";
 import { persistOptions } from "../src/query/persist";
 
 SplashScreen.preventAutoHideAsync();
+
+// Identify this build to version-gated endpoints (see lib/api/client-version.ts).
+// Set once at module load, not per-request: the version is fixed for the process.
+setAppVersion(getAppVersion());
 
 function AppStack() {
   const c = useColors();

@@ -6,6 +6,13 @@ import { dedupeTasks } from "@/lib/data-integrity";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { TASK_SELECT, TaskJoin, previewNotes, projectNameFromJoin } from "@/lib/api/tasks";
+import { clientVersionAtLeast } from "@/lib/api/client-version";
+
+// The app version that first sends `notes_truncated` and knows to fetch
+// GET /tasks/:id before editing. An older native build still running an
+// earlier binary must keep getting full notes, or its editor would silently
+// save a preview over the stored text (see docs/SSOT/SRS.md NFR-UX-04).
+const NOTES_PREVIEW_MIN_VERSION = "1.15.0";
 
 const PRIORITIES: TaskPriority[] = ["urgent", "high", "medium", "low"];
 const STATUSES: TaskStatus[] = ["open", "in_progress", "stuck", "review", "done"];
@@ -119,9 +126,16 @@ export async function GET(req: NextRequest) {
     rows = [...(active.data ?? []), ...(done.data ?? [])];
   }
 
+  const supportsNotesPreview = clientVersionAtLeast(
+    req.headers.get("x-app-version"),
+    NOTES_PREVIEW_MIN_VERSION
+  );
+
   const tasks = dedupeTasks(
     (rows as unknown as TaskJoin[]).map((row) => {
-      const preview = previewNotes(row.notes);
+      const preview = supportsNotesPreview
+        ? previewNotes(row.notes)
+        : { notes: row.notes, truncated: false };
       return {
         ...row,
         notes: preview.notes,
