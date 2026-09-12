@@ -475,7 +475,7 @@ export default function SettingsScreen() {
         {t("settings.gmail")}
       </SectionTitle>
       <Card>
-        {gmailQ.data?.connected ? (
+        {gmailQ.data?.working ? (
           <>
             <Text style={{ color: c.good, textAlign: textStart, writingDirection }}>
               ✓ {t("settings.connected")}
@@ -489,9 +489,25 @@ export default function SettingsScreen() {
                 marginTop: 4,
               }}
             >
-              {t("settings.gmailReconnectHint")}
+              {t("settings.gmailWorkingHint")}
             </Text>
             <Row style={{ marginTop: 10 }}>
+              <Btn
+                small
+                variant="ghost"
+                label={t("settings.gmailDisconnect")}
+                onPress={disconnectGmail}
+                disabled={busy}
+              />
+            </Row>
+          </>
+        ) : gmailQ.data?.connected ? (
+          <>
+            <Text style={{ color: c.warn, textAlign: textStart, writingDirection }}>
+              ⚠ {t("settings.gmailNeedsReconnect")}
+            </Text>
+            <Row style={{ marginTop: 10 }}>
+              <Btn small label={t("settings.connectGmail")} onPress={connectGmail} disabled={busy} />
               <Btn
                 small
                 variant="ghost"

@@ -2,7 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
 import { dedupeHabits, effectiveStreak, habitReportDay } from "@/lib/habit-stats";
 import { filterDueRelationships } from "@/lib/relationships-due";
-import { isGmailConnected } from "@/lib/integrations/gmail/client";
+import { getGmailConnectionStatus } from "@/lib/integrations/gmail/status";
 import { buildGmailDigest } from "@/lib/agent/gmail";
 import type { Habit, Task } from "@/lib/types";
 
@@ -18,7 +18,7 @@ export async function buildAgentContext(now = new Date(), opts: AgentContextOpti
   const supabase = getSupabase();
   const today = now.toISOString().slice(0, 10);
 
-  const [habitsRes, goalsRes, tasksRes, relRes, eventsRes, commitmentsRes, gmailConnected] =
+  const [habitsRes, goalsRes, tasksRes, relRes, eventsRes, commitmentsRes, gmailStatus] =
     await Promise.all([
     supabase.from("habits").select("*").eq("archived", false),
     supabase.from("goals").select("*").eq("status", "active"),
@@ -41,7 +41,7 @@ export async function buildAgentContext(now = new Date(), opts: AgentContextOpti
       .from("commitments")
       .select("id, text, status, commitment_date")
       .eq("commitment_date", today),
-    isGmailConnected(),
+    getGmailConnectionStatus(),
   ]);
 
   const habits = dedupeHabits(habitsRes.data || []);
@@ -57,11 +57,13 @@ export async function buildAgentContext(now = new Date(), opts: AgentContextOpti
     return h.last_checked_on !== day;
   });
 
-  const gmail_digest = opts.gmailDigest && gmailConnected ? await buildGmailDigest() : null;
+  const gmail_digest = opts.gmailDigest && gmailStatus.working ? await buildGmailDigest() : null;
 
   return {
     date: today,
-    gmail_connected: gmailConnected,
+    gmail_connected: gmailStatus.connected,
+    gmail_working: gmailStatus.working,
+    ...(gmailStatus.error ? { gmail_error: gmailStatus.error } : {}),
     ...(gmail_digest ? { gmail_digest } : {}),
     habits: {
       total: habits.length,

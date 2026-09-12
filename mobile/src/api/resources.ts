@@ -40,6 +40,8 @@ export type GoogleTasksStatusPayload = {
 
 export type GmailStatusPayload = {
   connected: boolean;
+  working: boolean;
+  error?: string;
   connectedAt?: string | null;
 };
 

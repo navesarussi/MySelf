@@ -117,6 +117,7 @@ export async function readGmailMessage(accessToken: string, id: string): Promise
 }
 
 export async function isGmailConnected() {
-  const row = await getIntegrationToken(GOOGLE_GMAIL_PROVIDER);
-  return row != null;
+  const { getGmailConnectionStatus } = await import("./status");
+  const status = await getGmailConnectionStatus();
+  return status.working;
 }
