@@ -56,6 +56,17 @@ export async function proxy(req: NextRequest) {
     }
     const authHeader = req.headers.get("authorization");
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+
+    // iOS Shortcut + GitHub Actions Leumi sync (no session cookie).
+    if (pathname === "/api/v1/finance/ingest" && req.method === "POST") {
+      const ingestToken = process.env.FINANCE_INGEST_TOKEN?.trim();
+      if (ingestToken && bearer === ingestToken) {
+        const res = NextResponse.next();
+        for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
+        return res;
+      }
+    }
+
     if (
       secret &&
       ((await isValidSessionToken(bearer, secret)) || (await isValidSessionToken(token, secret)))
