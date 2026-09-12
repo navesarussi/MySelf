@@ -42,7 +42,6 @@ function mapTxn(accountNumber: string, txn: ScraperTxn) {
     merchant: description,
     account_number: accountNumber,
     identifier: txn.identifier,
-    needs_categorization: false,
   };
 }
 

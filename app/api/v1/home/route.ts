@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     libraryRes,
     openTasksCountRes,
     inProgressTasksCountRes,
+    financeUncategorizedRes,
   ] = await Promise.all([
     supabase.from("habits").select("*").eq("archived", false),
     supabase.from("goals").select("*").eq("status", "active"),
@@ -66,6 +67,10 @@ export async function GET(req: NextRequest) {
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("status", "in_progress"),
+    supabase
+      .from("finance_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("needs_categorization", true),
   ]);
 
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
@@ -98,5 +103,6 @@ export async function GET(req: NextRequest) {
     libraryEntries: libraryRes.data || [],
     openTasksCount: openTasksCountRes.count || 0,
     inProgressTasksCount: inProgressTasksCountRes.count || 0,
+    financeUncategorizedCount: financeUncategorizedRes.count || 0,
   });
 }

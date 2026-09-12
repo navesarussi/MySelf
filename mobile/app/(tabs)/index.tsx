@@ -157,6 +157,18 @@ export default function HomeScreen() {
         accent: c.good,
         onPress: () => router.push("/goals"),
       },
+      ...(data.financeUncategorizedCount > 0
+        ? [
+            {
+              id: "finance",
+              title: t("home.financeUncategorized"),
+              main: String(data.financeUncategorizedCount),
+              icon: "wallet-outline" as const,
+              accent: c.warn,
+              onPress: () => router.push("/finance"),
+            },
+          ]
+        : []),
     ];
   }, [
     data,
@@ -182,7 +194,7 @@ export default function HomeScreen() {
       (config) => api.updateTask(config, task.id, { status: next }),
       {
         itemId: task.id,
-        flash: { success: "flash.taskUpdated" },
+        flash: { success: "flash.taskUpdated", when: "immediate" },
         onError: () => {
           if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
         },
@@ -203,7 +215,7 @@ export default function HomeScreen() {
 
     await run((config) => api.updateTask(config, task.id, { status: next }), {
       itemId: task.id,
-      flash: { success: "flash.taskUpdated" },
+      flash: { success: "flash.taskUpdated", when: "immediate" },
       onError: () => {
         if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
       },

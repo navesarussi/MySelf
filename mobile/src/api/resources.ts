@@ -29,6 +29,7 @@ export type HomePayload = {
   libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "body" | "updated_at">[];
   openTasksCount: number;
   inProgressTasksCount: number;
+  financeUncategorizedCount: number;
 };
 
 export type GoogleTasksStatusPayload = {
@@ -329,6 +330,11 @@ export const api = {
     const q = sp.toString();
     return apiFetch<FinanceTransaction[]>(c, `/finance/transactions${q ? `?${q}` : ""}`);
   },
+  financeTransaction: (c: ApiConfig, id: string) =>
+    apiFetch<FinanceTransaction & { suggested_category: string | null }>(
+      c,
+      `/finance/transactions/${id}`
+    ),
   categorizeFinanceTransaction: (
     c: ApiConfig,
     id: string,

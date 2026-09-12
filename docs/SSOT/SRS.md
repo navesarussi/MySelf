@@ -219,6 +219,21 @@ Daily push summarizes timeline events for today, deep-linking to `/timeline`.
 ### FR-PUSH-08
 Tapping a notification opens the relevant in-app screen via Expo Router (`data.screen`). Duplicate sends of the same type+ref for the same Jerusalem calendar day are suppressed via `notification_log`.
 
+### FR-FIN-01
+Personal finance module ingests transactions from Bank Leumi (scheduled scraper) and Apple Pay (iOS Shortcut), deduplicated by `external_key`.
+
+### FR-FIN-02
+New uncategorized expense transactions trigger a push notification (type `finance`, bypasses quiet hours) deep-linking to `/finance-categorize?id=…`.
+
+### FR-FIN-03
+User categorizes transactions with Hebrew category chips and optional purpose note; monthly cashflow shows income, expense, net, and spending by category.
+
+### FR-FIN-04
+Merchant category is auto-suggested from prior categorized transactions (same merchant/description); Leumi ingest applies the suggestion when available.
+
+### FR-FIN-05
+Home dashboard shows a stat tile when `financeUncategorizedCount > 0`, linking to the finance screen.
+
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
 

@@ -8,6 +8,8 @@ export type MutateFlash = {
   success?: string;
   error?: string;
   successParams?: Record<string, string | number>;
+  /** Default `success`: toast after API. Use `immediate` with optimistic UI. */
+  when?: "immediate" | "success";
 };
 
 /** Data-loading hook: runs the fetcher with the current session config,

@@ -221,6 +221,7 @@ export default function TasksScreen() {
         flash: {
           success: "flash.taskUpdated",
           error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
+          when: "immediate",
         },
         onError: () => {
           if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
@@ -257,6 +258,7 @@ export default function TasksScreen() {
         flash: {
           success: "flash.taskUpdated",
           error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
+          when: "immediate",
         },
         onError: () => {
           if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);

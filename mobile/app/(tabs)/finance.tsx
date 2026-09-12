@@ -1,6 +1,7 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
@@ -11,6 +12,21 @@ import type { FinanceCashflow, FinanceTransaction } from "@/lib/finance/types";
 
 function monthKey(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return monthKey(d);
+}
+
+function formatMonthLabel(month: string, locale: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString(locale === "he" ? "he-IL" : "en-US", {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function TxnRow({ txn, onPress }: { txn: FinanceTransaction; onPress: () => void }) {
@@ -32,6 +48,7 @@ function TxnRow({ txn, onPress }: { txn: FinanceTransaction; onPress: () => void
         <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 4, textAlign: textStart, writingDirection }}>
           {txn.txn_date}
           {txn.category ? ` · ${txn.category}` : txn.needs_categorization ? " · ?" : ""}
+          {txn.source === "apple_pay" ? " · Apple Pay" : txn.source === "leumi" ? " · לאומי" : ""}
         </Text>
       </Card>
     </Pressable>
@@ -39,11 +56,12 @@ function TxnRow({ txn, onPress }: { txn: FinanceTransaction; onPress: () => void
 }
 
 export default function FinanceScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
   const router = useRouter();
-  const month = monthKey();
+  const [month, setMonth] = useState(monthKey());
+  const isCurrentMonth = month === monthKey();
 
   const { data: cashflow, loading: cfLoading, error: cfError, refresh: refreshCf } = useApiQuery(
     queryKeys.financeCashflow(month),
@@ -51,7 +69,7 @@ export default function FinanceScreen() {
   );
   const { data: txns, loading: txLoading, error: txError, refresh: refreshTx } = useApiQuery(
     queryKeys.financeTransactions(month),
-    (cfg) => api.financeTransactions(cfg, { month, limit: 50 })
+    (cfg) => api.financeTransactions(cfg, { month, limit: 100 })
   );
 
   const loading = cfLoading || txLoading;
@@ -71,25 +89,77 @@ export default function FinanceScreen() {
   }
 
   const cf = cashflow as FinanceCashflow | undefined;
+  const maxCategory = cf?.by_category?.[0]?.amount ?? 1;
 
   return (
     <Screen title={t("finance.title")} subtitle={t("finance.subtitle")} refreshing={loading} onRefresh={refresh}>
       {error ? <ErrorNote message={error} onRetry={refresh} /> : null}
       {loading && !cf ? <Loading /> : null}
 
+      <View style={{ ...row, justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <Pressable onPress={() => setMonth((m) => shiftMonth(m, -1))} hitSlop={12}>
+          <Ionicons name="chevron-back" size={22} color={c.accent} />
+        </Pressable>
+        <Text style={{ color: c.ink, fontWeight: "700", textAlign: "center", writingDirection }}>
+          {formatMonthLabel(month, locale)}
+        </Text>
+        <Pressable
+          onPress={() => !isCurrentMonth && setMonth((m) => shiftMonth(m, 1))}
+          hitSlop={12}
+          style={{ opacity: isCurrentMonth ? 0.3 : 1 }}
+          disabled={isCurrentMonth}
+        >
+          <Ionicons name="chevron-forward" size={22} color={c.accent} />
+        </Pressable>
+      </View>
+
       {cf ? (
         <Card>
           <Row>
             <Stat label={t("finance.income")} value={`₪${cf.income.toFixed(0)}`} />
             <Stat label={t("finance.expense")} value={`₪${cf.expense.toFixed(0)}`} />
-            <Stat label={t("finance.net")} value={`₪${cf.net.toFixed(0)}`} accent />
+            <Stat label={t("finance.net")} value={`₪${cf.net.toFixed(0)}`} accent net={cf.net} />
           </Row>
           {cf.uncategorized_count > 0 ? (
-            <Text style={{ color: c.muted, marginTop: 8, textAlign: textStart, writingDirection }}>
+            <Text style={{ color: c.warn, marginTop: 8, textAlign: textStart, writingDirection, fontWeight: "600" }}>
               {t("finance.uncategorized")}: {cf.uncategorized_count}
             </Text>
           ) : null}
         </Card>
+      ) : null}
+
+      {cf && cf.by_category.length > 0 ? (
+        <>
+          <SectionTitle>{t("finance.byCategory")}</SectionTitle>
+          <Card>
+            {cf.by_category.map((item) => (
+              <View key={item.category} style={{ marginBottom: 10 }}>
+                <Row>
+                  <Text style={{ color: c.ink, flex: 1, textAlign: textStart, writingDirection }}>{item.category}</Text>
+                  <Text style={{ color: c.muted, fontWeight: "600" }}>₪{item.amount.toFixed(0)}</Text>
+                </Row>
+                <View
+                  style={{
+                    height: 4,
+                    backgroundColor: c.border,
+                    borderRadius: 2,
+                    marginTop: 4,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      height: 4,
+                      width: `${Math.max(8, (item.amount / maxCategory) * 100)}%`,
+                      backgroundColor: c.accent,
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+              </View>
+            ))}
+          </Card>
+        </>
       ) : null}
 
       {uncategorized.length > 0 ? (
@@ -101,7 +171,7 @@ export default function FinanceScreen() {
         </>
       ) : null}
 
-      <SectionTitle>{month}</SectionTitle>
+      <SectionTitle>{t("finance.allTransactions")}</SectionTitle>
       {!loading && (txns ?? []).length === 0 ? <EmptyState text={t("finance.noTransactions")} /> : null}
       {(txns ?? [])
         .filter((t) => !t.needs_categorization)
@@ -116,13 +186,24 @@ export default function FinanceScreen() {
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Stat({
+  label,
+  value,
+  accent,
+  net,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  net?: number;
+}) {
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
+  const color = accent ? (net !== undefined && net < 0 ? c.warn : c.accent) : c.ink;
   return (
     <View style={{ flex: 1 }}>
       <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>{label}</Text>
-      <Text style={{ color: accent ? c.accent : c.ink, fontWeight: "700", fontSize: tokens.title, textAlign: textStart, writingDirection }}>
+      <Text style={{ color, fontWeight: "700", fontSize: tokens.title, textAlign: textStart, writingDirection }}>
         {value}
       </Text>
     </View>

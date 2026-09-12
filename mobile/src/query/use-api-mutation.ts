@@ -61,10 +61,20 @@ export function useApiMutation() {
         }
       }
 
-      try {
-        const result = await fn({ token, serverUrl });
+      const showSuccessFlash = () => {
         if (flash?.success) {
           showToast(t(flash.success, flash.successParams), "success");
+        }
+      };
+
+      if (flash?.success && flash.when === "immediate") {
+        showSuccessFlash();
+      }
+
+      try {
+        const result = await fn({ token, serverUrl });
+        if (flash?.success && flash.when !== "immediate") {
+          showSuccessFlash();
         }
         onSuccess?.(result);
         return result;

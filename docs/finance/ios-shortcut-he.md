@@ -100,9 +100,13 @@ curl -X POST "https://myselfapp.xyz/api/v1/finance/ingest" \
 
 ## סנכרון לאומי (רקע)
 
-GitHub Actions מריץ `yarn sync:leumi` עם סודות:
+GitHub Actions מריץ `yarn sync:leumi` עם **Repository secrets** (לא Vercel):
 
-- `LEUMI_USERNAME`, `LEUMI_PASSWORD`
-- `MYSELF_API_URL`, `FINANCE_INGEST_TOKEN`
+```bash
+gh secret set LEUMI_USERNAME --body "YOUR_USER"
+gh secret set LEUMI_PASSWORD --body "YOUR_PASSWORD"
+```
+
+כבר מוגדרים: `MYSELF_API_URL`, `FINANCE_INGEST_TOKEN`
 
 סיסמת לאומי **לא** נשמרת ב-Vercel — רק ב-GitHub Secrets.

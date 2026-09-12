@@ -7,6 +7,7 @@ import { useSession } from "../src/session";
 import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
+import { queryClient, queryKeys, useApiMutation } from "../src/query";
 import { Btn, Card, Chip, ErrorNote, Input, Loading, Screen } from "../src/components/ui";
 import type { FinanceTransaction } from "@/lib/finance/types";
 
@@ -17,37 +18,47 @@ export default function FinanceCategorizeScreen() {
   const { textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
   const { token, serverUrl } = useSession();
-  const [txn, setTxn] = useState<FinanceTransaction | null>(null);
+  const { run, isPending } = useApiMutation();
+  const [txn, setTxn] = useState<(FinanceTransaction & { suggested_category?: string | null }) | null>(
+    null
+  );
   const [category, setCategory] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!token || !id) return;
-    const month = new Date().toISOString().slice(0, 7);
     api
-      .financeTransactions({ token, serverUrl }, { month, limit: 200 })
-      .then((list) => setTxn(list.find((x) => x.id === id) ?? null))
+      .financeTransaction({ token, serverUrl }, id)
+      .then((row) => {
+        setTxn(row);
+        if (row.suggested_category) setCategory(row.suggested_category);
+        if (row.purpose_note) setNote(row.purpose_note);
+      })
       .catch(() => setError("load_failed"));
   }, [token, serverUrl, id]);
 
   async function save(skip = false) {
     if (!token || !id) return;
-    setBusy(true);
     setError(null);
-    try {
-      await api.categorizeFinanceTransaction(
-        { token, serverUrl },
-        id,
-        skip ? { skip: true } : { category: category!, purpose_note: note || null }
-      );
-      router.back();
-    } catch {
-      setError("save_failed");
-    } finally {
-      setBusy(false);
-    }
+    const month = txn?.txn_date.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
+    await run(
+      (cfg) =>
+        api.categorizeFinanceTransaction(
+          cfg,
+          id,
+          skip ? { skip: true } : { category: category!, purpose_note: note || null }
+        ),
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.financeCashflow(month) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.financeTransactions(month) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+          router.back();
+        },
+        onError: () => setError("save_failed"),
+      }
+    );
   }
 
   if (!id) {
@@ -61,6 +72,7 @@ export default function FinanceCategorizeScreen() {
   if (!txn && !error) return <Loading />;
 
   const label = txn?.merchant || txn?.description || "";
+  const busy = isPending();
 
   return (
     <Screen title={t("finance.categorizeTitle")} subtitle={label}>
@@ -71,6 +83,11 @@ export default function FinanceCategorizeScreen() {
             {txn.kind === "income" ? "+" : "−"}₪{txn.amount.toFixed(2)}
           </Text>
           <Text style={{ color: c.muted, marginTop: 4, textAlign: textStart, writingDirection }}>{txn.txn_date}</Text>
+          {txn.suggested_category && !txn.category ? (
+            <Text style={{ color: c.accent, marginTop: 8, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
+              {t("finance.suggestedCategory", { category: txn.suggested_category })}
+            </Text>
+          ) : null}
         </Card>
       ) : null}
 

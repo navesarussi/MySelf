@@ -1,6 +1,10 @@
 import { getSupabase } from "@/lib/supabase";
 import { notifyUser } from "@/lib/push/notify";
 import { financeExternalKey, type FinanceSource } from "@/lib/finance/external-key";
+import {
+  suggestCategoryFromHistory,
+  type MerchantCategoryRow,
+} from "@/lib/finance/merchant-category";
 
 export type FinanceTxnKind = "income" | "expense";
 export type FinanceTxnStatus = "pending" | "completed";
@@ -137,14 +141,37 @@ export type IngestResult = {
   skipped: number;
 };
 
+async function loadCategoryHistory(): Promise<MerchantCategoryRow[]> {
+  const { data } = await getSupabase()
+    .from("finance_transactions")
+    .select("merchant, description, category")
+    .eq("needs_categorization", false)
+    .not("category", "is", null)
+    .order("categorized_at", { ascending: false })
+    .limit(500);
+  return (data ?? []) as MerchantCategoryRow[];
+}
+
+function applyMerchantSuggestion(
+  input: ReturnType<typeof normalizeInput>,
+  history: MerchantCategoryRow[]
+): ReturnType<typeof normalizeInput> {
+  if (input.category || input.kind !== "expense") return input;
+  const suggested = suggestCategoryFromHistory(input.merchant, input.description, history);
+  if (!suggested) return input;
+  return { ...input, category: suggested, needs_categorization: false };
+}
+
 export async function ingestFinanceTransactions(
   inputs: FinanceIngestInput[]
 ): Promise<IngestResult> {
   const created: FinanceTransaction[] = [];
   let skipped = 0;
+  const history = await loadCategoryHistory();
 
   for (const raw of inputs) {
-    const input = normalizeInput(raw);
+    let input = normalizeInput(raw);
+    input = applyMerchantSuggestion(input, history);
     const now = new Date().toISOString();
     const row = {
       source: input.source,
@@ -164,6 +191,14 @@ export async function ingestFinanceTransactions(
       categorized_at: input.category ? now : null,
       updated_at: now,
     };
+
+    if (input.category && !input.needs_categorization) {
+      history.unshift({
+        merchant: input.merchant,
+        description: input.description,
+        category: input.category,
+      });
+    }
 
     const { data, error } = await getSupabase()
       .from("finance_transactions")

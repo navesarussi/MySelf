@@ -10,6 +10,10 @@ import {
   unauthorized,
 } from "@/lib/api/auth";
 import { isFinanceCategory } from "@/lib/finance/categories";
+import {
+  suggestCategoryFromHistory,
+  type MerchantCategoryRow,
+} from "@/lib/finance/merchant-category";
 import { getSupabase } from "@/lib/supabase";
 import type { FinanceTransaction } from "@/lib/finance/ingest";
 
@@ -34,6 +38,39 @@ function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
+}
+
+async function loadCategoryHistory(): Promise<MerchantCategoryRow[]> {
+  const { data } = await getSupabase()
+    .from("finance_transactions")
+    .select("merchant, description, category")
+    .eq("needs_categorization", false)
+    .not("category", "is", null)
+    .order("categorized_at", { ascending: false })
+    .limit(500);
+  return (data ?? []) as MerchantCategoryRow[];
+}
+
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await isApiAuthorized(_req))) return unauthorized();
+  const { id } = await ctx.params;
+
+  const { data, error } = await getSupabase()
+    .from("finance_transactions")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) return dbError();
+  if (!data) return notFound();
+
+  const txn = rowToTxn(data as Record<string, unknown>);
+  const history = await loadCategoryHistory();
+  const suggested_category = txn.needs_categorization
+    ? suggestCategoryFromHistory(txn.merchant, txn.description, history)
+    : null;
+
+  return NextResponse.json({ ...txn, suggested_category });
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
