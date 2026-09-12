@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildExternalTaskUpsert,
+  dedupeDraftsByExternalId,
   idsToMarkDone,
   resolveExternalSyncStatus,
 } from "../integrations/task-sources/merge";
@@ -71,5 +72,37 @@ describe("buildExternalTaskUpsert", () => {
 describe("idsToMarkDone", () => {
   it("marks local open ids missing from fetch as done", () => {
     assert.deepEqual(idsToMarkDone(["a", "b", "c"], new Set(["a", "c"])), ["b"]);
+  });
+});
+
+describe("dedupeDraftsByExternalId", () => {
+  it("keeps one draft per external id so a chunked upsert stays valid", () => {
+    const drafts = [
+      { externalId: "a", title: "first" },
+      { externalId: "b", title: "other" },
+      { externalId: "a", title: "second" },
+    ];
+    const deduped = dedupeDraftsByExternalId(drafts);
+
+    assert.equal(deduped.length, 2);
+    assert.deepEqual(
+      deduped.map((d) => d.externalId).sort(),
+      ["a", "b"]
+    );
+  });
+
+  it("keeps the last draft when an id repeats", () => {
+    const deduped = dedupeDraftsByExternalId([
+      { externalId: "a", title: "stale" },
+      { externalId: "a", title: "fresh" },
+    ]);
+
+    assert.equal(deduped.length, 1);
+    assert.equal(deduped[0].title, "fresh");
+  });
+
+  it("preserves order of first appearance and passes through unique input", () => {
+    const drafts = [{ externalId: "x" }, { externalId: "y" }, { externalId: "z" }];
+    assert.deepEqual(dedupeDraftsByExternalId(drafts), drafts);
   });
 });

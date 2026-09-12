@@ -3,6 +3,9 @@ import { syncGoogleCalendar } from "@/lib/integrations/google-calendar/sync";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
 
+/** Daily cron syncs run inline; the platform default is far too short for them. */
+export const maxDuration = 60;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function isCronRequest(req: NextRequest) {

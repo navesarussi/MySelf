@@ -39,6 +39,17 @@ export function buildExternalTaskUpsert(
   };
 }
 
+/**
+ * Collapse drafts sharing an external id (the same item reachable from two
+ * selected lists). A chunked upsert would otherwise hit the same row twice in
+ * one statement, which Postgres rejects on ON CONFLICT. Last draft wins.
+ */
+export function dedupeDraftsByExternalId<T extends { externalId: string }>(drafts: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const draft of drafts) byId.set(draft.externalId, draft);
+  return [...byId.values()];
+}
+
 export function idsToMarkDone(localOpenExternalIds: string[], fetchedIds: Set<string>) {
   return localOpenExternalIds.filter((id) => !fetchedIds.has(id));
 }

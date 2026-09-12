@@ -12,7 +12,7 @@ import {
   getTokenSettings,
   updateSyncProgress,
 } from "../tokens";
-import { buildExternalTaskUpsert, idsToMarkDone } from "./merge";
+import { buildExternalTaskUpsert, dedupeDraftsByExternalId, idsToMarkDone } from "./merge";
 import { MONDAY_PROVIDER } from "../monday-config";
 
 const BATCH_SIZE = 100;
@@ -85,7 +85,8 @@ async function syncSingleAccount(
     );
     const selectedListIds =
       listIdsOverride ?? settings.selected_list_ids ?? [];
-    const drafts = selectedListIds.length ? await pull(selectedListIds) : [];
+    const pulled = selectedListIds.length ? await pull(selectedListIds) : [];
+    const drafts = dedupeDraftsByExternalId(pulled);
     const now = new Date().toISOString();
     const fetchedIds = new Set(drafts.map((d) => d.externalId));
 
@@ -102,12 +103,14 @@ async function syncSingleAccount(
     );
     let imported = 0;
 
+    // One upsert per chunk instead of a round-trip per task: the (source,
+    // external_id) unique constraint lets Postgres decide insert vs update, and
+    // each row already carries its merged status/priority from the fetch above.
     for (let i = 0; i < drafts.length; i += BATCH_SIZE) {
       const chunk = drafts.slice(i, i + BATCH_SIZE);
-
-      for (const draft of chunk) {
+      const rows = chunk.map((draft) => {
         const existing = existingByExternalId.get(draft.externalId);
-        const row = buildExternalTaskUpsert(
+        return buildExternalTaskUpsert(
           draft,
           providerId,
           now,
@@ -118,22 +121,12 @@ async function syncSingleAccount(
               }
             : undefined
         );
+      });
 
-        if (existing) {
-          const { error } = await supabase.from("tasks").update(row).eq("id", existing.id);
-          if (error) throw new Error(`sync_update_failed:${error.message}`);
-        } else {
-          const { data, error } = await supabase.from("tasks").insert(row).select("id").single();
-          if (error) throw new Error(`sync_insert_failed:${error.message}`);
-          if (data?.id) {
-            existingByExternalId.set(draft.externalId, {
-              id: data.id,
-              status: row.status,
-              priority: row.priority,
-            });
-          }
-        }
-      }
+      const { error } = await supabase
+        .from("tasks")
+        .upsert(rows, { onConflict: "source,external_id" });
+      if (error) throw new Error(`sync_upsert_failed:${error.message}`);
 
       imported += chunk.length;
       await updateSyncProgress(

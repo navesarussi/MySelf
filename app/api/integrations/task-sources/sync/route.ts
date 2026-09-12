@@ -4,6 +4,9 @@ import { getIntegrationToken, listIntegrationTokens } from "@/lib/integrations/t
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import type { TaskSourceId } from "@/lib/integrations/task-sources/types";
 
+/** Daily cron syncs run inline; the platform default is far too short for them. */
+export const maxDuration = 60;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function isCronRequest(req: NextRequest) {
