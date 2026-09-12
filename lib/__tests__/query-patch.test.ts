@@ -92,7 +92,7 @@ describe("query-patch helpers", () => {
   it("patchHabitInHome updates habit streak or status", () => {
     const mockHome: HomePayload = {
       habits: [
-        { id: "h1", name: "H1", current_streak: 2 } as Habit,
+        { id: "h1", name: "H1", streak_count: 2 } as Habit,
       ],
       activeGoals: [],
       doneGoalsCount: 0,
@@ -108,9 +108,9 @@ describe("query-patch helpers", () => {
       financeUncategorizedCount: 0,
     };
 
-    const updated = patchHabitInHome(mockHome, "h1", { current_streak: 3 });
+    const updated = patchHabitInHome(mockHome, "h1", { streak_count: 3 });
     assert.ok(updated);
-    assert.equal(updated.habits[0].current_streak, 3);
+    assert.equal(updated.habits[0].streak_count, 3);
   });
 
   it("patchRelationshipInHome updates contact date", () => {

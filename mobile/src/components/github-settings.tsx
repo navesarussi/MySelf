@@ -3,7 +3,7 @@ import { Platform, Pressable, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
 import { api } from "../api/resources";
-import { useApiQuery, useApiMutation, queryKeys } from "../query";
+import { useApiQuery, useApiMutation, queryKeys, queryClient, syncGithubWithPoll } from "../query";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
@@ -86,15 +86,14 @@ export function GithubSettingsSection() {
     setSyncingRepo(repoId);
     setMessage(t("settings.syncing"));
     try {
-      const result = await run((config) =>
-        api.syncTaskSources(config, "github", { list_ids: [repoId] })
-      );
-      setMessage(
-        result?.ok
-          ? t("flash.tasksSynced", { count: result.imported ?? 0 })
-          : t("settings.syncFailed")
-      );
-      statusQ.refresh();
+      const result = await run((config) => syncGithubWithPoll(config, [repoId]));
+      if (result?.ok) {
+        const refreshed = await statusQ.refresh();
+        setMessage(t("flash.tasksSynced", { count: refreshed?.taskCount ?? 0 }));
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+      } else {
+        setMessage(t("settings.syncFailed"));
+      }
     } catch {
       setMessage(t("settings.syncFailed"));
     } finally {
@@ -105,16 +104,17 @@ export function GithubSettingsSection() {
   async function syncNow() {
     setMessage(t("settings.syncing"));
     try {
-      const result = await run((config) => api.syncTaskSources(config, "github"));
-      setMessage(
-        result?.ok
-          ? t("flash.tasksSynced", { count: result.imported ?? 0 })
-          : t("settings.syncFailed")
-      );
+      const result = await run((config) => syncGithubWithPoll(config));
+      if (result?.ok) {
+        const refreshed = await statusQ.refresh();
+        setMessage(t("flash.tasksSynced", { count: refreshed?.taskCount ?? 0 }));
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+      } else {
+        setMessage(t("settings.syncFailed"));
+      }
     } catch {
       setMessage(t("settings.syncFailed"));
     }
-    statusQ.refresh();
   }
 
   function disconnect() {

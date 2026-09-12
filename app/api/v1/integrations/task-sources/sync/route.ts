@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { isApiAuthorized, unauthorized, badRequest, dbError, readJson } from "@/lib/api/auth";
+import { NextRequest, NextResponse, after } from "next/server";
+import { isApiAuthorized, unauthorized, badRequest, readJson } from "@/lib/api/auth";
 import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
+import { getIntegrationToken, listIntegrationTokens, tryStartSync, setSyncFailed } from "@/lib/integrations/tokens";
+import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import type { TaskSourceId } from "@/lib/integrations/task-sources/types";
 
 const VALID_PROVIDERS: TaskSourceId[] = ["google_tasks", "monday", "github"];
@@ -24,25 +26,54 @@ export async function POST(req: NextRequest) {
   }
 
   const targetProvider = isTaskSourceId(provider) ? provider : "google_tasks";
+  const syncOpts = {
+    accountKey,
+    listIds: listIds?.length ? listIds : undefined,
+  };
 
-  try {
-    const result = await syncTaskSource(targetProvider, {
-      accountKey,
-      listIds: listIds?.length ? listIds : undefined,
-    });
-    if (result.notConnected) {
-      return badRequest("not_connected");
+  // Claim the sync lock synchronously: the client starts polling sync_status as
+  // soon as it sees `started`, so the token must already read "running" before
+  // this response is flushed. after() runs post-response and would race it.
+  let claimedKeys: string[] | undefined;
+
+  if (targetProvider === MONDAY_PROVIDER) {
+    const accounts = await listIntegrationTokens(MONDAY_PROVIDER);
+    const scoped = accountKey
+      ? accounts.filter((a) => a.account_key === accountKey)
+      : accounts;
+    if (!scoped.length) return badRequest("not_connected");
+
+    const claims = await Promise.all(
+      scoped.map(async (a) => ((await tryStartSync(MONDAY_PROVIDER, a.account_key)) ? a.account_key : null))
+    );
+    claimedKeys = claims.filter((k): k is string => k !== null);
+    if (!claimedKeys.length) {
+      return NextResponse.json({ ok: true, alreadyRunning: true, provider: targetProvider });
     }
-    return NextResponse.json({
-      ok: true,
-      provider: targetProvider,
-      imported: result.imported,
-      markedDone: result.markedDone,
-      alreadyRunning: result.alreadyRunning,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "sync_failed";
-    console.error("[task-sources-sync]", message);
-    return dbError(message);
+  } else {
+    const token = await getIntegrationToken(targetProvider, accountKey ?? "");
+    if (!token) return badRequest("not_connected");
+    if (!(await tryStartSync(targetProvider, accountKey ?? ""))) {
+      return NextResponse.json({ ok: true, alreadyRunning: true, provider: targetProvider });
+    }
   }
+
+  after(async () => {
+    try {
+      await syncTaskSource(targetProvider, {
+        ...syncOpts,
+        accountKeys: claimedKeys,
+        preStarted: true,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "sync_failed";
+      console.error("[task-sources-sync]", message);
+      // syncSingleAccount releases the lock itself; this covers a throw before
+      // it runs, so a claimed token never stays "running" until the stale timeout.
+      const keys = claimedKeys ?? [accountKey ?? ""];
+      await Promise.all(keys.map((k) => setSyncFailed(targetProvider, k)));
+    }
+  });
+
+  return NextResponse.json({ ok: true, started: true, provider: targetProvider });
 }

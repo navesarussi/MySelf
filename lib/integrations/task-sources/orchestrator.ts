@@ -64,10 +64,13 @@ async function syncSingleAccount(
   pull: (selectedListIds: string[]) => Promise<
     Parameters<typeof buildExternalTaskUpsert>[0][]
   >,
-  listIdsOverride?: string[]
+  listIdsOverride?: string[],
+  preStarted?: boolean
 ): Promise<{ imported: number; markedDone: number; alreadyRunning?: true }> {
-  const started = await tryStartSync(providerId, accountKey);
-  if (!started) return { imported: 0, markedDone: 0, alreadyRunning: true as const };
+  if (!preStarted) {
+    const started = await tryStartSync(providerId, accountKey);
+    if (!started) return { imported: 0, markedDone: 0, alreadyRunning: true as const };
+  }
 
   try {
     await updateSyncProgress(
@@ -200,6 +203,10 @@ async function syncSingleAccount(
 export type SyncTaskSourceOptions = {
   accountKey?: string;
   listIds?: string[];
+  /** Monday only: sync exactly these accounts (the caller already claimed them). */
+  accountKeys?: string[];
+  /** The caller already marked the token(s) running via tryStartSync. */
+  preStarted?: boolean;
 };
 
 export async function syncTaskSource(
@@ -210,9 +217,12 @@ export async function syncTaskSource(
     const accounts = await listIntegrationTokens(MONDAY_PROVIDER);
     if (!accounts.length) return { imported: 0, markedDone: 0, notConnected: true as const };
 
-    const scoped = opts?.accountKey
-      ? accounts.filter((a) => a.account_key === opts.accountKey)
-      : accounts;
+    const claimed = opts?.accountKeys;
+    const scoped = claimed?.length
+      ? accounts.filter((a) => claimed.includes(a.account_key))
+      : opts?.accountKey
+        ? accounts.filter((a) => a.account_key === opts.accountKey)
+        : accounts;
     if (!scoped.length) return { imported: 0, markedDone: 0, notConnected: true as const };
 
     let imported = 0;
@@ -225,7 +235,8 @@ export async function syncTaskSource(
         providerId,
         account.account_key,
         (ids) => provider.pullOpenTasks(ids),
-        opts?.listIds
+        opts?.listIds,
+        opts?.preStarted
       );
       if (result.alreadyRunning) anyRunning = true;
       imported += result.imported;
@@ -248,7 +259,8 @@ export async function syncTaskSource(
     providerId,
     "",
     (ids) => provider.pullOpenTasks(ids),
-    opts?.listIds
+    opts?.listIds,
+    opts?.preStarted
   );
 }
 

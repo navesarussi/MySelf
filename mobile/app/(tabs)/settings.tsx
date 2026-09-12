@@ -19,7 +19,14 @@ import { MondaySettingsSection } from "../../src/components/monday-settings";
 import { GithubSettingsSection } from "../../src/components/github-settings";
 import { PushSettingsSection } from "../../src/components/push-settings";
 import { unregisterPushToken } from "../../src/push/register";
-import { useApiQuery, useApiMutation, queryKeys, queryClient, pollUntilSyncDone } from "../../src/query";
+import {
+  useApiQuery,
+  useApiMutation,
+  queryKeys,
+  queryClient,
+  pollUntilSyncDone,
+  syncGoogleTasksWithPoll,
+} from "../../src/query";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -154,16 +161,19 @@ export default function SettingsScreen() {
   async function runTasksSync() {
     setTasksSyncMessage(t("settings.syncing"));
     try {
-      const result = await run((config) => api.syncTaskSources(config, "google_tasks"));
-      setTasksSyncMessage(
-        result?.ok
-          ? t("flash.tasksSynced", { count: result.imported ?? 0 })
-          : t("settings.syncFailed")
-      );
+      const result = await run((config) => syncGoogleTasksWithPoll(config));
+      if (result?.ok) {
+        const refreshed = await googleTasksQ.refresh();
+        setTasksSyncMessage(
+          t("flash.tasksSynced", { count: refreshed?.taskCount ?? result.imported ?? 0 })
+        );
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+      } else {
+        setTasksSyncMessage(t("settings.syncFailed"));
+      }
     } catch {
       setTasksSyncMessage(t("settings.syncFailed"));
     }
-    googleTasksQ.refresh();
   }
 
   function disconnectGoogleTasks() {

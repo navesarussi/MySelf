@@ -259,7 +259,7 @@ Entity lists virtualize (`FlatList` / `ScreenList`); modal editors are hoisted t
 List endpoints omit unused columns and hidden timeline rows (SQL `hidden_at` filter). Library lists send a body preview; editors fetch the full row. Timeline lists are cursor-paginated (default 1500 rows/page) with truncated description previews (200 chars); event detail fetches the full row via `GET /timeline/events/:id`. Finance cashflow aggregates from lean transaction columns only (`txn_date`, `amount`, `kind`, `category`, `needs_categorization`). Tasks list queries are capped (default 2500). Filter/month changes keep previous results on screen (`keepPreviousData`).
 
 ### NFR-UX-06
-Manual Google Calendar sync (`POST /api/v1/sync`) returns immediately and runs in the background (`after`); the client polls `GET /api/v1/sync/status` until `syncStatus` is no longer `running`.
+Manual Google Calendar sync (`POST /api/v1/sync`) and external task-source sync (`POST /api/v1/integrations/task-sources/sync`) return immediately and run in the background (`after`); the client polls the provider status endpoint until `syncStatus` is no longer `running`. The route claims the sync lock synchronously (`tryStartSync`) before responding, so a poll that starts the instant the response lands always observes `running`; a second request while one is in flight returns `alreadyRunning` instead of starting a duplicate. App shell prefetch warms timeline events page 1 and life periods alongside home/habits/projects.
 
 ### NFR-UX-05
 Native entity lists use FlashList (FlatList on web). Query cache persists across cold starts except the timeline events blob. New Architecture is enabled for native builds.

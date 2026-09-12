@@ -238,6 +238,7 @@ export const api = {
     apiFetch<{
       ok: boolean;
       provider?: string;
+      started?: boolean;
       imported?: number;
       markedDone?: number;
       alreadyRunning?: boolean;

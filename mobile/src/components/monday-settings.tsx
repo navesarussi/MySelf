@@ -3,7 +3,7 @@ import { Platform, Pressable, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
 import { api, type MondayAccount } from "../api/resources";
-import { useApiQuery, useApiMutation, queryKeys } from "../query";
+import { useApiQuery, useApiMutation, queryKeys, queryClient, syncMondayWithPoll } from "../query";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
@@ -113,18 +113,14 @@ export function MondaySettingsSection() {
     setSyncingBoard(key);
     setMessage(t("settings.syncing"));
     try {
-      const result = await run((config) =>
-        api.syncTaskSources(config, "monday", {
-          account_key: accountKey,
-          list_ids: [boardId],
-        })
-      );
-      setMessage(
-        result?.ok
-          ? t("flash.tasksSynced", { count: result.imported ?? 0 })
-          : t("settings.syncFailed")
-      );
-      accountsQ.refresh();
+      const result = await run((config) => syncMondayWithPoll(config, accountKey, [boardId]));
+      if (result?.ok) {
+        await accountsQ.refresh();
+        setMessage(t("flash.tasksSynced", { count: 0 }));
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+      } else {
+        setMessage(t("settings.syncFailed"));
+      }
     } catch {
       setMessage(t("settings.syncFailed"));
     } finally {

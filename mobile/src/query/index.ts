@@ -4,6 +4,7 @@ export * from "./patch";
 export * from "./persist";
 export * from "./prefetch";
 export * from "./poll-sync";
+export * from "./task-sync";
 export * from "./timeline-cache";
 export * from "./use-api-query";
 export * from "./use-api-mutation";
