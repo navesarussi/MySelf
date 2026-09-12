@@ -69,6 +69,11 @@ export type SyncStatusPayload = {
   eventCount?: number;
 };
 
+export type TimelineEventsPage = {
+  events: TimelineEvent[];
+  nextCursor: string | null;
+};
+
 export const api = {
   checkSession: (c: ApiConfig) => apiFetch<{ ok: boolean }>(c, "/session"),
   home: (c: ApiConfig) => apiFetch<HomePayload>(c, "/home"),
@@ -165,7 +170,18 @@ export const api = {
   deleteEntry: (c: ApiConfig, id: string) =>
     apiFetch<{ ok: boolean }>(c, `/library/${id}`, { method: "DELETE" }),
 
-  timelineEvents: (c: ApiConfig) => apiFetch<TimelineEvent[]>(c, "/timeline/events"),
+  timelineEventsPage: (
+    c: ApiConfig,
+    params?: { cursor?: string; limit?: number }
+  ) => {
+    const sp = new URLSearchParams();
+    if (params?.cursor) sp.set("cursor", params.cursor);
+    if (params?.limit) sp.set("limit", String(params.limit));
+    const qs = sp.toString();
+    return apiFetch<TimelineEventsPage>(c, `/timeline/events${qs ? `?${qs}` : ""}`);
+  },
+  timelineEvent: (c: ApiConfig, id: string) =>
+    apiFetch<TimelineEvent>(c, `/timeline/events/${id}`),
   createEvent: (c: ApiConfig, body: Partial<TimelineEvent>) =>
     apiFetch<TimelineEvent>(c, "/timeline/events", { method: "POST", body }),
   updateEvent: (c: ApiConfig, id: string, body: Partial<TimelineEvent>) =>
@@ -195,11 +211,14 @@ export const api = {
 
   syncStatus: (c: ApiConfig) => apiFetch<SyncStatusPayload>(c, "/sync/status"),
   runSync: (c: ApiConfig) =>
-    apiFetch<{ ok: boolean; imported?: number; removed?: number; alreadyRunning?: boolean }>(
-      c,
-      "/sync",
-      { method: "POST", body: {} }
-    ),
+    apiFetch<{
+      ok: boolean;
+      started?: boolean;
+      alreadyRunning?: boolean;
+      imported?: number;
+      removed?: number;
+      error?: string;
+    }>(c, "/sync", { method: "POST", body: {} }),
 
   googleTasksStatus: (c: ApiConfig) => apiFetch<GoogleTasksStatusPayload>(c, "/integrations/google-tasks/status"),
   googleTasksLists: (c: ApiConfig) => apiFetch<{ id: string; title: string }[]>(c, "/integrations/google-tasks/lists"),

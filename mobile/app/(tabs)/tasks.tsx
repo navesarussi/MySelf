@@ -184,9 +184,11 @@ export default function TasksScreen() {
             queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
               patchItemInList(old, targetId, updated)
             );
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+              patchTaskInHome(old, targetId, updated)
+            );
           }
           queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     } else {
@@ -232,8 +234,10 @@ export default function TasksScreen() {
             queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
               patchItemInList(old, task.id, updated)
             );
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+              patchTaskInHome(old, task.id, updated)
+            );
           }
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -269,8 +273,10 @@ export default function TasksScreen() {
             queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
               patchItemInList(old, task.id, updated)
             );
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+              patchTaskInHome(old, task.id, updated)
+            );
           }
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -321,7 +327,6 @@ export default function TasksScreen() {
           },
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
-            queryClient.invalidateQueries({ queryKey: queryKeys.home });
           },
         });
       },

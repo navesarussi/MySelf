@@ -7,7 +7,13 @@ import { selectHomeEvents } from "@/lib/home-events";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
 
-type TaskRow = Task & { projects: { name: string } | null };
+type TaskJoin = Task & { projects?: { name: string } | { name: string }[] | null };
+
+function projectNameFromJoin(projects: TaskJoin["projects"]): string | undefined {
+  if (!projects) return undefined;
+  if (Array.isArray(projects)) return projects[0]?.name;
+  return projects.name;
+}
 
 /** Everything the home dashboard needs, mirroring app/page.tsx. Habit/streak
  *  math happens client-side with the shared lib/habit-stats helpers. */
@@ -86,9 +92,9 @@ export async function GET(req: NextRequest) {
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
 
   const openTasks = dedupeTasks(
-    ((tasksRes.data as TaskRow[]) || []).map((row) => ({
+    ((tasksRes.data ?? []) as unknown as TaskJoin[]).map((row) => ({
       ...row,
-      project_name: row.projects?.name,
+      project_name: projectNameFromJoin(row.projects),
       projects: undefined,
     }))
   );
@@ -97,7 +103,7 @@ export async function GET(req: NextRequest) {
   scheduleDataIntegrityCleanup(
     habits.length < (habitsRes.data?.length ?? 0) ||
       activeGoals.length < (goalsRes.data?.length ?? 0) ||
-      openTasks.length < ((tasksRes.data as TaskRow[] | null)?.length ?? 0)
+      openTasks.length < ((tasksRes.data as unknown as TaskJoin[] | null)?.length ?? 0)
   );
 
   return NextResponse.json({

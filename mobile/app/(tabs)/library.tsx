@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { api } from "../../src/api/resources";
+import { api, type HomePayload } from "../../src/api/resources";
 import { useSession } from "../../src/session";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
@@ -13,6 +13,8 @@ import {
   queryClient,
   patchItemInList,
   removeItemFromList,
+  patchLibraryEntryInHome,
+  removeLibraryEntryFromHome,
 } from "../../src/query";
 import {
   Badge,
@@ -103,9 +105,16 @@ export default function LibraryScreen() {
             queryClient.setQueryData<ContentEntry[]>(libraryKey, (old) =>
               patchItemInList(old, targetId, updated)
             );
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+              patchLibraryEntryInHome(old, targetId, {
+                title: updated.title,
+                category: updated.category,
+                tags: updated.tags,
+                updated_at: updated.updated_at,
+              })
+            );
           }
           queryClient.invalidateQueries({ queryKey: queryKeys.libraryAll });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     } else {
@@ -125,8 +134,12 @@ export default function LibraryScreen() {
         `${t("library.deleteEntry")}: ${entry.title}?`,
         async () => {
           const prevEntries = queryClient.getQueryData<ContentEntry[]>(libraryKey);
+          const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
           queryClient.setQueryData<ContentEntry[]>(libraryKey, (old) =>
             removeItemFromList(old, entry.id)
+          );
+          queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+            removeLibraryEntryFromHome(old, entry.id)
           );
           setForm(null);
 
@@ -135,10 +148,10 @@ export default function LibraryScreen() {
             flash: { success: "flash.entryDeleted" },
             onError: () => {
               if (prevEntries) queryClient.setQueryData(libraryKey, prevEntries);
+              if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
             },
             onSuccess: () => {
               queryClient.invalidateQueries({ queryKey: queryKeys.libraryAll });
-              queryClient.invalidateQueries({ queryKey: queryKeys.home });
             },
           });
         },

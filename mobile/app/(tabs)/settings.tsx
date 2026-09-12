@@ -19,7 +19,7 @@ import { MondaySettingsSection } from "../../src/components/monday-settings";
 import { GithubSettingsSection } from "../../src/components/github-settings";
 import { PushSettingsSection } from "../../src/components/push-settings";
 import { unregisterPushToken } from "../../src/push/register";
-import { useApiQuery, useApiMutation, queryKeys } from "../../src/query";
+import { useApiQuery, useApiMutation, queryKeys, queryClient, pollUntilSyncDone } from "../../src/query";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -108,11 +108,21 @@ export default function SettingsScreen() {
     setSyncMessage(t("settings.syncing"));
     try {
       const result = await run((config) => api.runSync(config));
-      setSyncMessage(
-        result?.ok
-          ? t("flash.calendarSynced", { count: result.imported ?? 0 })
-          : t("settings.syncFailed")
-      );
+      if (!result?.ok) {
+        setSyncMessage(t("settings.syncFailed"));
+        return;
+      }
+      if (result.started || result.alreadyRunning) {
+        const status = await run((config) => pollUntilSyncDone(config, api.syncStatus));
+        if (status?.syncStatus === "completed") {
+          setSyncMessage(t("flash.calendarSynced", { count: status.eventCount ?? 0 }));
+        } else {
+          setSyncMessage(t("settings.syncFailed"));
+        }
+        void queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
+      } else if (result.imported != null) {
+        setSyncMessage(t("flash.calendarSynced", { count: result.imported }));
+      }
     } catch {
       setSyncMessage(t("settings.syncFailed"));
     }

@@ -200,7 +200,6 @@ export default function HomeScreen() {
         },
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       }
     );
@@ -221,7 +220,6 @@ export default function HomeScreen() {
       },
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
-        queryClient.invalidateQueries({ queryKey: queryKeys.home });
       },
     });
   }
@@ -288,27 +286,41 @@ export default function HomeScreen() {
                     },
                     onSuccess: () => {
                       queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                      queryClient.invalidateQueries({ queryKey: queryKeys.home });
                     },
                   });
                 }}
                 onReportFall={async () => {
+                  const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+                  queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+                    patchHabitInHome(old, h.id, {
+                      streak_count: 0,
+                      failure_count: (h.failure_count ?? 0) + 1,
+                    })
+                  );
                   await run((config) => api.reportHabit(config, h.id, "fall"), {
                     itemId: h.id,
                     flash: { success: "flash.fallRecorded" },
+                    onError: () => {
+                      if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+                    },
                     onSuccess: () => {
                       queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                      queryClient.invalidateQueries({ queryKey: queryKeys.home });
                     },
                   });
                 }}
                 onReset={async () => {
+                  const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+                  queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+                    patchHabitInHome(old, h.id, { streak_count: 0 })
+                  );
                   await run((config) => api.reportHabit(config, h.id, "reset"), {
                     itemId: h.id,
                     flash: { success: "flash.streakReset" },
+                    onError: () => {
+                      if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+                    },
                     onSuccess: () => {
                       queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                      queryClient.invalidateQueries({ queryKey: queryKeys.home });
                     },
                   });
                 }}
@@ -379,7 +391,6 @@ export default function HomeScreen() {
                         },
                         onSuccess: () => {
                           queryClient.invalidateQueries({ queryKey: queryKeys.commitments });
-                          queryClient.invalidateQueries({ queryKey: queryKeys.home });
                         },
                       });
                     }}
@@ -461,7 +472,6 @@ export default function HomeScreen() {
                               },
                               onSuccess: () => {
                                 queryClient.invalidateQueries({ queryKey: queryKeys.relationships });
-                                queryClient.invalidateQueries({ queryKey: queryKeys.home });
                               },
                             }
                           );

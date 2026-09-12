@@ -1,29 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { badRequest, dbError, isApiAuthorized, unauthorized } from "@/lib/api/auth";
-import { summarizeCashflow } from "@/lib/finance/cashflow";
-import type { FinanceTransaction } from "@/lib/finance/ingest";
+import { summarizeCashflow, type CashflowRow } from "@/lib/finance/cashflow";
+import { TXN_CASHFLOW_COLUMNS } from "@/lib/finance/txn-columns";
 
-function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
+function rowToCashflow(row: Record<string, unknown>): CashflowRow {
   return {
-    id: String(row.id),
-    source: row.source as FinanceTransaction["source"],
-    external_key: String(row.external_key),
     txn_date: String(row.txn_date),
     amount: Number(row.amount),
-    kind: row.kind as FinanceTransaction["kind"],
-    currency: String(row.currency ?? "ILS"),
-    description: String(row.description ?? ""),
-    merchant: row.merchant != null ? String(row.merchant) : null,
-    account_number: row.account_number != null ? String(row.account_number) : null,
-    card_name: row.card_name != null ? String(row.card_name) : null,
-    status: row.status as FinanceTransaction["status"],
+    kind: row.kind as CashflowRow["kind"],
     category: row.category != null ? String(row.category) : null,
-    purpose_note: row.purpose_note != null ? String(row.purpose_note) : null,
     needs_categorization: Boolean(row.needs_categorization),
-    categorized_at: row.categorized_at != null ? String(row.categorized_at) : null,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
   };
 }
 
@@ -38,11 +25,11 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await getSupabase()
     .from("finance_transactions")
-    .select("*")
+    .select(TXN_CASHFLOW_COLUMNS)
     .gte("txn_date", start)
     .lt("txn_date", next);
 
   if (error) return dbError();
-  const txns = (data ?? []).map((r) => rowToTxn(r as Record<string, unknown>));
+  const txns = (data ?? []).map((r) => rowToCashflow(r as Record<string, unknown>));
   return NextResponse.json(summarizeCashflow(txns, month));
 }

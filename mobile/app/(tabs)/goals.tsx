@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { api } from "../../src/api/resources";
+import { api, type HomePayload } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
@@ -12,6 +12,10 @@ import {
   queryClient,
   patchItemInList,
   removeItemFromList,
+  patchGoalInHome,
+  removeGoalFromHome,
+  removeCommitmentFromHome,
+  setGoalStatusInHome,
 } from "../../src/query";
 import {
   Btn,
@@ -88,9 +92,11 @@ export default function GoalsScreen() {
             queryClient.setQueryData<Goal[]>(queryKeys.goals, (old) =>
               patchItemInList(old, targetId, updated)
             );
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+              patchGoalInHome(old, targetId, updated)
+            );
           }
           queryClient.invalidateQueries({ queryKey: queryKeys.goals });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     } else {
@@ -108,8 +114,12 @@ export default function GoalsScreen() {
     async (goal: Goal) => {
       const nextStatus = goal.status === "active" ? "done" : "active";
       const prevGoals = queryClient.getQueryData<Goal[]>(queryKeys.goals);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
       queryClient.setQueryData<Goal[]>(queryKeys.goals, (old) =>
         patchItemInList(old, goal.id, { status: nextStatus })
+      );
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+        setGoalStatusInHome(old, goal, nextStatus)
       );
 
       await run((config) => api.updateGoal(config, goal.id, { toggle_status: true }), {
@@ -117,10 +127,10 @@ export default function GoalsScreen() {
         flash: { success: "flash.goalUpdated" },
         onError: () => {
           if (prevGoals) queryClient.setQueryData(queryKeys.goals, prevGoals);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
         },
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.goals });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -133,8 +143,12 @@ export default function GoalsScreen() {
         `${t("common.delete")}: ${goal.title}?`,
         async () => {
           const prevGoals = queryClient.getQueryData<Goal[]>(queryKeys.goals);
+          const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
           queryClient.setQueryData<Goal[]>(queryKeys.goals, (old) =>
             removeItemFromList(old, goal.id)
+          );
+          queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+            removeGoalFromHome(old, goal.id)
           );
           setGoalForm(null);
 
@@ -143,10 +157,10 @@ export default function GoalsScreen() {
             flash: { success: "flash.goalDeleted" },
             onError: () => {
               if (prevGoals) queryClient.setQueryData(queryKeys.goals, prevGoals);
+              if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
             },
             onSuccess: () => {
               queryClient.invalidateQueries({ queryKey: queryKeys.goals });
-              queryClient.invalidateQueries({ queryKey: queryKeys.home });
             },
           });
         },
@@ -173,19 +187,25 @@ export default function GoalsScreen() {
   const setCommitment = useCallback(
     async (cm: Commitment, status: Commitment["status"]) => {
       const prevCommitments = queryClient.getQueryData<Commitment[]>(queryKeys.commitments);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
       queryClient.setQueryData<Commitment[]>(queryKeys.commitments, (old) =>
         patchItemInList(old, cm.id, { status })
       );
+      if (status === "done") {
+        queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+          removeCommitmentFromHome(old, cm.id)
+        );
+      }
 
       await run((config) => api.setCommitmentStatus(config, cm.id, status), {
         itemId: cm.id,
         flash: { success: "flash.commitmentUpdated" },
         onError: () => {
           if (prevCommitments) queryClient.setQueryData(queryKeys.commitments, prevCommitments);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
         },
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.commitments });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -198,18 +218,22 @@ export default function GoalsScreen() {
         `${t("common.delete")}?`,
         async () => {
           const prevCommitments = queryClient.getQueryData<Commitment[]>(queryKeys.commitments);
+          const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
           queryClient.setQueryData<Commitment[]>(queryKeys.commitments, (old) =>
             removeItemFromList(old, cm.id)
+          );
+          queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+            removeCommitmentFromHome(old, cm.id)
           );
           await run((config) => api.deleteCommitment(config, cm.id), {
             itemId: cm.id,
             flash: { success: "flash.commitmentDeleted" },
             onError: () => {
               if (prevCommitments) queryClient.setQueryData(queryKeys.commitments, prevCommitments);
+              if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
             },
             onSuccess: () => {
               queryClient.invalidateQueries({ queryKey: queryKeys.commitments });
-              queryClient.invalidateQueries({ queryKey: queryKeys.home });
             },
           });
         },

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { api } from "../src/api/resources";
-import { useApiQuery, useApiMutation, queryKeys } from "../src/query";
+import { useApiQuery, useTimelineEvents, queryKeys } from "../src/query";
 import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors } from "../src/theme";
@@ -23,7 +23,7 @@ export default function TimelineFullScreen() {
   const { row, textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const eventsQ = useApiQuery(queryKeys.timelineEvents, api.timelineEvents);
+  const eventsQ = useTimelineEvents();
   const periodsQ = useApiQuery(queryKeys.periods, api.periods);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [sheetEvents, setSheetEvents] = useState<TimelineEvent[] | null>(null);
@@ -36,9 +36,9 @@ export default function TimelineFullScreen() {
     };
   }, []);
 
-  const events = eventsQ.data ?? [];
+  const events = eventsQ.events;
   const periods = periodsQ.data ?? [];
-  const loading = (eventsQ.loading || periodsQ.loading) && !eventsQ.data;
+  const loading = (eventsQ.loading || periodsQ.loading) && events.length === 0;
 
   return (
     <View

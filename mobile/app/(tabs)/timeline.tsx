@@ -1,18 +1,26 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { api } from "../../src/api/resources";
+import { api, type HomePayload } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
+import type { InfiniteData } from "@tanstack/react-query";
 import {
   useApiQuery,
   useApiMutation,
+  useTimelineEvents,
   queryKeys,
   queryClient,
   patchItemInList,
   removeItemFromList,
+  patchEventInHome,
+  removeEventFromHome,
+  patchTimelineEventsCache,
+  removeTimelineEventFromCache,
+  pollUntilSyncDone,
 } from "../../src/query";
+import type { TimelineEventsPage } from "../../src/api/resources";
 import {
   Badge,
   Btn,
@@ -66,7 +74,7 @@ export default function TimelineScreen() {
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, busy, isPending } = useApiMutation();
 
-  const eventsQ = useApiQuery(queryKeys.timelineEvents, api.timelineEvents);
+  const eventsQ = useTimelineEvents();
   const periodsQ = useApiQuery(queryKeys.periods, api.periods);
   const syncQ = useApiQuery(queryKeys.syncStatus, api.syncStatus);
   const [eventForm, setEventForm] = useState<EventForm | null>(null);
@@ -83,7 +91,7 @@ export default function TimelineScreen() {
     if (params.add) router.setParams({ add: "" });
   }, [params.add, router]);
 
-  const events = eventsQ.data ?? [];
+  const events = eventsQ.events;
   const periods = periodsQ.data ?? [];
   const today = todayISO();
 
@@ -168,12 +176,14 @@ export default function TimelineScreen() {
         flash: { success: "flash.eventUpdated", error: "flash.eventUpdateError" },
         onSuccess: (updated) => {
           if (updated) {
-            queryClient.setQueryData<TimelineEvent[]>(queryKeys.timelineEvents, (old) =>
-              patchItemInList(old, targetId, updated)
+            queryClient.setQueryData<InfiniteData<TimelineEventsPage>>(
+              queryKeys.timelineEvents,
+              (old) => patchTimelineEventsCache(old, targetId, updated)
+            );
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+              patchEventInHome(old, targetId, updated)
             );
           }
-          queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     } else {
@@ -195,9 +205,15 @@ export default function TimelineScreen() {
         title: displayTitle(ev),
       }),
       async () => {
-        const prevEvents = queryClient.getQueryData<TimelineEvent[]>(queryKeys.timelineEvents);
-        queryClient.setQueryData<TimelineEvent[]>(queryKeys.timelineEvents, (old) =>
-          removeItemFromList(old, ev.id)
+        const prevEvents = queryClient.getQueryData<InfiniteData<TimelineEventsPage>>(
+          queryKeys.timelineEvents
+        );
+        const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+        queryClient.setQueryData<InfiniteData<TimelineEventsPage>>(queryKeys.timelineEvents, (old) =>
+          removeTimelineEventFromCache(old, ev.id)
+        );
+        queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+          removeEventFromHome(old, ev.id)
         );
         setEventForm(null);
 
@@ -209,10 +225,10 @@ export default function TimelineScreen() {
           },
           onError: () => {
             if (prevEvents) queryClient.setQueryData(queryKeys.timelineEvents, prevEvents);
+            if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
           },
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
-            queryClient.invalidateQueries({ queryKey: queryKeys.home });
           },
         });
       },
@@ -289,13 +305,21 @@ export default function TimelineScreen() {
     setSyncMessage(t("settings.syncing"));
     try {
       const result = await run((config) => api.runSync(config));
-      if (result?.ok) {
-        setSyncMessage(
-          result.alreadyRunning ? t("settings.syncing") : t("flash.calendarSynced", { count: result.imported ?? 0 })
-        );
-      } else {
+      if (!result?.ok) {
         setSyncMessage(t("flash.syncFailed"));
+        return;
       }
+      if (result.started || result.alreadyRunning) {
+        const status = await run((config) => pollUntilSyncDone(config, api.syncStatus));
+        if (status?.syncStatus === "completed") {
+          setSyncMessage(t("flash.calendarSynced", { count: status.eventCount ?? 0 }));
+        } else {
+          setSyncMessage(t("flash.syncFailed"));
+        }
+      } else if (result.imported != null) {
+        setSyncMessage(t("flash.calendarSynced", { count: result.imported }));
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
     } catch {
       setSyncMessage(t("flash.syncFailed"));
     }
@@ -445,8 +469,8 @@ export default function TimelineScreen() {
       ) : null}
 
       {eventsQ.error ? <ErrorNote message={eventsQ.error} onRetry={eventsQ.refresh} /> : null}
-      {loading && !eventsQ.data ? <Loading /> : null}
-      {eventsQ.data && events.length === 0 && periods.length === 0 ? (
+      {loading && events.length === 0 && periods.length === 0 ? <Loading /> : null}
+      {!loading && events.length === 0 && periods.length === 0 ? (
         <EmptyState text={t("timeline.empty")} />
       ) : null}
 

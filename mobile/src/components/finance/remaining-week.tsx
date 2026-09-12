@@ -11,8 +11,10 @@ export function RemainingWeekCard({ pace }: { pace: WeeklyPace }) {
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
   const over = pace.left < 0;
+  const ratio = pace.variable_budget > 0 ? Math.min(1, pace.spent / pace.variable_budget) : 0;
+
   return (
-    <Card>
+    <Card style={{ marginBottom: 12 }}>
       <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
         {t("finance.thisWeek", { week: String(pace.week) })}
       </Text>
@@ -20,7 +22,7 @@ export function RemainingWeekCard({ pace }: { pace: WeeklyPace }) {
         style={{
           color: over ? c.warn : c.accent,
           fontWeight: "800",
-          fontSize: tokens.title,
+          fontSize: 20,
           marginTop: 4,
           textAlign: textStart,
           writingDirection,
@@ -30,7 +32,25 @@ export function RemainingWeekCard({ pace }: { pace: WeeklyPace }) {
           ? t("finance.overWeekly", { amount: Math.abs(pace.left).toFixed(0) })
           : t("finance.leftThisWeek", { amount: pace.left.toFixed(0) })}
       </Text>
-      <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 4, textAlign: textStart, writingDirection }}>
+      <View
+        style={{
+          height: 6,
+          backgroundColor: c.border,
+          borderRadius: 3,
+          marginTop: 10,
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            height: 6,
+            width: `${Math.max(4, ratio * 100)}%`,
+            backgroundColor: over ? c.warn : c.accent,
+            borderRadius: 3,
+          }}
+        />
+      </View>
+      <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 6, textAlign: textStart, writingDirection }}>
         {t("finance.weeklyPaceHint", {
           spent: pace.spent.toFixed(0),
           budget: pace.variable_budget.toFixed(0),

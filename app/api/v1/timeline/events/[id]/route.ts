@@ -3,8 +3,26 @@ import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { parseMinZoom } from "@/lib/timeline-zoom";
 import { badRequest, dbError, isApiAuthorized, notFound, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import type { TimelineEvent } from "@/lib/types";
 
 type Params = { params: Promise<{ id: string }> };
+
+export async function GET(_req: NextRequest, { params }: Params) {
+  if (!(await isApiAuthorized(_req))) return unauthorized();
+  const { id } = await params;
+  if (!id) return badRequest("id_required");
+
+  const { data, error } = await getSupabase()
+    .from("timeline_events")
+    .select(
+      "id, event_date, event_time, title, description, category, min_zoom, source, google_event_id, title_override, description_override, hidden_at, synced_at, created_at"
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return dbError();
+  if (!data) return notFound();
+  return NextResponse.json(data as TimelineEvent);
+}
 
 function revalidateTimelinePaths() {
   revalidatePath("/timeline");

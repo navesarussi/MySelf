@@ -25,7 +25,13 @@ function revalidateTaskPaths() {
   revalidatePath("/");
 }
 
-type TaskRow = Task & { projects: { name: string } | null };
+type TaskJoin = Task & { projects?: { name: string } | { name: string }[] | null };
+
+function projectNameFromJoin(projects: TaskJoin["projects"]): string | undefined {
+  if (!projects) return undefined;
+  if (Array.isArray(projects)) return projects[0]?.name;
+  return projects.name;
+}
 
 function sortTasks(tasks: Task[], sort: string | null): Task[] {
   const list = [...tasks];
@@ -94,17 +100,20 @@ export async function GET(req: NextRequest) {
     query = query.lt("due_date", today).neq("status", "done");
   }
 
+  const limit = Math.min(Math.max(Number(sp.get("limit") ?? 2500), 1), 5000);
+  query = query.limit(limit);
+
   const { data, error } = await query;
   if (error) return dbError();
   const tasks = dedupeTasks(
-    ((data as TaskRow[]) || []).map((row) => ({
+    ((data ?? []) as unknown as TaskJoin[]).map((row) => ({
       ...row,
-      project_name: row.projects?.name,
+      project_name: projectNameFromJoin(row.projects),
       projects: undefined,
     }))
   );
   const sorted = sortTasks(tasks, sort);
-  const rawCount = (data as TaskRow[] | null)?.length ?? 0;
+  const rawCount = data?.length ?? 0;
   scheduleDataIntegrityCleanup(sorted.length < rawCount);
   return NextResponse.json(sorted);
 }

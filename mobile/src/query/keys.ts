@@ -20,6 +20,7 @@ export const queryKeys = {
       : (["library"] as const),
   libraryAll: ["library"] as const,
   timelineEvents: ["timelineEvents"] as const,
+  timelineEvent: (id: string) => ["timelineEvent", id] as const,
   periods: ["periods"] as const,
   syncStatus: ["syncStatus"] as const,
   googleTasksStatus: ["googleTasksStatus"] as const,

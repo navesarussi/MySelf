@@ -256,7 +256,10 @@ Tab switches do not remount frozen screens; warm cache avoids loading indicators
 Entity lists virtualize (`FlatList` / `ScreenList`); modal editors are hoisted to a single instance per screen rather than instantiated per card.
 
 ### NFR-UX-04
-List endpoints omit unused columns and hidden timeline rows (SQL `hidden_at` filter). Library lists send a body preview; editors fetch the full row. Filter/month changes keep previous results on screen (`keepPreviousData`).
+List endpoints omit unused columns and hidden timeline rows (SQL `hidden_at` filter). Library lists send a body preview; editors fetch the full row. Timeline lists are cursor-paginated (default 1500 rows/page) with truncated description previews (200 chars); event detail fetches the full row via `GET /timeline/events/:id`. Finance cashflow aggregates from lean transaction columns only (`txn_date`, `amount`, `kind`, `category`, `needs_categorization`). Tasks list queries are capped (default 2500). Filter/month changes keep previous results on screen (`keepPreviousData`).
+
+### NFR-UX-06
+Manual Google Calendar sync (`POST /api/v1/sync`) returns immediately and runs in the background (`after`); the client polls `GET /api/v1/sync/status` until `syncStatus` is no longer `running`.
 
 ### NFR-UX-05
 Native entity lists use FlashList (FlatList on web). Query cache persists across cold starts except the timeline events blob. New Architecture is enabled for native builds.

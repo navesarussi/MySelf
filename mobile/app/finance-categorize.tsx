@@ -82,7 +82,10 @@ export default function FinanceCategorizeScreen() {
   const busy = isPending();
 
   return (
-    <Screen title={t("finance.categorizeTitle")} subtitle={label}>
+    <Screen
+      title={t(txn?.kind === "income" ? "finance.categorizeTitleIncome" : "finance.categorizeTitle")}
+      subtitle={label}
+    >
       {error ? <ErrorNote message={error} /> : null}
       {txn ? (
         <Card>

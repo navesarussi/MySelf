@@ -8,6 +8,11 @@ import {
   type PlanLineRow,
 } from "@/lib/finance/plan";
 import type { PlanLineType } from "@/lib/finance/expense-type";
+import {
+  inferredCategory,
+  inferTxnKind,
+  shouldSkipCategorizationPrompt,
+} from "@/lib/finance/classify";
 
 function prevMonth(month: string): string {
   const [y, m] = month.split("-").map(Number);
@@ -30,6 +35,36 @@ async function fetchTransactions(month: string): Promise<FinanceTransaction[]> {
     .lt("txn_date", end);
   if (error) throw new Error(error.message);
   return (data ?? []).map(rowToTxn);
+}
+
+async function autoClassifyObvious(month: string): Promise<void> {
+  const txns = await fetchTransactions(month);
+  const now = new Date().toISOString();
+  await Promise.all(
+    txns.map(async (t) => {
+      const kind = inferTxnKind({ description: t.description, merchant: t.merchant });
+      const skip = shouldSkipCategorizationPrompt({
+        description: t.description,
+        merchant: t.merchant,
+        kind,
+      });
+      const category = inferredCategory({ description: t.description, merchant: t.merchant, kind });
+      const kindChanged = kind !== t.kind;
+      const markDone = skip && t.needs_categorization;
+      const applyCat = Boolean(category) && t.needs_categorization && !t.category;
+      if (!kindChanged && !markDone && !applyCat) return;
+      await getSupabase()
+        .from("finance_transactions")
+        .update({
+          kind,
+          category: applyCat ? category : t.category,
+          needs_categorization: markDone ? false : t.needs_categorization,
+          categorized_at: markDone ? now : t.categorized_at,
+          updated_at: now,
+        })
+        .eq("id", t.id);
+    })
+  );
 }
 
 function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
@@ -68,6 +103,7 @@ function rowToLine(row: Record<string, unknown>): PlanLineRow {
 }
 
 export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView> {
+  await autoClassifyObvious(month);
   const supabase = getSupabase();
   const { data: existing } = await supabase
     .from("finance_month_plans")

@@ -12,6 +12,7 @@ import {
   patchItemInList,
   removeItemFromList,
   patchHabitInHome,
+  removeHabitFromHome,
 } from "../../src/query";
 import type { Habit } from "@/lib/types";
 import {
@@ -92,7 +93,6 @@ export default function HabitsScreen() {
         },
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -101,12 +101,29 @@ export default function HabitsScreen() {
 
   const handleReportFall = useCallback(
     async (h: Habit) => {
+      const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+      queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
+        patchItemInList(old, h.id, {
+          streak_count: 0,
+          failure_count: (h.failure_count ?? 0) + 1,
+        })
+      );
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+        patchHabitInHome(old, h.id, {
+          streak_count: 0,
+          failure_count: (h.failure_count ?? 0) + 1,
+        })
+      );
       await run((config) => api.reportHabit(config, h.id, "fall"), {
         itemId: h.id,
         flash: { success: "flash.fallRecorded" },
+        onError: () => {
+          if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+        },
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -115,12 +132,23 @@ export default function HabitsScreen() {
 
   const handleReset = useCallback(
     async (h: Habit) => {
+      const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+      queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
+        patchItemInList(old, h.id, { streak_count: 0 })
+      );
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+        patchHabitInHome(old, h.id, { streak_count: 0 })
+      );
       await run((config) => api.reportHabit(config, h.id, "reset"), {
         itemId: h.id,
         flash: { success: "flash.streakReset" },
+        onError: () => {
+          if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+        },
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -151,9 +179,11 @@ export default function HabitsScreen() {
             queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
               patchItemInList(old, h.id, updated)
             );
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+              patchHabitInHome(old, h.id, updated)
+            );
           }
           queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -166,16 +196,18 @@ export default function HabitsScreen() {
     setEditingHabit(null);
     setViewingHabit(null);
     const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
+    const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
     queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => removeItemFromList(old, h.id));
+    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => removeHabitFromHome(old, h.id));
     await run((config) => api.deleteHabit(config, h.id), {
       itemId: h.id,
       flash: { success: "flash.habitDeleted" },
       onError: () => {
         if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
+        if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
       },
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-        queryClient.invalidateQueries({ queryKey: queryKeys.home });
       },
     });
   }, [editingHabit, run]);

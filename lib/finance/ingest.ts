@@ -2,6 +2,11 @@ import { getSupabase } from "@/lib/supabase";
 import { notifyUser } from "@/lib/push/notify";
 import { financeExternalKey, type FinanceSource } from "@/lib/finance/external-key";
 import {
+  inferTxnKind,
+  inferredCategory,
+  shouldSkipCategorizationPrompt,
+} from "@/lib/finance/classify";
+import {
   suggestCategoryFromHistory,
   type MerchantCategoryRow,
 } from "@/lib/finance/merchant-category";
@@ -87,10 +92,16 @@ function normalizeInput(input: FinanceIngestInput): Omit<FinanceIngestInput, "ex
 
   const description = (input.description ?? input.merchant ?? "").trim() || "תנועה";
   const merchant = input.merchant?.trim() || null;
-  const kind = input.kind ?? "expense";
-  const hasCategory = Boolean(input.category?.trim());
+  const kind = inferTxnKind({
+    kind: input.kind,
+    description,
+    merchant,
+  });
+  const autoCat = inferredCategory({ description, merchant, kind });
+  const hasCategory = Boolean(input.category?.trim() || autoCat);
+  const skipPrompt = shouldSkipCategorizationPrompt({ description, merchant, kind });
   const needs_categorization =
-    input.needs_categorization ?? (input.source === "apple_pay" || !hasCategory);
+    input.needs_categorization ?? !(hasCategory || skipPrompt);
 
   return {
     ...input,
@@ -102,7 +113,7 @@ function normalizeInput(input: FinanceIngestInput): Omit<FinanceIngestInput, "ex
     currency: (input.currency ?? "ILS").trim() || "ILS",
     status: input.status ?? "completed",
     needs_categorization: hasCategory ? false : needs_categorization,
-    category: hasCategory ? input.category!.trim() : null,
+    category: hasCategory ? (input.category?.trim() || autoCat) : null,
     purpose_note: input.purpose_note?.trim() || null,
     external_key:
       input.external_key?.trim() ||
@@ -122,11 +133,12 @@ async function notifyCategorize(txn: FinanceTransaction): Promise<void> {
   if (!txn.needs_categorization) return;
   const label = txn.merchant || txn.description;
   const sign = txn.kind === "income" ? "+" : "−";
+  const ask = txn.kind === "income" ? "הכנסה חדשה" : "למה ההוצאה?";
   await notifyUser(
     "finance",
     {
       title: "תנועה חדשה",
-      body: `${sign}₪${txn.amount.toFixed(2)} · ${label} — למה ההוצאה?`,
+      body: `${sign}₪${txn.amount.toFixed(2)} · ${label} — ${ask}`,
       data: {
         screen: `/finance-categorize?id=${txn.id}`,
       },

@@ -3,8 +3,13 @@ import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { parseMinZoom } from "@/lib/timeline-zoom";
 import { isEventHidden } from "@/lib/timeline-display";
+import { leanTimelineEventForList } from "@/lib/timeline-preview";
+import { buildTimelineCursor, parseTimelineCursor } from "@/lib/timeline-pagination";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { TimelineEvent } from "@/lib/types";
+
+const DEFAULT_PAGE_SIZE = 1500;
+const MAX_PAGE_SIZE = 3000;
 
 function revalidateTimelinePaths() {
   revalidatePath("/timeline");
@@ -13,17 +18,40 @@ function revalidateTimelinePaths() {
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase()
+  const sp = req.nextUrl.searchParams;
+  const limit = Math.min(
+    Math.max(Number(sp.get("limit") ?? DEFAULT_PAGE_SIZE), 1),
+    MAX_PAGE_SIZE
+  );
+  const cursorRaw = sp.get("cursor");
+  const cursor = cursorRaw ? parseTimelineCursor(cursorRaw) : null;
+  if (cursorRaw && !cursor) return badRequest("invalid_cursor");
+
+  let query = getSupabase()
     .from("timeline_events")
     .select(
       "id, event_date, event_time, title, description, category, min_zoom, source, google_event_id, title_override, description_override, hidden_at, synced_at, created_at"
     )
     .is("hidden_at", null)
     .order("event_date", { ascending: false })
-    .limit(10000);
+    .order("id", { ascending: false })
+    .limit(limit);
+
+  if (cursor) {
+    query = query.or(
+      `event_date.lt.${cursor.date},and(event_date.eq.${cursor.date},id.lt.${cursor.id})`
+    );
+  }
+
+  const { data, error } = await query;
   if (error) return dbError();
-  const events = ((data as TimelineEvent[]) || []).filter((e) => !isEventHidden(e));
-  return NextResponse.json(events);
+  const events = ((data as TimelineEvent[]) || [])
+    .filter((e) => !isEventHidden(e))
+    .map(leanTimelineEventForList);
+  const last = events[events.length - 1];
+  const nextCursor =
+    events.length === limit && last ? buildTimelineCursor(last) : null;
+  return NextResponse.json({ events, nextCursor });
 }
 
 export async function POST(req: NextRequest) {

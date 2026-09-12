@@ -5,6 +5,7 @@
  * Env: LEUMI_USERNAME, LEUMI_PASSWORD, MYSELF_API_URL, FINANCE_INGEST_TOKEN
  */
 import { CompanyTypes, createScraper } from "@sergienko4/israeli-bank-scrapers";
+import { inferTxnKind } from "../../lib/finance/classify";
 
 type ScraperTxn = {
   date: string;
@@ -31,8 +32,11 @@ function mapTxn(accountNumber: string, txn: ScraperTxn) {
   const amountRaw = txn.chargedAmount ?? txn.originalAmount ?? 0;
   const signed = Number(amountRaw);
   if (!Number.isFinite(signed) || signed === 0) return null;
-  const kind = signed > 0 ? "income" : "expense";
   const description = (txn.description ?? txn.memo ?? "").trim() || "תנועה";
+  const kind = inferTxnKind({
+    signedAmount: signed,
+    description,
+  });
   return {
     source: "leumi" as const,
     txn_date: txnDate(txn.date),

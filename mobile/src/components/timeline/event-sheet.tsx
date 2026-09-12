@@ -133,6 +133,12 @@ function EventDetail({
   const { row, textStart, writingDirection } = useLayoutDir();
   const { run, busy } = useApiMutation();
 
+  const detailQ = useApiQuery(
+    queryKeys.timelineEvent(event.id),
+    (config) => api.timelineEvent(config, event.id)
+  );
+  const detail = detailQ.data ?? event;
+
   const linksQ = useApiQuery(
     queryKeys.eventLinks(event.id),
     (config) => api.eventLinks(config, event.id)
@@ -142,8 +148,8 @@ function EventDetail({
   const [addKind, setAddKind] = useState<TimelineEventLinkKind | null>(null);
   const [addValue, setAddValue] = useState("");
 
-  const containing = useMemo(() => periodsForEvent(event, periods), [event, periods]);
-  const description = displayDescription(event);
+  const containing = useMemo(() => periodsForEvent(detail, periods), [detail, periods]);
+  const description = displayDescription(detail);
 
   async function submitLink() {
     if (!addKind || !addValue.trim()) return;
@@ -185,17 +191,17 @@ function EventDetail({
         ) : null}
         <View style={{ flex: 1 }}>
           <Text style={{ color: c.ink, fontSize: 17, fontWeight: "700", textAlign: textStart, writingDirection }}>
-            {displayTitle(event)}
+            {displayTitle(detail)}
           </Text>
           <Text style={{ color: c.muted, fontSize: tokens.textSm, textAlign: textStart, writingDirection, marginTop: 3 }}>
-            {formatEventWhen(event, locale)}
+            {formatEventWhen(detail, locale)}
           </Text>
         </View>
       </View>
 
       <Row wrap style={{ justifyContent: "flex-start", marginTop: 8 }}>
-        {event.category ? <Badge label={event.category} /> : null}
-        {isGoogleCalendarEvent(event) ? <Badge label={t("common.fromGoogleCalendar")} tone="accent" /> : null}
+        {detail.category ? <Badge label={detail.category} /> : null}
+        {isGoogleCalendarEvent(detail) ? <Badge label={t("common.fromGoogleCalendar")} tone="accent" /> : null}
         {containing.map((p) => (
           <View
             key={p.id}

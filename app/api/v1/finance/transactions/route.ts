@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { dbError, isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import type { FinanceTransaction } from "@/lib/finance/ingest";
+import { TXN_LIST_COLUMNS } from "@/lib/finance/txn-columns";
 
 function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
   return {
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
 
   let query = getSupabase()
     .from("finance_transactions")
-    .select("*")
+    .select(TXN_LIST_COLUMNS)
     .order("txn_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);

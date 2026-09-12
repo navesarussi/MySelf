@@ -1,5 +1,10 @@
 import type { FinanceTransaction } from "@/lib/finance/ingest";
 
+export type CashflowRow = Pick<
+  FinanceTransaction,
+  "txn_date" | "amount" | "kind" | "category" | "needs_categorization"
+>;
+
 export type CategorySpend = { category: string; amount: number };
 
 export type CashflowSummary = {
@@ -12,7 +17,7 @@ export type CashflowSummary = {
 };
 
 export function summarizeCashflow(
-  transactions: FinanceTransaction[],
+  transactions: readonly CashflowRow[],
   month: string
 ): CashflowSummary {
   let income = 0;

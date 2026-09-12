@@ -16,6 +16,7 @@ import {
   patchItemInList,
   removeItemFromList,
   patchRelationshipInHome,
+  removeRelationshipFromHome,
 } from "../../src/query";
 import {
   Badge,
@@ -190,8 +191,10 @@ export default function RelationshipsScreen() {
               queryClient.setQueryData<Relationship[]>(queryKeys.relationships, (old) =>
                 patchItemInList(old, r.id, updated)
               );
+              queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+                patchRelationshipInHome(old, r.id, updated)
+              );
             }
-            queryClient.invalidateQueries({ queryKey: queryKeys.home });
           },
         }
       );
@@ -225,8 +228,10 @@ export default function RelationshipsScreen() {
             queryClient.setQueryData<Relationship[]>(queryKeys.relationships, (old) =>
               patchItemInList(old, targetId, updated)
             );
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+              patchRelationshipInHome(old, targetId, updated)
+            );
           }
-          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     } else {
@@ -248,8 +253,12 @@ export default function RelationshipsScreen() {
       `${t("common.delete")}: ${r.name}?`,
       async () => {
         const prevRel = queryClient.getQueryData<Relationship[]>(queryKeys.relationships);
+        const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
         queryClient.setQueryData<Relationship[]>(queryKeys.relationships, (old) =>
           removeItemFromList(old, r.id)
+        );
+        queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+          removeRelationshipFromHome(old, r.id)
         );
         setForm(null);
 
@@ -258,10 +267,10 @@ export default function RelationshipsScreen() {
           flash: { success: "flash.relationshipDeleted" },
           onError: () => {
             if (prevRel) queryClient.setQueryData(queryKeys.relationships, prevRel);
+            if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
           },
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.relationships });
-            queryClient.invalidateQueries({ queryKey: queryKeys.home });
           },
         });
       },

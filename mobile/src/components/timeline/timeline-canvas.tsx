@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -99,6 +99,7 @@ export function TimelineCanvas({
   const deduped = useMemo(() => dedupeEvents(events), [events]);
   const bounds = useMemo(() => timelineBounds(deduped.events, periods), [deduped.events, periods]);
   const [view, setView] = useState<Win>(() => ({ min: bounds.min, max: bounds.max }));
+  const deferredView = useDeferredValue(view);
   const [plotW, setPlotW] = useState(0);
 
   // Re-fit when the underlying data range changes.
@@ -277,9 +278,9 @@ export function TimelineCanvas({
   );
 
   // --- Layout (all math from lib/timeline-engine — stable across pan/zoom) ---
-  const span = view.max - view.min;
-  const padMin = view.min - span;
-  const padMax = view.max + span;
+  const span = deferredView.max - deferredView.min;
+  const padMin = deferredView.min - span;
+  const padMax = deferredView.max + span;
 
   const { lanes, laneCount } = useMemo(() => stablePeriodLanes(periods, today), [periods, today]);
   const tracksH = tracksHeight(laneCount);
@@ -292,10 +293,14 @@ export function TimelineCanvas({
 
   const clusters = useMemo(() => {
     if (!plotW) return [];
-    return clusterEvents(zoomVisibleEvents, view.min, view.max, plotW, CLUSTER_GAP_PX).filter(
-      (cl) => cl.x >= -plotW && cl.x <= plotW * 2
-    );
-  }, [zoomVisibleEvents, view.min, view.max, plotW]);
+    return clusterEvents(
+      zoomVisibleEvents,
+      deferredView.min,
+      deferredView.max,
+      plotW,
+      CLUSTER_GAP_PX
+    ).filter((cl) => cl.x >= -plotW && cl.x <= plotW * 2);
+  }, [zoomVisibleEvents, deferredView.min, deferredView.max, plotW]);
 
   const { lanes: clusterLanes, laneCount: clusterLaneCount } = useMemo(
     () => assignClusterLanes(clusters, LABEL_GAP_PX),
@@ -312,7 +317,9 @@ export function TimelineCanvas({
     return timelineTicks(padMin, padMax, plotW * 3, localeTag).map((tk) => ({ ...tk, x: tk.x - plotW }));
   }, [padMin, padMax, plotW, localeTag]);
 
-  const todayX = plotW ? xFor(toTime(today) + 12 * HOUR_MS, view.min, view.max, plotW) : -1;
+  const todayX = plotW
+    ? xFor(toTime(today) + 12 * HOUR_MS, deferredView.min, deferredView.max, plotW)
+    : -1;
   const zoomLevel = spanToZoomLevel(span);
   const zoomLabel =
     zoomLevel === "years"
@@ -398,8 +405,8 @@ export function TimelineCanvas({
                       {periods.map((p) => {
                         const lane = lanes.get(p.id);
                         if (lane === undefined) return null;
-                        const startX = xFor(toTime(p.start_date), view.min, view.max, plotW);
-                        const endX = xFor(toTime(p.end_date || today), view.min, view.max, plotW);
+                        const startX = xFor(toTime(p.start_date), deferredView.min, deferredView.max, plotW);
+                        const endX = xFor(toTime(p.end_date || today), deferredView.min, deferredView.max, plotW);
                         const spanPx = clampSpanX(startX, endX, plotW);
                         if (!spanPx) return null;
                         const geom = periodBarGeom(lane);
@@ -600,7 +607,7 @@ function ControlBtn({
  * axis, a hairline connector, and a single label block in its collision-free
  * lane. Duplicate rows show once with a ×N badge.
  */
-function ClusterMarker({
+const ClusterMarker = React.memo(function ClusterMarker({
   cluster,
   duplicates,
   axisY,
@@ -737,7 +744,7 @@ function ClusterMarker({
       </Animated.View>
     </>
   );
-}
+});
 
 function Minimap({
   bounds,

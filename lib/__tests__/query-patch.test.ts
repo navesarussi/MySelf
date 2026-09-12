@@ -54,6 +54,7 @@ describe("query-patch helpers", () => {
       libraryEntries: [],
       openTasksCount: 1,
       inProgressTasksCount: 1,
+      financeUncategorizedCount: 0,
     };
 
     const updated = patchTaskInHome(mockHome, "t1", { status: "done" });
@@ -79,6 +80,7 @@ describe("query-patch helpers", () => {
       libraryEntries: [],
       openTasksCount: 0,
       inProgressTasksCount: 1,
+      financeUncategorizedCount: 0,
     };
 
     const updated = removeTaskFromHome(mockHome, "t1");
@@ -103,6 +105,7 @@ describe("query-patch helpers", () => {
       libraryEntries: [],
       openTasksCount: 0,
       inProgressTasksCount: 0,
+      financeUncategorizedCount: 0,
     };
 
     const updated = patchHabitInHome(mockHome, "h1", { current_streak: 3 });
@@ -126,6 +129,7 @@ describe("query-patch helpers", () => {
       libraryEntries: [],
       openTasksCount: 0,
       inProgressTasksCount: 0,
+      financeUncategorizedCount: 0,
     };
 
     const updated = patchRelationshipInHome(mockHome, "r1", { last_contact_date: "2026-09-12" });

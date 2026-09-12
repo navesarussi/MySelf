@@ -17,6 +17,7 @@ export type ScreenListProps<T> = {
   ListEmptyComponent?: ReactElement | null;
   ListFooterComponent?: ReactElement | null;
   estimatedItemSize?: number;
+  maxWidth?: number;
 };
 
 export function ScreenList<T>({
@@ -31,6 +32,7 @@ export function ScreenList<T>({
   onRefresh,
   ListEmptyComponent,
   ListFooterComponent,
+  maxWidth,
 }: ScreenListProps<T>) {
   const c = useColors();
   const { textStart, writingDirection, row } = useLayoutDir();
@@ -77,21 +79,23 @@ export function ScreenList<T>({
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <FlashList
-        data={data as T[]}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        ListHeaderComponent={header}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: tokens.padLg, paddingBottom: 48 }}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.accent} />
-          ) : undefined
-        }
-      />
+      <View style={{ flex: 1, width: "100%", maxWidth, alignSelf: "center" }}>
+        <FlashList
+          data={data as T[]}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          ListHeaderComponent={header}
+          ListEmptyComponent={ListEmptyComponent}
+          ListFooterComponent={ListFooterComponent}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: tokens.padLg, paddingBottom: 48 }}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+            ) : undefined
+          }
+        />
+      </View>
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { syncGoogleCalendar } from "@/lib/integrations/google-calendar/sync";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
@@ -19,14 +19,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, alreadyRunning: true });
   }
 
-  try {
-    const { imported, removed } = await syncGoogleCalendar();
-    revalidatePath("/timeline");
-    revalidatePath("/");
-    return NextResponse.json({ ok: true, imported, removed });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "sync_failed";
-    console.error("[google-sync-v1]", message);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
-  }
+  after(async () => {
+    try {
+      await syncGoogleCalendar();
+      revalidatePath("/timeline");
+      revalidatePath("/");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "sync_failed";
+      console.error("[google-sync-v1]", message);
+    }
+  });
+
+  return NextResponse.json({ ok: true, started: true });
 }
