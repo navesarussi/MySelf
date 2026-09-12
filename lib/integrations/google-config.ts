@@ -18,6 +18,8 @@ export const GOOGLE_LOGIN_SCOPES = [
   "email",
   "profile",
   GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_TASKS_SCOPE,
+  GOOGLE_GMAIL_SCOPE,
 ].join(" ");
 export const GOOGLE_PROVIDER = "google_calendar";
 export const GOOGLE_TASKS_PROVIDER = "google_tasks";

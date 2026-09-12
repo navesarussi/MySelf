@@ -86,15 +86,23 @@ export default function SettingsScreen() {
     }
   }, [googleTasksQ.data?.connected, loadGoogleTasksLists]);
 
-  async function connectGoogle() {
-    const loginUrl = `${API_URL}/api/auth/google/login?next=${encodeURIComponent("/settings")}`;
+  async function connectGoogleUnified() {
+    const appRedirect =
+      Platform.OS === "web"
+        ? `${window.location.origin}/settings`
+        : ExpoLinking.createURL("/settings");
+    const connectUrl = `${API_URL}/api/auth/google/login?next=${encodeURIComponent("/settings")}&app_redirect=${encodeURIComponent(appRedirect)}`;
     if (Platform.OS === "web") {
-      window.open(loginUrl, "_blank");
+      window.location.href = connectUrl;
       return;
     }
-    await WebBrowser.openBrowserAsync(loginUrl);
-    syncQ.refresh();
+    const result = await WebBrowser.openAuthSessionAsync(connectUrl, appRedirect);
+    if (result.type !== "cancel") {
+      refreshAll();
+    }
   }
+
+  const connectGoogle = connectGoogleUnified;
 
   async function runSync() {
     setSyncMessage(t("settings.syncing"));
@@ -111,21 +119,7 @@ export default function SettingsScreen() {
     syncQ.refresh();
   }
 
-  async function connectGoogleTasks() {
-    const appRedirect =
-      Platform.OS === "web"
-        ? `${window.location.origin}/settings`
-        : ExpoLinking.createURL("/settings");
-    const connectUrl = `${API_URL}/api/integrations/google-tasks/connect?app_redirect=${encodeURIComponent(appRedirect)}`;
-    if (Platform.OS === "web") {
-      window.location.href = connectUrl;
-      return;
-    }
-    const result = await WebBrowser.openAuthSessionAsync(connectUrl, appRedirect);
-    if (result.type !== "cancel") {
-      await googleTasksQ.refresh();
-    }
-  }
+  const connectGoogleTasks = connectGoogleUnified;
 
   function toggleGoogleTasksList(id: string) {
     setSelectedListIds((prev) =>
@@ -179,21 +173,7 @@ export default function SettingsScreen() {
     );
   }
 
-  async function connectGmail() {
-    const appRedirect =
-      Platform.OS === "web"
-        ? `${window.location.origin}/settings`
-        : ExpoLinking.createURL("/settings");
-    const connectUrl = `${API_URL}/api/integrations/gmail/connect?app_redirect=${encodeURIComponent(appRedirect)}`;
-    if (Platform.OS === "web") {
-      window.location.href = connectUrl;
-      return;
-    }
-    const result = await WebBrowser.openAuthSessionAsync(connectUrl, appRedirect);
-    if (result.type !== "cancel") {
-      await gmailQ.refresh();
-    }
-  }
+  const connectGmail = connectGoogleUnified;
 
   function disconnectGmail() {
     confirmDelete(

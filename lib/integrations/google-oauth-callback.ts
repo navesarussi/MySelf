@@ -7,14 +7,34 @@ import {
 import { syncGoogleCalendar } from "@/lib/integrations/google-calendar/sync";
 import { isAllowedGoogleEmail, isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
-import {
-  getIntegrationToken,
-  saveIntegrationToken,
-  tryStartSync,
-} from "@/lib/integrations/tokens";
+import { saveGoogleTokensToAllProviders } from "@/lib/integrations/google-unified";
+import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
 import { consumeOAuthNext, consumeOAuthState } from "@/lib/integrations/oauth-state";
+import {
+  appendTokenToRedirect,
+  isAllowedAppRedirect,
+} from "@/lib/integrations/mobile-redirect";
 import { applySessionCookie } from "@/lib/auth";
 import { setFlashCookie } from "@/lib/flash";
+
+const APP_REDIRECT_COOKIE = "google_oauth_app_redirect";
+
+function redirectToAppOrNext(
+  jar: Awaited<ReturnType<typeof cookies>>,
+  url: NextRequest["nextUrl"],
+  next: string
+) {
+  const appRedirect = jar.get(APP_REDIRECT_COOKIE)?.value;
+  jar.delete(APP_REDIRECT_COOKIE);
+  if (appRedirect && isAllowedAppRedirect(appRedirect)) {
+    const sessionToken = jar.get("session")?.value;
+    const target = sessionToken
+      ? appendTokenToRedirect(appRedirect, sessionToken)
+      : appRedirect;
+    return NextResponse.redirect(target);
+  }
+  return NextResponse.redirect(new URL(next, url.origin));
+}
 
 export async function handleGoogleOAuthCallback(req: NextRequest) {
   const url = req.nextUrl;
@@ -56,20 +76,14 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
       const refreshToken = tokens.refresh_token ?? existing?.refresh_token;
       if (!refreshToken) throw new Error("missing_refresh_token");
 
-      await saveIntegrationToken({
-        provider: GOOGLE_PROVIDER,
-        access_token: tokens.access_token,
-        refresh_token: refreshToken,
-        expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-        last_sync_at: existing?.last_sync_at ?? null,
-      });
+      await saveGoogleTokensToAllProviders(tokens);
     }
 
-    const res = NextResponse.redirect(new URL(next, url.origin));
+    const res = redirectToAppOrNext(jar, url, next);
     await applySessionCookie(res, secret);
 
     if (isPrimary) {
-      setFlashCookie(jar, "מחובר — מסנכרן יומן ברקע");
+      setFlashCookie(jar, "Google מחובר — יומן, משימות ומייל");
       if (await tryStartSync(GOOGLE_PROVIDER)) {
         after(async () => {
           try {

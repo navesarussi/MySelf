@@ -111,7 +111,7 @@ Bidirectional WhatsApp via Meta Cloud API webhook (`/api/agent/whatsapp/webhook`
 Scheduled motivation digs when Jerusalem wall-clock hour is in `dig_hours` (1–6 slots). Cron ticks multiple daily UTC times; only matching hours send.
 
 ### FR-AI-GMAIL-01
-User connects Gmail via OAuth (`gmail.readonly` scope) from mobile Settings. Tokens stored in `integration_tokens` (`google_gmail` provider). The motivation agent has read-only tools `list_emails` and `read_email` to search and read message bodies when Gmail is connected.
+User connects Gmail via the unified Google OAuth login (`gmail.readonly` scope together with calendar + tasks) from mobile Settings. Tokens stored in `integration_tokens` (`google_gmail` provider). The motivation agent has read-only tools `list_emails` and `read_email` to search and read message bodies when Gmail is connected.
 
 ### FR-AI-GMAIL-02
 Morning motivation dig pre-fetches unread Gmail preview (`gmail_digest` in agent context) when Gmail is connected, so the dig may mention the most urgent unread email.
