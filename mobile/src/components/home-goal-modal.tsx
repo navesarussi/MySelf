@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import { api } from "../api/resources";
-import { useMutate } from "../hooks";
+import { useApiMutation } from "../query";
 import { useI18n } from "../i18n";
 import { FormModal } from "./form-modal";
 import { Input, confirmDelete } from "./ui";
@@ -37,7 +37,7 @@ export function HomeGoalModal({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
-  const { run, busy } = useMutate();
+  const { run, busy } = useApiMutation();
   const [form, setForm] = useState<GoalForm | null>(null);
 
   useEffect(() => {

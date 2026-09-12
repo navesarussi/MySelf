@@ -20,8 +20,9 @@ import { ThemeProvider, useColors } from "../src/theme";
 import { ToastProvider } from "../src/toast";
 import { ErrorBoundary } from "../src/components/error-boundary";
 import { usePushNotifications } from "../src/push/use-push";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { queryClient } from "../src/query/client";
+import { persistOptions } from "../src/query/persist";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -76,7 +77,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
           <ThemeProvider>
             <I18nProvider>
               <NavPrefsProvider>
@@ -90,7 +91,7 @@ export default function RootLayout() {
               </NavPrefsProvider>
             </I18nProvider>
           </ThemeProvider>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

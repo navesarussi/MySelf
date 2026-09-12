@@ -45,13 +45,13 @@ export default function HomeScreen() {
   const { data, loading, error, refresh } = useApiQuery(queryKeys.home, api.home);
   const { run, isPending } = useApiMutation();
   const [goalForm, setGoalForm] = useState<Goal | null>(null);
-  const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags" | "body"> | null>(null);
+  const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags"> | null>(null);
 
   const today = todayISO();
   const todayDate = new Date();
 
   const habits = data?.habits ?? [];
-  const uniqueHabits = dedupeHabits(habits, today);
+  const uniqueHabits = useMemo(() => dedupeHabits(habits, today), [habits, today]);
   const habitsPendingToday = useMemo(
     () =>
       sortHabitsByReportUrgency(uniqueHabits).filter(

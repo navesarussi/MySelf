@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import { api } from "../api/resources";
-import { useMutate } from "../hooks";
+import { useApiMutation, useApiQuery, queryKeys } from "../query";
 import { useI18n } from "../i18n";
 import { FormModal } from "./form-modal";
 import { Input, confirmDelete } from "./ui";
@@ -15,14 +15,14 @@ type LibraryForm = {
   tags: string;
 };
 
-type LibraryCard = Pick<ContentEntry, "id" | "title" | "category" | "tags" | "body">;
+type LibraryCard = Pick<ContentEntry, "id" | "title" | "category" | "tags"> & { body?: string };
 
 function toForm(entry: LibraryCard): LibraryForm {
   return {
     id: entry.id,
     title: entry.title,
     category: entry.category,
-    body: entry.body,
+    body: entry.body ?? "",
     tags: entry.tags.join(", "),
   };
 }
@@ -37,12 +37,22 @@ export function HomeLibraryModal({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
-  const { run, busy } = useMutate();
+  const { run, busy } = useApiMutation();
   const [form, setForm] = useState<LibraryForm | null>(null);
+  const entryQ = useApiQuery(
+    queryKeys.libraryEntry(entry?.id ?? ""),
+    (config) => api.getEntry(config, entry!.id),
+    { enabled: Boolean(entry?.id) }
+  );
 
   useEffect(() => {
-    setForm(entry ? toForm(entry) : null);
-  }, [entry]);
+    if (!entry) {
+      setForm(null);
+      return;
+    }
+    if (entryQ.data) setForm(toForm(entryQ.data));
+    else setForm(toForm(entry));
+  }, [entry, entryQ.data]);
 
   async function submit() {
     if (!form || !form.title.trim() || !form.body.trim()) return;

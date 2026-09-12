@@ -1,12 +1,6 @@
-import React from "react";
-import {
-  FlatList,
-  RefreshControl,
-  Text,
-  View,
-  type FlatListProps,
-  type ListRenderItem,
-} from "react-native";
+import React, { type ReactElement } from "react";
+import { RefreshControl, Text, View } from "react-native";
+import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useColors, tokens } from "../theme";
 import { useLayoutDir } from "../layout-dir";
 
@@ -20,9 +14,9 @@ export type ScreenListProps<T> = {
   keyExtractor: (item: T, index: number) => string;
   refreshing?: boolean;
   onRefresh?: () => void;
-  ListEmptyComponent?: React.ReactElement | null;
-  ListFooterComponent?: React.ReactElement | null;
-  contentContainerStyle?: FlatListProps<T>["contentContainerStyle"];
+  ListEmptyComponent?: ReactElement | null;
+  ListFooterComponent?: ReactElement | null;
+  estimatedItemSize?: number;
 };
 
 export function ScreenList<T>({
@@ -37,7 +31,6 @@ export function ScreenList<T>({
   onRefresh,
   ListEmptyComponent,
   ListFooterComponent,
-  contentContainerStyle,
 }: ScreenListProps<T>) {
   const c = useColors();
   const { textStart, writingDirection, row } = useLayoutDir();
@@ -83,28 +76,22 @@ export function ScreenList<T>({
   ) : null;
 
   return (
-    <FlatList
-      style={{ flex: 1, backgroundColor: c.bg }}
-      contentContainerStyle={[
-        { padding: tokens.padLg, paddingBottom: 48 },
-        contentContainerStyle,
-      ]}
-      data={data}
-      renderItem={renderItem}
-      keyExtractor={keyExtractor}
-      ListHeaderComponent={header}
-      ListEmptyComponent={ListEmptyComponent}
-      ListFooterComponent={ListFooterComponent}
-      keyboardShouldPersistTaps="handled"
-      windowSize={7}
-      initialNumToRender={10}
-      maxToRenderPerBatch={10}
-      removeClippedSubviews={true}
-      refreshControl={
-        onRefresh ? (
-          <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.accent} />
-        ) : undefined
-      }
-    />
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <FlashList
+        data={data as T[]}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={header}
+        ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={ListFooterComponent}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: tokens.padLg, paddingBottom: 48 }}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+          ) : undefined
+        }
+      />
+    </View>
   );
 }

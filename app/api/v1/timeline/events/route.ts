@@ -15,7 +15,10 @@ export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await getSupabase()
     .from("timeline_events")
-    .select("*")
+    .select(
+      "id, event_date, event_time, title, description, category, min_zoom, source, google_event_id, title_override, description_override, hidden_at, synced_at, created_at"
+    )
+    .is("hidden_at", null)
     .order("event_date", { ascending: false })
     .limit(10000);
   if (error) return dbError();

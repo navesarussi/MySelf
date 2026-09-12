@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useColors, tokens } from "../../theme";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
-import { useApi, useMutate } from "../../hooks";
+import { useApiQuery, useApiMutation, queryKeys } from "../../query";
 import { api } from "../../api/resources";
 import { Badge, Btn, Chip, Input, Row, confirmDelete } from "../ui";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
@@ -131,11 +131,11 @@ function EventDetail({
   const c = useColors();
   const { t, locale } = useI18n();
   const { row, textStart, writingDirection } = useLayoutDir();
-  const { run, busy } = useMutate();
+  const { run, busy } = useApiMutation();
 
-  const linksQ = useApi(
-    (config) => api.eventLinks(config, event.id),
-    [event.id]
+  const linksQ = useApiQuery(
+    queryKeys.eventLinks(event.id),
+    (config) => api.eventLinks(config, event.id)
   );
   const links = linksQ.data ?? [];
 

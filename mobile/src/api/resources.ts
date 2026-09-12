@@ -12,6 +12,8 @@ import type {
 } from "@/lib/types";
 import type { LifePeriod } from "@/lib/life-periods";
 import type { FinanceCashflow, FinanceTransaction } from "@/lib/finance/types";
+import type { MonthPlanView } from "@/lib/finance/plan";
+import type { PlanLineRow } from "@/lib/finance/plan";
 
 export type HomePayload = {
   habits: Habit[];
@@ -26,7 +28,7 @@ export type HomePayload = {
   eventsMode: "upcoming" | "recent";
   openTasks: Task[];
   projects: Project[];
-  libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "body" | "updated_at">[];
+  libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "updated_at">[];
   openTasksCount: number;
   inProgressTasksCount: number;
   financeUncategorizedCount: number;
@@ -152,6 +154,7 @@ export const api = {
     const qs = sp.toString();
     return apiFetch<ContentEntry[]>(c, `/library${qs ? `?${qs}` : ""}`);
   },
+  getEntry: (c: ApiConfig, id: string) => apiFetch<ContentEntry>(c, `/library/${id}`),
   createEntry: (c: ApiConfig, body: Partial<Omit<ContentEntry, "tags">> & { tags?: string | string[] }) =>
     apiFetch<ContentEntry>(c, "/library", { method: "POST", body }),
   updateEntry: (
@@ -319,6 +322,13 @@ export const api = {
 
   financeCashflow: (c: ApiConfig, month: string) =>
     apiFetch<FinanceCashflow>(c, `/finance/cashflow?month=${encodeURIComponent(month)}`),
+  financePlan: (c: ApiConfig, month: string) =>
+    apiFetch<MonthPlanView>(c, `/finance/plan?month=${encodeURIComponent(month)}`),
+  patchFinancePlanLine: (c: ApiConfig, lineId: string, planned_amount: number) =>
+    apiFetch<PlanLineRow>(c, `/finance/plan/lines/${lineId}`, {
+      method: "PATCH",
+      body: { planned_amount },
+    }),
   financeTransactions: (
     c: ApiConfig,
     params: { month?: string; uncategorized?: boolean; limit?: number }

@@ -1,18 +1,19 @@
-import { QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, QueryClient } from "@tanstack/react-query";
 
 /**
  * Global QueryClient configured for instant UI responsiveness.
- * Data remains fresh for 30s; inactive cache retained for 10m.
- * Re-focus refetching disabled to avoid unexpected layout shifts on mobile.
+ * Previous results stay on screen while filters/months change.
+ * Re-focus refetching disabled to avoid layout shifts on mobile.
  */
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 30, // 30 seconds
-      gcTime: 1000 * 60 * 10, // 10 minutes
+      staleTime: 1000 * 30,
+      gcTime: 1000 * 60 * 10,
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
+      placeholderData: keepPreviousData,
     },
     mutations: {
       retry: 0,

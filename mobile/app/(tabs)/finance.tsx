@@ -6,9 +6,21 @@ import { api } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
-import { useApiQuery, queryKeys } from "../../src/query";
-import { Card, EmptyState, ErrorNote, Loading, Row, Screen, SectionTitle } from "../../src/components/ui";
-import type { FinanceCashflow, FinanceTransaction } from "@/lib/finance/types";
+import { useApiQuery, useApiMutation, queryKeys, queryClient } from "../../src/query";
+import { PLAN_SECTION_ORDER } from "@/lib/finance/expense-type";
+import type { MonthPlanView } from "@/lib/finance/plan";
+import { PlanSectionBlock } from "../../src/components/finance/plan-section";
+import { WeekStrip } from "../../src/components/finance/week-strip";
+import {
+  Card,
+  EmptyState,
+  ErrorNote,
+  Loading,
+  Row,
+  Screen,
+  SectionTitle,
+} from "../../src/components/ui";
+import type { FinanceTransaction } from "@/lib/finance/types";
 
 function monthKey(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -47,8 +59,7 @@ function TxnRow({ txn, onPress }: { txn: FinanceTransaction; onPress: () => void
         </Row>
         <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 4, textAlign: textStart, writingDirection }}>
           {txn.txn_date}
-          {txn.category ? ` · ${txn.category}` : txn.needs_categorization ? " · ?" : ""}
-          {txn.source === "apple_pay" ? " · Apple Pay" : txn.source === "leumi" ? " · לאומי" : ""}
+          {txn.category ? ` · ${txn.category}` : ""}
         </Text>
       </Card>
     </Pressable>
@@ -60,25 +71,28 @@ export default function FinanceScreen() {
   const c = useColors();
   const { textStart, writingDirection, row } = useLayoutDir();
   const router = useRouter();
+  const { run } = useApiMutation();
   const [month, setMonth] = useState(monthKey());
+  const [showTxns, setShowTxns] = useState(false);
   const isCurrentMonth = month === monthKey();
 
-  const { data: cashflow, loading: cfLoading, error: cfError, refresh: refreshCf } = useApiQuery(
-    queryKeys.financeCashflow(month),
-    (cfg) => api.financeCashflow(cfg, month)
+  const { data: plan, loading: planLoading, error: planError, refresh: refreshPlan } = useApiQuery(
+    queryKeys.financePlan(month),
+    (cfg) => api.financePlan(cfg, month)
   );
-  const { data: txns, loading: txLoading, error: txError, refresh: refreshTx } = useApiQuery(
+  const { data: txns, loading: txLoading, refresh: refreshTx } = useApiQuery(
     queryKeys.financeTransactions(month),
     (cfg) => api.financeTransactions(cfg, { month, limit: 100 })
   );
 
-  const loading = cfLoading || txLoading;
-  const error = cfError || txError;
+  const loading = planLoading;
+  const error = planError;
   const refresh = () => {
-    void refreshCf();
+    void refreshPlan();
     void refreshTx();
   };
 
+  const view = plan as MonthPlanView | undefined;
   const uncategorized = useMemo(
     () => (txns ?? []).filter((t) => t.needs_categorization),
     [txns]
@@ -88,13 +102,24 @@ export default function FinanceScreen() {
     router.push(`/finance-categorize?id=${id}` as `/${string}`);
   }
 
-  const cf = cashflow as FinanceCashflow | undefined;
-  const maxCategory = cf?.by_category?.[0]?.amount ?? 1;
+  async function savePlanned(lineId: string, amount: number) {
+    await run(
+      (cfg) => api.patchFinancePlanLine(cfg, lineId, amount),
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) });
+        },
+      }
+    );
+  }
+
+  const netColor =
+    view && view.totals.net_actual < 0 ? c.warn : view && view.totals.net_actual > 0 ? c.good : c.ink;
 
   return (
-    <Screen title={t("finance.title")} subtitle={t("finance.subtitle")} refreshing={loading} onRefresh={refresh}>
+    <Screen title={t("finance.title")} subtitle={t("finance.subtitlePlan")} refreshing={loading} onRefresh={refresh}>
       {error ? <ErrorNote message={error} onRetry={refresh} /> : null}
-      {loading && !cf ? <Loading /> : null}
+      {loading && !view ? <Loading /> : null}
 
       <View style={{ ...row, justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <Pressable onPress={() => setMonth((m) => shiftMonth(m, -1))} hitSlop={12}>
@@ -113,53 +138,19 @@ export default function FinanceScreen() {
         </Pressable>
       </View>
 
-      {cf ? (
+      {view ? (
         <Card>
           <Row>
-            <Stat label={t("finance.income")} value={`₪${cf.income.toFixed(0)}`} />
-            <Stat label={t("finance.expense")} value={`₪${cf.expense.toFixed(0)}`} />
-            <Stat label={t("finance.net")} value={`₪${cf.net.toFixed(0)}`} accent net={cf.net} />
+            <SummaryCell label={t("finance.income")} value={`₪${view.totals.actual_income.toFixed(0)}`} sub={`/ ₪${view.totals.planned_income.toFixed(0)}`} />
+            <SummaryCell label={t("finance.expense")} value={`₪${view.totals.actual_expense.toFixed(0)}`} sub={`/ ₪${view.totals.planned_expense.toFixed(0)}`} />
+            <SummaryCell label={t("finance.net")} value={`₪${view.totals.net_actual.toFixed(0)}`} valueColor={netColor} />
           </Row>
-          {cf.uncategorized_count > 0 ? (
-            <Text style={{ color: c.warn, marginTop: 8, textAlign: textStart, writingDirection, fontWeight: "600" }}>
-              {t("finance.uncategorized")}: {cf.uncategorized_count}
+          {view.totals.savings_planned > 0 ? (
+            <Text style={{ color: c.accent, marginTop: 8, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
+              {t("finance.savingsTarget")}: ₪{view.totals.savings_planned.toFixed(0)}
             </Text>
           ) : null}
         </Card>
-      ) : null}
-
-      {cf && cf.by_category.length > 0 ? (
-        <>
-          <SectionTitle>{t("finance.byCategory")}</SectionTitle>
-          <Card>
-            {cf.by_category.map((item) => (
-              <View key={item.category} style={{ marginBottom: 10 }}>
-                <Row>
-                  <Text style={{ color: c.ink, flex: 1, textAlign: textStart, writingDirection }}>{item.category}</Text>
-                  <Text style={{ color: c.muted, fontWeight: "600" }}>₪{item.amount.toFixed(0)}</Text>
-                </Row>
-                <View
-                  style={{
-                    height: 4,
-                    backgroundColor: c.border,
-                    borderRadius: 2,
-                    marginTop: 4,
-                    overflow: "hidden",
-                  }}
-                >
-                  <View
-                    style={{
-                      height: 4,
-                      width: `${Math.max(8, (item.amount / maxCategory) * 100)}%`,
-                      backgroundColor: c.accent,
-                      borderRadius: 2,
-                    }}
-                  />
-                </View>
-              </View>
-            ))}
-          </Card>
-        </>
       ) : null}
 
       {uncategorized.length > 0 ? (
@@ -171,41 +162,59 @@ export default function FinanceScreen() {
         </>
       ) : null}
 
-      <SectionTitle>{t("finance.allTransactions")}</SectionTitle>
-      {!loading && (txns ?? []).length === 0 ? <EmptyState text={t("finance.noTransactions")} /> : null}
-      {(txns ?? [])
-        .filter((t) => !t.needs_categorization)
-        .map((txn) => (
-          <TxnRow key={txn.id} txn={txn} onPress={() => openCategorize(txn.id)} />
-        ))}
+      {view ? (
+        <>
+          {PLAN_SECTION_ORDER.map((type) => (
+            <PlanSectionBlock
+              key={type}
+              section={view.sections[type]}
+              onSavePlanned={(id, amount) => void savePlanned(id, amount)}
+            />
+          ))}
+          {view.weeks.length > 0 ? <WeekStrip weeks={view.weeks} /> : null}
+        </>
+      ) : null}
 
-      <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 12, textAlign: textStart, writingDirection }}>
-        {t("finance.shortcutHint")}
-      </Text>
+      <Pressable onPress={() => setShowTxns((v) => !v)} style={{ marginTop: 8, marginBottom: 4 }}>
+        <Row>
+          <SectionTitle>{t("finance.allTransactions")}</SectionTitle>
+          <Ionicons name={showTxns ? "chevron-up" : "chevron-down"} size={18} color={c.muted} />
+        </Row>
+      </Pressable>
+      {showTxns ? (
+        <>
+          {!txLoading && (txns ?? []).length === 0 ? <EmptyState text={t("finance.noTransactions")} /> : null}
+          {(txns ?? []).map((txn) => (
+            <TxnRow key={txn.id} txn={txn} onPress={() => openCategorize(txn.id)} />
+          ))}
+        </>
+      ) : null}
     </Screen>
   );
 }
 
-function Stat({
+function SummaryCell({
   label,
   value,
-  accent,
-  net,
+  sub,
+  valueColor,
 }: {
   label: string;
   value: string;
-  accent?: boolean;
-  net?: number;
+  sub?: string;
+  valueColor?: string;
 }) {
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
-  const color = accent ? (net !== undefined && net < 0 ? c.warn : c.accent) : c.ink;
   return (
     <View style={{ flex: 1 }}>
       <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>{label}</Text>
-      <Text style={{ color, fontWeight: "700", fontSize: tokens.title, textAlign: textStart, writingDirection }}>
+      <Text style={{ color: valueColor ?? c.ink, fontWeight: "700", fontSize: tokens.title, textAlign: textStart, writingDirection }}>
         {value}
       </Text>
+      {sub ? (
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>{sub}</Text>
+      ) : null}
     </View>
   );
 }

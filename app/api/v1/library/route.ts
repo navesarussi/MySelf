@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
+import { previewContentBody } from "@/lib/content-preview";
 
 const parseTags = (v: unknown) =>
   Array.isArray(v)
@@ -29,7 +30,11 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) return dbError();
-  return NextResponse.json(data || []);
+  const rows = (data || []).map((row) => ({
+    ...row,
+    body: previewContentBody((row as { body?: string | null }).body),
+  }));
+  return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {

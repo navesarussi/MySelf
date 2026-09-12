@@ -2,12 +2,12 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "1.12.4",
+    "version": "1.13.0",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "backgroundColor": "#0b0c10",
     "ios": {
       "supportsTablet": true,
@@ -15,7 +15,7 @@
       "infoPlist": {
         "CFBundleDevelopmentRegion": "he",
         "ITSAppUsesNonExemptEncryption": false,
-        "RCTNewArchEnabled": false,
+        "RCTNewArchEnabled": true,
         "NSContactsUsageDescription": "לאפשר ל-MeAndMySelf לקרוא אנשי קשר כדי למלא פרטי קשר חדשים.",
         "UIBackgroundModes": [
           "remote-notification"

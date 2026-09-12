@@ -1,6 +1,6 @@
 {
   "name": "myself-dashboard",
-  "version": "1.12.5",
+  "version": "1.13.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,7 +10,7 @@
     "lint": "next lint",
     "db:apply": "bash scripts/db-apply.sh",
     "sync:leumi": "tsx scripts/finance/sync-leumi.ts",
-    "test": "node --import tsx --test lib/__tests__/phone.test.ts lib/__tests__/google-calendar-map.test.ts lib/__tests__/google-calendar-merge.test.ts lib/__tests__/life-periods.test.ts lib/__tests__/google-auth.test.ts lib/__tests__/delete-guard.test.ts lib/__tests__/habit-stats.test.ts lib/__tests__/data-integrity.test.ts lib/__tests__/timeline-zoom.test.ts lib/__tests__/task-source-merge.test.ts lib/__tests__/google-tasks-map.test.ts lib/__tests__/relationships-due.test.ts lib/__tests__/home-events.test.ts lib/__tests__/device-contact-map.test.ts lib/__tests__/mobile-redirect.test.ts lib/__tests__/google-tasks-redirect.test.ts lib/__tests__/timeline-engine.test.ts lib/__tests__/monday-ids.test.ts lib/__tests__/monday-map.test.ts lib/__tests__/monday-redirect.test.ts lib/__tests__/github-map.test.ts lib/__tests__/github-repos.test.ts lib/__tests__/task-priority.test.ts lib/__tests__/home-stats-grid.test.ts lib/__tests__/agent-whatsapp.test.ts lib/__tests__/agent-action-push.test.ts lib/__tests__/push.test.ts lib/__tests__/query-patch.test.ts lib/__tests__/finance-external-key.test.ts lib/__tests__/merchant-category.test.ts lib/__tests__/cashflow.test.ts"
+    "test": "node --import tsx --test lib/__tests__/phone.test.ts lib/__tests__/google-calendar-map.test.ts lib/__tests__/google-calendar-merge.test.ts lib/__tests__/life-periods.test.ts lib/__tests__/google-auth.test.ts lib/__tests__/delete-guard.test.ts lib/__tests__/habit-stats.test.ts lib/__tests__/data-integrity.test.ts lib/__tests__/timeline-zoom.test.ts lib/__tests__/task-source-merge.test.ts lib/__tests__/google-tasks-map.test.ts lib/__tests__/relationships-due.test.ts lib/__tests__/home-events.test.ts lib/__tests__/device-contact-map.test.ts lib/__tests__/mobile-redirect.test.ts lib/__tests__/google-tasks-redirect.test.ts lib/__tests__/timeline-engine.test.ts lib/__tests__/monday-ids.test.ts lib/__tests__/monday-map.test.ts lib/__tests__/monday-redirect.test.ts lib/__tests__/github-map.test.ts lib/__tests__/github-repos.test.ts lib/__tests__/task-priority.test.ts lib/__tests__/home-stats-grid.test.ts lib/__tests__/agent-whatsapp.test.ts lib/__tests__/agent-action-push.test.ts lib/__tests__/push.test.ts lib/__tests__/query-patch.test.ts lib/__tests__/finance-external-key.test.ts lib/__tests__/merchant-category.test.ts lib/__tests__/cashflow.test.ts lib/__tests__/plan.test.ts lib/__tests__/content-preview.test.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.101",

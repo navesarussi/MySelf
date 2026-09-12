@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
+import { useSession } from "../../src/session";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
@@ -44,6 +45,7 @@ const emptyForm: FormState = { title: "", category: "", body: "", tags: "" };
 export default function LibraryScreen() {
   const c = useColors();
   const { t } = useI18n();
+  const { token, serverUrl } = useSession();
   const { textStart, textLtr, writingDirection } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
@@ -147,6 +149,34 @@ export default function LibraryScreen() {
     [libraryKey, run, t]
   );
 
+  const openEdit = useCallback(
+    async (entry: ContentEntry) => {
+      if (!token || !serverUrl) return;
+      try {
+        const full = await queryClient.fetchQuery({
+          queryKey: queryKeys.libraryEntry(entry.id),
+          queryFn: () => api.getEntry({ token, serverUrl }, entry.id),
+        });
+        setForm({
+          id: full.id,
+          title: full.title,
+          category: full.category,
+          body: full.body,
+          tags: full.tags.join(", "),
+        });
+      } catch {
+        setForm({
+          id: entry.id,
+          title: entry.title,
+          category: entry.category,
+          body: entry.body,
+          tags: entry.tags.join(", "),
+        });
+      }
+    },
+    [token, serverUrl]
+  );
+
   const renderItem = useCallback(
     ({ item: entry }: { item: ContentEntry }) => {
       const open = expanded === entry.id;
@@ -189,15 +219,7 @@ export default function LibraryScreen() {
                 small
                 variant="ghost"
                 label={t("common.edit")}
-                onPress={() =>
-                  setForm({
-                    id: entry.id,
-                    title: entry.title,
-                    category: entry.category,
-                    body: entry.body,
-                    tags: entry.tags.join(", "),
-                  })
-                }
+                onPress={() => void openEdit(entry)}
               />
               <Btn
                 small
@@ -211,7 +233,7 @@ export default function LibraryScreen() {
         </Card>
       );
     },
-    [expanded, c, textStart, writingDirection, t, isPending, removeEntry]
+    [expanded, c, textStart, writingDirection, t, isPending, removeEntry, openEdit]
   );
 
   const keyExtractor = useCallback((item: ContentEntry) => item.id, []);

@@ -234,6 +234,12 @@ Merchant category is auto-suggested from prior categorized transactions (same me
 ### FR-FIN-05
 Home dashboard shows a stat tile when `financeUncategorizedCount > 0`, linking to the finance screen.
 
+### FR-FIN-06
+Monthly cash-flow plan with line types: income, fixed, variable, planned, savings. Plan auto-seeded from previous month; user edits planned amounts per line.
+
+### FR-FIN-07
+Finance dashboard shows planned vs actual per section, weekly expense bars, and collapsible transaction list.
+
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
 
@@ -245,4 +251,10 @@ Tab switches do not remount frozen screens; warm cache avoids loading indicators
 
 ### NFR-UX-03
 Entity lists virtualize (`FlatList` / `ScreenList`); modal editors are hoisted to a single instance per screen rather than instantiated per card.
+
+### NFR-UX-04
+List endpoints omit unused columns and hidden timeline rows (SQL `hidden_at` filter). Library lists send a body preview; editors fetch the full row. Filter/month changes keep previous results on screen (`keepPreviousData`).
+
+### NFR-UX-05
+Native entity lists use FlashList (FlatList on web). Query cache persists across cold starts except the timeline events blob. New Architecture is enabled for native builds.
 

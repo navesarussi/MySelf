@@ -12,7 +12,10 @@ function revalidateGoalPaths() {
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase().from("goals").select("*").order("sort_order");
+  const { data, error } = await getSupabase()
+    .from("goals")
+    .select("id, title, category, horizon, first_step, definition_of_done, status, sort_order, created_at")
+    .order("sort_order");
   if (error) return dbError();
   const rows = data || [];
   const unique = dedupeGoals(rows);

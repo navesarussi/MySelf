@@ -1,8 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Redirect, Tabs } from "expo-router";
 import { enableFreeze } from "react-native-screens";
-import { useSession } from "../../src/session";
+import { useSession, API_URL } from "../../src/session";
+import { prefetchAppShell } from "../../src/query";
 import { useI18n } from "../../src/i18n";
 import { Loading } from "../../src/components/ui";
 import { AddMenuModal } from "../../src/components/add-menu";
@@ -19,6 +20,11 @@ export default function TabsLayout() {
   const { ready: prefsReady, isBottomTab } = useNavPrefs();
   const [addOpen, setAddOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    prefetchAppShell({ token, serverUrl: API_URL });
+  }, [token]);
 
   const renderTabBar = useCallback(
     (props: Parameters<NonNullable<React.ComponentProps<typeof Tabs>["tabBar"]>>[0]) => (

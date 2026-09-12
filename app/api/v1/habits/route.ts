@@ -16,7 +16,9 @@ export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await getSupabase()
     .from("habits")
-    .select("*")
+    .select(
+      "id, name, kind, target_note, streak_count, best_streak, total_success_days, failure_count, last_checked_on, report_time, last_reported_at, archived, created_at"
+    )
     .eq("archived", false)
     .order("created_at");
   if (error) return dbError();

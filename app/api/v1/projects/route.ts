@@ -9,7 +9,10 @@ function revalidateProjectPaths() {
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase().from("projects").select("*").order("sort_order");
+  const { data, error } = await getSupabase()
+    .from("projects")
+    .select("id, name, sort_order, created_at")
+    .order("sort_order");
   if (error) return dbError();
   return NextResponse.json(data || []);
 }

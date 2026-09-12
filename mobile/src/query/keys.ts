@@ -28,4 +28,7 @@ export const queryKeys = {
   githubStatus: ["githubStatus"] as const,
   financeCashflow: (month: string) => ["financeCashflow", month] as const,
   financeTransactions: (month: string) => ["financeTransactions", month] as const,
+  financePlan: (month: string) => ["financePlan", month] as const,
+  eventLinks: (eventId: string) => ["eventLinks", eventId] as const,
+  libraryEntry: (id: string) => ["libraryEntry", id] as const,
 };

@@ -7,7 +7,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - Max ~200 lines per file; split UI sections when needed.
 - Prefer localized changes; no speculative abstractions.
 - Docs in English.
-- Client state & cache architecture lives in `mobile/src/query/` (TanStack Query) to provide optimistic updates, per-item pending states, and avoid redundant screen refetches.
+- Client state & cache architecture lives in `mobile/src/query/` (TanStack Query) to provide optimistic updates, per-item pending states, and avoid redundant screen refetches. Cache persistence is in `mobile/src/query/persist.ts` (skips timeline events). Native lists use FlashList via `ScreenList`.
 
 ## [PENDING REFACTOR]
 - Introduce `/domain` + `/application` + `/infrastructure` layers when the surface area grows past current pages.
@@ -22,6 +22,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/timeline.tsx` chronological/period accordion helpers under 200 lines.
 - [PENDING REFACTOR]: Split `lib/agent/tools.ts` / `data.ts` further under 200 lines after full entity tool coverage.
 - [PENDING REFACTOR]: Lift per-card modals from `HabitCard` to screen-level `FormModal` (implemented during instant UX infrastructure).
+- [PENDING REFACTOR]: TimelineCanvas clustering still runs on the JS thread (out of NFR-UX-04/05 pass).
 
 ## Notes
 - Never mutate cookies inside Server Components (layout). Flash toast is set in Server Actions and read/cleared on the client.

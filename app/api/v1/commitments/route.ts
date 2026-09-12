@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await getSupabase()
     .from("commitments")
-    .select("*")
+    .select("id, commitment_date, text, status, created_at")
     .order("commitment_date", { ascending: false });
   if (error) return dbError();
   return NextResponse.json(data || []);

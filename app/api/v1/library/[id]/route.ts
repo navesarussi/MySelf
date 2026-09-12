@@ -5,6 +5,20 @@ import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } fro
 
 type Params = { params: Promise<{ id: string }> };
 
+export async function GET(req: NextRequest, { params }: Params) {
+  if (!(await isApiAuthorized(req))) return unauthorized();
+  const { id } = await params;
+  if (!id) return badRequest("id_required");
+  const { data, error } = await getSupabase()
+    .from("content_entries")
+    .select("id, title, category, body, tags, created_at, updated_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return dbError();
+  if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  return NextResponse.json(data);
+}
+
 const parseTags = (v: unknown) =>
   Array.isArray(v)
     ? v.map((t) => String(t).trim()).filter(Boolean)

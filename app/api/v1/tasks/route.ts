@@ -69,7 +69,11 @@ export async function GET(req: NextRequest) {
   const overdue = sp.get("overdue") === "1";
   const sort = sp.get("sort");
 
-  let query = getSupabase().from("tasks").select("*, projects(name)");
+  let query = getSupabase()
+    .from("tasks")
+    .select(
+      "id, title, project_id, priority, status, due_date, notes, source, external_id, external_list_id, external_meta, synced_at, created_at, updated_at, projects(name)"
+    );
   if (project) query = query.eq("project_id", project);
   if (status) {
     const list = status.split(",").filter((s): s is TaskStatus => (STATUSES as string[]).includes(s));

@@ -3,7 +3,7 @@ import { Platform, Pressable, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
 import { api, type MondayAccount } from "../api/resources";
-import { useApi, useMutate } from "../hooks";
+import { useApiQuery, useApiMutation, queryKeys } from "../query";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
@@ -15,8 +15,8 @@ export function MondaySettingsSection() {
   const { t, locale } = useI18n();
   const { textStart, writingDirection, row } = useLayoutDir();
   const { token, serverUrl } = useSession();
-  const { run, busy } = useMutate();
-  const accountsQ = useApi(api.mondayAccounts);
+  const { run, busy } = useApiMutation();
+  const accountsQ = useApiQuery(queryKeys.mondayAccounts, api.mondayAccounts);
   const [message, setMessage] = useState<string | null>(null);
   const [boardsByAccount, setBoardsByAccount] = useState<
     Record<string, { id: string; title: string }[]>

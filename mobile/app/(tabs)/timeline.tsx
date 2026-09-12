@@ -23,13 +23,14 @@ import {
   Label,
   Loading,
   Row,
-  Screen,
+  ScreenList,
   SectionTitle,
   confirmDelete,
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
 import { TimelineVisual } from "../../src/components/timeline-visual";
 import { TimelineEventSheet } from "../../src/components/timeline/event-sheet";
+import { TimelineEventCard } from "../../src/components/timeline-event-card";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import { eventsForPeriod, formatPeriodRange, type LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
@@ -104,6 +105,44 @@ export default function TimelineScreen() {
     pastEvents.sort(byDateDesc);
     return { todayEvents, futureEvents, pastEvents };
   }, [events, today]);
+
+  type ChronoRow =
+    | { key: string; kind: "toggle"; section: "future" | "past"; count: number; open: boolean }
+    | { key: string; kind: "label" }
+    | { key: string; kind: "event"; event: TimelineEvent };
+
+  const chronoRows = useMemo(() => {
+    const rows: ChronoRow[] = [];
+    rows.push({
+      key: "future-toggle",
+      kind: "toggle",
+      section: "future",
+      count: chronoBuckets.futureEvents.length,
+      open: futureOpen,
+    });
+    if (futureOpen) {
+      for (const ev of chronoBuckets.futureEvents) {
+        rows.push({ key: ev.id, kind: "event", event: ev });
+      }
+    }
+    rows.push({ key: "today-label", kind: "label" });
+    for (const ev of chronoBuckets.todayEvents) {
+      rows.push({ key: ev.id, kind: "event", event: ev });
+    }
+    rows.push({
+      key: "past-toggle",
+      kind: "toggle",
+      section: "past",
+      count: chronoBuckets.pastEvents.length,
+      open: pastOpen,
+    });
+    if (pastOpen) {
+      for (const ev of chronoBuckets.pastEvents) {
+        rows.push({ key: ev.id, kind: "event", event: ev });
+      }
+    }
+    return rows;
+  }, [chronoBuckets, futureOpen, pastOpen]);
 
   function refreshAll() {
     eventsQ.refresh();
@@ -292,45 +331,6 @@ export default function TimelineScreen() {
     setExpandedPeriodId((prev) => (prev === periodId ? null : periodId));
   }
 
-  function renderEventCard(ev: TimelineEvent) {
-    return (
-      <Pressable key={ev.id} onPress={() => openEventForm(ev)}>
-        <Card>
-          <Row>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>
-                {displayTitle(ev)}
-              </Text>
-              {displayDescription(ev) ? (
-                <Text
-                  style={{
-                    color: c.muted,
-                    fontSize: tokens.textXs,
-                    textAlign: textStart,
-                    writingDirection,
-                    marginTop: 2,
-                  }}
-                >
-                  {displayDescription(ev)}
-                </Text>
-              ) : null}
-              <Row style={{ justifyContent: "flex-start", marginTop: 4 }} wrap>
-                {ev.category ? <Badge label={ev.category} /> : null}
-                {isGoogleCalendarEvent(ev) ? (
-                  <Badge label={t("common.fromGoogleCalendar")} tone="accent" />
-                ) : null}
-              </Row>
-            </View>
-            <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
-              {new Date(ev.event_date).toLocaleDateString(locale === "he" ? "he-IL" : "en-US")}
-              {ev.event_time ? `\n${ev.event_time.slice(0, 5)}` : ""}
-            </Text>
-          </Row>
-        </Card>
-      </Pressable>
-    );
-  }
-
   function renderPeriodCard(p: LifePeriod) {
     const expanded = expandedPeriodId === p.id;
     const periodEvents = expanded ? eventsForPeriod(events, p) : [];
@@ -367,7 +367,9 @@ export default function TimelineScreen() {
                   {t("timeline.noEventsInPeriod")}
                 </Text>
               ) : (
-                periodEvents.map((ev) => renderEventCard(ev))
+                periodEvents.map((ev) => (
+                  <TimelineEventCard key={ev.id} event={ev} onPress={openEventForm} />
+                ))
               )}
             </View>
           ) : null}
@@ -377,13 +379,32 @@ export default function TimelineScreen() {
   }
 
   return (
-    <Screen
-      title={t("timeline.title")}
-      subtitle={t("timeline.subtitle")}
-      refreshing={loading}
-      onRefresh={refreshAll}
-    >
-      <Row wrap style={{ marginBottom: 12 }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <View style={{ paddingHorizontal: tokens.padLg, paddingTop: tokens.padLg }}>
+        <Text
+          style={{
+            color: c.ink,
+            fontSize: tokens.title,
+            fontWeight: "700",
+            textAlign: textStart,
+            writingDirection,
+          }}
+        >
+          {t("timeline.title")}
+        </Text>
+        <Text
+          style={{
+            color: c.muted,
+            fontSize: tokens.subtitle,
+            marginTop: 2,
+            marginBottom: 12,
+            textAlign: textStart,
+            writingDirection,
+          }}
+        >
+          {t("timeline.subtitle")}
+        </Text>
+        <Row wrap style={{ marginBottom: 12 }}>
         <Btn small label={t("timeline.addEvent")} onPress={() => setEventForm(emptyEvent)} />
         <Btn small variant="ghost" label={t("timeline.addPeriodBtn")} onPress={() => setPeriodForm(emptyPeriod)} />
       </Row>
@@ -436,8 +457,72 @@ export default function TimelineScreen() {
           onEventPress={(ev) => setSheetEvents([ev])}
           onPeriodPress={(p) => setExpandedPeriodId(p.id)}
           onClusterPress={(evs) => setSheetEvents(evs)}
-        />
-      ) : null}
+          />
+        ) : null}
+      </View>
+
+      <ScreenList
+        data={chronoRows}
+        keyExtractor={(row) => row.key}
+        estimatedItemSize={96}
+        refreshing={loading}
+        onRefresh={refreshAll}
+        headerExtra={
+          periods.length > 0 ? (
+            <View>
+              <SectionTitle>{t("timeline.byPeriods")}</SectionTitle>
+              {periods.map((p) => renderPeriodCard(p))}
+              <SectionTitle>{t("timeline.chronological")}</SectionTitle>
+            </View>
+          ) : (
+            <SectionTitle>{t("timeline.chronological")}</SectionTitle>
+          )
+        }
+        renderItem={({ item }) => {
+          if (item.kind === "toggle") {
+            const label =
+              item.section === "future" ? t("timeline.futureSection") : t("timeline.pastSection");
+            return (
+              <Pressable
+                onPress={() =>
+                  item.section === "future" ? setFutureOpen((v) => !v) : setPastOpen((v) => !v)
+                }
+              >
+                <Text
+                  style={{
+                    color: c.accent,
+                    fontWeight: "700",
+                    fontSize: 15,
+                    textAlign: textStart,
+                    writingDirection,
+                    marginVertical: 6,
+                  }}
+                >
+                  {item.open ? "▾ " : "▸ "}
+                  {label} ({item.count})
+                </Text>
+              </Pressable>
+            );
+          }
+          if (item.kind === "label") {
+            return (
+              <Text
+                style={{
+                  color: c.accent,
+                  fontWeight: "700",
+                  fontSize: 15,
+                  textAlign: textStart,
+                  writingDirection,
+                  marginVertical: 6,
+                }}
+              >
+                {t("timeline.todaySection")}
+              </Text>
+            );
+          }
+          return <TimelineEventCard event={item.event} onPress={openEventForm} />;
+        }}
+      />
 
       <TimelineEventSheet
         events={sheetEvents}
@@ -445,63 +530,6 @@ export default function TimelineScreen() {
         onClose={() => setSheetEvents(null)}
         onEdit={openEventForm}
       />
-
-      {periods.length > 0 ? (
-        <>
-          <SectionTitle>{t("timeline.byPeriods")}</SectionTitle>
-          {periods.map((p) => renderPeriodCard(p))}
-        </>
-      ) : null}
-
-      <SectionTitle>{t("timeline.chronological")}</SectionTitle>
-
-      <Pressable onPress={() => setFutureOpen((v) => !v)}>
-        <Text
-          style={{
-            color: c.accent,
-            fontWeight: "700",
-            fontSize: 15,
-            textAlign: textStart,
-            writingDirection,
-            marginVertical: 6,
-          }}
-        >
-          {futureOpen ? "▾ " : "▸ "}
-          {t("timeline.futureSection")} ({chronoBuckets.futureEvents.length})
-        </Text>
-      </Pressable>
-      {futureOpen ? chronoBuckets.futureEvents.map((ev) => renderEventCard(ev)) : null}
-
-      <Text
-        style={{
-          color: c.accent,
-          fontWeight: "700",
-          fontSize: 15,
-          textAlign: textStart,
-          writingDirection,
-          marginVertical: 6,
-        }}
-      >
-        {t("timeline.todaySection")}
-      </Text>
-      {chronoBuckets.todayEvents.map((ev) => renderEventCard(ev))}
-
-      <Pressable onPress={() => setPastOpen((v) => !v)}>
-        <Text
-          style={{
-            color: c.accent,
-            fontWeight: "700",
-            fontSize: 15,
-            textAlign: textStart,
-            writingDirection,
-            marginVertical: 6,
-          }}
-        >
-          {pastOpen ? "▾ " : "▸ "}
-          {t("timeline.pastSection")} ({chronoBuckets.pastEvents.length})
-        </Text>
-      </Pressable>
-      {pastOpen ? chronoBuckets.pastEvents.map((ev) => renderEventCard(ev)) : null}
 
       <FormModal
         visible={eventForm !== null}
@@ -635,6 +663,6 @@ export default function TimelineScreen() {
           </View>
         ) : null}
       </FormModal>
-    </Screen>
+    </View>
   );
 }

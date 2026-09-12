@@ -29,12 +29,20 @@ export async function GET(req: NextRequest) {
     inProgressTasksCountRes,
     financeUncategorizedRes,
   ] = await Promise.all([
-    supabase.from("habits").select("*").eq("archived", false),
-    supabase.from("goals").select("*").eq("status", "active"),
+    supabase
+      .from("habits")
+      .select(
+        "id, name, kind, target_note, streak_count, best_streak, total_success_days, failure_count, last_checked_on, report_time, last_reported_at, archived, created_at"
+      )
+      .eq("archived", false),
+    supabase
+      .from("goals")
+      .select("id, title, category, horizon, first_step, definition_of_done, status, sort_order, created_at")
+      .eq("status", "active"),
     supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "done"),
     supabase
       .from("commitments")
-      .select("*")
+      .select("id, commitment_date, text, status, created_at")
       .eq("status", "pending")
       .order("commitment_date", { ascending: false }),
     supabase
@@ -43,20 +51,22 @@ export async function GET(req: NextRequest) {
       .order("name"),
     supabase
       .from("timeline_events")
-      .select("id, title, summary, source, event_date, event_time, hidden_at")
+      .select("id, title, title_override, source, event_date, event_time, hidden_at")
       .is("hidden_at", null)
       .order("event_date", { ascending: false })
       .limit(60),
     supabase
       .from("tasks")
-      .select("*, projects(name)")
+      .select(
+        "id, title, project_id, priority, status, due_date, notes, source, external_id, external_list_id, external_meta, synced_at, created_at, updated_at, projects(name)"
+      )
       .in("status", ["open", "in_progress", "stuck", "review"])
       .order("created_at", { ascending: false })
       .limit(25),
-    supabase.from("projects").select("*").order("sort_order"),
+    supabase.from("projects").select("id, name, sort_order, created_at").order("sort_order"),
     supabase
       .from("content_entries")
-      .select("id, title, category, tags, body, updated_at")
+      .select("id, title, category, tags, updated_at")
       .order("updated_at", { ascending: false })
       .limit(20),
     supabase
