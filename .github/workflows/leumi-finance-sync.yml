@@ -20,8 +20,8 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: Install Camoufox browser
+        run: npx camoufox-js fetch
 
       - name: Sync Leumi → MySelf
         env:
