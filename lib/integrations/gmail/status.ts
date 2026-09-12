@@ -23,6 +23,27 @@ export function scopeIncludesGmail(scope: string): boolean {
   return scope.includes("gmail.readonly") || scope.includes(GOOGLE_GMAIL_SCOPE);
 }
 
+/** Classify Gmail API HTTP errors (scope alone is not enough — API may be disabled). */
+export function classifyGmailApiError(status: number, body: string): string {
+  const lower = body.toLowerCase();
+  if (status === 403 && (lower.includes("has not been used") || lower.includes("disabled") || lower.includes("accessnotconfigured"))) {
+    return "gmail_api_disabled";
+  }
+  if (status === 403) return "gmail_forbidden";
+  if (status === 401) return "gmail_unauthorized";
+  return `gmail_fetch_failed:${status}`;
+}
+
+export async function probeGmailApi(accessToken: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=1",
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (res.ok) return { ok: true };
+  const body = await res.text();
+  return { ok: false, error: classifyGmailApiError(res.status, body) };
+}
+
 export async function getGmailConnectionStatus(): Promise<GmailConnectionStatus> {
   const row = await getIntegrationToken(GOOGLE_GMAIL_PROVIDER);
   if (!row) return { connected: false, working: false };
@@ -38,6 +59,17 @@ export async function getGmailConnectionStatus(): Promise<GmailConnectionStatus>
         connectedAt: row.connected_at ?? null,
       };
     }
+
+    const probe = await probeGmailApi(accessToken);
+    if (!probe.ok) {
+      return {
+        connected: true,
+        working: false,
+        error: probe.error,
+        connectedAt: row.connected_at ?? null,
+      };
+    }
+
     return {
       connected: true,
       working: true,

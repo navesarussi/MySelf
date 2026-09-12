@@ -504,7 +504,10 @@ export default function SettingsScreen() {
         ) : gmailQ.data?.connected ? (
           <>
             <Text style={{ color: c.warn, textAlign: textStart, writingDirection }}>
-              ⚠ {t("settings.gmailNeedsReconnect")}
+              ⚠{" "}
+              {gmailQ.data.error === "gmail_api_disabled"
+                ? t("settings.gmailApiDisabled")
+                : t("settings.gmailNeedsReconnect")}
             </Text>
             <Row style={{ marginTop: 10 }}>
               <Btn small label={t("settings.connectGmail")} onPress={connectGmail} disabled={busy} />
