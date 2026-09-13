@@ -1,7 +1,10 @@
 import { summarizeCashflow, type CashflowRow, type CategorySpend } from "@/lib/finance/cashflow";
+import { buildHistoryTrends, type HistoryTrends } from "@/lib/finance/history-trends";
 
-export const HISTORY_MONTH_OPTIONS = [3, 6, 12] as const;
-export type HistoryMonths = (typeof HISTORY_MONTH_OPTIONS)[number];
+export const HISTORY_MONTH_MIN = 1;
+export const HISTORY_MONTH_MAX = 24;
+export const HISTORY_MONTH_DEFAULT = 6;
+export const HISTORY_MONTH_PRESETS = [3, 6, 9, 12, 18, 24] as const;
 
 export type HistoryPlanSlice = {
   planned_income: number;
@@ -31,8 +34,9 @@ export type HistoryMonthRow = {
 };
 
 export type FinanceHistory = {
-  months: HistoryMonths;
+  months: number;
   end_month: string;
+  trends: HistoryTrends;
   rows: HistoryMonthRow[];
 };
 
@@ -45,11 +49,11 @@ export type HistoryPlanSeed = {
   savings_planned: number;
 };
 
-export function parseHistoryMonths(raw: string | null): HistoryMonths | null {
-  if (raw == null || raw === "") return 6;
+export function parseHistoryMonths(raw: string | null): number | null {
+  if (raw == null || raw === "") return HISTORY_MONTH_DEFAULT;
   const n = Number(raw);
-  if (n === 3 || n === 6 || n === 12) return n;
-  return null;
+  if (!Number.isInteger(n) || n < HISTORY_MONTH_MIN || n > HISTORY_MONTH_MAX) return null;
+  return n;
 }
 
 /** Oldest → newest, inclusive of endMonth. */
@@ -111,7 +115,7 @@ function planSliceForMonth(
 
 export function buildFinanceHistory(input: {
   endMonth: string;
-  months: HistoryMonths;
+  months: number;
   transactions: readonly CashflowRow[];
   planSeeds: readonly HistoryPlanSeed[];
 }): FinanceHistory {
@@ -132,5 +136,10 @@ export function buildFinanceHistory(input: {
     };
   });
 
-  return { months: input.months, end_month: input.endMonth, rows };
+  return {
+    months: input.months,
+    end_month: input.endMonth,
+    trends: buildHistoryTrends(rows),
+    rows,
+  };
 }

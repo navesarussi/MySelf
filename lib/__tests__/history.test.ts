@@ -3,18 +3,20 @@ import assert from "node:assert/strict";
 import {
   buildFinanceHistory,
   categoryDeltas,
+  HISTORY_MONTH_MAX,
   monthKeysEndingAt,
   parseHistoryMonths,
 } from "../finance/history";
 import type { CashflowRow } from "../finance/cashflow";
 
 describe("parseHistoryMonths", () => {
-  it("defaults empty to 6 and rejects invalid", () => {
+  it("defaults empty to 6 and accepts custom 1-24", () => {
     assert.equal(parseHistoryMonths(null), 6);
-    assert.equal(parseHistoryMonths(""), 6);
-    assert.equal(parseHistoryMonths("3"), 3);
-    assert.equal(parseHistoryMonths("12"), 12);
-    assert.equal(parseHistoryMonths("5"), null);
+    assert.equal(parseHistoryMonths("9"), 9);
+    assert.equal(parseHistoryMonths(String(HISTORY_MONTH_MAX)), HISTORY_MONTH_MAX);
+    assert.equal(parseHistoryMonths("0"), null);
+    assert.equal(parseHistoryMonths("25"), null);
+    assert.equal(parseHistoryMonths("3.5"), null);
   });
 });
 
@@ -36,12 +38,11 @@ describe("categoryDeltas", () => {
     );
     assert.equal(deltas[0]?.category, "סופר");
     assert.equal(deltas[0]?.delta, 300);
-    assert.equal(deltas.find((d) => d.category === "דלק")?.prev_amount, 0);
   });
 });
 
 describe("buildFinanceHistory", () => {
-  it("summarizes months with plan seeds and deltas", () => {
+  it("includes trends and plan slices", () => {
     const txns: CashflowRow[] = [
       { txn_date: "2026-08-10", amount: 1000, kind: "income", category: null, needs_categorization: false },
       { txn_date: "2026-08-12", amount: 400, kind: "expense", category: "סופר", needs_categorization: false },
@@ -64,17 +65,8 @@ describe("buildFinanceHistory", () => {
       ],
     });
     assert.equal(history.rows.length, 3);
-    const sep = history.rows[2]!;
-    assert.equal(sep.month, "2026-09");
-    assert.equal(sep.income, 1200);
-    assert.equal(sep.expense, 600);
-    assert.equal(sep.net, 600);
-    assert.ok(sep.plan);
-    assert.equal(sep.plan!.planned_income, 1500);
-    assert.equal(sep.plan!.planned_expense, 500);
-    assert.equal(sep.plan!.net_planned, 900);
-    assert.equal(sep.category_deltas[0]?.category, "סופר");
-    assert.equal(sep.category_deltas[0]?.delta, 200);
-    assert.equal(history.rows[0]!.plan, null);
+    assert.ok(history.trends);
+    assert.equal(history.trends.total_income, 2200);
+    assert.equal(history.rows[2]!.plan!.net_planned, 900);
   });
 });

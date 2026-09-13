@@ -7,9 +7,11 @@ import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import type { FinanceHistory, HistoryMonthRow } from "@/lib/finance/history";
-import { HISTORY_MONTH_OPTIONS } from "@/lib/finance/history";
+import { HISTORY_MONTH_DEFAULT } from "@/lib/finance/history";
 import { fmtAmount0 } from "@/lib/finance/format";
-import { Card, Chip, EmptyState, Loading, Row, Screen } from "../src/components/ui";
+import { HistoryRangePicker } from "../src/components/finance/history-range-picker";
+import { HistoryTrendsPanel } from "../src/components/finance/history-trends-panel";
+import { Card, EmptyState, Loading, Screen, SectionTitle } from "../src/components/ui";
 
 const monthKey = () => {
   const d = new Date();
@@ -85,29 +87,6 @@ function MonthHistoryCard({
             {t("finance.historyNoPlan")}
           </Text>
         )}
-        {row.category_deltas.length > 0 ? (
-          <View style={{ marginTop: 10, gap: 4 }}>
-            <Text
-              style={{
-                color: c.ink,
-                fontWeight: "600",
-                fontSize: tokens.textXs,
-                textAlign: textStart,
-                writingDirection,
-              }}
-            >
-              {t("finance.historyCategoryMovers")}
-            </Text>
-            {row.category_deltas.map((d) => (
-              <Text
-                key={d.category}
-                style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}
-              >
-                {d.category}: {d.delta >= 0 ? "+" : "−"}₪{fmtAmount0(Math.abs(d.delta))}
-              </Text>
-            ))}
-          </View>
-        ) : null}
       </Card>
     </Pressable>
   );
@@ -115,10 +94,8 @@ function MonthHistoryCard({
 
 export default function FinanceHistoryScreen() {
   const { t, locale } = useI18n();
-  const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
-  const [months, setMonths] = useState<(typeof HISTORY_MONTH_OPTIONS)[number]>(6);
+  const [months, setMonths] = useState(HISTORY_MONTH_DEFAULT);
   const endMonth = useMemo(() => monthKey(), []);
 
   const { data, loading } = useApiQuery(queryKeys.financeHistory(months), (cfg) =>
@@ -129,26 +106,25 @@ export default function FinanceHistoryScreen() {
 
   return (
     <Screen title={t("finance.hubHistory")} subtitle={t("finance.historySubtitle")}>
-      <Text style={{ color: c.muted, fontSize: tokens.textSm, marginBottom: 8, textAlign: textStart, writingDirection }}>
-        {t("finance.historyRangeHint")}
-      </Text>
-      <Row wrap>
-        {HISTORY_MONTH_OPTIONS.map((n) => (
-          <Chip key={n} label={t("finance.historyMonths", { count: String(n) })} active={months === n} onPress={() => setMonths(n)} />
-        ))}
-      </Row>
+      <HistoryRangePicker value={months} onChange={setMonths} />
       {loading && !history ? <Loading /> : null}
+      {history ? <HistoryTrendsPanel history={history} locale={locale} /> : null}
       {!loading && rowsNewestFirst.length === 0 ? <EmptyState text={t("finance.historyEmpty")} /> : null}
-      <View style={{ gap: 10, marginTop: 12 }}>
-        {rowsNewestFirst.map((row) => (
-          <MonthHistoryCard
-            key={row.month}
-            row={row}
-            locale={locale}
-            onOpen={() => router.push(`/finance?month=${row.month}` as `/${string}`)}
-          />
-        ))}
-      </View>
+      {rowsNewestFirst.length > 0 ? (
+        <>
+          <SectionTitle>{t("finance.historyMonthlyBreakdown")}</SectionTitle>
+          <View style={{ gap: 10 }}>
+            {rowsNewestFirst.map((row) => (
+              <MonthHistoryCard
+                key={row.month}
+                row={row}
+                locale={locale}
+                onOpen={() => router.push(`/finance?month=${row.month}` as `/${string}`)}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
     </Screen>
   );
 }

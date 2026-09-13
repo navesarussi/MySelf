@@ -286,7 +286,7 @@ Future planning screen projects monthly net and cumulative cashflow from the cur
 Wealth summary stores manual/imported snapshot items (pension, insurance, investment, property); users may paste report text (Har HaBituach / Cover) or send screenshots to the agent for import.
 
 ### FR-FIN-23
-Finance history screen (`/finance-history`) summarizes the last 3/6/12 months (user-selectable): income, expense, net, planned vs actual when a plan exists, and top category deltas vs the previous month. Tapping a month opens the main cashflow screen for that month. The main cashflow month navigator pages both backward and forward (soft caps), not only up to the current month.
+Finance history screen (`/finance-history`) accepts a custom month count (1–24, presets plus free input). It shows period trends and totals (income/expense/net, half-period trend direction, monthly series chart, top categories with share %, plan adherence variance), plus per-month breakdown with planned vs actual. Tapping a month opens the main cashflow screen for that month. The main cashflow month navigator pages both backward and forward (soft caps), not only up to the current month.
 
 ### FR-AGENT-02
 In-app agent chat accepts text and up to 3 image attachments; vision model extracts wealth/finance data and persists via agent tools (`upsert_wealth_item`, `import_wealth_text`).
