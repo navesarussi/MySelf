@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
@@ -34,18 +34,29 @@ const formatMonthLabel = (month: string, locale: string) => {
   const [y, m] = month.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString(locale === "he" ? "he-IL" : "en-US", { month: "long", year: "numeric" });
 };
+const FUTURE_MONTH_LIMIT = 12;
+const PAST_MONTH_LIMIT = 36;
 
 export default function FinanceScreen() {
   const { t, locale } = useI18n();
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
+  const params = useLocalSearchParams<{ month?: string }>();
   const { run } = useApiMutation();
   const [month, setMonth] = useState(monthKey());
   const [showTxns, setShowTxns] = useState(false);
   const [showAllUncat, setShowAllUncat] = useState(false);
   const [addType, setAddType] = useState<PlanLineType | null>(null);
-  const isCurrentMonth = month === monthKey();
+  const current = monthKey();
+  const isCurrentMonth = month === current;
+  const canGoNext = month < shiftMonth(current, FUTURE_MONTH_LIMIT);
+  const canGoPrev = month > shiftMonth(current, -PAST_MONTH_LIMIT);
+
+  useEffect(() => {
+    const m = params.month;
+    if (typeof m === "string" && /^\d{4}-\d{2}$/.test(m)) setMonth(m);
+  }, [params.month]);
 
   const { data: plan, loading: planLoading, error: planError, refresh: refreshPlan } = useApiQuery(
     queryKeys.financePlan(month),
@@ -117,9 +128,11 @@ export default function FinanceScreen() {
       {planLoading && !view ? <Loading /> : null}
       <FinanceMonthNav
         label={formatMonthLabel(month, locale)}
-        canGoNext={!isCurrentMonth}
+        canGoPrev={canGoPrev}
+        canGoNext={canGoNext}
         onPrev={() => setMonth((m) => shiftMonth(m, -1))}
         onNext={() => setMonth((m) => shiftMonth(m, 1))}
+        onLabelPress={isCurrentMonth ? undefined : () => setMonth(current)}
       />
       <FinanceHubLinks />
       <FinanceSourcesStrip />

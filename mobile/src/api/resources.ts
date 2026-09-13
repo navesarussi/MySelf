@@ -443,6 +443,11 @@ export const api = {
       c,
       `/finance/forecast?month=${encodeURIComponent(month)}&months=${months}`
     ),
+  financeHistory: (c: ApiConfig, months = 6, month?: string) =>
+    apiFetch<import("@/lib/finance/history").FinanceHistory>(
+      c,
+      `/finance/history?months=${months}${month ? `&month=${encodeURIComponent(month)}` : ""}`
+    ),
   financeWealth: (c: ApiConfig) =>
     apiFetch<import("@/lib/finance/wealth-types").WealthSummary>(c, "/finance/wealth"),
   importWealthText: (

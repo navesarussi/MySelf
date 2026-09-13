@@ -268,7 +268,7 @@ Expense transactions support three expense types: fixed (קבועה), variable/o
 Transactions store an optional `txn_time` (HH:MM) alongside `txn_date`; the transaction editor lets users view and edit both date and time.
 
 ### FR-FIN-17
-Finance hub exposes sub-screens: monthly plan (existing), future planning (projected savings and cashflow), and wealth summary (net worth, pension, insurance — manual entry initially).
+Finance hub exposes sub-screens: monthly plan (existing), history (multi-month actuals vs plan), future planning (projected savings and cashflow), and wealth summary (net worth, pension, insurance — manual entry initially).
 
 ### FR-FIN-18
 Weekly spending allowance is computed as `(planned income − planned fixed − planned savings) / weeks in month`, shown on the finance dashboard; users may override the weekly budget per month.
@@ -284,6 +284,9 @@ Future planning screen projects monthly net and cumulative cashflow from the cur
 
 ### FR-FIN-22
 Wealth summary stores manual/imported snapshot items (pension, insurance, investment, property); users may paste report text (Har HaBituach / Cover) or send screenshots to the agent for import.
+
+### FR-FIN-23
+Finance history screen (`/finance-history`) summarizes the last 3/6/12 months (user-selectable): income, expense, net, planned vs actual when a plan exists, and top category deltas vs the previous month. Tapping a month opens the main cashflow screen for that month. The main cashflow month navigator pages both backward and forward (soft caps), not only up to the current month.
 
 ### FR-AGENT-02
 In-app agent chat accepts text and up to 3 image attachments; vision model extracts wealth/finance data and persists via agent tools (`upsert_wealth_item`, `import_wealth_text`).

@@ -33,6 +33,7 @@ export const queryKeys = {
   financePlan: (month: string) => ["financePlan", "v2", month] as const,
   financeRecurringSuggestions: (month?: string) => ["financeRecurringSuggestions", month ?? "current"] as const,
   financeForecast: (month: string) => ["financeForecast", month] as const,
+  financeHistory: (months: number) => ["financeHistory", months] as const,
   financeWealth: ["financeWealth"] as const,
   eventLinks: (eventId: string) => ["eventLinks", eventId] as const,
   libraryEntry: (id: string) => ["libraryEntry", id] as const,
