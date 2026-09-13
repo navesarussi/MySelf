@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   try {
     const plan = await getOrCreateMonthPlan(month);
     return NextResponse.json(normalizePlanResponse(plan));
-  } catch {
+  } catch (err) {
+    console.error("[finance/plan GET]", err);
     return dbError();
   }
 }
@@ -45,7 +46,8 @@ export async function PATCH(req: NextRequest) {
     await updateWeeklyBudgetOverride(month, weekly_budget_override);
     const plan = await getOrCreateMonthPlan(month);
     return NextResponse.json(normalizePlanResponse(plan));
-  } catch {
+  } catch (err) {
+    console.error("[finance/plan PATCH]", err);
     return dbError();
   }
 }

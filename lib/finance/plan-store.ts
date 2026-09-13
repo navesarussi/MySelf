@@ -62,19 +62,46 @@ const rowToLine = (r: Record<string, unknown>): PlanLineRow => ({
   sort_order: Number(r.sort_order ?? 0),
 });
 
-export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView> {
-  await reconcileMonthTransactions(month).catch(() => null);
-  await autoClassifyObvious(month);
+type PlanMeta = { planId: string; weeklyOverride: number | null };
+
+function isUniqueViolation(error: { code?: string; message?: string }): boolean {
+  return error.code === "23505" || (error.message ?? "").toLowerCase().includes("duplicate");
+}
+
+/** Tolerates stale PostgREST schema cache (weekly_budget_override column missing from cache). */
+async function fetchPlanMeta(month: string): Promise<PlanMeta | null> {
   const supabase = getSupabase();
-  const { data: existing } = await supabase
+  const { data, error } = await supabase
     .from("finance_month_plans")
     .select("id, weekly_budget_override")
     .eq("month", month)
     .maybeSingle();
 
-  let planId = existing?.id as string | undefined;
-  let weeklyOverride =
-    existing?.weekly_budget_override != null ? Number(existing.weekly_budget_override) : null;
+  if (!error && data?.id) {
+    return {
+      planId: String(data.id),
+      weeklyOverride: data.weekly_budget_override != null ? Number(data.weekly_budget_override) : null,
+    };
+  }
+
+  const { data: fallback, error: fbErr } = await supabase
+    .from("finance_month_plans")
+    .select("id")
+    .eq("month", month)
+    .maybeSingle();
+  if (fbErr) throw new Error(fbErr.message);
+  if (!fallback?.id) return null;
+  return { planId: String(fallback.id), weeklyOverride: null };
+}
+
+export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView> {
+  await reconcileMonthTransactions(month).catch(() => null);
+  await autoClassifyObvious(month).catch(() => null);
+  const supabase = getSupabase();
+  const existing = await fetchPlanMeta(month);
+
+  let planId = existing?.planId;
+  let weeklyOverride = existing?.weeklyOverride ?? null;
 
   if (!planId) {
     const prev = prevMonth(month);
@@ -94,8 +121,20 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
     const seeds = seedPlanLines(month, prevLines.length ? prevLines : null, prevTxns, currentTxns, rulesMap);
 
     const { data: created, error } = await supabase.from("finance_month_plans").insert({ month }).select("id").single();
-    if (error || !created) throw new Error(error?.message ?? "plan_create_failed");
-    planId = String(created.id);
+    if (error) {
+      if (isUniqueViolation(error)) {
+        const again = await fetchPlanMeta(month);
+        if (!again) throw new Error(error.message);
+        planId = again.planId;
+        weeklyOverride = again.weeklyOverride;
+      } else {
+        throw new Error(error.message);
+      }
+    } else if (!created) {
+      throw new Error("plan_create_failed");
+    } else {
+      planId = String(created.id);
+    }
 
     if (seeds.length > 0) {
       await supabase.from("finance_plan_lines").insert(seeds.map((s) => ({ ...s, plan_id: planId })));
