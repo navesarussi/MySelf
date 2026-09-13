@@ -17,7 +17,7 @@ enableFreeze(true);
 export default function TabsLayout() {
   const { ready, token } = useSession();
   const { t } = useI18n();
-  const { ready: prefsReady, isBottomTab } = useNavPrefs();
+  const { ready: prefsReady } = useNavPrefs();
   const [addOpen, setAddOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -42,11 +42,10 @@ export default function TabsLayout() {
   if (!token) return <Redirect href="/login" />;
 
   function tabOptions(id: BottomTabId) {
-    const visible = isBottomTab(id);
-    return {
-      title: t(TAB_LABEL_KEY[id]),
-      href: visible ? undefined : (null as null),
-    };
+    // Always keep the route registered. Visibility is owned by CenteredTabBar
+    // via isBottomTab — toggling href between null/undefined drops routes from
+    // navigator state and the custom bar never sees them again.
+    return { title: t(TAB_LABEL_KEY[id]) };
   }
 
   return (

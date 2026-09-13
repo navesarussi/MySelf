@@ -23,9 +23,16 @@ export const ALL_BOTTOM_TAB_IDS: BottomTabId[] = [
   "finance",
 ];
 
-export const DEFAULT_BOTTOM_TABS: BottomTabId[] = ["index", "tasks", "habits", "relationships"];
+export const DEFAULT_BOTTOM_TABS: BottomTabId[] = [
+  "index",
+  "tasks",
+  "habits",
+  "relationships",
+  "finance",
+];
 
-const STORAGE_KEY = "myself.bottomTabs";
+/** Bumped when default set changes so existing installs pick up new tabs. */
+const STORAGE_KEY = "myself.bottomTabs.v2";
 
 type NavPrefsValue = {
   ready: boolean;
