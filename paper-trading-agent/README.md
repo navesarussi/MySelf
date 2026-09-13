@@ -30,7 +30,7 @@
 
 ## הפעלה עם Alpaca Paper
 
-הגדירו `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, והשאירו `PAPER=true` ו־`ALPACA_BASE_URL=https://paper-api.alpaca.markets`. לאחר מכן אפשר להריץ מחזור יחיד:
+הגדירו ב־`.env` את `ALPACA_API_KEY` ו־`ALPACA_SECRET_KEY` של חשבון **Paper**, והשאירו `PAPER=true` ו־`ALPACA_BASE_URL=https://paper-api.alpaca.markets`. לאחר מכן אפשר להריץ מחזור יחיד:
 
 ```bash
 python -m trading_agent run --symbol BTC/USD --dry-run
@@ -42,7 +42,7 @@ python -m trading_agent run --symbol AAPL
 
 ## בקרות בטיחות
 
-הגדרות `.env` כוללות `MAX_POSITION_PCT` (5%), `MAX_DAILY_LOSS_PCT` (3%), `HUMAN_APPROVAL_THRESHOLD_USD`, ו־`ALLOWED_SYMBOLS`. המינוף מוגבל ל־1, `buy`/`sell` בגודל אפס נדחים, ו־`close` דורש פוזיציה קיימת. האירועים נשמרים append-only ב־`logs/decisions.jsonl` עם ההחלטה הגולמית, תוצאת הסיכון ומצב הביצוע.
+הגדרות `.env` כוללות `MAX_POSITION_PCT` (5%), `MAX_DAILY_LOSS_PCT` (3%), `HUMAN_APPROVAL_THRESHOLD_USD`, ו־`ALLOWED_SYMBOLS`. בכל מחזור paper אמיתי ה־daily P&L מחושב מ־`equity - last_equity` בתגובת החשבון של Alpaca; בתחילת יום המסחר הערכים יכולים להיות זהים ולכן התוצאה היא `0`. המינוף מוגבל ל־1, `buy`/`sell` בגודל אפס נדחים, ו־`close` דורש פוזיציה קיימת. פקודה מעל סף האישור לא תישלח בלי `APPROVE=1`. האירועים נשמרים append-only ב־`logs/decisions.jsonl` עם ההחלטה הגולמית, תוצאת הסיכון ומצב הביצוע.
 
 ## צעדים הבאים
 
@@ -52,4 +52,4 @@ python -m trading_agent run --symbol AAPL
 
 ## English (short)
 
-A paper-only, human-in-the-loop AI-assisted trading scaffold for Alpaca stocks and crypto. LLM output is strict JSON and is **never** executed before deterministic `RiskManager` checks. Use `python -m trading_agent run --symbol AAPL --dry-run` for an offline cycle; without Alpaca keys, dry-run uses `MockBroker`, while non-dry-run exits clearly. Logs are append-only JSONL in `logs/decisions.jsonl`. Live trading is deliberately refused in v1.
+A paper-only, human-in-the-loop AI-assisted trading scaffold for Alpaca stocks and crypto. LLM output is strict JSON and is **never** executed before deterministic `RiskManager` checks. Use `python -m trading_agent run --symbol AAPL --dry-run` for an offline cycle; without Alpaca keys, dry-run uses `MockBroker`, while non-dry-run exits clearly. Daily P&L is calculated from Alpaca account `equity - last_equity` (and can be `0` at the start of a trading day). Logs are append-only JSONL in `logs/decisions.jsonl`. Live trading is deliberately refused in v1.

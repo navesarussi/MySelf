@@ -27,7 +27,7 @@ def run_decision_cycle(symbol: str, *, settings: Settings, broker: BrokerClient,
         append_decision(symbol=symbol, raw_decision=raw, risk_result=asdict(risk), executed=False, dry_run=dry_run, broker=broker.name)
         return CycleResult(False, risk, raw)
     manager = RiskManager(settings.max_position_pct, settings.max_daily_loss_pct, settings.allowed_symbols, settings.human_approval_threshold_usd, settings.approved)
-    risk = manager.validate(decision, equity=broker.get_equity(), daily_pnl=0.0, positions=broker.get_positions(), market_price=market_data["price"])
+    risk = manager.validate(decision, equity=broker.get_equity(), daily_pnl=broker.get_daily_pnl(), positions=broker.get_positions(), market_price=market_data["price"])
     executed = False
     if risk.passed and decision.action not in {"hold"} and not dry_run:
         broker.place_order(decision)

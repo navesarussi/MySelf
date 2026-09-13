@@ -29,8 +29,24 @@ class AlpacaPaperBroker:
         with urlopen(request, timeout=15) as response:  # nosec B310: URL is validated paper URL in Settings
             return json.loads(response.read().decode())
 
+    def _account(self) -> dict[str, object]:
+        account = self._request("GET", "/v2/account")
+        if not isinstance(account, dict):
+            raise ValueError("Alpaca returned an invalid account response.")
+        return account
+
     def get_equity(self) -> float:
-        return float(self._request("GET", "/v2/account")["equity"])
+        return float(self._account()["equity"])
+
+    def get_daily_pnl(self) -> float:
+        """Calculate today's realized/unrealized change from Alpaca account values.
+
+        Alpaca's ``last_equity`` is the account equity from the previous trading
+        day close. At the beginning of a trading day it can equal ``equity``,
+        which correctly yields a zero daily P&L.
+        """
+        account = self._account()
+        return float(account["equity"]) - float(account["last_equity"])
 
     def get_positions(self) -> dict[str, float]:
         positions = self._request("GET", "/v2/positions")
