@@ -23,10 +23,11 @@ class AlpacaPaperBroker:
             raise ValueError("ALPACA_API_KEY and ALPACA_SECRET_KEY are required for non-dry-run execution.")
         self.base_url, self.key, self.secret = settings.alpaca_base_url, settings.alpaca_api_key, settings.alpaca_secret_key
 
-    def _request(self, method: str, path: str, payload: dict[str, object] | None = None) -> object:
+    def _request(self, method: str, path: str, payload: dict[str, object] | None = None, *, base_url: str | None = None) -> object:
         body = json.dumps(payload).encode() if payload is not None else None
-        request = Request(self.base_url + path, data=body, method=method, headers={"APCA-API-KEY-ID": self.key, "APCA-API-SECRET-KEY": self.secret, "Content-Type": "application/json"})
-        with urlopen(request, timeout=15) as response:  # nosec B310: URL is validated paper URL in Settings
+        root = (base_url or self.base_url).rstrip("/")
+        request = Request(root + path, data=body, method=method, headers={"APCA-API-KEY-ID": self.key, "APCA-API-SECRET-KEY": self.secret, "Content-Type": "application/json"})
+        with urlopen(request, timeout=15) as response:  # nosec B310: trading URL validated paper-only; market data uses data.alpaca.markets
             return json.loads(response.read().decode())
 
     def _account(self) -> dict[str, object]:
@@ -53,8 +54,14 @@ class AlpacaPaperBroker:
         return {item["symbol"]: float(item["qty"]) for item in positions}
 
     def get_market_data(self, symbol: str) -> dict[str, float]:
-        # Latest trade endpoint works for equities; crypto callers may provide a decision without price.
-        data = self._request("GET", f"/v2/stocks/{quote(symbol, safe='')}/trades/latest")
+        # Market data lives on data.alpaca.markets, not the paper trading host.
+        data = self._request(
+            "GET",
+            f"/v2/stocks/{quote(symbol, safe='')}/trades/latest",
+            base_url="https://data.alpaca.markets",
+        )
+        if not isinstance(data, dict) or "trade" not in data:
+            raise ValueError(f"Alpaca market data missing trade for {symbol}: {data!r}")
         return {"price": float(data["trade"]["p"])}
 
     def place_order(self, decision: Decision) -> dict[str, object]:
