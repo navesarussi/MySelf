@@ -20,6 +20,7 @@ const TAB_ORDER: BottomTabId[] = [
   "relationships",
   "goals",
   "library",
+  "finance",
   "index",
 ];
 
