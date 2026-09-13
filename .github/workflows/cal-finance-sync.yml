@@ -1,0 +1,32 @@
+name: Visa Cal finance sync
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Camoufox browser
+        run: npx camoufox-js fetch
+
+      - name: Sync Visa Cal → MySelf
+        env:
+          CAL_USERNAME: ${{ secrets.CAL_USERNAME }}
+          CAL_PASSWORD: ${{ secrets.CAL_PASSWORD }}
+          MYSELF_API_URL: ${{ secrets.MYSELF_API_URL }}
+          FINANCE_INGEST_TOKEN: ${{ secrets.FINANCE_INGEST_TOKEN }}
+        run: yarn sync:cal

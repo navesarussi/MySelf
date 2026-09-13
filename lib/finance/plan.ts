@@ -95,7 +95,8 @@ export function buildMonthPlanView(
   planId: string,
   lines: PlanLineRow[],
   txns: FinanceTransaction[],
-  rulesMap?: Map<string, MerchantRule>
+  rulesMap?: Map<string, MerchantRule>,
+  weeklyBudgetOverride: number | null = null
 ): MonthPlanView {
   const sections = {} as Record<PlanLineType, PlanSectionView>;
 
@@ -123,6 +124,7 @@ export function buildMonthPlanView(
   return {
     month,
     plan_id: planId,
+    weekly_budget_override: weeklyBudgetOverride,
     sections,
     totals: {
       planned_income,
@@ -134,6 +136,12 @@ export function buildMonthPlanView(
       savings_planned,
     },
     weeks,
-    weekly_pace: weeklyVariablePace(weeks, sections.variable.planned_total),
+    weekly_pace: weeklyVariablePace(weeks, {
+      variablePlanned: sections.variable.planned_total,
+      plannedIncome: planned_income,
+      plannedFixed: sections.fixed.planned_total,
+      plannedSavings: savings_planned,
+      weeklyOverride: weeklyBudgetOverride,
+    }),
   };
 }

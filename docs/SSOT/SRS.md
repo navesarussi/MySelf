@@ -258,6 +258,27 @@ Transaction ingestion supports MAX and Visa Cal credit card providers alongside 
 ### FR-FIN-13
 Reconciliation detects internal batch charges (e.g. credit card settlement debits in bank statements) and marks them `is_internal = true`, excluding them from expense cash-flow totals and plan actuals to prevent double counting.
 
+### FR-FIN-14
+Transaction categorization offers a picker of existing categories (built-in defaults plus categories already used in history/rules) and an inline option to create a new custom category name.
+
+### FR-FIN-15
+Expense transactions support three expense types: fixed (קבועה), variable/one-time (רגילה), and savings (חיסכון). Users can change type at any time on the transaction editor; merchant rules may persist the choice.
+
+### FR-FIN-16
+Transactions store an optional `txn_time` (HH:MM) alongside `txn_date`; the transaction editor lets users view and edit both date and time.
+
+### FR-FIN-17
+Finance hub exposes sub-screens: monthly plan (existing), future planning (projected savings and cashflow), and wealth summary (net worth, pension, insurance — manual entry initially).
+
+### FR-FIN-18
+Weekly spending allowance is computed as `(planned income − planned fixed − planned savings) / weeks in month`, shown on the finance dashboard; users may override the weekly budget per month.
+
+### FR-FIN-19
+Categorized transactions open a full editor (`/finance-transaction`); uncategorized items and push deep-links keep the quick categorize flow (`/finance-categorize`).
+
+### FR-FIN-20
+System detects recurring expenses across recent months (similar amount, same merchant) and provides actionable suggestions to establish fixed expense merchant rules.
+
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
 

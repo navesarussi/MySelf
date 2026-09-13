@@ -11,6 +11,7 @@ import {
 import type { PlanLineType } from "@/lib/finance/expense-type";
 import { inferredCategory, inferTxnKind, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
+import { reconcileMonthTransactions } from "@/lib/finance/reconcile";
 
 function monthRange(month: string) {
   const [y, m] = month.split("-").map(Number);
@@ -62,11 +63,18 @@ const rowToLine = (r: Record<string, unknown>): PlanLineRow => ({
 });
 
 export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView> {
+  await reconcileMonthTransactions(month).catch(() => null);
   await autoClassifyObvious(month);
   const supabase = getSupabase();
-  const { data: existing } = await supabase.from("finance_month_plans").select("id").eq("month", month).maybeSingle();
+  const { data: existing } = await supabase
+    .from("finance_month_plans")
+    .select("id, weekly_budget_override")
+    .eq("month", month)
+    .maybeSingle();
 
   let planId = existing?.id as string | undefined;
+  let weeklyOverride =
+    existing?.weekly_budget_override != null ? Number(existing.weekly_budget_override) : null;
 
   if (!planId) {
     const prev = prevMonth(month);
@@ -99,7 +107,21 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
   lines = await ensureTemplateLines(planId!, lines);
 
   const [txns, rulesMap] = await Promise.all([fetchTransactions(month), fetchMerchantRulesMap()]);
-  return buildMonthPlanView(month, planId!, lines, txns, rulesMap);
+  return buildMonthPlanView(month, planId!, lines, txns, rulesMap, weeklyOverride);
+}
+
+export async function updateWeeklyBudgetOverride(
+  month: string,
+  weekly_budget_override: number | null
+): Promise<number | null> {
+  const plan = await getOrCreateMonthPlan(month);
+  const value = weekly_budget_override != null ? Math.max(0, weekly_budget_override) : null;
+  const { error } = await getSupabase()
+    .from("finance_month_plans")
+    .update({ weekly_budget_override: value, updated_at: new Date().toISOString() })
+    .eq("id", plan.plan_id);
+  if (error) throw new Error(error.message);
+  return value;
 }
 
 async function ensureTemplateLines(planId: string, lines: PlanLineRow[]): Promise<PlanLineRow[]> {

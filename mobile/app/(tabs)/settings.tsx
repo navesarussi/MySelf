@@ -18,6 +18,7 @@ import {
 import { MondaySettingsSection } from "../../src/components/monday-settings";
 import { GithubSettingsSection } from "../../src/components/github-settings";
 import { PushSettingsSection } from "../../src/components/push-settings";
+import { FinanceSourcesSettingsSection } from "../../src/components/finance/finance-sources-settings";
 import { useSyncProgress } from "../../src/components/use-sync-progress";
 import { unregisterPushToken } from "../../src/push/register";
 import {
@@ -562,6 +563,8 @@ export default function SettingsScreen() {
       </Card>
 
       <PushSettingsSection />
+
+      <FinanceSourcesSettingsSection />
 
       <MondaySettingsSection />
 

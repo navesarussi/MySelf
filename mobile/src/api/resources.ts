@@ -14,6 +14,8 @@ import type { LifePeriod } from "@/lib/life-periods";
 import type { FinanceCashflow, FinanceTransaction } from "@/lib/finance/types";
 import type { MonthPlanView } from "@/lib/finance/plan";
 import type { PlanLineRow } from "@/lib/finance/plan";
+import type { FinanceSourcesStatusResponse } from "@/lib/finance/sources-status";
+import type { RecurringSuggestion } from "@/lib/finance/recurring";
 
 export type HomePayload = {
   habits: Habit[];
@@ -355,11 +357,24 @@ export const api = {
     apiFetch<FinanceCashflow>(c, `/finance/cashflow?month=${encodeURIComponent(month)}`),
   financePlan: (c: ApiConfig, month: string) =>
     apiFetch<MonthPlanView>(c, `/finance/plan?month=${encodeURIComponent(month)}`),
-  patchFinancePlanLine: (c: ApiConfig, lineId: string, planned_amount: number) =>
-    apiFetch<PlanLineRow>(c, `/finance/plan/lines/${lineId}`, {
+  patchFinancePlan: (c: ApiConfig, month: string, body: { weekly_budget_override: number | null }) =>
+    apiFetch<MonthPlanView>(c, `/finance/plan?month=${encodeURIComponent(month)}`, {
       method: "PATCH",
-      body: { planned_amount },
+      body,
     }),
+  financeCategories: (c: ApiConfig) =>
+    apiFetch<{ categories: string[] }>(c, "/finance/categories"),
+  patchFinancePlanLine: (
+    c: ApiConfig,
+    lineId: string,
+    patch: number | { planned_amount?: number; line_type?: string }
+  ) => {
+    const body = typeof patch === "number" ? { planned_amount: patch } : patch;
+    return apiFetch<PlanLineRow>(c, `/finance/plan/lines/${lineId}`, {
+      method: "PATCH",
+      body,
+    });
+  },
   addFinancePlanLine: (
     c: ApiConfig,
     body: { month: string; line_type: string; name: string; planned_amount: number; category?: string | null }
@@ -378,13 +393,49 @@ export const api = {
     return apiFetch<FinanceTransaction[]>(c, `/finance/transactions${q ? `?${q}` : ""}`);
   },
   financeTransaction: (c: ApiConfig, id: string) =>
-    apiFetch<FinanceTransaction & { suggested_category: string | null }>(
-      c,
-      `/finance/transactions/${id}`
-    ),
+    apiFetch<
+      FinanceTransaction & {
+        suggested_category: string | null;
+        suggested_expense_type?: "fixed" | "variable" | "savings" | null;
+        default_note?: string | null;
+      }
+    >(c, `/finance/transactions/${id}`),
   categorizeFinanceTransaction: (
     c: ApiConfig,
     id: string,
-    body: { category: string; purpose_note?: string | null } | { skip: true }
+    body:
+      | {
+          category: string;
+          purpose_note?: string | null;
+          expense_type?: "fixed" | "variable" | "savings" | null;
+          remember_rule?: boolean;
+          txn_date?: string;
+          txn_time?: string | null;
+        }
+      | { skip: true }
   ) => apiFetch<FinanceTransaction>(c, `/finance/transactions/${id}`, { method: "PATCH", body }),
+  patchFinanceTransaction: (
+    c: ApiConfig,
+    id: string,
+    body: {
+      category?: string | null;
+      purpose_note?: string | null;
+      expense_type?: "fixed" | "variable" | "savings" | null;
+      remember_rule?: boolean;
+      skip?: boolean;
+      txn_date?: string;
+      txn_time?: string | null;
+    }
+  ) => apiFetch<FinanceTransaction>(c, `/finance/transactions/${id}`, { method: "PATCH", body }),
+  financeSourcesStatus: (c: ApiConfig) =>
+    apiFetch<FinanceSourcesStatusResponse>(c, "/finance/sources/status"),
+  financeRecurringSuggestions: (c: ApiConfig, month?: string) =>
+    apiFetch<{ suggestions: RecurringSuggestion[] }>(
+      c,
+      `/finance/recurring/suggestions${month ? `?month=${encodeURIComponent(month)}` : ""}`
+    ),
+  applyFinanceRecurringSuggestion: (
+    c: ApiConfig,
+    body: { merchant_key: string; category?: string | null; planned_amount?: number }
+  ) => apiFetch<{ ok: boolean }>(c, "/finance/recurring/apply", { method: "POST", body }),
 };

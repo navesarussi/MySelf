@@ -56,7 +56,25 @@ export function actualForLine(
   month: string,
   rulesMap?: Map<string, MerchantRule>
 ): number {
-  if (line.line_type === "savings") return 0;
+  if (line.line_type === "savings") {
+    let total = 0;
+    for (const t of txns) {
+      if (t.is_internal || !t.txn_date.startsWith(month) || t.kind !== "expense") continue;
+      const txnLineType = resolveExpenseType({
+        merchant: t.merchant,
+        description: t.description,
+        category: t.category,
+        kind: "expense",
+        explicitExpenseType: t.expense_type,
+        rules: rulesMap,
+      });
+      if (txnLineType !== "savings") continue;
+      const lineKey = line.category ?? line.name;
+      if (txnCategoryKey(t, "expense") !== lineKey && line.name !== (t.merchant || t.description)) continue;
+      total += t.amount;
+    }
+    return round2(total);
+  }
   const lineKey = line.category ?? line.name;
   let total = 0;
   for (const t of txns) {

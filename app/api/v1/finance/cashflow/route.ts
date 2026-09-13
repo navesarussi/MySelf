@@ -11,6 +11,7 @@ function rowToCashflow(row: Record<string, unknown>): CashflowRow {
     kind: row.kind as CashflowRow["kind"],
     category: row.category != null ? String(row.category) : null,
     needs_categorization: Boolean(row.needs_categorization),
+    is_internal: Boolean(row.is_internal),
   };
 }
 

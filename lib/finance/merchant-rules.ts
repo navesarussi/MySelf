@@ -1,7 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { lineTypeForCategory, type PlanLineType } from "@/lib/finance/expense-type";
 
-export type ExpenseType = "fixed" | "variable";
+export type ExpenseType = "fixed" | "variable" | "savings";
 export type MerchantRuleKind = "income" | "expense";
 
 export type MerchantRule = {
@@ -52,18 +52,30 @@ export function resolveExpenseType(input: {
 }): PlanLineType {
   if (input.kind === "income") return "income";
 
-  if (input.explicitExpenseType === "fixed" || input.explicitExpenseType === "variable") {
+  if (
+    input.explicitExpenseType === "fixed" ||
+    input.explicitExpenseType === "variable" ||
+    input.explicitExpenseType === "savings"
+  ) {
     return input.explicitExpenseType;
   }
 
   const directRule = input.rule;
-  if (directRule?.expense_type === "fixed" || directRule?.expense_type === "variable") {
+  if (
+    directRule?.expense_type === "fixed" ||
+    directRule?.expense_type === "variable" ||
+    directRule?.expense_type === "savings"
+  ) {
     return directRule.expense_type;
   }
 
   if (input.rules) {
     const matched = matchMerchantRule(input.merchant, input.description, input.rules);
-    if (matched?.expense_type === "fixed" || matched?.expense_type === "variable") {
+    if (
+      matched?.expense_type === "fixed" ||
+      matched?.expense_type === "variable" ||
+      matched?.expense_type === "savings"
+    ) {
       return matched.expense_type;
     }
   }

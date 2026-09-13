@@ -18,7 +18,8 @@ export type FinanceIngestInput = {
   external_key?: string;
   category?: string | null;
   purpose_note?: string | null;
-  expense_type?: "fixed" | "variable" | null;
+  expense_type?: "fixed" | "variable" | "savings" | null;
+  txn_time?: string | null;
   is_internal?: boolean;
   needs_categorization?: boolean;
 };
@@ -38,7 +39,8 @@ export type FinanceTransaction = {
   status: FinanceTxnStatus;
   category: string | null;
   purpose_note: string | null;
-  expense_type: "fixed" | "variable" | null;
+  expense_type: "fixed" | "variable" | "savings" | null;
+  txn_time?: string | null;
   is_internal: boolean;
   needs_categorization: boolean;
   categorized_at: string | null;

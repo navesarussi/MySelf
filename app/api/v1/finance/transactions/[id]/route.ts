@@ -9,7 +9,7 @@ import {
   str,
   unauthorized,
 } from "@/lib/api/auth";
-import { isFinanceCategory } from "@/lib/finance/categories";
+import { normalizeCategory } from "@/lib/finance/category-list";
 import {
   loadCategoryHistory,
   suggestCategoryFromHistory,
@@ -20,8 +20,14 @@ import {
   upsertMerchantRule,
   type ExpenseType,
 } from "@/lib/finance/merchant-rules";
+import { parseTxnTime } from "@/lib/finance/txn-datetime";
 import { getSupabase } from "@/lib/supabase";
 import { rowToTxn } from "@/lib/finance/ingest";
+
+function parseExpenseType(raw: string, fallback: ExpenseType | null): ExpenseType | null {
+  if (raw === "fixed" || raw === "variable" || raw === "savings") return raw;
+  return fallback;
+}
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(_req))) return unauthorized();
@@ -91,18 +97,49 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return NextResponse.json(rowToTxn(data as Record<string, unknown>));
   }
 
-  const category = str(body.category) || current.category;
-  if (!category) return badRequest("category_required");
-  if (!isFinanceCategory(category)) return badRequest("invalid_category");
+  const hasCategoryField = body.category !== undefined;
+  let category = hasCategoryField
+    ? body.category === null
+      ? null
+      : normalizeCategory(str(body.category))
+    : current.category;
+  if (hasCategoryField && body.category !== null && str(body.category) && !category) {
+    return badRequest("invalid_category");
+  }
 
-  const purpose_note = body.purpose_note !== undefined ? optStr(body.purpose_note) : current.purpose_note;
+  const isCategorize = current.needs_categorization || hasCategoryField;
+  if (isCategorize && !category) return badRequest("category_required");
+
+  const purpose_note =
+    body.purpose_note !== undefined ? optStr(body.purpose_note) : current.purpose_note;
+
   const rawExpenseType = str(body.expense_type);
   const expense_type: ExpenseType | null =
-    rawExpenseType === "fixed" || rawExpenseType === "variable"
-      ? rawExpenseType
-      : current.kind === "expense"
-        ? (current.expense_type ?? (resolveExpenseType({ category, kind: "expense" }) as ExpenseType))
-        : null;
+    current.kind === "expense"
+      ? parseExpenseType(
+          rawExpenseType,
+          current.expense_type ??
+            (resolveExpenseType({ category, kind: "expense" }) as ExpenseType)
+        )
+      : null;
+
+  let txn_date = current.txn_date;
+  if (body.txn_date !== undefined) {
+    const d = str(body.txn_date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return badRequest("invalid_txn_date");
+    txn_date = d;
+  }
+
+  let txn_time = current.txn_time;
+  if (body.txn_time !== undefined) {
+    if (body.txn_time === null || body.txn_time === "") {
+      txn_time = null;
+    } else {
+      const parsed = parseTxnTime(body.txn_time);
+      if (!parsed) return badRequest("invalid_txn_time");
+      txn_time = parsed;
+    }
+  }
 
   const remember_rule = body.remember_rule === true;
   if (remember_rule) {
@@ -122,6 +159,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     category,
     purpose_note,
     expense_type,
+    txn_date,
+    txn_time,
     needs_categorization: false,
     categorized_at: current.categorized_at || now,
     updated_at: now,

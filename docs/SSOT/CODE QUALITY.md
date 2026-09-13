@@ -24,6 +24,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - [PENDING REFACTOR]: Lift per-card modals from `HabitCard` to screen-level `FormModal` (implemented during instant UX infrastructure).
 - [PENDING REFACTOR]: TimelineCanvas clustering still runs on the JS thread (out of NFR-UX-04/05 pass).
 - [PENDING REFACTOR]: Split `lib/finance/plan.ts` and `plan-store.ts` under 200 lines.
+- [PENDING REFACTOR]: Split `mobile/app/(tabs)/finance.tsx` under 200 lines.
 
 ## Notes
 - Never mutate cookies inside Server Components (layout). Flash toast is set in Server Actions and read/cleared on the client.

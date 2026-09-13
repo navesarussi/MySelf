@@ -15,7 +15,16 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
   const { textStart, writingDirection, row } = useLayoutDir();
   const income = txn.kind === "income";
   const label = txn.merchant || txn.description;
-  const meta = [txn.txn_date, txn.category, txn.needs_categorization && !txn.category ? "?" : null]
+  const when = txn.txn_time ? `${txn.txn_date} ${txn.txn_time}` : txn.txn_date;
+  const typeLabel =
+    txn.expense_type === "fixed"
+      ? "קבועה"
+      : txn.expense_type === "savings"
+        ? "חיסכון"
+        : txn.expense_type === "variable"
+          ? "רגילה"
+          : null;
+  const meta = [when, txn.category, typeLabel, txn.needs_categorization && !txn.category ? "?" : null]
     .filter(Boolean)
     .join(" · ");
 
@@ -23,7 +32,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${label} ${income ? "+" : "−"}₪${txn.amount.toFixed(2)}`}
+      accessibilityLabel={`${label} ${txn.purpose_note ? `(${txn.purpose_note}) ` : ""}${income ? "+" : "−"}₪${txn.amount.toFixed(2)}`}
       style={({ pressed }) => ({
         ...row,
         justifyContent: "space-between",
@@ -47,6 +56,21 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
         >
           {label}
         </Text>
+        {txn.purpose_note ? (
+          <Text
+            numberOfLines={1}
+            style={{
+              color: c.ink,
+              fontSize: tokens.textXs,
+              opacity: 0.85,
+              marginTop: 1,
+              textAlign: textStart,
+              writingDirection,
+            }}
+          >
+            {txn.purpose_note}
+          </Text>
+        ) : null}
         <Text
           style={{
             color: c.muted,

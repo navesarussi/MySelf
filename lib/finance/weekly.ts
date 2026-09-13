@@ -15,8 +15,18 @@ export type WeeklyPace = {
   week: number;
   weeks_in_month: number;
   variable_budget: number;
+  computed_budget: number;
+  is_override: boolean;
   spent: number;
   left: number;
+};
+
+export type WeeklyBudgetInput = {
+  variablePlanned?: number;
+  plannedIncome?: number;
+  plannedFixed?: number;
+  plannedSavings?: number;
+  weeklyOverride?: number | null;
 };
 
 function parseDate(iso: string): Date {
@@ -26,6 +36,13 @@ function parseDate(iso: string): Date {
 
 function formatDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function isVariableExpense(t: FinanceTransaction): boolean {
+  if (t.kind !== "expense" || t.is_internal) return false;
+  if (t.expense_type === "variable") return true;
+  if (t.expense_type === "fixed" || t.expense_type === "savings") return false;
+  return lineTypeForCategory(t.category, "expense") === "variable";
 }
 
 /** Calendar weeks (Sun–Sat) overlapping the month. */
@@ -39,7 +56,6 @@ export function weekBucketsForMonth(
 
   const buckets: WeekBucket[] = [];
   let cursor = new Date(monthStart);
-  // Back to Sunday
   cursor.setDate(cursor.getDate() - cursor.getDay());
 
   let week = 1;
@@ -59,11 +75,9 @@ export function weekBucketsForMonth(
       const d = parseDate(t.txn_date);
       if (d < start || d > end) continue;
       if (t.kind === "income") income += t.amount;
-      else {
+      else if (!t.is_internal) {
         expense += t.amount;
-        if (lineTypeForCategory(t.category, "expense") === "variable") {
-          variable_expense += t.amount;
-        }
+        if (isVariableExpense(t)) variable_expense += t.amount;
       }
     }
 
@@ -86,21 +100,36 @@ export function weekBucketsForMonth(
   return buckets;
 }
 
-/** Variable budget split evenly across weeks; leftover for the current week. */
+/** Weekly discretionary budget from plan; optional per-month override. */
 export function weeklyVariablePace(
   weeks: WeekBucket[],
-  variablePlanned: number,
+  budgetInput: WeeklyBudgetInput | number,
   today = new Date()
 ): WeeklyPace | null {
   if (weeks.length === 0) return null;
+  const budget = typeof budgetInput === "number" ? { variablePlanned: budgetInput } : budgetInput;
   const todayIso = formatDate(today);
   const current =
     weeks.find((w) => todayIso >= w.start && todayIso <= w.end) ?? weeks[weeks.length - 1];
-  const variable_budget = round2(variablePlanned / weeks.length);
+
+  const fromPlan = round2(
+    ((budget.plannedIncome ?? 0) -
+      (budget.plannedFixed ?? 0) -
+      (budget.plannedSavings ?? 0)) /
+      weeks.length
+  );
+  const fallback = round2((budget.variablePlanned ?? 0) / weeks.length);
+  const computed_budget = fromPlan > 0 ? fromPlan : fallback;
+  const override = budget.weeklyOverride;
+  const variable_budget =
+    override != null && override >= 0 ? round2(override) : computed_budget;
+
   return {
     week: current.week,
     weeks_in_month: weeks.length,
     variable_budget,
+    computed_budget,
+    is_override: override != null && override >= 0,
     spent: current.variable_expense,
     left: round2(variable_budget - current.variable_expense),
   };

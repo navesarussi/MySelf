@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { FINANCE_CATEGORIES } from "@/lib/finance/categories";
 import { lineTypeForCategory } from "@/lib/finance/expense-type";
 import { api } from "../src/api/resources";
 import { useSession } from "../src/session";
@@ -10,13 +9,19 @@ import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, decFinanceUncategorizedInHome } from "../src/query";
 import type { HomePayload } from "../src/api/resources";
-import { Btn, Card, Chip, ErrorNote, Input, Loading, Screen } from "../src/components/ui";
-import { ExpenseTypeChips, RememberRuleToggle } from "../src/components/finance/categorize-controls";
+import { Btn, Card, ErrorNote, Input, Loading, Screen } from "../src/components/ui";
+import {
+  ExpenseTypeChips,
+  RememberRuleToggle,
+  type ExpenseTypeValue,
+} from "../src/components/finance/categorize-controls";
+import { CategoryPicker } from "../src/components/finance/category-picker";
+import { TxnDateTimeFields } from "../src/components/finance/txn-datetime-fields";
 import type { FinanceTransaction } from "@/lib/finance/types";
 
 type TxnDetail = FinanceTransaction & {
   suggested_category?: string | null;
-  suggested_expense_type?: "fixed" | "variable" | null;
+  suggested_expense_type?: ExpenseTypeValue | null;
   default_note?: string | null;
 };
 
@@ -29,49 +34,60 @@ export default function FinanceCategorizeScreen() {
   const { token, serverUrl } = useSession();
   const { run, isPending } = useApiMutation();
   const [txn, setTxn] = useState<TxnDetail | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState<string | null>(null);
-  const [expenseType, setExpenseType] = useState<"fixed" | "variable">("variable");
+  const [expenseType, setExpenseType] = useState<ExpenseTypeValue>("variable");
   const [rememberRule, setRememberRule] = useState<boolean>(true);
   const [note, setNote] = useState("");
+  const [txnDate, setTxnDate] = useState("");
+  const [txnTime, setTxnTime] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || !id) return;
-    api
-      .financeTransaction({ token, serverUrl }, id)
-      .then((row) => {
+    Promise.all([
+      api.financeTransaction({ token, serverUrl }, id),
+      api.financeCategories({ token, serverUrl }),
+    ])
+      .then(([row, cats]) => {
         setTxn(row);
+        setCategories(cats.categories);
         const cat = row.category || row.suggested_category;
         if (cat) setCategory(cat);
         if (row.purpose_note || row.default_note) setNote(row.purpose_note || row.default_note || "");
+        setTxnDate(row.txn_date);
+        setTxnTime(row.txn_time ?? "");
         if (row.expense_type) {
           setExpenseType(row.expense_type);
         } else if (row.suggested_expense_type) {
           setExpenseType(row.suggested_expense_type);
         } else if (cat) {
           const resolved = lineTypeForCategory(cat, "expense");
-          if (resolved === "fixed" || resolved === "variable") setExpenseType(resolved);
+          if (resolved === "fixed" || resolved === "variable" || resolved === "savings") {
+            setExpenseType(resolved);
+          }
         }
       })
       .catch(() => setError("load_failed"));
   }, [token, serverUrl, id]);
 
-  const onSelectCategory = (cat: string) => {
+  const onSelectCategory = (cat: string | null) => {
+    if (!cat) return;
     setCategory(cat);
     if (!txn?.expense_type) {
       const resolved = lineTypeForCategory(cat, "expense");
-      if (resolved === "fixed" || resolved === "variable") setExpenseType(resolved);
+      if (resolved === "fixed" || resolved === "variable" || resolved === "savings") {
+        setExpenseType(resolved);
+      }
     }
   };
 
   async function save(skip = false) {
     if (!token || !id) return;
     setError(null);
-    const month = txn?.txn_date.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
+    const month = txnDate.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
     const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-      decFinanceUncategorizedInHome(old)
-    );
+    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => decFinanceUncategorizedInHome(old));
     await run(
       (cfg) =>
         api.categorizeFinanceTransaction(
@@ -84,6 +100,8 @@ export default function FinanceCategorizeScreen() {
                 purpose_note: note || null,
                 expense_type: txn?.kind === "expense" ? expenseType : null,
                 remember_rule: rememberRule,
+                txn_date: txnDate,
+                txn_time: txnTime.trim() || null,
               }
         ),
       {
@@ -126,7 +144,6 @@ export default function FinanceCategorizeScreen() {
           <Text style={{ color: c.ink, fontWeight: "700", fontSize: tokens.title, textAlign: textStart, writingDirection }}>
             {txn.kind === "income" ? "+" : "−"}₪{txn.amount.toFixed(2)}
           </Text>
-          <Text style={{ color: c.muted, marginTop: 4, textAlign: textStart, writingDirection }}>{txn.txn_date}</Text>
           {txn.suggested_category && !txn.category ? (
             <Text style={{ color: c.accent, marginTop: 8, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
               {t("finance.suggestedCategory", { category: txn.suggested_category })}
@@ -135,15 +152,20 @@ export default function FinanceCategorizeScreen() {
         </Card>
       ) : null}
 
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: 12 }}>
-        {FINANCE_CATEGORIES.map((cat) => (
-          <Chip key={cat} label={cat} active={category === cat} onPress={() => onSelectCategory(cat)} />
-        ))}
+      <View style={{ marginTop: 14 }}>
+        <TxnDateTimeFields
+          txnDate={txnDate}
+          txnTime={txnTime}
+          onDateChange={setTxnDate}
+          onTimeChange={setTxnTime}
+        />
       </View>
 
-      {isExpense ? (
-        <ExpenseTypeChips value={expenseType} onChange={setExpenseType} />
-      ) : null}
+      <View style={{ marginTop: 14 }}>
+        <CategoryPicker categories={categories} value={category} onChange={onSelectCategory} />
+      </View>
+
+      {isExpense ? <ExpenseTypeChips value={expenseType} onChange={setExpenseType} /> : null}
 
       <RememberRuleToggle value={rememberRule} onToggle={() => setRememberRule((v) => !v)} />
 

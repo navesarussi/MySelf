@@ -15,6 +15,18 @@ describe("financeExternalKey", () => {
     assert.equal(key, "leumi:1234:txn-99");
   });
 
+  it("uses card_name in identifier when account_number missing", () => {
+    const key = financeExternalKey({
+      source: "max",
+      card_name: "MAX-0812",
+      identifier: "tx-456",
+      txn_date: "2026-09-01",
+      amount: 120,
+      description: "Super",
+    });
+    assert.equal(key, "max:MAX-0812:tx-456");
+  });
+
   it("hashes when identifier missing", () => {
     const a = financeExternalKey({
       source: "apple_pay",

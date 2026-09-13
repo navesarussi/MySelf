@@ -27,9 +27,11 @@ export const queryKeys = {
   gmailStatus: ["gmailStatus"] as const,
   mondayAccounts: ["mondayAccounts"] as const,
   githubStatus: ["githubStatus"] as const,
+  financeSourcesStatus: ["financeSourcesStatus"] as const,
   financeCashflow: (month: string) => ["financeCashflow", month] as const,
   financeTransactions: (month: string) => ["financeTransactions", month] as const,
   financePlan: (month: string) => ["financePlan", month] as const,
+  financeRecurringSuggestions: (month?: string) => ["financeRecurringSuggestions", month ?? "current"] as const,
   eventLinks: (eventId: string) => ["eventLinks", eventId] as const,
   libraryEntry: (id: string) => ["libraryEntry", id] as const,
 };

@@ -55,6 +55,9 @@ function AppStack() {
           name="finance-categorize"
           options={{ title: "Finance", presentation: "modal" }}
         />
+        <Stack.Screen name="finance-transaction" options={{ title: "Finance", presentation: "modal" }} />
+        <Stack.Screen name="finance-planning" options={{ title: "Finance" }} />
+        <Stack.Screen name="finance-wealth" options={{ title: "Finance" }} />
       </Stack>
     </>
   );

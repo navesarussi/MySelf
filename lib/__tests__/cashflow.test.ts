@@ -17,6 +17,7 @@ function txn(partial: Partial<FinanceTransaction> & Pick<FinanceTransaction, "tx
     category: null,
     purpose_note: null,
     expense_type: null,
+    txn_time: null,
     is_internal: false,
     needs_categorization: false,
     categorized_at: null,
@@ -42,5 +43,20 @@ describe("summarizeCashflow", () => {
     assert.equal(summary.by_category.length, 2);
     assert.equal(summary.by_category[0].category, "מזון");
     assert.equal(summary.by_category[0].amount, 150);
+  });
+
+  it("strictly filters out internal transactions", () => {
+    const summary = summarizeCashflow(
+      [
+        txn({ txn_date: "2026-09-01", amount: 100, kind: "expense", category: "מזון" }),
+        txn({ txn_date: "2026-09-02", amount: 1500, kind: "expense", category: "כללי", is_internal: true }),
+        txn({ txn_date: "2026-09-03", amount: 500, kind: "income", is_internal: true }),
+      ],
+      "2026-09"
+    );
+    assert.equal(summary.income, 0);
+    assert.equal(summary.expense, 100);
+    assert.equal(summary.by_category.length, 1);
+    assert.equal(summary.by_category[0].category, "מזון");
   });
 });

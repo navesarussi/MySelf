@@ -7,7 +7,15 @@ function parseTxn(raw: unknown): FinanceIngestInput | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const source = o.source;
-  if (source !== "leumi" && source !== "apple_pay" && source !== "manual") return null;
+  if (
+    source !== "leumi" &&
+    source !== "apple_pay" &&
+    source !== "manual" &&
+    source !== "max" &&
+    source !== "visa_cal"
+  ) {
+    return null;
+  }
   const txn_date = typeof o.txn_date === "string" ? o.txn_date : "";
   const amount = Number(o.amount);
   if (!txn_date || !Number.isFinite(amount)) return null;
@@ -27,6 +35,12 @@ function parseTxn(raw: unknown): FinanceIngestInput | null {
     external_key: typeof o.external_key === "string" ? o.external_key : undefined,
     category: typeof o.category === "string" ? o.category : undefined,
     purpose_note: typeof o.purpose_note === "string" ? o.purpose_note : undefined,
+    expense_type:
+      o.expense_type === "fixed" || o.expense_type === "variable" || o.expense_type === "savings"
+        ? o.expense_type
+        : undefined,
+    txn_time: typeof o.txn_time === "string" ? o.txn_time : undefined,
+    is_internal: typeof o.is_internal === "boolean" ? o.is_internal : undefined,
     needs_categorization:
       typeof o.needs_categorization === "boolean" ? o.needs_categorization : undefined,
   };

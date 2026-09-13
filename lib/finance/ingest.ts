@@ -4,6 +4,7 @@ import { financeExternalKey, type FinanceSource } from "@/lib/finance/external-k
 import { inferTxnKind, inferredCategory, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
 import { loadCategoryHistory, suggestCategoryFromHistory, type MerchantCategoryRow } from "@/lib/finance/merchant-category";
 import { fetchMerchantRulesMap, matchMerchantRule, resolveExpenseType, type MerchantRule } from "@/lib/finance/merchant-rules";
+import { isBatchSettlementDescription, reconcileMonthTransactions } from "@/lib/finance/reconcile";
 import type { FinanceIngestInput, FinanceTransaction, FinanceTxnKind, FinanceTxnStatus } from "@/lib/finance/types";
 
 export type { FinanceIngestInput, FinanceTransaction, FinanceTxnKind, FinanceTxnStatus };
@@ -25,7 +26,8 @@ export function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
     status: row.status as FinanceTxnStatus,
     category: row.category != null ? String(row.category) : null,
     purpose_note: row.purpose_note != null ? String(row.purpose_note) : null,
-    expense_type: expType === "fixed" || expType === "variable" ? expType : null,
+    expense_type: expType === "fixed" || expType === "variable" || expType === "savings" ? expType : null,
+    txn_time: row.txn_time != null ? String(row.txn_time).slice(0, 5) : null,
     is_internal: Boolean(row.is_internal),
     needs_categorization: Boolean(row.needs_categorization),
     categorized_at: row.categorized_at != null ? String(row.categorized_at) : null,
@@ -39,25 +41,22 @@ function normalizeInput(input: FinanceIngestInput) {
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("invalid_amount");
   const txn_date = input.txn_date.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(txn_date)) throw new Error("invalid_txn_date");
+  const rawTime = input.txn_time?.trim();
+  const txn_time = rawTime && /^\d{2}:\d{2}$/.test(rawTime) ? rawTime : null;
 
   const description = (input.description ?? input.merchant ?? "").trim() || "תנועה";
   const merchant = input.merchant?.trim() || null;
   const kind = inferTxnKind({ kind: input.kind, description, merchant });
-  const autoCat = inferredCategory({ description, merchant, kind });
+  const isBatch = input.source === "leumi" && isBatchSettlementDescription(description, merchant);
+  const autoCat = isBatch ? null : inferredCategory({ description, merchant, kind });
   const hasCategory = Boolean(input.category?.trim() || autoCat);
-  const skipPrompt = shouldSkipCategorizationPrompt({ description, merchant, kind });
-  const needs_categorization = input.needs_categorization ?? !(hasCategory || skipPrompt);
+  const skipPrompt = isBatch || shouldSkipCategorizationPrompt({ description, merchant, kind });
+  const needs_categorization = isBatch ? false : (input.needs_categorization ?? !(hasCategory || skipPrompt));
+  const card_name = input.card_name?.trim() || null;
+  const account_number = input.account_number?.trim() || null;
   const external_key =
     input.external_key?.trim() ||
-    financeExternalKey({
-      source: input.source,
-      account_number: input.account_number,
-      identifier: input.identifier,
-      txn_date,
-      amount,
-      description,
-      merchant,
-    });
+    financeExternalKey({ source: input.source, account_number, card_name, identifier: input.identifier, txn_date, amount, description, merchant });
 
   return {
     ...input,
@@ -66,19 +65,22 @@ function normalizeInput(input: FinanceIngestInput) {
     kind,
     description,
     merchant,
+    account_number,
+    card_name,
     currency: (input.currency ?? "ILS").trim() || "ILS",
     status: input.status ?? "completed",
     needs_categorization: hasCategory ? false : needs_categorization,
     category: hasCategory ? (input.category?.trim() || autoCat) : null,
     purpose_note: input.purpose_note?.trim() || null,
     expense_type: input.expense_type ?? null,
-    is_internal: Boolean(input.is_internal),
+    txn_time,
+    is_internal: Boolean(input.is_internal || isBatch),
     external_key,
   };
 }
 
 async function notifyCategorize(txn: FinanceTransaction): Promise<void> {
-  if (!txn.needs_categorization) return;
+  if (!txn.needs_categorization || txn.is_internal) return;
   const label = txn.merchant || txn.description;
   const sign = txn.kind === "income" ? "+" : "−";
   const ask = txn.kind === "income" ? "הכנסה חדשה" : "למה ההוצאה?";
@@ -99,13 +101,17 @@ function applyRules(
   rulesMap: Map<string, MerchantRule>,
   history: MerchantCategoryRow[]
 ) {
+  if (item.is_internal) return item;
   const rule = matchMerchantRule(item.merchant, item.description, rulesMap);
   if (rule) {
     const category = item.category || rule.category || null;
     const kind = item.kind;
     const expense_type =
       kind === "expense"
-        ? (resolveExpenseType({ category, kind, explicitExpenseType: item.expense_type, rule }) as "fixed" | "variable")
+        ? (resolveExpenseType({ category, kind, explicitExpenseType: item.expense_type, rule }) as
+            | "fixed"
+            | "variable"
+            | "savings")
         : null;
     return {
       ...item,
@@ -119,7 +125,10 @@ function applyRules(
   if (item.category || item.kind !== "expense") return item;
   const suggested = suggestCategoryFromHistory(item.merchant, item.description, history);
   if (!suggested) return item;
-  const expense_type = resolveExpenseType({ category: suggested, kind: "expense" }) as "fixed" | "variable";
+  const expense_type = resolveExpenseType({ category: suggested, kind: "expense" }) as
+    | "fixed"
+    | "variable"
+    | "savings";
   return { ...item, category: suggested, expense_type, needs_categorization: false };
 }
 
@@ -148,6 +157,7 @@ export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): P
       category: input.category,
       purpose_note: input.purpose_note,
       expense_type: input.kind === "expense" ? input.expense_type ?? null : null,
+      txn_time: input.txn_time,
       is_internal: input.is_internal,
       needs_categorization: input.needs_categorization,
       categorized_at: input.category ? now : null,
@@ -177,6 +187,11 @@ export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): P
     const txn = rowToTxn(data as Record<string, unknown>);
     created.push(txn);
     await notifyCategorize(txn);
+  }
+
+  if (created.length > 0) {
+    const months = Array.from(new Set(created.map((t) => t.txn_date.slice(0, 7))));
+    await Promise.all(months.map((m) => reconcileMonthTransactions(m).catch(() => null)));
   }
 
   return { created, skipped };

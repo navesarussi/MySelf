@@ -23,6 +23,7 @@ export type PlanSectionView = {
 export type MonthPlanView = {
   month: string;
   plan_id: string;
+  weekly_budget_override: number | null;
   sections: Record<PlanLineType, PlanSectionView>;
   totals: {
     planned_income: number;

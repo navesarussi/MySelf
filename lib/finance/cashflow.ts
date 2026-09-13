@@ -3,7 +3,7 @@ import type { FinanceTransaction } from "@/lib/finance/ingest";
 export type CashflowRow = Pick<
   FinanceTransaction,
   "txn_date" | "amount" | "kind" | "category" | "needs_categorization"
->;
+> & { is_internal?: boolean };
 
 export type CategorySpend = { category: string; amount: number };
 
@@ -26,6 +26,7 @@ export function summarizeCashflow(
   const byCat = new Map<string, number>();
 
   for (const t of transactions) {
+    if (t.is_internal) continue;
     if (!t.txn_date.startsWith(month)) continue;
     if (t.kind === "income") income += t.amount;
     else {

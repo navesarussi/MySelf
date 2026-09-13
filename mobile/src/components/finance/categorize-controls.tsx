@@ -5,33 +5,47 @@ import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Chip } from "../ui";
 
+export type ExpenseTypeValue = "fixed" | "variable" | "savings";
+
 export function ExpenseTypeChips({
   value,
   onChange,
 }: {
-  value: "fixed" | "variable";
-  onChange: (val: "fixed" | "variable") => void;
+  value: ExpenseTypeValue;
+  onChange: (val: ExpenseTypeValue) => void;
 }) {
   const { t } = useI18n();
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
 
+  const options: { id: ExpenseTypeValue; label: string }[] = [
+    { id: "variable", label: t("finance.expenseTypeRegular") },
+    { id: "fixed", label: t("finance.expenseTypeFixed") },
+    { id: "savings", label: t("finance.expenseTypeSavings") },
+  ];
+
   return (
     <View style={{ marginBottom: 14 }}>
-      <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>
+      <Text
+        style={{
+          color: c.muted,
+          fontSize: tokens.textXs,
+          marginBottom: 6,
+          textAlign: textStart,
+          writingDirection,
+        }}
+      >
         {t("finance.expenseTypeLabel")}
       </Text>
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <Chip
-          label={t("finance.expenseTypeFixed")}
-          active={value === "fixed"}
-          onPress={() => onChange("fixed")}
-        />
-        <Chip
-          label={t("finance.expenseTypeVariable")}
-          active={value === "variable"}
-          onPress={() => onChange("variable")}
-        />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {options.map((opt) => (
+          <Chip
+            key={opt.id}
+            label={opt.label}
+            active={value === opt.id}
+            onPress={() => onChange(opt.id)}
+          />
+        ))}
       </View>
     </View>
   );

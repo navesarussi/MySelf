@@ -5,15 +5,16 @@ export type FinanceSource = "leumi" | "apple_pay" | "manual" | "max" | "visa_cal
 export function financeExternalKey(input: {
   source: FinanceSource;
   account_number?: string | null;
+  card_name?: string | null;
   identifier?: string | number | null;
   txn_date: string;
   amount: number;
   description: string;
   merchant?: string | null;
 }): string {
-  if (input.identifier != null && String(input.identifier).length > 0) {
-    const acct = input.account_number ?? "default";
-    return `${input.source}:${acct}:${input.identifier}`;
+  if (input.identifier != null && String(input.identifier).trim().length > 0) {
+    const acct = (input.account_number ?? input.card_name ?? "default").trim() || "default";
+    return `${input.source}:${acct}:${String(input.identifier).trim()}`;
   }
   const merchant = (input.merchant ?? input.description).trim().toLowerCase();
   const raw = [
@@ -21,7 +22,7 @@ export function financeExternalKey(input: {
     input.txn_date,
     input.amount.toFixed(2),
     merchant,
-    input.account_number ?? "",
+    (input.account_number ?? input.card_name ?? "").trim(),
   ].join("|");
   const hash = createHash("sha256").update(raw).digest("hex").slice(0, 24);
   return `${input.source}:hash:${hash}`;
