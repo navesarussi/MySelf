@@ -112,6 +112,7 @@ struct LogApplePayExpenseIntent: AppIntent {
   }
 }
 
+@available(iOS 16.0, *)
 enum LogApplePayExpenseError: Error, CustomLocalizedStringResourceConvertible {
   case missingAmount
   case missingAuth
