@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { lineTypeForCategory } from "@/lib/finance/expense-type";
+import { fmtAmount2 } from "@/lib/finance/format";
 import type { FinanceTransaction } from "@/lib/finance/types";
 import { api, type HomePayload } from "../src/api/resources";
 import { useSession } from "../src/session";
@@ -141,7 +142,7 @@ export default function FinanceTransactionScreen() {
       {txn ? (
         <Card>
           <Text style={{ color: isExpense ? c.ink : c.good, fontWeight: "700", fontSize: tokens.title, textAlign: textStart, writingDirection }}>
-            {isExpense ? "−" : "+"}₪{txn.amount.toFixed(2)}
+            {isExpense ? "−" : "+"}₪{fmtAmount2(txn.amount)}
           </Text>
           {metaParts ? <Text style={{ color: c.muted, marginTop: 4, textAlign: textStart, writingDirection }}>{metaParts}</Text> : null}
           {txn.merchant && txn.description && txn.merchant !== txn.description ? (

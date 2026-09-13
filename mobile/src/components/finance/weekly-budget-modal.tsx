@@ -1,14 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
+import { fmtAmount0, safeAmount } from "@/lib/finance/format";
+import { normalizeWeeklyPace, type WeeklyPace } from "@/lib/finance/weekly";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Btn, Input } from "../ui";
-import type { WeeklyPace } from "@/lib/finance/weekly";
 
 export function WeeklyBudgetModal({
   visible,
-  pace,
+  pace: rawPace,
   onClose,
   onSave,
 }: {
@@ -20,7 +21,18 @@ export function WeeklyBudgetModal({
   const { t } = useI18n();
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
-  const [value, setValue] = useState(String(pace.variable_budget));
+  const pace = normalizeWeeklyPace(rawPace);
+  const [value, setValue] = useState("0");
+
+  useEffect(() => {
+    if (visible && pace) {
+      setValue(String(safeAmount(pace.variable_budget)));
+    }
+  }, [visible, pace]);
+
+  if (!visible || !pace) return null;
+
+  const computed = safeAmount(pace.computed_budget, safeAmount(pace.variable_budget));
 
   function submit() {
     const n = Number(value);
@@ -71,7 +83,7 @@ export function WeeklyBudgetModal({
               writingDirection,
             }}
           >
-            {t("finance.weeklyBudgetFormula", { amount: pace.computed_budget.toFixed(0) })}
+            {t("finance.weeklyBudgetFormula", { amount: fmtAmount0(computed) })}
           </Text>
           <Input value={value} onChangeText={setValue} placeholder="0" keyboardType="numeric" />
           <View style={{ marginTop: 14, gap: 8 }}>

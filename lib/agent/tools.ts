@@ -22,6 +22,7 @@ import {
 } from "@/lib/agent/data";
 import { buildAgentContext } from "@/lib/agent/context";
 import { createExtraAgentTools } from "@/lib/agent/tools-extra";
+import { createFinanceAgentTools } from "@/lib/agent/tools-finance";
 import { createGmailAgentTools } from "@/lib/agent/tools-gmail";
 
 async function withLog<T>(name: string, input: unknown, fn: () => Promise<T>): Promise<T> {
@@ -39,6 +40,7 @@ async function withLog<T>(name: string, input: unknown, fn: () => Promise<T>): P
 export function createAgentTools() {
   return {
     ...createExtraAgentTools(),
+    ...createFinanceAgentTools(),
     ...createGmailAgentTools(),
     get_dashboard: tool({
       description: "Get a compact snapshot of habits, goals, tasks, relationships, events, commitments.",

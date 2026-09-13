@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
+import { fmtAmount2 } from "@/lib/finance/format";
 import type { FinanceTransaction } from "@/lib/finance/types";
 
 export const FinanceTxnRow = memo(function FinanceTxnRow({
@@ -32,7 +33,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${label} ${txn.purpose_note ? `(${txn.purpose_note}) ` : ""}${income ? "+" : "−"}₪${txn.amount.toFixed(2)}`}
+      accessibilityLabel={`${label} ${txn.purpose_note ? `(${txn.purpose_note}) ` : ""}${income ? "+" : "−"}₪${fmtAmount2(txn.amount)}`}
       style={({ pressed }) => ({
         ...row,
         justifyContent: "space-between",
@@ -91,7 +92,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
           fontVariant: ["tabular-nums"],
         }}
       >
-        {income ? "+" : "−"}₪{txn.amount.toFixed(2)}
+        {income ? "+" : "−"}₪{fmtAmount2(txn.amount)}
       </Text>
     </Pressable>
   );

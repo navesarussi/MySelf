@@ -1,25 +1,32 @@
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { fmtAmount0, safeAmount } from "@/lib/finance/format";
+import { normalizeWeeklyPace, type WeeklyPace } from "@/lib/finance/weekly";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Card } from "../ui";
-import type { WeeklyPace } from "@/lib/finance/weekly";
 import { WeeklyBudgetModal } from "./weekly-budget-modal";
 
 export function RemainingWeekCard({
-  pace,
+  pace: rawPace,
   onEditBudget,
 }: {
   pace: WeeklyPace;
   onEditBudget?: (amount: number | null) => void;
 }) {
+  const pace = normalizeWeeklyPace(rawPace);
   const { t } = useI18n();
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
   const [showEdit, setShowEdit] = useState(false);
-  const over = pace.left < 0;
-  const ratio = pace.variable_budget > 0 ? Math.min(1, pace.spent / pace.variable_budget) : 0;
+  if (!pace) return null;
+
+  const variableBudget = safeAmount(pace.variable_budget);
+  const spent = safeAmount(pace.spent);
+  const left = safeAmount(pace.left, variableBudget - spent);
+  const over = left < 0;
+  const ratio = variableBudget > 0 ? Math.min(1, spent / variableBudget) : 0;
 
   return (
     <>
@@ -40,8 +47,8 @@ export function RemainingWeekCard({
             }}
           >
             {over
-              ? t("finance.overWeekly", { amount: Math.abs(pace.left).toFixed(0) })
-              : t("finance.leftThisWeek", { amount: pace.left.toFixed(0) })}
+              ? t("finance.overWeekly", { amount: fmtAmount0(Math.abs(left)) })
+              : t("finance.leftThisWeek", { amount: fmtAmount0(left) })}
           </Text>
           <View
             style={{
@@ -71,8 +78,8 @@ export function RemainingWeekCard({
             }}
           >
             {t("finance.weeklyPaceHint", {
-              spent: pace.spent.toFixed(0),
-              budget: pace.variable_budget.toFixed(0),
+              spent: fmtAmount0(spent),
+              budget: fmtAmount0(variableBudget),
             })}
           </Text>
           {onEditBudget ? (
@@ -90,7 +97,7 @@ export function RemainingWeekCard({
           ) : null}
         </Card>
       </Pressable>
-      {onEditBudget ? (
+      {onEditBudget && showEdit && pace ? (
         <WeeklyBudgetModal
           visible={showEdit}
           pace={pace}

@@ -5,6 +5,7 @@ import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Card, Row, SectionTitle } from "../ui";
 import { PlanLineRow } from "./plan-line-row";
+import { fmtAmount0 } from "@/lib/finance/format";
 import type { PlanLineType, PlanSectionView } from "@/lib/finance/plan";
 
 const SECTION_KEYS: Record<PlanLineType, string> = {
@@ -39,10 +40,10 @@ export function PlanSectionBlock({
       <Card>
         <Row style={{ marginBottom: 8 }}>
           <Text style={{ color: c.muted, fontSize: tokens.textXs, flex: 1, textAlign: textStart, writingDirection }}>
-            {t("finance.planned")}: ₪{section.planned_total.toFixed(0)}
+            {t("finance.planned")}: ₪{fmtAmount0(section.planned_total)}
           </Text>
           <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "600" }}>
-            {t("finance.actual")}: ₪{section.actual_total.toFixed(0)}
+            {t("finance.actual")}: ₪{fmtAmount0(section.actual_total)}
           </Text>
         </Row>
         {section.lines.length === 0 ? (

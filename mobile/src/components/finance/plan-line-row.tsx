@@ -4,6 +4,7 @@ import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Btn, Chip, Row } from "../ui";
+import { fmtAmount0, safeAmount } from "@/lib/finance/format";
 import type { PlanLineType, PlanLineView } from "@/lib/finance/plan";
 
 export function PlanLineRow({
@@ -47,16 +48,16 @@ export function PlanLineRow({
           <Row>
             <Text style={{ color: c.ink, flex: 1, textAlign: textStart, writingDirection }}>{line.name}</Text>
             <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
-              {t("finance.actual")} ₪{line.actual_amount.toFixed(0)}
+              {t("finance.actual")} ₪{fmtAmount0(line.actual_amount)}
             </Text>
           </Row>
           <Row style={{ marginTop: 2 }}>
             <Text style={{ color: c.muted, fontSize: tokens.textXs, flex: 1, textAlign: textStart, writingDirection }}>
-              {t("finance.planned")} ₪{line.planned_amount.toFixed(0)}
+              {t("finance.planned")} ₪{fmtAmount0(line.planned_amount)}
             </Text>
             {over ? (
               <Text style={{ color: c.warn, fontSize: tokens.textXs, fontWeight: "600" }}>
-                +₪{(line.actual_amount - line.planned_amount).toFixed(0)}
+                +₪{fmtAmount0(safeAmount(line.actual_amount) - safeAmount(line.planned_amount))}
               </Text>
             ) : null}
           </Row>

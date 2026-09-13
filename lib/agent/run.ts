@@ -9,6 +9,11 @@ import { logAgentMessage } from "@/lib/agent/log";
 
 const MODEL_ID = "gemini-3-flash-preview";
 
+export type AgentImageInput = {
+  mimeType: string;
+  data: string;
+};
+
 function requireGeminiKey() {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   if (!key) throw new Error("missing_gemini_api_key");
@@ -17,6 +22,7 @@ function requireGeminiKey() {
 
 export async function runAgentChat(input: {
   message: string;
+  images?: AgentImageInput[];
   channel: AgentChannel;
   logInbound?: boolean;
   contextOptions?: AgentContextOptions;
@@ -26,11 +32,16 @@ export async function runAgentChat(input: {
   const context = await buildAgentContext(new Date(), input.contextOptions ?? {});
   const tools = createAgentTools();
 
+  const inboundSummary =
+    input.images?.length
+      ? `${input.message}\n[${input.images.length} image(s) attached]`
+      : input.message;
+
   if (input.logInbound) {
     await logAgentMessage({
       direction: "inbound",
       channel: input.channel,
-      content: input.message,
+      content: inboundSummary,
     });
   }
 
@@ -41,7 +52,26 @@ export async function runAgentChat(input: {
     stopWhen: stepCountIs(12),
   });
 
-  const result = await agent.generate({ prompt: input.message });
+  const textPrompt =
+    input.message.trim() ||
+    "נתח את התמונה/המסמך שהמשתמש שלח ועדכן את האפליקציה עם הכלים המתאימים (במיוחד upsert_wealth_item / import_wealth_text).";
+
+  const userContent: Array<{ type: "text"; text: string } | { type: "image"; image: string; mimeType?: string }> = [
+    { type: "text", text: textPrompt },
+  ];
+
+  for (const img of input.images ?? []) {
+    const dataUrl = img.data.startsWith("data:")
+      ? img.data
+      : `data:${img.mimeType};base64,${img.data}`;
+    userContent.push({ type: "image", image: dataUrl, mimeType: img.mimeType });
+  }
+
+  const result =
+    input.images?.length
+      ? await agent.generate({ messages: [{ role: "user", content: userContent }] })
+      : await agent.generate({ prompt: textPrompt });
+
   const text = result.text?.trim() || "לא הצלחתי לענות כרגע. נסה שוב.";
 
   await logAgentMessage({

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { lineTypeForCategory } from "@/lib/finance/expense-type";
+import { fmtAmount2 } from "@/lib/finance/format";
 import { api } from "../src/api/resources";
 import { useSession } from "../src/session";
 import { useI18n } from "../src/i18n";
@@ -142,7 +143,7 @@ export default function FinanceCategorizeScreen() {
       {txn ? (
         <Card>
           <Text style={{ color: c.ink, fontWeight: "700", fontSize: tokens.title, textAlign: textStart, writingDirection }}>
-            {txn.kind === "income" ? "+" : "−"}₪{txn.amount.toFixed(2)}
+            {txn.kind === "income" ? "+" : "−"}₪{fmtAmount2(txn.amount)}
           </Text>
           {txn.suggested_category && !txn.category ? (
             <Text style={{ color: c.accent, marginTop: 8, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>

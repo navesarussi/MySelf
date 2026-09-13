@@ -438,4 +438,24 @@ export const api = {
     c: ApiConfig,
     body: { merchant_key: string; category?: string | null; planned_amount?: number }
   ) => apiFetch<{ ok: boolean }>(c, "/finance/recurring/apply", { method: "POST", body }),
+  financeForecast: (c: ApiConfig, month: string, months = 6) =>
+    apiFetch<import("@/lib/finance/forecast").FinanceForecast>(
+      c,
+      `/finance/forecast?month=${encodeURIComponent(month)}&months=${months}`
+    ),
+  financeWealth: (c: ApiConfig) =>
+    apiFetch<import("@/lib/finance/wealth-types").WealthSummary>(c, "/finance/wealth"),
+  importWealthText: (
+    c: ApiConfig,
+    body: { import_text: string; source?: "har_bituach" | "cover_import" }
+  ) =>
+    apiFetch<{ imported: number; summary: import("@/lib/finance/wealth-types").WealthSummary }>(
+      c,
+      "/finance/wealth",
+      { method: "POST", body }
+    ),
+  agentChat: (
+    c: ApiConfig,
+    body: { message: string; images?: Array<{ mimeType: string; data: string }> }
+  ) => apiFetch<{ text: string; steps: number }>(c, "/agent/chat", { method: "POST", body }),
 };

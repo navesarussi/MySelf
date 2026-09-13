@@ -9,11 +9,13 @@ import { useColors, tokens } from "../../src/theme";
 import { useApiQuery, useApiMutation, queryKeys, queryClient } from "../../src/query";
 import { PLAN_SECTION_ORDER, type PlanLineType } from "@/lib/finance/expense-type";
 import type { MonthPlanView } from "@/lib/finance/plan";
+import { normalizeWeeklyPace } from "@/lib/finance/weekly";
 import type { FinanceTransaction } from "@/lib/finance/types";
 import { PlanSectionBlock } from "../../src/components/finance/plan-section";
 import { WeekStrip } from "../../src/components/finance/week-strip";
 import { RemainingWeekCard } from "../../src/components/finance/remaining-week";
 import { FinanceHubLinks } from "../../src/components/finance/finance-hub-links";
+import { FinanceSourcesStrip } from "../../src/components/finance/finance-sources-strip";
 import { AddPlanLineModal } from "../../src/components/finance/add-plan-line-modal";
 import { FinanceHero } from "../../src/components/finance/finance-hero";
 import { FinanceMonthNav } from "../../src/components/finance/month-nav";
@@ -59,7 +61,14 @@ export default function FinanceScreen() {
     void refreshTx();
   };
 
-  const view = plan as MonthPlanView | undefined;
+  const view = useMemo(() => {
+    const p = plan as MonthPlanView | undefined;
+    if (!p) return undefined;
+    return {
+      ...p,
+      weekly_pace: normalizeWeeklyPace(p.weekly_pace),
+    };
+  }, [plan]);
   const uncategorized = useMemo(() => (txns ?? []).filter((item) => item.needs_categorization), [txns]);
 
   const openTxn = useCallback(
@@ -113,6 +122,7 @@ export default function FinanceScreen() {
         onNext={() => setMonth((m) => shiftMonth(m, 1))}
       />
       <FinanceHubLinks />
+      <FinanceSourcesStrip />
       <RecurringSuggestionsCard month={month} onApplied={refresh} />
       {view ? <FinanceHero view={view} /> : null}
       {view?.weekly_pace ? (
@@ -128,16 +138,20 @@ export default function FinanceScreen() {
         }}
       />
       {view
-        ? PLAN_SECTION_ORDER.map((type) => (
+        ? PLAN_SECTION_ORDER.map((type) => {
+            const section = view.sections?.[type];
+            if (!section) return null;
+            return (
             <PlanSectionBlock
               key={type}
-              section={view.sections[type]}
+              section={section}
               onSavePlanned={(id, amount) => void savePlanned(id, amount)}
               onChangeLineType={(id, lt) => void changeLineType(id, lt)}
               onAdd={type === "planned" || type === "savings" ? () => setAddType(type) : undefined}
               onDelete={type === "planned" || type === "savings" ? (id) => void deleteLine(id) : undefined}
             />
-          ))
+            );
+          })
         : null}
       {view?.weeks.length ? <WeekStrip weeks={view.weeks} /> : null}
       <Pressable onPress={() => setShowTxns((v) => !v)} accessibilityRole="button" style={{ marginVertical: 4 }}>

@@ -45,6 +45,24 @@ function isVariableExpense(t: FinanceTransaction): boolean {
   return lineTypeForCategory(t.category, "expense") === "variable";
 }
 
+/** Normalize cached/API pace objects (handles older clients missing new fields). */
+export function normalizeWeeklyPace(raw: Partial<WeeklyPace> | null | undefined): WeeklyPace | null {
+  if (!raw || raw.week == null) return null;
+  const variable_budget = Number(raw.variable_budget) || 0;
+  const computed_budget = Number(raw.computed_budget) || variable_budget;
+  const spent = Number(raw.spent) || 0;
+  const left = raw.left != null ? Number(raw.left) : round2(variable_budget - spent);
+  return {
+    week: raw.week,
+    weeks_in_month: raw.weeks_in_month ?? 4,
+    variable_budget,
+    computed_budget,
+    is_override: Boolean(raw.is_override),
+    spent,
+    left,
+  };
+}
+
 /** Calendar weeks (Sun–Sat) overlapping the month. */
 export function weekBucketsForMonth(
   month: string,
@@ -103,11 +121,10 @@ export function weekBucketsForMonth(
 /** Weekly discretionary budget from plan; optional per-month override. */
 export function weeklyVariablePace(
   weeks: WeekBucket[],
-  budgetInput: WeeklyBudgetInput | number,
+  budget: WeeklyBudgetInput,
   today = new Date()
 ): WeeklyPace | null {
   if (weeks.length === 0) return null;
-  const budget = typeof budgetInput === "number" ? { variablePlanned: budgetInput } : budgetInput;
   const todayIso = formatDate(today);
   const current =
     weeks.find((w) => todayIso >= w.start && todayIso <= w.end) ?? weeks[weeks.length - 1];
@@ -124,7 +141,7 @@ export function weeklyVariablePace(
   const variable_budget =
     override != null && override >= 0 ? round2(override) : computed_budget;
 
-  return {
+  return normalizeWeeklyPace({
     week: current.week,
     weeks_in_month: weeks.length,
     variable_budget,
@@ -132,7 +149,7 @@ export function weeklyVariablePace(
     is_override: override != null && override >= 0,
     spent: current.variable_expense,
     left: round2(variable_budget - current.variable_expense),
-  };
+  });
 }
 
 function round2(n: number): number {

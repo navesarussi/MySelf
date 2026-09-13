@@ -63,19 +63,34 @@ export function AppTopBar({ onMenuPress }: { onMenuPress: () => void }) {
           {isHome ? "" : t("nav.brand")}
         </Text>
 
-        <Pressable
-          onPress={() => router.push("/settings")}
-          accessibilityRole="button"
-          accessibilityLabel={t("nav.settings")}
-          hitSlop={8}
-          style={({ pressed }) => ({
-            padding: 8,
-            borderRadius: tokens.radiusSm,
-            backgroundColor: pressed ? c.border + "80" : "transparent",
-          })}
-        >
-          <Ionicons name="settings-outline" size={22} color={c.ink} />
-        </Pressable>
+        <View style={{ ...row, gap: 4 }}>
+          <Pressable
+            onPress={() => router.push("/agent-chat")}
+            accessibilityRole="button"
+            accessibilityLabel={t("agent.title")}
+            hitSlop={8}
+            style={({ pressed }) => ({
+              padding: 8,
+              borderRadius: tokens.radiusSm,
+              backgroundColor: pressed ? c.border + "80" : "transparent",
+            })}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={22} color={c.ink} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/settings")}
+            accessibilityRole="button"
+            accessibilityLabel={t("nav.settings")}
+            hitSlop={8}
+            style={({ pressed }) => ({
+              padding: 8,
+              borderRadius: tokens.radiusSm,
+              backgroundColor: pressed ? c.border + "80" : "transparent",
+            })}
+          >
+            <Ionicons name="settings-outline" size={22} color={c.ink} />
+          </Pressable>
+        </View>
       </View>
     </View>
   );

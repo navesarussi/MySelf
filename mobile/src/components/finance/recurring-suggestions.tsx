@@ -6,6 +6,7 @@ import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../../query";
+import { fmtAmount0 } from "@/lib/finance/format";
 import type { RecurringSuggestion } from "@/lib/finance/recurring";
 
 export function RecurringSuggestionsCard({
@@ -99,7 +100,7 @@ export function RecurringSuggestionsCard({
                 {item.display_name}
               </Text>
               <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 2, textAlign: textStart, writingDirection }}>
-                ₪{item.suggested_amount.toFixed(0)} · {t("finance.recurringMonthsCount", { count: String(item.occurrences) })}
+                ₪{fmtAmount0(item.suggested_amount)} · {t("finance.recurringMonthsCount", { count: String(item.occurrences) })}
                 {item.category ? ` · ${item.category}` : ""}
               </Text>
             </View>

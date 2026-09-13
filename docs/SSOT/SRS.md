@@ -279,6 +279,15 @@ Categorized transactions open a full editor (`/finance-transaction`); uncategori
 ### FR-FIN-20
 System detects recurring expenses across recent months (similar amount, same merchant) and provides actionable suggestions to establish fixed expense merchant rules.
 
+### FR-FIN-21
+Future planning screen projects monthly net and cumulative cashflow from the current month plan (income − fixed − variable − planned − savings).
+
+### FR-FIN-22
+Wealth summary stores manual/imported snapshot items (pension, insurance, investment, property); users may paste report text (Har HaBituach / Cover) or send screenshots to the agent for import.
+
+### FR-AGENT-02
+In-app agent chat accepts text and up to 3 image attachments; vision model extracts wealth/finance data and persists via agent tools (`upsert_wealth_item`, `import_wealth_text`).
+
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
 

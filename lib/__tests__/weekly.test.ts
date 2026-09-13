@@ -1,6 +1,21 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { weeklyVariablePace, type WeekBucket } from "../finance/weekly";
+import { normalizeWeeklyPace, weeklyVariablePace, type WeekBucket } from "../finance/weekly";
+
+describe("normalizeWeeklyPace", () => {
+  it("fills computed_budget from variable_budget when missing (stale cache)", () => {
+    const pace = normalizeWeeklyPace({
+      week: 2,
+      variable_budget: 500,
+      spent: 120,
+      left: 380,
+    });
+    assert.ok(pace);
+    assert.equal(pace.computed_budget, 500);
+    assert.equal(pace.variable_budget, 500);
+    assert.equal(pace.weeks_in_month, 4);
+  });
+});
 
 describe("weeklyVariablePace", () => {
   it("splits variable budget and reports leftover", () => {

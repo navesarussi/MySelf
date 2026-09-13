@@ -4,6 +4,7 @@ import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Card, SectionTitle } from "../ui";
+import { fmtAmount0 } from "@/lib/finance/format";
 import type { WeekBucket } from "@/lib/finance/weekly";
 
 export function WeekStrip({ weeks }: { weeks: WeekBucket[] }) {
@@ -41,7 +42,7 @@ export function WeekStrip({ weeks }: { weeks: WeekBucket[] }) {
                 {w.week}
               </Text>
               <Text style={{ color: c.ink, fontSize: 9, fontWeight: "600", writingDirection }}>
-                ₪{w.expense.toFixed(0)}
+                ₪{fmtAmount0(w.expense)}
               </Text>
             </View>
           ))}

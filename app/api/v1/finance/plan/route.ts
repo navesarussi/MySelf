@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, readJson, unauthorized } from "@/lib/api/auth";
 import { getOrCreateMonthPlan, updateWeeklyBudgetOverride } from "@/lib/finance/plan-store";
+import { normalizeWeeklyPace } from "@/lib/finance/weekly";
+import type { MonthPlanView } from "@/lib/finance/plan-types";
+
+function normalizePlanResponse(plan: MonthPlanView): MonthPlanView {
+  return { ...plan, weekly_pace: normalizeWeeklyPace(plan.weekly_pace) };
+}
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
@@ -9,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const plan = await getOrCreateMonthPlan(month);
-    return NextResponse.json(plan);
+    return NextResponse.json(normalizePlanResponse(plan));
   } catch {
     return dbError();
   }
@@ -38,7 +44,7 @@ export async function PATCH(req: NextRequest) {
   try {
     await updateWeeklyBudgetOverride(month, weekly_budget_override);
     const plan = await getOrCreateMonthPlan(month);
-    return NextResponse.json(plan);
+    return NextResponse.json(normalizePlanResponse(plan));
   } catch {
     return dbError();
   }
