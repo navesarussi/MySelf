@@ -2,6 +2,10 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { apiFetch } from "./api/client";
+import {
+  bootstrapFinanceIngestKeychain,
+  syncFinanceIngestSessionToken,
+} from "./native/finance-ingest-keychain";
 
 /** Session = baked-in production API + session token in SecureStore.
  *  After first successful sign-in the device stays logged in until logout. */
@@ -70,13 +74,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      await bootstrapFinanceIngestKeychain();
       const storedToken = await storeGet(TOKEN_KEY);
       if (storedToken) {
         try {
           await apiFetch({ serverUrl: API_URL, token: storedToken }, "/session");
           setToken(storedToken);
+          await syncFinanceIngestSessionToken(storedToken);
         } catch {
           await storeSet(TOKEN_KEY, null);
+          await syncFinanceIngestSessionToken(null);
         }
       }
     })().finally(() => setReady(true));
@@ -91,10 +98,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         await apiFetch({ serverUrl: API_URL, token: newToken }, "/session");
         setToken(newToken);
         await storeSet(TOKEN_KEY, newToken);
+        await syncFinanceIngestSessionToken(newToken);
       },
       signOut: async () => {
         setToken(null);
         await storeSet(TOKEN_KEY, null);
+        await syncFinanceIngestSessionToken(null);
         if (Platform.OS === "web") {
           try {
             await fetch(`${API_URL}/api/logout`, { method: "POST", credentials: "include" });

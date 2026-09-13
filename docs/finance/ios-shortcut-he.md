@@ -4,60 +4,56 @@
 
 ## דרישות
 
-1. אפליקציית **MySelf** מותקנת ב-iPhone
-2. משתנה סביבה `FINANCE_INGEST_TOKEN` מוגדר ב-Vercel (אותו ערך שתשתמש בו בקיצור)
-3. כתובת השרת: `https://myselfapp.xyz` (או הדומיין האישי שלך)
+1. אפליקציית **MeAndMySelf** מותקנת ב-iPhone (בילד native חדש עם App Intent)
+2. משתנה סביבה `FINANCE_INGEST_TOKEN` מוגדר ב-Vercel **או** התחברות לאפליקציה (טוקן סשן)
+3. כתובת השרת: `https://myselfapp.xyz`
 
 ---
 
 ## הגדרת הטוקן
 
+### אפשרות א׳ — התחברות באפליקציה (מומלץ)
+
+1. התחבר ל-MySelf באפליקציה.
+2. האפליקציה שומרת את טוקן הסשן ב-Keychain — פעולת הקיצור משתמשת בו ברקע.
+
+### אפשרות ב׳ — טוקן ingest ייעודי
+
 1. צור מחרוזת אקראית ארוכה וחזקה (Password Generator).
 2. ב-Vercel → Project → Settings → Environment Variables:
    - `FINANCE_INGEST_TOKEN` = המחרוזת שיצרת.
 3. בצע Redeploy כדי שהמשתנה ייכנס לתוקף.
-4. שמור את אותה מחרוזת ב-**iCloud Keychain** או בתוך פעולת **Text** ייעודית בקיצור ב-iPhone (הגן על המכשיר).
+4. באפליקציה → **הגדרות** → **חיבורי כספים וכרטיסים** → הדבק את הטוקן תחת **טוקן Apple Pay (קיצורים)**.
 
 ---
 
-## קיצור: "MySelf — Apple Pay"
+## אוטומציה מומלצת (App Intent — iOS 16+)
 
-### אוטומציה מומלצת (iOS 17 ו-iOS 18)
+האפליקציה מפרסמת פעולה מובנית: **«רשום הוצאה ל־MySelf»**.  
+אוטומציית Transaction מעבירה פרטי העסקה ישירות לפעולה — **בלי** Get Details / Ask for Input.
 
-1. פתח את אפליקציית **Shortcuts** (קיצורים) ב-iPhone.
-2. עבור ללשונית **Automation** (אוטומציות) ולחץ על **+** ליצירת אוטומציה אישית חדשה.
-3. בחר בטריגר **Transaction** (עסקה ב-Apple Pay / כרטיס Wallet):
-   - **Card:** בחר Any Card (כל הכרטיסים) או כרטיס ספציפי (למשל כרטיס MAX או Cal).
+### שלבים
+
+1. פתח **Shortcuts** (קיצורים) → **Automation** (אוטומציות) → **+**.
+2. בחר טריגר **Transaction** (עסקה ב-Apple Pay / כרטיס Wallet):
+   - **Card:** Any Card או כרטיס ספציפי.
    - **Category:** Any.
-   - סמן **Run Immediately** (הרץ מיד) ובטל את **Notify When Run** (אל תבקש אישור לפני ריצה).
-4. לחץ על **Next** ובחר **New Blank Automation** (הוסף פעולות).
+   - סמן **Run Immediately** ובטל **Notify When Run**.
+3. **Next** → **New Blank Automation**.
+4. הוסף פעולה **רשום הוצאה ל־MySelf** (תחת MeAndMySelf).
+5. חבר משתני הטריגר לפרמטרים:
+   - `Amount` → **סכום**
+   - `Merchant` → **בית עסק**
+   - `Card Name` → **שם כרטיס**
+   - `Date` → **תאריך**
+   - `Transaction ID` → **מזהה עסקה** (אם זמין)
+6. שמור.
 
-### פירוט הפעולות לבנייה באוטומציה
+> **הערה:** הפעולה מופיעה רק אחרי התקנת בילד native חדש (לא OTA). בנה מקומית: `cd mobile && npx expo prebuild --platform ios` ואז Xcode / `eas build --local`.
 
-#### 1. קבלת פרטי העסקה מהטריגר
-הטריגר של iOS מעביר משתנה בשם **Shortcut Input** (או פרטי העסקה).
-ניתן להשתמש בפעולות:
-- **Get Details of Transaction** לבחירת:
-  - `Amount` (סכום)
-  - `Merchant` (שם בית העסק)
-  - `Card Name` (שם הכרטיס ב-Wallet)
-  - `Date` (תאריך ושעה)
+### מה קורה ברקע
 
-> **הערה לגבי מזהה ייחודי (`identifier`):**
-> בגרסאות iOS 17/18, אם טריגר העסקה מספק מזהה עסקה, העבר אותו בשדה `identifier`.
-> אם אין מזהה מובנה ישיר, מומלץ לחבר שילוב ייחודי: למשל `Formatted Date (yyyyMMddHHmmss)-Amount-CardName`. שדה זה מבטיח דה-דופליקציה מוחלטת ב-`external_key` (`apple_pay:CardName:identifier`).
-
-#### 2. עיצוב תאריך ושעה
-- הוסף פעולת **Format Date**:
-  - בחר את תאריך העסקה מהטריגר.
-  - Date Format: Custom → `yyyy-MM-dd`
-  - שמור במשתנה `TxnDate`.
-- (אופציונלי) הוסף פעולת **Format Date** לשעה:
-  - Time Format: Custom → `HH:mm`
-  - שמור במשתנה `TxnTime`.
-
-#### 3. הרכבת גוף הבקשה (JSON)
-הוסף פעולת **Text** עם התוכן הבא (גרור את המשתנים מהשלבים הקודמים למקומות המתאימים):
+הפעולה שולחת `POST https://myselfapp.xyz/api/v1/finance/ingest` עם:
 
 ```json
 {
@@ -72,20 +68,15 @@
 }
 ```
 
-*הנחיות לשדות:*
-- `source`: קבוע `"apple_pay"`.
-- `card_name`: למשל `"MAX"`, `"Cal"`, `"Isracard"` או שם הכרטיס כפי שמופיע ב-Wallet.
-- `identifier`: מזהה ייחודי של העסקה למניעת כפילויות.
-- `amount`: ערך מספרי חיובי.
+- **Auth:** `Bearer` מ-Keychain (`FINANCE_INGEST_TOKEN` או טוקן סשן).
+- **identifier:** מזהה מהטריגר, או שילוב `תאריך-סכום-כרטיס` לדה-דופליקציה.
 
-#### 4. שליחת הבקשה ל-API
-הוסף פעולת **Get Contents of URL**:
-- **URL:** `https://myselfapp.xyz/api/v1/finance/ingest`
-- **Method:** `POST`
-- **Headers:**
-  - `Authorization`: `Bearer YOUR_FINANCE_INGEST_TOKEN`
-  - `Content-Type`: `application/json`
-- **Request Body:** בחר `File` או `Text` וחבר את פלט פעולת ה-Text מהשלב הקודם.
+---
+
+## אוטומציה ידנית (ללא App Intent)
+
+אם עדיין אין בילד עם Intent, אפשר לבנות קיצור ידני עם **Get Contents of URL** (ראה גרסה קודמת ב-git).  
+בישראל, **Get Details of Transaction** של Apple לעיתים לא מחזיר Amount/Merchant — לכן מומלץ App Intent.
 
 ---
 
@@ -93,13 +84,11 @@
 
 1. **החלת כללים אוטומטית (Merchant Rules):**
    ברגע שהתנועה נקלטת מה-Apple Pay, שרת MySelf בודק האם קיים כלל שמור עבור בית העסק (`merchant_rules`):
-   - אם קיים כלל: התנועה מסווגת מיידית (למשל קטגוריה "סופר", סוג "משתנה", והערה קבועה).
-   - אם אין עדיין כלל: נשלחת אליך התראת Push עם קישור לסיווג מהיר (`/finance-categorize?id=...`). בסיווג תוכל לסמן "זכור לעתיד" כדי שכל העסקאות הבאות מסוחר זה יסווגו לבד.
+   - אם קיים כלל: התנועה מסווגת מיידית.
+   - אם אין: נשלחת התראת Push עם קישור לסיווג מהיר.
 
-2. **איחוד מול חיובי הבנק (Reconciliation):**
-   - כרטיסי MAX / Cal ו-Apple Pay מביאים את פירוט העסקה המדויק (למשל "שופרסל דיל ₪320.00").
-   - בבנק לאומי מופיע בסוף החודש חיוב מרוכז אחד (למשל "מקס איט סך ₪4,200").
-   - מנוע האיחוד מסמן את החיוב המרוכז בבנק כ-`is_internal = true` ומחריג אותו מחישובי ההוצאות ותזרים המזומנים, כך שהפירוט המדויק מכרטיס האשראי ו-Apple Pay הוא זה שנכנס לתקציב ללא ספירה כפולה!
+2. **איחוד מול חיובי הבנק:**
+   פירוט מ-Apple Pay / MAX / Cal נשמר; חיוב מרוכז בלאומי מסומן `is_internal` ולא נספר פעמיים.
 
 ---
 
@@ -120,8 +109,14 @@ curl -X POST "https://myselfapp.xyz/api/v1/finance/ingest" \
     "identifier": "test-apple-pay-001"
   }'
 ```
-תגובה צפויה:
-```json
-{"created":[{"id":"...","source":"apple_pay","amount":25,...}],"skipped":0}
-```
-שליחה חוזרת של אותו JSON בדיוק תחזיר `{"created":[],"skipped":1}` תודות ל-`external_key` הייחודי.
+
+תגובה צפויה: `{"created":[...],"skipped":0}`  
+שליחה חוזרת: `{"created":[],"skipped":1}`
+
+---
+
+## מה זה לא
+
+- לא FinanceKit (US/UK בלבד)
+- לא תיקון ל-Get Details הגנרי של Apple בישראל
+- לא שינוי ב-legacy Next.js UI

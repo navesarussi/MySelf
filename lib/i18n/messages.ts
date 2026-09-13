@@ -595,6 +595,14 @@ export const messages = {
       financeSourcesLastActivity: "פעילות אחרונה: {date}",
       financeSourcesNoActivity: "טרם נקלטו תנועות",
       financeSourcesGuideLink: "מדריך הגדרת Apple Pay וקיצורים",
+      financeIngestTokenTitle: "טוקן Apple Pay (קיצורים)",
+      financeIngestTokenHint:
+        "אופציונלי — אותו FINANCE_INGEST_TOKEN מ-Vercel. בלי זה, פעולת הקיצור משתמשת בטוקן ההתחברות שלך.",
+      financeIngestTokenPlaceholder: "הדבק טוקן ingest",
+      financeIngestTokenReady: "מוכן לקיצור Apple Pay",
+      financeIngestTokenMissing: "אין טוקן ב-Keychain — התחבר או הדבק טוקן",
+      financeIngestTokenSaved: "טוקן נשמר לקיצור Apple Pay",
+      financeIngestTokenFailed: "שמירת הטוקן נכשלה",
     },
     privacy: {
       title: "Privacy Policy — מרכז השליטה",
@@ -1299,6 +1307,14 @@ export const messages = {
       financeSourcesLastActivity: "Last activity: {date}",
       financeSourcesNoActivity: "No transactions yet",
       financeSourcesGuideLink: "Apple Pay & Shortcuts guide",
+      financeIngestTokenTitle: "Apple Pay ingest token (Shortcuts)",
+      financeIngestTokenHint:
+        "Optional — same FINANCE_INGEST_TOKEN as in Vercel. Without it, the shortcut uses your sign-in session token.",
+      financeIngestTokenPlaceholder: "Paste ingest token",
+      financeIngestTokenReady: "Ready for Apple Pay shortcut",
+      financeIngestTokenMissing: "No Keychain token — sign in or paste a token",
+      financeIngestTokenSaved: "Token saved for Apple Pay shortcut",
+      financeIngestTokenFailed: "Failed to save token",
     },
     privacy: {
       title: "Privacy Policy — Command Center",

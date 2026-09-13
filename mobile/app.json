@@ -36,6 +36,7 @@
       "favicon": "./assets/icon.png"
     },
     "plugins": [
+      "./plugins/with-apple-pay-intent",
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
