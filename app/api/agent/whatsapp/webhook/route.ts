@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAgentSettings, isAuthorizedWhatsAppSender } from "@/lib/agent/settings";
+import { handleCodingTaskRequest } from "@/lib/agent/coding/bridge";
 import { runAgentChat } from "@/lib/agent/run";
 import { logAgentMessage } from "@/lib/agent/log";
 import {
@@ -68,6 +69,27 @@ export async function POST(req: NextRequest) {
 
     const logContent =
       inbound.kind === "audio" ? `[voice] ${userText}` : userText;
+
+    const coding = await handleCodingTaskRequest({
+      message: userText,
+      channel: "whatsapp",
+      logInbound: true,
+      external_id: inbound.messageId,
+      inboundLogContent: logContent,
+    });
+    if (coding.handled) {
+      const sent = await sendWhatsAppText(inbound.from, coding.text);
+      if (!sent.ok) {
+        console.error("[whatsapp-webhook] send_failed", sent.error);
+        return NextResponse.json({ ok: false, error: sent.error }, { status: sent.configured ? 502 : 503 });
+      }
+      return NextResponse.json({
+        ok: true,
+        messageId: sent.messageId,
+        via: inbound.kind,
+        coding: true,
+      });
+    }
 
     await logAgentMessage({
       direction: "inbound",

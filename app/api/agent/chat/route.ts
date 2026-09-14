@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, readJson, str, unauthorized, badRequest } from "@/lib/api/auth";
+import { handleCodingTaskRequest } from "@/lib/agent/coding/bridge";
 import { runAgentChat, type AgentImageInput } from "@/lib/agent/run";
 
 function parseImages(body: Record<string, unknown>): AgentImageInput[] {
@@ -25,6 +26,23 @@ export async function POST(req: NextRequest) {
   if (!message && images.length === 0) return badRequest("message_required");
 
   try {
+    const coding = await handleCodingTaskRequest({
+      message,
+      channel: "app",
+      logInbound: true,
+    });
+    if (coding.handled) {
+      return NextResponse.json({
+        text: coding.text,
+        steps: 0,
+        coding: true,
+        jobId: coding.jobId,
+        agentId: coding.agentId,
+        agentUrl: coding.agentUrl,
+        remainingQuota: coding.remainingQuota,
+      });
+    }
+
     const result = await runAgentChat({ message, images, channel: "app", logInbound: true });
     return NextResponse.json(result);
   } catch (err) {
