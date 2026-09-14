@@ -1,4 +1,5 @@
 # Build iOS on every main push that touches mobile/, bump patch version, submit to TestFlight.
+# Uses a macOS runner + `eas build --local` so we are not blocked by the EAS cloud free quota.
 #
 # Required GitHub secrets (repo → Settings → Secrets → Actions):
 #   EXPO_TOKEN          — https://expo.dev/accounts/saussilberg/settings/access-tokens
@@ -15,6 +16,8 @@ on:
     paths:
       - 'mobile/**'
       - '.github/workflows/testflight-ios.yml'
+  schedule:
+    - cron: "0 5 * * *" # daily 08:00 Israel (UTC+3)
   workflow_dispatch:
 
 concurrency:
@@ -24,7 +27,7 @@ concurrency:
 jobs:
   testflight:
     name: Build & submit to TestFlight
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     permissions:
       contents: write
     defaults:
@@ -65,7 +68,7 @@ jobs:
           ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
         run: bash scripts/ci-write-asc-key.sh
 
-      - name: Build iOS & submit to TestFlight
+      - name: Build iOS locally & submit to TestFlight
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
@@ -74,5 +77,12 @@ jobs:
           eas build \
             --platform ios \
             --profile production \
+            --local \
             --non-interactive \
-            --auto-submit
+            --output ./build-myself.ipa
+          eas submit \
+            --platform ios \
+            --profile production \
+            --path ./build-myself.ipa \
+            --non-interactive \
+            --wait

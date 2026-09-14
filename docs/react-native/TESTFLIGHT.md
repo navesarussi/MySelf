@@ -72,12 +72,28 @@ GitHub → **Actions** → **TestFlight iOS** → **Run workflow**.
 
 ---
 
-## העלאה ידנית (גיבוי)
+## העלאה ידנית (גיבוי) — בילד לוקאלי (חינם, בלי מכסת EAS בענן)
 
 ```bash
 cd mobile
-npx eas-cli build --platform ios --profile production   # build בענן של Expo
-npx eas-cli submit --platform ios --latest              # שליחה ל-TestFlight
+bash scripts/build-and-submit-testflight.sh
+```
+
+או בשלבים:
+
+```bash
+cd mobile
+npx eas-cli build --platform ios --profile production --local --output ./build-myself.ipa
+npx eas-cli submit --platform ios --profile production --path ./build-myself.ipa --wait
+```
+
+דרישות: Xcode מותקן, `eas login`, ו-`mobile/asc-api-key.p8` (מפתח App Store Connect).
+
+### בילד בענן (אם יש מכסה חודשית ב-EAS)
+
+```bash
+npx eas-cli build --platform ios --profile production
+npx eas-cli submit --platform ios --latest
 ```
 
 - ‏EAS שואל פעם ראשונה על חשבון האפל ומנהל לבד certificates/profiles.
