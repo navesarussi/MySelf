@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -17,8 +17,12 @@ import { Badge, Btn, Row } from "./ui";
 import { StatTile } from "./habit-stat-tile";
 import { effectiveStreak, habitReportDay, isReportDue, normalizeReportTime } from "@/lib/habit-stats";
 import { HabitMissedReports } from "./habit-missed-reports";
+import { HabitHistoryTable } from "./habit-history-table";
 import { formatLocaleDate } from "@/lib/i18n/core";
+import type { HabitHistoryDay } from "@/lib/habit-history";
 import type { Habit } from "@/lib/types";
+import { api } from "../api/resources";
+import { useSession } from "../session";
 
 export function HabitDetailsModal({
   habit,
@@ -43,6 +47,16 @@ export function HabitDetailsModal({
   const { t, locale } = useI18n();
   const { textStart, writingDirection, progressAlign } = useLayoutDir();
   const { height: windowHeight } = useWindowDimensions();
+  const { token, serverUrl } = useSession();
+  const [historyDays, setHistoryDays] = useState<HabitHistoryDay[]>([]);
+
+  useEffect(() => {
+    if (!visible || !habit || !token) return;
+    api
+      .habitHistory({ token, serverUrl }, habit.id, 35)
+      .then((res) => setHistoryDays(res.grid))
+      .catch(() => setHistoryDays([]));
+  }, [visible, habit?.id, habit?.last_checked_on, habit?.failure_count, token, serverUrl]);
 
   if (!habit) return null;
 
@@ -133,6 +147,13 @@ export function HabitDetailsModal({
             </View>
 
             {onBackfill ? <HabitMissedReports habit={habit} busy={busy} onBackfill={onBackfill} /> : null}
+
+            <View style={{ marginTop: 18 }}>
+              <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>
+                {t("habits.historyTitle")}
+              </Text>
+              <HabitHistoryTable days={historyDays} />
+            </View>
 
             {habit.best_streak > 0 ? (
               <View style={{ marginTop: 18 }}>

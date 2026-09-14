@@ -1,30 +1,24 @@
-import React, { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { lineTypeForCategory } from "@/lib/finance/expense-type";
 import { fmtAmount2 } from "@/lib/finance/format";
 import { api } from "../src/api/resources";
 import { useSession } from "../src/session";
 import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
-import { queryClient, queryKeys, useApiMutation, decFinanceUncategorizedInHome } from "../src/query";
-import type { HomePayload } from "../src/api/resources";
+import { queryClient, queryKeys, useApiMutation } from "../src/query";
 import { Btn, Card, ErrorNote, Input, Loading, Screen } from "../src/components/ui";
-import {
-  ExpenseTypeChips,
-  RememberRuleToggle,
-  type ExpenseTypeValue,
-} from "../src/components/finance/categorize-controls";
+import { ExpenseTypeChips, RememberRuleToggle, type ExpenseTypeValue } from "../src/components/finance/categorize-controls";
 import { CategoryPicker } from "../src/components/finance/category-picker";
+import { QuickCategoryChips } from "../src/components/finance/quick-category-chips";
+import {
+  nextUncategorizedId,
+  saveCategorization,
+  type UncategorizedTxn,
+} from "../src/components/finance/categorize-save";
 import { TxnDateTimeFields } from "../src/components/finance/txn-datetime-fields";
-import type { FinanceTransaction } from "@/lib/finance/types";
-
-type TxnDetail = FinanceTransaction & {
-  suggested_category?: string | null;
-  suggested_expense_type?: ExpenseTypeValue | null;
-  default_note?: string | null;
-};
+import { expenseTypeForCategory } from "@/lib/finance/suggest-txn";
 
 export default function FinanceCategorizeScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -34,92 +28,95 @@ export default function FinanceCategorizeScreen() {
   const router = useRouter();
   const { token, serverUrl } = useSession();
   const { run, isPending } = useApiMutation();
-  const [txn, setTxn] = useState<TxnDetail | null>(null);
+  const [txn, setTxn] = useState<UncategorizedTxn | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState<string | null>(null);
   const [expenseType, setExpenseType] = useState<ExpenseTypeValue>("variable");
-  const [rememberRule, setRememberRule] = useState<boolean>(true);
+  const [rememberRule, setRememberRule] = useState(true);
   const [note, setNote] = useState("");
   const [txnDate, setTxnDate] = useState("");
   const [txnTime, setTxnTime] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const queue = queryClient.getQueryData<UncategorizedTxn[]>(queryKeys.financeUncategorized) ?? [];
+  const queueIndex = useMemo(() => queue.findIndex((row) => row.id === id), [queue, id]);
+  const queueLabel =
+    queue.length > 1 && queueIndex >= 0
+      ? t("finance.categorizeQueue", { current: queueIndex + 1, total: queue.length })
+      : null;
+
+  const loadTxn = useCallback(() => {
     if (!token || !id) return;
-    Promise.all([
-      api.financeTransaction({ token, serverUrl }, id),
-      api.financeCategories({ token, serverUrl }),
-    ])
+    Promise.all([api.financeTransaction({ token, serverUrl }, id), api.financeCategories({ token, serverUrl })])
       .then(([row, cats]) => {
-        setTxn(row);
+        const detail = row as UncategorizedTxn;
+        setTxn(detail);
         setCategories(cats.categories);
-        const cat = row.category || row.suggested_category;
+        const cat = detail.category || detail.suggested_category;
         if (cat) setCategory(cat);
-        if (row.purpose_note || row.default_note) setNote(row.purpose_note || row.default_note || "");
-        setTxnDate(row.txn_date);
-        setTxnTime(row.txn_time ?? "");
-        if (row.expense_type) {
-          setExpenseType(row.expense_type);
-        } else if (row.suggested_expense_type) {
-          setExpenseType(row.suggested_expense_type);
-        } else if (cat) {
-          const resolved = lineTypeForCategory(cat, "expense");
-          if (resolved === "fixed" || resolved === "variable" || resolved === "savings") {
-            setExpenseType(resolved);
-          }
+        if (detail.purpose_note || detail.default_note) setNote(detail.purpose_note || detail.default_note || "");
+        setTxnDate(detail.txn_date);
+        setTxnTime(detail.txn_time ?? "");
+        if (detail.expense_type) setExpenseType(detail.expense_type);
+        else if (detail.suggested_expense_type) setExpenseType(detail.suggested_expense_type);
+        else if (cat) {
+          const resolved = expenseTypeForCategory(cat, detail.kind);
+          if (resolved) setExpenseType(resolved);
         }
       })
       .catch(() => setError("load_failed"));
   }, [token, serverUrl, id]);
 
-  const onSelectCategory = (cat: string | null) => {
-    if (!cat) return;
-    setCategory(cat);
-    if (!txn?.expense_type) {
-      const resolved = lineTypeForCategory(cat, "expense");
-      if (resolved === "fixed" || resolved === "variable" || resolved === "savings") {
-        setExpenseType(resolved);
-      }
+  useEffect(() => {
+    loadTxn();
+  }, [loadTxn]);
+
+  const advance = useCallback(() => {
+    if (!id) {
+      router.back();
+      return;
     }
-  };
+    const nextId = nextUncategorizedId(id);
+    if (nextId) {
+      router.replace(`/finance-categorize?id=${nextId}` as `/${string}`);
+      return;
+    }
+    router.back();
+  }, [id, router]);
+
+  const submitCategory = useCallback(
+    async (cat: string, opts?: { rememberRule?: boolean }) => {
+      if (!token || !serverUrl || !txn) return;
+      setError(null);
+      const payload: UncategorizedTxn = {
+        ...txn,
+        purpose_note: note || txn.default_note || txn.purpose_note,
+        suggested_expense_type:
+          txn.kind === "expense" ? expenseTypeForCategory(cat, txn.kind, expenseType) : null,
+      };
+      await run(
+        (cfg) => saveCategorization(cfg, payload, cat, { rememberRule: opts?.rememberRule ?? rememberRule }),
+        {
+          onSuccess: () => advance(),
+          onError: () => setError("save_failed"),
+        }
+      );
+    },
+    [token, serverUrl, txn, note, expenseType, rememberRule, run, advance]
+  );
 
   async function save(skip = false) {
-    if (!token || !id) return;
-    setError(null);
-    const month = txnDate.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
-    const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => decFinanceUncategorizedInHome(old));
-    await run(
-      (cfg) =>
-        api.categorizeFinanceTransaction(
-          cfg,
-          id,
-          skip
-            ? { skip: true }
-            : {
-                category: category!,
-                purpose_note: note || null,
-                expense_type: txn?.kind === "expense" ? expenseType : null,
-                remember_rule: rememberRule,
-                txn_date: txnDate,
-                txn_time: txnTime.trim() || null,
-              }
-        ),
-      {
-        onSuccess: () => {
-          void queryClient.invalidateQueries({ queryKey: queryKeys.financeCashflow(month) });
-          void queryClient.invalidateQueries({ queryKey: queryKeys.financeTransactions(month) });
-          void queryClient.invalidateQueries({ queryKey: queryKeys.financeUncategorized });
-          void queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) });
-          void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-          router.back();
-        },
-        onError: () => {
-          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-          setError("save_failed");
-        },
-      }
-    );
+    if (!token || !txn || !id) return;
+    if (skip) {
+      await run((cfg) => saveCategorization(cfg, txn, "", { skip: true }), {
+        onSuccess: () => advance(),
+        onError: () => setError("save_failed"),
+      });
+      return;
+    }
+    if (!category) return;
+    await submitCategory(category);
   }
 
   if (!id) {
@@ -135,11 +132,12 @@ export default function FinanceCategorizeScreen() {
   const label = txn?.merchant || txn?.description || "";
   const busy = isPending();
   const isExpense = txn?.kind === "expense";
+  const suggested = txn?.suggested_category ?? null;
 
   return (
     <Screen
       title={t(isExpense ? "finance.categorizeTitle" : "finance.categorizeTitleIncome")}
-      subtitle={label}
+      subtitle={queueLabel ?? label}
     >
       {error ? <ErrorNote message={error} /> : null}
       {txn ? (
@@ -147,40 +145,57 @@ export default function FinanceCategorizeScreen() {
           <Text style={{ color: c.ink, fontWeight: "700", fontSize: tokens.title, textAlign: textStart, writingDirection }}>
             {txn.kind === "income" ? "+" : "−"}₪{fmtAmount2(txn.amount)}
           </Text>
-          {txn.suggested_category && !txn.category ? (
-            <Text style={{ color: c.accent, marginTop: 8, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
-              {t("finance.suggestedCategory", { category: txn.suggested_category })}
-            </Text>
-          ) : null}
+          <Text style={{ color: c.muted, marginTop: 4, textAlign: textStart, writingDirection }} numberOfLines={2}>
+            {label}
+          </Text>
         </Card>
       ) : null}
 
+      {suggested ? (
+        <View style={{ marginTop: 14 }}>
+          <Btn
+            label={t("finance.confirmSuggestion", { category: suggested })}
+            onPress={() => submitCategory(suggested)}
+            disabled={busy}
+          />
+        </View>
+      ) : null}
+
       <View style={{ marginTop: 14 }}>
-        <TxnDateTimeFields
-          txnDate={txnDate}
-          txnTime={txnTime}
-          onDateChange={setTxnDate}
-          onTimeChange={setTxnTime}
+        <QuickCategoryChips
+          categories={categories}
+          suggested={suggested}
+          selected={category}
+          disabled={busy}
+          onPick={(cat) => {
+            setCategory(cat);
+            void submitCategory(cat);
+          }}
         />
       </View>
 
-      <View style={{ marginTop: 14 }}>
-        <CategoryPicker categories={categories} value={category} onChange={onSelectCategory} />
-      </View>
+      <Pressable onPress={() => setShowDetails((v) => !v)} style={{ marginTop: 12, paddingVertical: 6 }}>
+        <Text style={{ color: c.accent, fontWeight: "600", textAlign: textStart, writingDirection }}>
+          {showDetails ? t("finance.hideDetails") : t("finance.showDetails")}
+        </Text>
+      </Pressable>
 
-      {isExpense ? <ExpenseTypeChips value={expenseType} onChange={setExpenseType} /> : null}
+      {showDetails ? (
+        <View style={{ marginTop: 8 }}>
+          <TxnDateTimeFields txnDate={txnDate} txnTime={txnTime} onDateChange={setTxnDate} onTimeChange={setTxnTime} />
+          <View style={{ marginTop: 14 }}>
+            <CategoryPicker categories={categories} value={category} onChange={setCategory} />
+          </View>
+          {isExpense ? <ExpenseTypeChips value={expenseType} onChange={setExpenseType} /> : null}
+          <RememberRuleToggle value={rememberRule} onToggle={() => setRememberRule((v) => !v)} />
+          <Input value={note} onChangeText={setNote} placeholder={t("finance.purposePlaceholder")} multiline />
+          <View style={{ marginTop: 12 }}>
+            <Btn label={t("finance.saveCategory")} onPress={() => save(false)} disabled={!category || busy} />
+          </View>
+        </View>
+      ) : null}
 
-      <RememberRuleToggle value={rememberRule} onToggle={() => setRememberRule((v) => !v)} />
-
-      <Input
-        value={note}
-        onChangeText={setNote}
-        placeholder={t("finance.purposePlaceholder")}
-        multiline
-      />
-
-      <View style={{ marginTop: 16, gap: 8 }}>
-        <Btn label={t("finance.saveCategory")} onPress={() => save(false)} disabled={!category || busy} />
+      <View style={{ marginTop: 16 }}>
         <Btn label={t("finance.skip")} variant="ghost" onPress={() => save(true)} disabled={busy} />
       </View>
     </Screen>

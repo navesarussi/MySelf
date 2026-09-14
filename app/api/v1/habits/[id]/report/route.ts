@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { computeCheckIn, computeFall, habitReportDay } from "@/lib/habit-stats";
+import { upsertHabitReport } from "@/lib/habit-reports-store";
 import { badRequest, dbError, isApiAuthorized, notFound, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { Habit } from "@/lib/types";
 
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     .select()
     .single();
   if (error) return dbError();
+  await upsertHabitReport(id, today, type === "check_in" ? "check_in" : "fall");
   revalidateHabitPaths();
   return NextResponse.json(data);
 }

@@ -201,6 +201,11 @@ export const api = {
       method: "POST",
       body: opts?.for_date ? { type, for_date: opts.for_date } : { type },
     }),
+  habitHistory: (c: ApiConfig, id: string, days = 35) =>
+    apiFetch<{
+      reports: { report_date: string; outcome: "check_in" | "fall"; reported_at: string }[];
+      grid: import("@/lib/habit-history").HabitHistoryDay[];
+    }>(c, `/habits/${id}/history?days=${days}`),
 
   goals: (c: ApiConfig) => apiFetch<Goal[]>(c, "/goals"),
   createGoal: (c: ApiConfig, body: Partial<Goal>) =>

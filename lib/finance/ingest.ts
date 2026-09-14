@@ -79,15 +79,19 @@ function normalizeInput(input: FinanceIngestInput) {
   };
 }
 
-async function notifyCategorize(txn: FinanceTransaction): Promise<void> {
+async function notifyCategorize(
+  txn: FinanceTransaction,
+  opts?: { hasMerchantRule?: boolean }
+): Promise<void> {
   if (!txn.needs_categorization || txn.is_internal) return;
   const label = txn.merchant || txn.description;
   const sign = txn.kind === "income" ? "+" : "−";
-  const ask = txn.kind === "income" ? "הכנסה חדשה" : "למה ההוצאה?";
+  const identityHint = opts?.hasMerchantRule ? "לסיווג" : "סוחר חדש · לסיווג";
+  const ask = txn.kind === "income" ? "מה ההכנסה?" : "בחר קטגוריה";
   await notifyUser(
     "finance",
     {
-      title: "תנועה חדשה",
+      title: `תנועה ${identityHint}`,
       body: `${sign}₪${txn.amount.toFixed(2)} · ${label} — ${ask}`,
       data: { screen: `/finance-categorize?id=${txn.id}` },
     },
@@ -186,7 +190,8 @@ export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): P
     }
     const txn = rowToTxn(data as Record<string, unknown>);
     created.push(txn);
-    await notifyCategorize(txn);
+    const hadRule = Boolean(matchMerchantRule(input.merchant, input.description, rulesMap)?.category);
+    await notifyCategorize(txn, { hasMerchantRule: hadRule });
   }
 
   if (created.length > 0) {

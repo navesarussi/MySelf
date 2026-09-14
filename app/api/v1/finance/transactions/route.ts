@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { dbError, isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { rowToTxn } from "@/lib/finance/ingest";
+import { loadCategoryHistory } from "@/lib/finance/merchant-category";
+import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
+import { suggestForTxn } from "@/lib/finance/suggest-txn";
 import { TXN_LIST_COLUMNS } from "@/lib/finance/txn-columns";
 
 export async function GET(req: NextRequest) {
@@ -28,5 +31,15 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) return dbError();
-  return NextResponse.json((data ?? []).map((r) => rowToTxn(r as Record<string, unknown>)));
+  const rows = (data ?? []).map((r) => rowToTxn(r as Record<string, unknown>));
+
+  if (!uncategorized) return NextResponse.json(rows);
+
+  const [history, rulesMap] = await Promise.all([loadCategoryHistory(), fetchMerchantRulesMap()]);
+  return NextResponse.json(
+    rows.map((txn) => {
+      const suggestion = suggestForTxn(txn, rulesMap, history);
+      return { ...txn, ...suggestion };
+    })
+  );
 }

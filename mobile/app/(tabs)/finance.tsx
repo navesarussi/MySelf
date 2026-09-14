@@ -11,6 +11,7 @@ import { PLAN_SECTION_ORDER, type PlanLineType } from "@/lib/finance/expense-typ
 import type { MonthPlanView } from "@/lib/finance/plan";
 import { normalizeWeeklyPace } from "@/lib/finance/weekly";
 import type { FinanceTransaction } from "@/lib/finance/types";
+import type { UncategorizedTxn } from "../../src/components/finance/categorize-save";
 import { PlanSectionBlock } from "../../src/components/finance/plan-section";
 import { WeekStrip } from "../../src/components/finance/week-strip";
 import { RemainingWeekCard } from "../../src/components/finance/remaining-week";
@@ -86,7 +87,7 @@ export default function FinanceScreen() {
       weekly_pace: normalizeWeeklyPace(p.weekly_pace),
     };
   }, [plan]);
-  const uncategorized = uncategorizedTxns ?? [];
+  const uncategorized = (uncategorizedTxns ?? []) as UncategorizedTxn[];
 
   const openTxn = useCallback(
     (item: FinanceTransaction) => {
@@ -151,6 +152,7 @@ export default function FinanceScreen() {
         items={uncategorized}
         expanded={showAllUncat}
         onToggle={() => setShowAllUncat((v) => !v)}
+        onCategorized={refresh}
         onOpen={(id) => {
           const txn = uncategorized.find((t) => t.id === id);
           if (txn) openTxn(txn);
