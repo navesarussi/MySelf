@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
+import { getAppVersion } from "../version";
 
 /** Top bar: menu (start) · brand title (center) · settings (end). */
 export function AppTopBar({ onMenuPress }: { onMenuPress: () => void }) {
@@ -16,6 +17,7 @@ export function AppTopBar({ onMenuPress }: { onMenuPress: () => void }) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const isHome = pathname === "/" || pathname === "/index" || pathname.endsWith("/(tabs)");
+  const version = getAppVersion();
 
   return (
     <View
@@ -48,20 +50,44 @@ export function AppTopBar({ onMenuPress }: { onMenuPress: () => void }) {
           <Ionicons name="menu-outline" size={22} color={c.ink} />
         </Pressable>
 
-        <Text
+        <View
           style={{
             flex: 1,
-            color: c.ink,
-            fontSize: 17,
-            fontWeight: "700",
-            textAlign: "center",
-            writingDirection,
+            alignItems: "center",
+            justifyContent: "center",
             paddingHorizontal: 4,
           }}
-          numberOfLines={1}
         >
-          {isHome ? "" : t("nav.brand")}
-        </Text>
+          {!isHome ? (
+            <>
+              <Text
+                style={{
+                  color: c.ink,
+                  fontSize: 17,
+                  fontWeight: "700",
+                  textAlign: "center",
+                  writingDirection,
+                }}
+                numberOfLines={1}
+              >
+                {t("nav.brand")}
+              </Text>
+              <Text
+                style={{
+                  color: c.muted,
+                  fontSize: 10,
+                  fontWeight: "400",
+                  textAlign: "center",
+                  writingDirection,
+                  marginTop: 1,
+                }}
+                numberOfLines={1}
+              >
+                v{version}
+              </Text>
+            </>
+          ) : null}
+        </View>
 
         <View style={{ ...row, gap: 4 }}>
           <Pressable
