@@ -370,12 +370,14 @@ function stepStructural(p: SimPosition, bar: Bar, ctx: StepContext, events: Posi
   // Chandelier trail once the trade has earned its room.
   p.peak_price = Math.max(p.peak_price ?? entry, bar.h);
   if (p.trail_after_r !== null && p.trail_after_r !== undefined && p.peak_price >= entry + p.trail_after_r * R && Number.isFinite(ctx.atr)) {
-    const proposed = Math.max(entry, p.peak_price - (p.trail_mult ?? 3) * ctx.atr);
+    // Once the trade has earned ≥1R of room the trail never gives back the entry; an immediate trail (0R) may sit below it.
+    const floor = p.trail_after_r >= 1 ? entry : -Infinity;
+    const proposed = Math.max(floor, p.peak_price - (p.trail_mult ?? 3) * ctx.atr);
     if (proposed > p.stop_price && proposed < bar.c) {
       events.push({ type: "STOP_MOVED", from: p.stop_price, to: proposed, at: bar.t });
       p.stop_price = ratchetStop(p.stop_price, proposed);
       p.trail_stop = p.stop_price;
-      if (p.state === "OPEN") p.state = "RISK_FREE";
+      if (p.state === "OPEN" && p.stop_price >= entry) p.state = "RISK_FREE";
     }
   }
 }
