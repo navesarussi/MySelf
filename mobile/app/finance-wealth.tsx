@@ -20,7 +20,7 @@ const CATEGORY_KEYS: Record<WealthCategory, string> = {
 export default function FinanceWealthScreen() {
   const { t } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
   const router = useRouter();
   const { run, isPending } = useApiMutation();
   const [importText, setImportText] = useState("");
@@ -81,7 +81,7 @@ export default function FinanceWealthScreen() {
               backgroundColor: c.surface,
             }}
           >
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <View style={{ ...row, justifyContent: "space-between" }}>
               <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>
                 {t(CATEGORY_KEYS[cat])}
               </Text>
@@ -129,7 +129,7 @@ export default function FinanceWealthScreen() {
             placeholder={t("finance.importPlaceholder")}
             multiline
           />
-          <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+          <View style={{ ...row, gap: 8, marginTop: 10 }}>
             <Btn
               label={t("finance.importHarBituach")}
               onPress={() => void doImport("har_bituach")}

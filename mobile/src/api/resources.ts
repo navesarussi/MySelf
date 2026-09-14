@@ -76,6 +76,16 @@ export type HomePayload = {
   openTasksCount: number;
   inProgressTasksCount: number;
   financeUncategorizedCount: number;
+  finance?: {
+    month: string;
+    net_actual: number;
+    uncategorized_count: number;
+  };
+  trading?: {
+    phase: string;
+    equity: number;
+    kill_switch_active: boolean;
+  } | null;
 };
 
 export type GoogleTasksStatusPayload = {

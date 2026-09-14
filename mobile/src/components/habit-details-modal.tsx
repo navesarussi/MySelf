@@ -38,7 +38,7 @@ export function HabitDetailsModal({
 }) {
   const c = useColors();
   const { t, locale } = useI18n();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, progressAlign } = useLayoutDir();
   const { height: windowHeight } = useWindowDimensions();
 
   if (!habit) return null;
@@ -85,7 +85,7 @@ export function HabitDetailsModal({
               </Pressable>
             </Row>
 
-            <Row style={{ marginTop: 6, justifyContent: "flex-start", flexWrap: "wrap", gap: 6 }}>
+            <Row wrap style={{ marginTop: 6, gap: 6 }}>
               <Badge label={habit.kind === "build" ? t("habits.build") : t("habits.quit")} tone={habit.kind === "build" ? "good" : "warn"} />
               <Text style={{ color: c.muted, fontSize: tokens.textXs }}>{t("habits.created")}: {formatLocaleDate(locale, habit.created_at)}</Text>
             </Row>
@@ -121,7 +121,15 @@ export function HabitDetailsModal({
                   <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "700" }}>{streak}/{habit.best_streak}</Text>
                 </Row>
                 <View style={{ height: 10, borderRadius: 999, backgroundColor: c.border + "60", overflow: "hidden", marginTop: 6 }}>
-                  <View style={{ height: "100%", width: `${streakPct}%`, backgroundColor: c.accent2, borderRadius: 999 }} />
+                  <View
+                    style={{
+                      height: "100%",
+                      width: `${streakPct}%`,
+                      backgroundColor: c.accent2,
+                      borderRadius: 999,
+                      alignSelf: progressAlign,
+                    }}
+                  />
                 </View>
               </View>
             ) : null}

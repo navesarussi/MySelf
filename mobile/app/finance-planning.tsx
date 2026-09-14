@@ -17,7 +17,7 @@ const monthKey = () => {
 export default function FinancePlanningScreen() {
   const { t } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row, progressAlign } = useLayoutDir();
   const [month] = useState(monthKey());
 
   const { data, loading } = useApiQuery(queryKeys.financeForecast(month), (cfg) =>
@@ -79,7 +79,7 @@ export default function FinancePlanningScreen() {
             const positive = row.cumulative_savings >= 0;
             return (
               <View key={row.month} style={{ marginBottom: 10 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                <View style={{ ...row, justifyContent: "space-between", marginBottom: 4 }}>
                   <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "600" }}>{row.label}</Text>
                   <Text style={{ color: positive ? c.good : c.warn, fontSize: tokens.textXs, fontWeight: "700" }}>
                     ₪{fmtAmount0(row.cumulative_savings)}
@@ -92,6 +92,7 @@ export default function FinancePlanningScreen() {
                       width: `${w}%`,
                       backgroundColor: positive ? c.good : c.warn,
                       borderRadius: 4,
+                      alignSelf: progressAlign,
                     }}
                   />
                 </View>

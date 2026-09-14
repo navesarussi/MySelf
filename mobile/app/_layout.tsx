@@ -16,9 +16,9 @@ import * as SplashScreen from "expo-splash-screen";
 import { SessionProvider } from "../src/session";
 import { setAppVersion } from "../src/api/client";
 import { getAppVersion } from "../src/version";
-import { I18nProvider } from "../src/i18n";
+import { ThemeCanvas, ThemeProvider, useColors, useTheme } from "../src/theme";
+import { I18nProvider, useI18n } from "../src/i18n";
 import { NavPrefsProvider } from "../src/nav-prefs";
-import { ThemeProvider, useColors } from "../src/theme";
 import { ToastProvider } from "../src/toast";
 import { ErrorBoundary } from "../src/components/error-boundary";
 import { usePushNotifications } from "../src/push/use-push";
@@ -34,11 +34,13 @@ setAppVersion(getAppVersion());
 
 function AppStack() {
   const c = useColors();
+  const { resolved } = useTheme();
+  const { t } = useI18n();
   usePushNotifications();
 
   return (
     <>
-      <StatusBar style="auto" />
+      <StatusBar style={resolved === "dark" ? "light" : "dark"} />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: c.surface },
@@ -53,19 +55,19 @@ function AppStack() {
         <Stack.Screen name="timeline-full" options={{ headerShown: false, animation: "fade" }} />
         <Stack.Screen
           name="finance-categorize"
-          options={{ title: "Finance", presentation: "modal" }}
+          options={{ title: t("nav.finance"), presentation: "modal" }}
         />
-        <Stack.Screen name="finance-transaction" options={{ title: "Finance", presentation: "modal" }} />
-        <Stack.Screen name="finance-planning" options={{ title: "Finance" }} />
-        <Stack.Screen name="finance-history" options={{ title: "Finance" }} />
-        <Stack.Screen name="finance-wealth" options={{ title: "Finance" }} />
-        <Stack.Screen name="agent-chat" options={{ title: "Agent", presentation: "modal" }} />
-        <Stack.Screen name="trading-journal" options={{ title: "Trading" }} />
-        <Stack.Screen name="trading-trade" options={{ title: "Trading" }} />
-        <Stack.Screen name="trading-analytics" options={{ title: "Trading" }} />
-        <Stack.Screen name="trading-backtests" options={{ title: "Trading" }} />
-        <Stack.Screen name="trading-chat" options={{ title: "Trading" }} />
-        <Stack.Screen name="trading-control" options={{ title: "Trading" }} />
+        <Stack.Screen name="finance-transaction" options={{ title: t("nav.finance"), presentation: "modal" }} />
+        <Stack.Screen name="finance-planning" options={{ title: t("nav.finance") }} />
+        <Stack.Screen name="finance-history" options={{ title: t("nav.finance") }} />
+        <Stack.Screen name="finance-wealth" options={{ title: t("nav.finance") }} />
+        <Stack.Screen name="agent-chat" options={{ title: t("agent.title"), presentation: "modal" }} />
+        <Stack.Screen name="trading-journal" options={{ title: t("nav.trading") }} />
+        <Stack.Screen name="trading-trade" options={{ title: t("nav.trading") }} />
+        <Stack.Screen name="trading-analytics" options={{ title: t("nav.trading") }} />
+        <Stack.Screen name="trading-backtests" options={{ title: t("nav.trading") }} />
+        <Stack.Screen name="trading-chat" options={{ title: t("nav.trading") }} />
+        <Stack.Screen name="trading-control" options={{ title: t("nav.trading") }} />
       </Stack>
     </>
   );
@@ -93,20 +95,22 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
+      <SafeAreaProvider style={{ flex: 1 }}>
         <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
           <ThemeProvider>
-            <I18nProvider>
-              <NavPrefsProvider>
-                <SessionProvider>
-                  <ToastProvider>
-                    <ErrorBoundary>
-                      <AppStack />
-                    </ErrorBoundary>
-                  </ToastProvider>
-                </SessionProvider>
-              </NavPrefsProvider>
-            </I18nProvider>
+            <ThemeCanvas>
+              <I18nProvider>
+                <NavPrefsProvider>
+                  <SessionProvider>
+                    <ToastProvider>
+                      <ErrorBoundary>
+                        <AppStack />
+                      </ErrorBoundary>
+                    </ToastProvider>
+                  </SessionProvider>
+                </NavPrefsProvider>
+              </I18nProvider>
+            </ThemeCanvas>
           </ThemeProvider>
         </PersistQueryClientProvider>
       </SafeAreaProvider>

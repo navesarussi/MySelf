@@ -17,7 +17,9 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - [PENDING REFACTOR]: Prefer Monday OAuth 2.1 (expiring tokens + refresh) when app is migrated off legacy OAuth.
 - [PENDING REFACTOR]: Extract shared Settings “external source card” UI for Google Tasks + Monday + GitHub.
 - [PENDING REFACTOR]: Split `mobile/src/components/github-settings.tsx` (grouped repo picker) under 200 lines.
-- [PENDING REFACTOR]: Split `mobile/app/(tabs)/index.tsx` further (habits / relationships / stats sections) — still ~450 lines after goal/library modal extract.
+- Layout direction is owned by `lib/layout-dir.ts` + `mobile/src/layout-dir.ts`. Do not hardcode `flexDirection: "row"` for locale-sensitive stacks.
+- Appearance preference is owned by `lib/appearance.ts` + `mobile/src/theme.tsx` (`system` | `light` | `dark`).
+- Home dashboard is split into `mobile/src/components/home/home-hero.tsx`, `home-kpi-section.tsx`, `home-habits-feed.tsx`, `home-lists-feed.tsx`.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/relationships.tsx` (device import + form + list) — ~330 lines after email/device picker.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/timeline.tsx` chronological/period accordion helpers under 200 lines.
 - [PENDING REFACTOR]: Split `lib/agent/tools.ts` / `data.ts` further under 200 lines after full entity tool coverage.

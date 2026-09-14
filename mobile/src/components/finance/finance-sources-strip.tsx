@@ -21,7 +21,7 @@ const LABEL: Record<FinanceSource, string> = {
 export function FinanceSourcesStrip() {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
   const router = useRouter();
   const { data } = useApiQuery(queryKeys.financeSourcesStatus, api.financeSourcesStatus);
   const map = new Map((data?.sources ?? []).map((s) => [s.source, s]));
@@ -39,7 +39,7 @@ export function FinanceSourcesStrip() {
       >
         {t("finance.sourcesStripTitle")}
       </Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+      <View style={{ ...row, flexWrap: "wrap", gap: 6 }}>
         {SOURCES.map((source) => {
           const item = map.get(source);
           const active = (item?.count ?? 0) > 0;

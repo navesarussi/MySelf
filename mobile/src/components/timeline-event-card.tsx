@@ -4,6 +4,7 @@ import { Badge, Card, Row } from "./ui";
 import { useColors, tokens } from "../theme";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
+import { formatEventWhen } from "@/lib/timeline-layout";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import type { TimelineEvent } from "@/lib/types";
 
@@ -16,11 +17,16 @@ export const TimelineEventCard = memo(function TimelineEventCard({
 }) {
   const c = useColors();
   const { t, locale } = useI18n();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, textLtr } = useLayoutDir();
   const description = displayDescription(event);
 
   return (
-    <Pressable unstable_pressDelay={0} onPress={() => onPress(event)}>
+    <Pressable
+      unstable_pressDelay={0}
+      accessibilityRole="button"
+      onPress={() => onPress(event)}
+      style={({ pressed }) => [{ opacity: pressed ? tokens.press : 1 }]}
+    >
       <Card>
         <Row>
           <View style={{ flex: 1 }}>
@@ -41,16 +47,15 @@ export const TimelineEventCard = memo(function TimelineEventCard({
                 {description}
               </Text>
             ) : null}
-            <Row style={{ justifyContent: "flex-start", marginTop: 4 }} wrap>
+            <Row wrap style={{ marginTop: 4 }}>
               {event.category ? <Badge label={event.category} /> : null}
               {isGoogleCalendarEvent(event) ? (
                 <Badge label={t("common.fromGoogleCalendar")} tone="accent" />
               ) : null}
             </Row>
           </View>
-          <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
-            {new Date(event.event_date).toLocaleDateString(locale === "he" ? "he-IL" : "en-US")}
-            {event.event_time ? `\n${event.event_time.slice(0, 5)}` : ""}
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textLtr, writingDirection: "ltr" }}>
+            {formatEventWhen(event, locale)}
           </Text>
         </Row>
       </Card>

@@ -197,14 +197,16 @@ export default function LibraryScreen() {
         <Card key={entry.id}>
           <Pressable
             unstable_pressDelay={0}
+            accessibilityRole="button"
             onPress={() => setExpanded(open ? null : entry.id)}
+            style={({ pressed }) => [{ opacity: pressed ? tokens.press : 1 }]}
           >
             <Row>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>
+                <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>
                   {entry.title}
                 </Text>
-                <Row style={{ justifyContent: "flex-start", marginTop: 4 }} wrap>
+                <Row wrap style={{ marginTop: 4 }}>
                   <Badge label={entry.category} tone="accent" />
                   {entry.tags.map((tag) => (
                     <Badge key={tag} label={tag} />
@@ -246,7 +248,7 @@ export default function LibraryScreen() {
         </Card>
       );
     },
-    [expanded, c, textStart, writingDirection, t, isPending, removeEntry, openEdit]
+    [expanded, c, textStart, writingDirection, t, tokens.press, isPending, removeEntry, openEdit]
   );
 
   const keyExtractor = useCallback((item: ContentEntry) => item.id, []);

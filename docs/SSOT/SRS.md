@@ -17,7 +17,7 @@ Site access via Google Sign-In (openid, email, profile, calendar.readonly). Only
 After sign-in, calendar sync runs in the background without blocking the redirect.
 
 ### FR-NAV-01
-Navigation includes: בית, ציר זמן, משימות, פרויקטים, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן, הגדרות.
+Navigation includes: בית, ציר זמן, משימות, פרויקטים, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן, כסף, מסחר, הגדרות.
 On mobile, the Home tab sits on the visual right of the bottom bar (without reversing the rest of the RTL layout).
 
 ### FR-PROJ-01
@@ -143,7 +143,19 @@ Section titles on home navigate to the matching tab.
 Library and goal cards on home support open/edit/delete via the same forms as their tabs.
 
 ### FR-HOME-03
-Home stats show at least 8 compact metrics without enlarging the stats block beyond denser cards.
+Home stats use the shared KPI grid (same tile anatomy as Trading: muted label, 17/800 value, optional hint). At least 8 metrics. Labels must be readable (no 9px-only tiles).
+
+### FR-HOME-04
+Home KPI grid always includes a current-month finance net tile (links to `/finance`) and a trading equity/phase tile (links to `/trading`). The uncategorized-finance tile from FR-FIN-05 remains when `financeUncategorizedCount > 0`.
+
+### FR-I18N-01
+The in-app locale (`he` | `en`, Settings) drives both copy and layout. Start-edge controls (task Done checkbox, section add buttons, primary form actions) sit on the inline-start side: physical right in Hebrew, physical left in English, on native and web. User-facing strings live in `lib/i18n/messages.ts`. Time series, month pagers, and the bottom tab bar are explicit LTR exceptions (FR-NAV-01).
+
+### FR-UI-01
+Home, Finance, and Trading share dashboard primitives: screen title/subtitle, hero metric, KPI grid, hub links (module hubs only), start-filling progress, locale-aware rows. Entity list cards (tasks, habits, relationships, goals) use the same Card + start-aligned Row pattern.
+
+### FR-UI-02
+Appearance is an explicit user preference: `system` | `light` | `dark` (default `system`). Settings exposes the three options; the resolved scheme drives the existing light/dark palettes, StatusBar, and web `color-scheme`. Preference persists locally like locale.
 
 ### FR-TL-04
 Visual timeline supports deep zoom down to hourly divisions on a specific date (log-scale zoom control, adaptive axis ticks).

@@ -7,6 +7,7 @@ import { useLayoutDir } from "../layout-dir";
 import { Badge, Btn, Card, Row, confirmDelete } from "./ui";
 import { StatTile } from "./habit-stat-tile";
 import { hapticImpact, hapticSelection } from "../haptics";
+import { localeTag } from "@/lib/i18n/core";
 import { effectiveStreak, habitReportDay } from "@/lib/habit-stats";
 import type { Habit } from "@/lib/types";
 import type { HabitEditFields } from "./habit-edit-modal";
@@ -42,11 +43,11 @@ export const HabitCard = React.memo(function HabitCard({
   const successDays = habit.total_success_days ?? 0;
   const failures = habit.failure_count ?? 0;
   const lastReported = habit.last_reported_at
-    ? new Date(habit.last_reported_at).toLocaleString(locale === "he" ? "he-IL" : "en-US", {
+    ? new Date(habit.last_reported_at).toLocaleString(localeTag(locale), {
         day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
       })
     : habit.last_checked_on
-      ? new Date(habit.last_checked_on).toLocaleDateString(locale === "he" ? "he-IL" : "en-US", {
+      ? new Date(habit.last_checked_on).toLocaleDateString(localeTag(locale), {
           day: "numeric", month: "short",
         })
       : null;
@@ -73,13 +74,13 @@ export const HabitCard = React.memo(function HabitCard({
       disabled={!onPress}
       accessibilityRole="button"
       accessibilityLabel={t("habits.viewDetails")}
-      style={({ pressed }) => [{ opacity: pressed && onPress ? 0.8 : 1 }]}
+      style={({ pressed }) => [{ opacity: pressed && onPress ? tokens.press : 1 }]}
     >
       <Card>
         <Row>
           <View style={{ flex: 1 }}>
-            <Row style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-              <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>
+            <Row wrap>
+              <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>
                 {habit.name}
               </Text>
               <Badge
@@ -132,11 +133,9 @@ export const HabitCard = React.memo(function HabitCard({
           <StatTile icon="alert-circle-outline" iconColor={c.warn} label={t("common.failures")} value={failures} />
         </Row>
 
-        <Row style={{ marginTop: 8, justifyContent: "space-between" }}>
-          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }} numberOfLines={1}>
-            {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
-          </Text>
-        </Row>
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 8 }} numberOfLines={1}>
+          {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
+        </Text>
 
         <Row style={{ marginTop: 10 }}>
           {checked ? (

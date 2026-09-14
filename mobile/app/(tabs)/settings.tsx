@@ -6,7 +6,7 @@ import * as ExpoLinking from "expo-linking";
 import { api } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
-import { useColors, tokens } from "../../src/theme";
+import { useColors, tokens, useTheme } from "../../src/theme";
 import { useSession, API_URL } from "../../src/session";
 import { Btn, Card, Chip, Row, Screen, SectionTitle, confirmDelete } from "../../src/components/ui";
 import { getAppVersion } from "../../src/version";
@@ -35,7 +35,8 @@ WebBrowser.maybeCompleteAuthSession();
 export default function SettingsScreen() {
   const c = useColors();
   const { t, locale, setLocale } = useI18n();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { preference, setPreference } = useTheme();
+  const { textStart, writingDirection, row } = useLayoutDir();
   const router = useRouter();
   const version = getAppVersion();
   const { ready, signOut, token, serverUrl } = useSession();
@@ -247,6 +248,26 @@ export default function SettingsScreen() {
         <Row>
           <Chip label={t("language.he")} active={locale === "he"} onPress={() => setLocale("he")} />
           <Chip label={t("language.en")} active={locale === "en"} onPress={() => setLocale("en")} />
+        </Row>
+      </Card>
+
+      <SectionTitle>{t("appearance.label")}</SectionTitle>
+      <Card>
+        <Text
+          style={{
+            color: c.muted,
+            fontSize: tokens.textSm,
+            textAlign: textStart,
+            writingDirection,
+            marginBottom: 8,
+          }}
+        >
+          {t("appearance.hint")}
+        </Text>
+        <Row>
+          <Chip label={t("appearance.system")} active={preference === "system"} onPress={() => setPreference("system")} />
+          <Chip label={t("appearance.light")} active={preference === "light"} onPress={() => setPreference("light")} />
+          <Chip label={t("appearance.dark")} active={preference === "dark"} onPress={() => setPreference("dark")} />
         </Row>
       </Card>
 

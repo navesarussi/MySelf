@@ -9,6 +9,7 @@ import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Badge, Btn, Card } from "../ui";
+import { HubLinks } from "../ui/hub-links";
 
 export function TradingText({ children, muted, bold, size, color }: { children: React.ReactNode; muted?: boolean; bold?: boolean; size?: number; color?: string }) {
   const c = useColors();
@@ -30,26 +31,7 @@ const HUB = [
 
 export function TradingHubLinks() {
   const { t } = useI18n();
-  const c = useColors();
-  const { row, textStart, writingDirection } = useLayoutDir();
-  const router = useRouter();
-  return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-      {HUB.map((h) => (
-        <Pressable
-          key={h.href}
-          onPress={() => router.push(h.href as `/${string}`)}
-          accessibilityRole="button"
-          style={({ pressed }) => ({ flexGrow: 1, flexBasis: "30%", minWidth: 104, backgroundColor: pressed ? c.border : c.surface, borderColor: c.border, borderWidth: 1, borderRadius: tokens.radiusSm, padding: 10 })}
-        >
-          <View style={{ ...row, gap: 6 }}>
-            <Ionicons name={h.icon} size={17} color={c.accent} />
-            <Text style={{ flex: 1, color: c.ink, fontSize: tokens.textXs, fontWeight: "600", textAlign: textStart, writingDirection }}>{t(h.key)}</Text>
-          </View>
-        </Pressable>
-      ))}
-    </View>
-  );
+  return <HubLinks links={HUB.map((h) => ({ href: h.href, label: t(h.key), icon: h.icon }))} />;
 }
 
 export function GateChecklist({ checks, onReview }: { checks: GateCheck[]; onReview?: (id: string) => void }) {
@@ -121,16 +103,20 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
   const pos = p.last_price !== null && span > 0 ? Math.min(1, Math.max(0, (p.last_price - p.stop_price) / span)) : null;
   const entryPos = p.entry_price !== null && span > 0 ? (p.entry_price - p.stop_price) / span : 1 / 3;
   return (
-    <Pressable onPress={() => router.push(`/trading-trade?id=${p.id}` as `/${string}`)}>
+    <Pressable
+      onPress={() => router.push(`/trading-trade?id=${p.id}` as `/${string}`)}
+      accessibilityRole="button"
+      style={({ pressed }) => ({ opacity: pressed ? tokens.press : 1 })}
+    >
       <Card>
         <View style={{ ...row, gap: 8 }}>
-          <Text style={{ color: c.ink, fontWeight: "800", fontSize: 16 }}>{p.symbol}</Text>
+          <Text style={{ color: c.ink, fontWeight: "800", fontSize: 16, writingDirection: "ltr" }}>{p.symbol}</Text>
           <Badge label={t(`trading.state_${p.state}`)} tone={p.state === "RISK_FREE" ? "good" : p.state === "PENDING" ? "default" : "accent"} />
           {p.agent_risk_multiplier !== null && p.agent_risk_multiplier < 1 ? <Badge label={t("trading.multiplier", { m: p.agent_risk_multiplier })} /> : null}
           {p.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
           {!p.baseline_enter ? <Badge label={t("trading.aiOnly")} tone="accent" /> : null}
           <View style={{ flex: 1 }} />
-          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 18 }}>{fmtR(p.current_r)}</Text>
+          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 18, writingDirection: "ltr" }}>{fmtR(p.current_r)}</Text>
         </View>
         <View style={{ height: 8, marginVertical: 10, borderRadius: 4, backgroundColor: c.border, direction: "ltr" }}>
           <View style={{ position: "absolute", left: `${entryPos * 100}%`, top: -2, width: 2, height: 12, backgroundColor: c.muted }} />
@@ -144,7 +130,7 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
             {t("trading.last")} {fmtPrice(p.last_price)}
           </Text>
           <Text style={{ color: c.good, fontSize: tokens.textXs }}>
-            {p.exit_plan === "TRAIL_2ATR" ? "trail" : `${t("trading.target")} ${fmtPrice(p.target_price)}`}
+            {p.exit_plan === "TRAIL_2ATR" ? t("trading.trail") : `${t("trading.target")} ${fmtPrice(p.target_price)}`}
           </Text>
         </View>
         <View style={{ ...row, marginTop: 8, gap: 8 }}>
@@ -174,16 +160,16 @@ export function TriggerCard({ tr }: { tr: TriggerRow }) {
   return (
     <Card>
       <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
-        <Text style={{ color: c.ink, fontWeight: "700" }}>{tr.symbol}</Text>
+        <Text style={{ color: c.ink, fontWeight: "700", writingDirection: "ltr" }}>{tr.symbol}</Text>
         <Badge label={status.label} tone={status.tone} />
         {tr.setup ? <Badge label={t(`trading.setup_${tr.setup}`)} /> : null}
         {tr.score !== null ? <Badge label={t("trading.scoreLabel", { n: tr.score })} tone="accent" /> : null}
         {!tr.baseline_enter ? <Badge label={t("trading.aiOnly")} /> : null}
         {tr.agent_conviction ? <Badge label={t("trading.conviction", { n: tr.agent_conviction })} tone="accent" /> : null}
         {tr.agent_risk_multiplier !== null && tr.agent_risk_multiplier > 0 && tr.agent_risk_multiplier < 1 ? <Badge label={t("trading.multiplier", { m: tr.agent_risk_multiplier })} /> : null}
-        {tr.injection_flags.length ? <Badge label="⚠ injection" tone="warn" /> : null}
+        {tr.injection_flags.length ? <Badge label={t("trading.injectionFlag")} tone="warn" /> : null}
         <View style={{ flex: 1 }} />
-        <Text style={{ color: c.muted, fontSize: tokens.textXs }}>{fmtDateTime(tr.bar_time)}</Text>
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, writingDirection: "ltr" }}>{fmtDateTime(tr.bar_time)}</Text>
       </View>
       {tr.agent_thesis || tr.agent_reasoning ? (
         <View style={{ marginTop: 6 }}>
@@ -192,7 +178,7 @@ export function TriggerCard({ tr }: { tr: TriggerRow }) {
       ) : null}
       {tr.agent_error ? (
         <TradingText size={tokens.textXs} color={c.warn}>
-          agent: {tr.agent_error}
+          {t("trading.agentError", { msg: tr.agent_error })}
         </TradingText>
       ) : null}
     </Card>
@@ -207,18 +193,22 @@ export function TradeRowCard({ trade }: { trade: TradeListItem }) {
   const r = trade.realized_r;
   const tone = rTone(r);
   return (
-    <Pressable onPress={() => router.push(`/trading-trade?id=${trade.id}` as `/${string}`)}>
+    <Pressable
+      onPress={() => router.push(`/trading-trade?id=${trade.id}` as `/${string}`)}
+      accessibilityRole="button"
+      style={({ pressed }) => ({ opacity: pressed ? tokens.press : 1 })}
+    >
       <Card>
         <View style={{ ...row, gap: 8 }}>
-          <Text style={{ color: c.ink, fontWeight: "800", fontSize: 15 }}>{trade.symbol}</Text>
+          <Text style={{ color: c.ink, fontWeight: "800", fontSize: 15, writingDirection: "ltr" }}>{trade.symbol}</Text>
           <Badge label={t(`trading.state_${trade.state}`)} tone={trade.state === "CLOSED" ? "default" : "accent"} />
           <Badge label={trade.execution} tone={trade.execution === "PAPER" ? "accent" : "default"} />
           {trade.score !== null ? <Badge label={t("trading.scoreLabel", { n: trade.score })} /> : null}
           {trade.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
           {!trade.baseline_enter ? <Badge label={t("trading.aiOnly")} tone="accent" /> : null}
-          {trade.track === "DETERMINISTIC" ? <Badge label="BASE" /> : null}
+          {trade.track === "DETERMINISTIC" ? <Badge label={t("trading.trackBase")} /> : null}
           <View style={{ flex: 1 }} />
-          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 16 }}>{trade.state === "CLOSED" ? fmtR(r) : "—"}</Text>
+          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 16, writingDirection: "ltr" }}>{trade.state === "CLOSED" ? fmtR(r) : "—"}</Text>
         </View>
         <View style={{ marginTop: 4 }}>
           <TradingText muted size={tokens.textXs}>

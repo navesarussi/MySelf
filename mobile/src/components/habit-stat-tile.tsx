@@ -32,11 +32,11 @@ export function StatTile({
     >
       <Row style={{ gap: 3, justifyContent: "center" }}>
         <Ionicons name={icon} size={12} color={iconColor} />
-        <Text style={{ color: c.muted, fontSize: 9, writingDirection }} numberOfLines={1}>
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, writingDirection }} numberOfLines={1}>
           {label}
         </Text>
       </Row>
-      <Text style={{ color: c.ink, fontWeight: "700", fontSize: 16, marginTop: 2, writingDirection }}>
+      <Text style={{ color: c.ink, fontWeight: "800", fontSize: 17, marginTop: 2, writingDirection }}>
         {value}
       </Text>
     </View>

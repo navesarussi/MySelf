@@ -246,8 +246,14 @@ export function decFinanceUncategorizedInHome(
   home: HomePayload | undefined
 ): HomePayload | undefined {
   if (!home) return undefined;
+  const uncategorized = Math.max(0, home.financeUncategorizedCount - 1);
   return {
     ...home,
-    financeUncategorizedCount: Math.max(0, home.financeUncategorizedCount - 1),
+    financeUncategorizedCount: uncategorized,
+    finance: {
+      month: home.finance?.month ?? "",
+      net_actual: home.finance?.net_actual ?? 0,
+      uncategorized_count: uncategorized,
+    },
   };
 }

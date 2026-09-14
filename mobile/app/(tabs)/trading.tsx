@@ -42,7 +42,7 @@ export default function TradingScreen() {
     <Screen title={t("trading.title")} subtitle={t("trading.subtitle")} onRefresh={refresh} refreshing={loading}>
       <View style={{ ...row, gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         <Badge label={`${t("trading.phase")}: ${t(`trading.phase_${settings.phase}`)}`} tone="accent" />
-        <Badge label={`params ${data.params.version}`} />
+        <Badge label={t("trading.paramsVersion", { version: data.params.version })} />
         <View style={{ flex: 1 }} />
         <TradingText muted size={tokens.textXs}>
           {settings.last_tick_at ? t("trading.lastTick", { time: fmtDateTime(settings.last_tick_at, locale) }) : t("trading.neverTicked")}

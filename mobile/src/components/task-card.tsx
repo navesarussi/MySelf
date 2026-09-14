@@ -6,6 +6,7 @@ import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
 import { Badge, Card, Row } from "./ui";
 import { hapticImpact, hapticSelection } from "../haptics";
+import { formatLocaleDate } from "@/lib/i18n/core";
 import type { Task, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
 
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
@@ -120,7 +121,7 @@ export const TaskCard = React.memo(function TaskCard({
   busy?: boolean;
 }) {
   const c = useColors();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { textStart, writingDirection } = useLayoutDir();
   const done = task.status === "done";
 
@@ -170,6 +171,7 @@ export const TaskCard = React.memo(function TaskCard({
   return (
     <Card style={{ opacity: done ? 0.55 : 1 }}>
       <Row style={{ alignItems: "flex-start", gap: 10 }}>
+        {/* First child sits on the locale start edge (right in Hebrew, left in English). */}
         <TaskDoneCheckbox
           done={done}
           busy={busy}
@@ -183,7 +185,7 @@ export const TaskCard = React.memo(function TaskCard({
         {onPress ? (
           <Pressable
             unstable_pressDelay={0}
-            style={({ pressed }) => [{ flex: 1, opacity: pressed ? 0.7 : 1 }]}
+            style={({ pressed }) => [{ flex: 1, opacity: pressed ? tokens.press : 1 }]}
             onPress={() => {
               hapticSelection();
               onPress(task);
@@ -195,13 +197,17 @@ export const TaskCard = React.memo(function TaskCard({
           titleBlock
         )}
       </Row>
-      <Row style={{ marginTop: 8, justifyContent: "flex-start" }} wrap>
+      <Row style={{ marginTop: 8 }} wrap>
         {task.project_name ? <Badge label={task.project_name} /> : null}
         {isExternalTask(task) ? (
           <Badge label={taskSourceLabel(t, task.source)} tone="accent" />
         ) : null}
         <Badge label={taskPriorityLabel(t, task.priority)} tone={priorityTone(task.priority)} />
-        {task.due_date ? <Badge label={`${t("common.due")}: ${task.due_date}`} /> : null}
+        {task.due_date ? (
+          <Badge
+            label={`${t("common.due")}: ${formatLocaleDate(locale, `${task.due_date}T12:00:00`, { day: "numeric", month: "short" })}`}
+          />
+        ) : null}
         <Pressable
           unstable_pressDelay={0}
           onPress={() => {
@@ -209,7 +215,7 @@ export const TaskCard = React.memo(function TaskCard({
             onAdvanceStatus?.(task);
           }}
           disabled={busy || !onAdvanceStatus}
-          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+          style={({ pressed }) => [{ opacity: pressed ? tokens.press : 1 }]}
         >
           <Badge label={taskStatusLabel(t, task.status)} tone={statusTone(task.status)} />
         </Pressable>

@@ -16,7 +16,7 @@ export function ExpenseTypeChips({
 }) {
   const { t } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
 
   const options: { id: ExpenseTypeValue; label: string }[] = [
     { id: "variable", label: t("finance.expenseTypeRegular") },
@@ -37,7 +37,7 @@ export function ExpenseTypeChips({
       >
         {t("finance.expenseTypeLabel")}
       </Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      <View style={{ ...row, flexWrap: "wrap", gap: 8 }}>
         {options.map((opt) => (
           <Chip
             key={opt.id}
@@ -60,14 +60,13 @@ export function RememberRuleToggle({
 }) {
   const { t } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
 
   return (
     <Pressable
       onPress={onToggle}
       style={{
-        flexDirection: "row",
-        alignItems: "center",
+        ...row,
         justifyContent: "space-between",
         backgroundColor: c.surface,
         borderWidth: 1,

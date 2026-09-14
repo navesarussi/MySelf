@@ -27,7 +27,7 @@ type PendingImage = { uri: string; mimeType: string; base64: string };
 export default function AgentChatScreen() {
   const { t } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection, row } = useLayoutDir();
+  const { textStart, writingDirection, row, alignStart, alignEnd } = useLayoutDir();
   const router = useRouter();
   const { token, serverUrl } = useSession();
   const scrollRef = useRef<ScrollView>(null);
@@ -115,7 +115,7 @@ export default function AgentChatScreen() {
             <View
               key={i}
               style={{
-                alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                alignSelf: msg.role === "user" ? alignEnd : alignStart,
                 maxWidth: "88%",
                 marginBottom: 10,
                 backgroundColor: msg.role === "user" ? c.accent + "22" : c.surface,

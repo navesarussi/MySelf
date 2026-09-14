@@ -18,7 +18,7 @@ export function TxnDateTimeFields({
 }) {
   const { t } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
 
   return (
     <View style={{ marginBottom: 14, gap: 10 }}>
@@ -32,7 +32,7 @@ export function TxnDateTimeFields({
       >
         {t("finance.dateTime")}
       </Text>
-      <View style={{ flexDirection: "row", gap: 10 }}>
+      <View style={{ ...row, gap: 10 }}>
         <View style={{ flex: 1.4 }}>
           <Input
             value={txnDate}

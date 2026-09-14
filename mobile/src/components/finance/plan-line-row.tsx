@@ -20,7 +20,7 @@ export function PlanLineRow({
 }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row, progressAlign } = useLayoutDir();
   const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState(String(line.planned_amount));
   const [draftType, setDraftType] = useState<PlanLineType>(line.line_type);
@@ -76,6 +76,7 @@ export function PlanLineRow({
                 width: `${Math.max(pct, line.actual_amount > 0 ? 4 : 0)}%`,
                 backgroundColor: over ? c.warn : c.accent,
                 borderRadius: 3,
+                alignSelf: progressAlign,
               }}
             />
           </View>
@@ -124,7 +125,7 @@ export function PlanLineRow({
                   <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>
                     {t("finance.expenseTypeLabel")}
                   </Text>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
+                  <View style={{ ...row, gap: 8 }}>
                     <Chip
                       label={t("finance.expenseTypeFixed")}
                       active={draftType === "fixed"}

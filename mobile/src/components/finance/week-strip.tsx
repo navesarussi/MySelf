@@ -10,14 +10,14 @@ import type { WeekBucket } from "@/lib/finance/weekly";
 export function WeekStrip({ weeks }: { weeks: WeekBucket[] }) {
   const { t } = useI18n();
   const c = useColors();
-  const { writingDirection } = useLayoutDir();
+  const { writingDirection, timeRow } = useLayoutDir();
   const max = Math.max(...weeks.map((w) => w.expense), 1);
 
   return (
     <View style={{ marginBottom: 8 }}>
       <SectionTitle>{t("finance.sectionWeeks")}</SectionTitle>
       <Card>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", gap: 6 }}>
+        <View style={{ ...timeRow, justifyContent: "space-between", alignItems: "flex-end", gap: 6 }}>
           {weeks.map((w) => (
             <View key={w.week} style={{ flex: 1, alignItems: "center" }}>
               <View

@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { Pressable, Text, View } from "react-native";
+import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { fmtAmount2 } from "@/lib/finance/format";
@@ -13,17 +14,18 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
   onPress: () => void;
 }) {
   const c = useColors();
+  const { t } = useI18n();
   const { textStart, writingDirection, row } = useLayoutDir();
   const income = txn.kind === "income";
   const label = txn.merchant || txn.description;
   const when = txn.txn_time ? `${txn.txn_date} ${txn.txn_time}` : txn.txn_date;
   const typeLabel =
     txn.expense_type === "fixed"
-      ? "קבועה"
+      ? t("finance.expenseTypeFixed")
       : txn.expense_type === "savings"
-        ? "חיסכון"
+        ? t("finance.expenseTypeSavings")
         : txn.expense_type === "variable"
-          ? "רגילה"
+          ? t("finance.expenseTypeRegular")
           : null;
   const meta = [when, txn.category, typeLabel, txn.needs_categorization && !txn.category ? "?" : null]
     .filter(Boolean)
@@ -41,7 +43,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
         paddingVertical: 11,
         borderBottomWidth: 1,
         borderBottomColor: c.border,
-        opacity: pressed ? 0.7 : 1,
+        opacity: pressed ? tokens.press : 1,
       })}
     >
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -90,6 +92,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
           fontWeight: "800",
           fontSize: tokens.text,
           fontVariant: ["tabular-nums"],
+          writingDirection: "ltr",
         }}
       >
         {income ? "+" : "−"}₪{fmtAmount2(txn.amount)}

@@ -26,14 +26,15 @@ export const GoalCard = React.memo(function GoalCard({
     <Card style={goal.status === "done" ? { opacity: 0.6 } : undefined}>
       <Pressable
         unstable_pressDelay={0}
-        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        accessibilityRole="button"
+        style={({ pressed }) => [{ opacity: pressed ? tokens.press : 1 }]}
         onPress={() => {
           hapticSelection();
           onPress(goal);
         }}
       >
-        <Row wrap style={{ justifyContent: "flex-start" }}>
-          <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>
+        <Row wrap>
+          <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>
             {goal.title}
           </Text>
           {goal.category ? <Badge label={goal.category} tone="accent" /> : null}

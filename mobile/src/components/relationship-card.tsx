@@ -1,5 +1,5 @@
 import React from "react";
-import { Linking as RNLinking, Pressable, Text, View } from "react-native";
+import { Linking as RNLinking, Pressable, Text } from "react-native";
 import { differenceInCalendarDays } from "date-fns";
 import { useColors, tokens } from "../theme";
 import { useI18n } from "../i18n";
@@ -34,7 +34,7 @@ export const RelationshipCard = React.memo(function RelationshipCard({
 }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, textLtr } = useLayoutDir();
 
   const days = daysSince(r, today);
   const overdue = isOverdue(r, today);
@@ -45,14 +45,15 @@ export const RelationshipCard = React.memo(function RelationshipCard({
       <Row>
         <Pressable
           unstable_pressDelay={0}
-          style={({ pressed }) => [{ flex: 1, opacity: pressed ? 0.7 : 1 }]}
+          accessibilityRole="button"
+          style={({ pressed }) => [{ flex: 1, opacity: pressed ? tokens.press : 1 }]}
           onPress={() => {
             hapticSelection();
             onPress(r);
           }}
         >
-          <Row style={{ justifyContent: "flex-start" }} wrap>
-            <Text style={{ color: c.ink, fontWeight: "700", textAlign: textStart, writingDirection }}>
+          <Row wrap>
+            <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>
               {r.name}
             </Text>
             {r.group_name ? <Badge label={r.group_name} /> : null}
@@ -73,8 +74,8 @@ export const RelationshipCard = React.memo(function RelationshipCard({
               style={{
                 color: c.muted,
                 fontSize: tokens.textXs,
-                textAlign: textStart,
-                writingDirection,
+                textAlign: textLtr,
+                writingDirection: "ltr",
                 marginTop: 2,
               }}
             >

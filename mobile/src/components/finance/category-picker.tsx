@@ -19,7 +19,7 @@ export function CategoryPicker({
 }) {
   const { t } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, row } = useLayoutDir();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
@@ -138,7 +138,7 @@ export function CategoryPicker({
                       />
                     </View>
                   ) : null}
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  <View style={{ ...row, flexWrap: "wrap", gap: 8 }}>
                     {filtered.map((cat) => (
                       <Chip key={cat} label={cat} active={value === cat} onPress={() => pick(cat)} />
                     ))}
@@ -172,7 +172,7 @@ export function CategoryPicker({
                   placeholder={t("finance.newCategoryPlaceholder")}
                   autoFocus
                 />
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                <View style={{ ...row, gap: 8, marginTop: 12 }}>
                   <Btn label={t("common.save")} onPress={createCategory} disabled={!newName.trim()} />
                   <Btn label={t("common.cancel")} variant="ghost" onPress={() => setCreating(false)} />
                 </View>

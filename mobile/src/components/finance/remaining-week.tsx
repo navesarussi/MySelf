@@ -6,6 +6,7 @@ import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Card } from "../ui";
+import { ProgressBar } from "../ui/progress-bar";
 import { WeeklyBudgetModal } from "./weekly-budget-modal";
 
 export function RemainingWeekCard({
@@ -50,23 +51,8 @@ export function RemainingWeekCard({
               ? t("finance.overWeekly", { amount: fmtAmount0(Math.abs(left)) })
               : t("finance.leftThisWeek", { amount: fmtAmount0(left) })}
           </Text>
-          <View
-            style={{
-              height: 6,
-              backgroundColor: c.border,
-              borderRadius: 3,
-              marginTop: 10,
-              overflow: "hidden",
-            }}
-          >
-            <View
-              style={{
-                height: 6,
-                width: `${Math.max(4, ratio * 100)}%`,
-                backgroundColor: over ? c.warn : c.accent,
-                borderRadius: 3,
-              }}
-            />
+          <View style={{ marginTop: 10 }}>
+            <ProgressBar ratio={ratio} tone={over ? "warn" : "accent"} />
           </View>
           <Text
             style={{

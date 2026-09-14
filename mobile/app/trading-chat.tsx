@@ -11,7 +11,7 @@ import type { ChatMessageRow } from "@/lib/trading/chat";
 export default function TradingChatScreen() {
   const { t } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection, row } = useLayoutDir();
+  const { textStart, writingDirection, row, alignStart, alignEnd } = useLayoutDir();
   const { run } = useApiMutation();
   const scrollRef = useRef<ScrollView>(null);
   const [input, setInput] = useState("");
@@ -43,7 +43,7 @@ export default function TradingChatScreen() {
     <View
       key={key}
       style={{
-        alignSelf: role === "user" ? "flex-end" : "flex-start",
+        alignSelf: role === "user" ? alignEnd : alignStart,
         maxWidth: "90%",
         marginBottom: 10,
         backgroundColor: role === "user" ? c.accent + "22" : c.surface,

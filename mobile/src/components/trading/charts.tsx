@@ -192,18 +192,4 @@ export function GroupBars({ rows, title }: { rows: { key: string; value: number;
   );
 }
 
-export function KpiGrid({ items }: { items: { label: string; value: string; tone?: "good" | "warn" | "default"; hint?: string }[] }) {
-  const c = useColors();
-  const { textStart, writingDirection } = useLayoutDir();
-  return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-      {items.map((k) => (
-        <View key={k.label} style={{ flexGrow: 1, flexBasis: "30%", minWidth: 100, backgroundColor: c.surface, borderColor: c.border, borderWidth: 1, borderRadius: tokens.radiusSm, padding: 10 }}>
-          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>{k.label}</Text>
-          <Text style={{ color: k.tone === "good" ? c.good : k.tone === "warn" ? c.warn : c.ink, fontSize: 17, fontWeight: "800", marginTop: 2, textAlign: textStart }}>{k.value}</Text>
-          {k.hint ? <Text style={{ color: c.muted, fontSize: 10, marginTop: 2, textAlign: textStart, writingDirection }}>{k.hint}</Text> : null}
-        </View>
-      ))}
-    </View>
-  );
-}
+export { KpiGrid } from "../ui/kpi-grid";

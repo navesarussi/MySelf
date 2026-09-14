@@ -4,6 +4,8 @@ import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
 import { dedupeHabits } from "@/lib/habit-stats";
 import { selectHomeEvents } from "@/lib/home-events";
+import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
+import { summarizeCashflow } from "@/lib/finance/cashflow";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
 
@@ -20,6 +22,8 @@ function projectNameFromJoin(projects: TaskJoin["projects"]): string | undefined
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const supabase = getSupabase();
+  const month = currentMonthKey();
+  const monthEnd = `${month}-${String(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()).padStart(2, "0")}`;
 
   const [
     habitsRes,
@@ -34,6 +38,8 @@ export async function GET(req: NextRequest) {
     openTasksCountRes,
     inProgressTasksCountRes,
     financeUncategorizedRes,
+    financeMonthRes,
+    tradingSettingsRes,
   ] = await Promise.all([
     supabase
       .from("habits")
@@ -87,6 +93,12 @@ export async function GET(req: NextRequest) {
       .from("finance_transactions")
       .select("id", { count: "exact", head: true })
       .eq("needs_categorization", true),
+    supabase
+      .from("finance_transactions")
+      .select("txn_date, amount, kind, category, needs_categorization, is_internal")
+      .gte("txn_date", `${month}-01`)
+      .lte("txn_date", monthEnd),
+    supabase.from("trading_settings").select("phase, peak_equity, starting_equity, kill_switch_active").eq("id", true).maybeSingle(),
   ]);
 
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
@@ -120,5 +132,11 @@ export async function GET(req: NextRequest) {
     openTasksCount: openTasksCountRes.count || 0,
     inProgressTasksCount: inProgressTasksCountRes.count || 0,
     financeUncategorizedCount: financeUncategorizedRes.count || 0,
+    finance: {
+      month,
+      net_actual: summarizeCashflow(financeMonthRes.data ?? [], month).net,
+      uncategorized_count: financeUncategorizedRes.count || 0,
+    },
+    trading: shapeTradingSnapshot(tradingSettingsRes.data as Record<string, unknown> | null),
   });
 }

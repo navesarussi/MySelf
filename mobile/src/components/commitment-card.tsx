@@ -5,6 +5,7 @@ import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { Badge, Btn, Card, Row } from "./ui";
 import { hapticImpact } from "../haptics";
+import { formatLocaleDate } from "@/lib/i18n/core";
 import type { Commitment } from "@/lib/types";
 
 export const CommitmentCard = React.memo(function CommitmentCard({
@@ -19,14 +20,22 @@ export const CommitmentCard = React.memo(function CommitmentCard({
   onDelete: (cm: Commitment) => void;
 }) {
   const c = useColors();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { textStart, writingDirection } = useLayoutDir();
 
   return (
     <Card style={cm.status !== "pending" ? { opacity: 0.6 } : undefined}>
-      <Text style={{ color: c.ink, textAlign: textStart, writingDirection }}>{cm.text}</Text>
-      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 2 }}>
-        {cm.commitment_date}
+      <Text style={{ color: c.ink, fontWeight: "600", textAlign: textStart, writingDirection }}>{cm.text}</Text>
+      <Text
+        style={{
+          color: c.muted,
+          fontSize: tokens.textXs,
+          textAlign: textStart,
+          writingDirection,
+          marginTop: 2,
+        }}
+      >
+        {formatLocaleDate(locale, `${cm.commitment_date}T12:00:00`, { weekday: "short", day: "numeric", month: "short" })}
       </Text>
       <Row style={{ marginTop: 8 }}>
         {cm.status === "pending" ? (

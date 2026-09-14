@@ -340,13 +340,13 @@ export function Loading() {
 export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const c = useColors();
   const { t } = useI18n();
-  const { textStart, writingDirection } = useLayoutDir();
+  const { textStart, writingDirection, alignStart } = useLayoutDir();
   return (
     <Card style={{ borderColor: c.warn }}>
       <Text style={{ color: c.warn, textAlign: textStart, writingDirection }}>{message}</Text>
       {onRetry ? (
-        <View style={{ marginTop: 8, alignSelf: "flex-start" }}>
-          <Btn small variant="ghost" label={t("common.loading")} onPress={onRetry} />
+        <View style={{ marginTop: 8, alignSelf: alignStart }}>
+          <Btn small variant="ghost" label={t("common.retry")} onPress={onRetry} />
         </View>
       ) : null}
     </Card>
