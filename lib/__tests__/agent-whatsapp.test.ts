@@ -99,3 +99,12 @@ describe("isAuthorizedWhatsAppSender", () => {
     assert.equal(isAuthorizedWhatsAppSender("972501234567", null), false);
   });
 });
+
+describe("whatsapp dedup ref ids", () => {
+  it("uses stable dig ref keys per motivation kind", () => {
+    const kinds = ["morning", "midday", "evening"] as const;
+    const refs = kinds.map((k) => `dig:${k}`);
+    assert.equal(new Set(refs).size, 3);
+    assert.deepEqual(refs, ["dig:morning", "dig:midday", "dig:evening"]);
+  });
+});

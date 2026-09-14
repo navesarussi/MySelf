@@ -67,12 +67,24 @@ export async function runAgentChat(input: {
     userContent.push({ type: "image", image: dataUrl, mimeType: img.mimeType });
   }
 
-  const result =
+  let result =
     input.images?.length
       ? await agent.generate({ messages: [{ role: "user", content: userContent }] })
       : await agent.generate({ prompt: textPrompt });
 
-  const text = result.text?.trim() || "לא הצלחתי לענות כרגע. נסה שוב.";
+  let text = result.text?.trim() || "";
+  if (!text) {
+    const retry = await agent.generate({
+      prompt:
+        "סכם למשתמש בעברית ב-2–3 משפטים מה עשית עכשיו לפי הכלים שקראת. אל תכתוב שגיאות או 'נסה שוב'.",
+    });
+    text = retry.text?.trim() || "";
+    result = retry;
+  }
+
+  if (!text && input.channel !== "whatsapp") {
+    text = "לא הצלחתי לענות כרגע. נסה שוב.";
+  }
 
   await logAgentMessage({
     direction: "outbound",

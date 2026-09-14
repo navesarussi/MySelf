@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAgentSettings, isAuthorizedWhatsAppSender } from "@/lib/agent/settings";
 import { handleCodingTaskRequest } from "@/lib/agent/coding/bridge";
 import { runAgentChat } from "@/lib/agent/run";
-import { logAgentMessage } from "@/lib/agent/log";
+import {
+  claimWhatsAppInbound,
+  finalizeWhatsAppInbound,
+} from "@/lib/agent/whatsapp-dedup";
 import {
   downloadWhatsAppMedia,
   parseInboundWhatsAppMessage,
@@ -12,6 +15,11 @@ import {
 import { transcribeWhatsAppAudio } from "@/lib/whatsapp/transcribe";
 
 export const maxDuration = 60;
+
+/** Meta expects 200 quickly; never return 5xx (retries cause duplicate replies). */
+function webhookOk(body: Record<string, unknown> = { ok: true }) {
+  return NextResponse.json(body);
+}
 
 /** Meta webhook verification (GET). */
 export async function GET(req: NextRequest) {
@@ -26,20 +34,30 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ ok: true });
+    return webhookOk();
   }
 
   const inbound = parseInboundWhatsAppMessage(body);
   if (!inbound) {
     console.log("[whatsapp-webhook] ignored_unsupported_or_empty");
-    return NextResponse.json({ ok: true });
+    return webhookOk();
   }
 
   const settings = await getAgentSettings();
-  if (!settings.enabled) return NextResponse.json({ ok: true, skipped: "disabled" });
+  if (!settings.enabled) return webhookOk({ ok: true, skipped: "disabled" });
   if (!isAuthorizedWhatsAppSender(inbound.from, settings)) {
     console.log("[whatsapp-webhook] unauthorized_sender", inbound.from);
-    return NextResponse.json({ ok: true, skipped: "unauthorized_sender" });
+    return webhookOk({ ok: true, skipped: "unauthorized_sender" });
+  }
+
+  const claim = await claimWhatsAppInbound(inbound.messageId);
+  if (claim === "duplicate") {
+    console.log("[whatsapp-webhook] duplicate", inbound.messageId);
+    return webhookOk({ ok: true, skipped: "duplicate" });
+  }
+  if (claim === "error") {
+    console.error("[whatsapp-webhook] claim_error", inbound.messageId);
+    return webhookOk({ ok: true, skipped: "claim_error" });
   }
 
   try {
@@ -59,44 +77,39 @@ export async function POST(req: NextRequest) {
           inbound.from,
           "קיבלתי את ההקלטה אבל לא הצלחתי לתמלל. תשלח שוב בקול ברור יותר, או כתוב בטקסט."
         );
-        return NextResponse.json({ ok: true, skipped: "transcribe_failed" });
+        await finalizeWhatsAppInbound(inbound.messageId, `[voice transcribe_failed]`);
+        return webhookOk({ ok: true, skipped: "transcribe_failed" });
       }
     }
 
     if (!userText.trim()) {
-      return NextResponse.json({ ok: true, skipped: "empty_text" });
+      await finalizeWhatsAppInbound(inbound.messageId, "[empty]");
+      return webhookOk({ ok: true, skipped: "empty_text" });
     }
 
     const logContent =
       inbound.kind === "audio" ? `[voice] ${userText}` : userText;
 
+    await finalizeWhatsAppInbound(inbound.messageId, logContent);
+
     const coding = await handleCodingTaskRequest({
       message: userText,
       channel: "whatsapp",
-      logInbound: true,
+      logInbound: false,
       external_id: inbound.messageId,
       inboundLogContent: logContent,
     });
     if (coding.handled) {
       const sent = await sendWhatsAppText(inbound.from, coding.text);
-      if (!sent.ok) {
-        console.error("[whatsapp-webhook] send_failed", sent.error);
-        return NextResponse.json({ ok: false, error: sent.error }, { status: sent.configured ? 502 : 503 });
-      }
-      return NextResponse.json({
-        ok: true,
-        messageId: sent.messageId,
+      if (!sent.ok) console.error("[whatsapp-webhook] send_failed", sent.error);
+      return webhookOk({
+        ok: sent.ok,
+        messageId: sent.ok ? sent.messageId : undefined,
         via: inbound.kind,
         coding: true,
+        ...(sent.ok ? {} : { send_error: sent.error }),
       });
     }
-
-    await logAgentMessage({
-      direction: "inbound",
-      channel: "whatsapp",
-      content: logContent,
-      external_id: inbound.messageId,
-    });
 
     const { text } = await runAgentChat({
       message: userText,
@@ -104,20 +117,22 @@ export async function POST(req: NextRequest) {
       logInbound: false,
     });
 
-    const sent = await sendWhatsAppText(inbound.from, text);
-    if (!sent.ok) {
-      console.error("[whatsapp-webhook] send_failed", sent.error);
-      return NextResponse.json({ ok: false, error: sent.error }, { status: sent.configured ? 502 : 503 });
+    if (!text.trim()) {
+      console.warn("[whatsapp-webhook] empty_agent_reply", inbound.messageId);
+      return webhookOk({ ok: true, skipped: "empty_reply" });
     }
 
-    return NextResponse.json({
-      ok: true,
-      messageId: sent.messageId,
+    const sent = await sendWhatsAppText(inbound.from, text);
+    if (!sent.ok) console.error("[whatsapp-webhook] send_failed", sent.error);
+    return webhookOk({
+      ok: sent.ok,
+      messageId: sent.ok ? sent.messageId : undefined,
       via: inbound.kind,
+      ...(sent.ok ? {} : { send_error: sent.error }),
     });
   } catch (err) {
     const code = err instanceof Error ? err.message : "agent_error";
     console.error("[whatsapp-webhook]", code);
-    return NextResponse.json({ error: code }, { status: 500 });
+    return webhookOk({ ok: true, skipped: "error", error: code });
   }
 }

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runMotivationMessage } from "@/lib/agent/run";
 import { getAgentSettings, motivationKindForHour } from "@/lib/agent/settings";
+import {
+  recordMotivationDig,
+  shouldSendMotivationDig,
+} from "@/lib/agent/whatsapp-dedup";
 import { sendWhatsAppDig } from "@/lib/whatsapp/client";
 
 export const maxDuration = 60;
@@ -45,6 +49,16 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const digGate = await shouldSendMotivationDig(kind);
+  if (!digGate.ok) {
+    return NextResponse.json({
+      skipped: true,
+      reason: digGate.reason === "duplicate" ? "already_sent_today" : digGate.reason,
+      kind,
+      hour,
+    });
+  }
+
   try {
     const result = await runMotivationMessage(kind);
     if (!("text" in result)) return NextResponse.json(result);
@@ -56,6 +70,8 @@ export async function GET(req: NextRequest) {
         { status: 502 }
       );
     }
+    await recordMotivationDig(kind, digGate.dayKey, result.text);
+
     return NextResponse.json({
       ok: true,
       kind,
