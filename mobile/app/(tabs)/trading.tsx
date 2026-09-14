@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { useRouter } from "expo-router";
 import { View } from "react-native";
 import { api } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
@@ -15,6 +16,7 @@ export default function TradingScreen() {
   const c = useColors();
   const { row } = useLayoutDir();
   const { run } = useApiMutation();
+  const router = useRouter();
   const { data, loading, error, refresh } = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg), { staleTime: 30_000 });
 
   const control = (body: Record<string, unknown>) =>
@@ -56,6 +58,16 @@ export default function TradingScreen() {
           </TradingText>
         </Card>
       ))}
+
+      <Card>
+        <TradingText bold>{t("trading.searchCardTitle")}</TradingText>
+        <TradingText muted size={tokens.textXs}>
+          {t("trading.searchCardBody")}
+        </TradingText>
+        <View style={{ marginTop: 8 }}>
+          <Btn label={t("trading.searchButton")} onPress={() => router.push("/trading-search?auto=1" as `/${string}`)} />
+        </View>
+      </Card>
 
       <TradingHubLinks />
 

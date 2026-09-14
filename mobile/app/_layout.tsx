@@ -68,6 +68,7 @@ function AppStack() {
         <Stack.Screen name="trading-backtests" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-chat" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-control" options={{ title: t("nav.trading") }} />
+        <Stack.Screen name="trading-search" options={{ title: t("nav.trading") }} />
       </Stack>
     </>
   );

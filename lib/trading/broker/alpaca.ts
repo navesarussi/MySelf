@@ -93,14 +93,15 @@ export const alpaca = {
    * `bracket: false` (daily-trend — trail-only, no real take-profit price) or crypto (no crypto brackets on
    * Alpaca): plain limit entry; the caller places a protective stop separately once it sees the fill.
    */
-  placeEntry(input: { symbol: string; assetClass: AssetClass; qty: number; limit: number; stop: number; target: number; clientId: string; bracket?: boolean }) {
+  placeEntry(input: { symbol: string; assetClass: AssetClass; qty: number; limit: number; stop: number; target: number; clientId: string; bracket?: boolean; orderType?: "limit" | "market"; timeInForce?: "gtc" | "day" }) {
+    const market = input.orderType === "market";
     const base = {
       symbol: alpacaSymbol(input.symbol, input.assetClass),
       qty: String(roundQty(input.qty, input.assetClass)),
       side: "buy",
-      type: "limit",
-      time_in_force: "gtc",
-      limit_price: String(roundPrice(input.limit, input.assetClass)),
+      type: market ? "market" : "limit",
+      time_in_force: input.timeInForce ?? "gtc",
+      ...(market ? {} : { limit_price: String(roundPrice(input.limit, input.assetClass)) }),
       client_order_id: input.clientId,
     };
     if (input.assetClass === "STOCK" && input.bracket !== false) {

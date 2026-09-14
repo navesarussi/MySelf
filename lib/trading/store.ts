@@ -32,6 +32,7 @@ export type TradingSettings = {
   intraday_enabled: boolean;
   last_intraday_tick_at: string | null;
   last_intraday_summary: Record<string, unknown> | null;
+  last_intraday_universe_date: string | null;
   updated_at: string;
 };
 
@@ -63,6 +64,7 @@ export async function getSettings(): Promise<TradingSettings> {
     intraday_enabled: Boolean(r.intraday_enabled),
     last_intraday_tick_at: (r.last_intraday_tick_at as string) ?? null,
     last_intraday_summary: (r.last_intraday_summary as Record<string, unknown>) ?? null,
+    last_intraday_universe_date: (r.last_intraday_universe_date as string) ?? null,
     updated_at: String(r.updated_at ?? new Date().toISOString()),
   };
 }

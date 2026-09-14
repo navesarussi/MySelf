@@ -36,6 +36,8 @@ export type IntradayParams = {
   max_stop_atr: number;
   /** Fees are ~0.2% round trip — a stop tighter than this turns every trade into a fee donation. */
   min_stop_pct: number;
+  /** Stocks cost ~0.1% round trip (commission-free) — a tighter minimum stop is affordable. */
+  min_stop_pct_stock: number;
   min_rr: number;
   breakeven_at_r: number;
   trail_after_r: number;
@@ -64,6 +66,7 @@ export const INTRADAY_PARAMS: IntradayParams = {
   min_stop_atr: 0.6,
   max_stop_atr: 3,
   min_stop_pct: 0.012,
+  min_stop_pct_stock: 0.005,
   min_rr: 2,
   breakeven_at_r: 1,
   trail_after_r: 1.5,
@@ -71,6 +74,11 @@ export const INTRADAY_PARAMS: IntradayParams = {
   time_stop_bars_5m: 144,
   entry_cushion: 0.001,
 };
+
+/** Per-asset-class params (stocks get their own minimum stop distance). */
+export function intradayParamsFor(assetClass: "STOCK" | "CRYPTO_MAJOR" | "CRYPTO_ALT", p: IntradayParams = INTRADAY_PARAMS): IntradayParams {
+  return assetClass === "STOCK" ? { ...p, min_stop_pct: p.min_stop_pct_stock } : p;
+}
 
 export const M5 = 5 * 60_000;
 export const M15 = 15 * 60_000;
@@ -145,7 +153,7 @@ export function tradingRange(s: TfSeries, from: number, to: number, atr: number,
   return { high, low, width, supportTests, resistanceTests };
 }
 
-function features(s: TfSeries, i: number, range: Range | null): IntradayFeatures {
+export function features(s: TfSeries, i: number, range: Range | null = null): IntradayFeatures {
   const b = s.bars[i];
   const atr = s.atr[i];
   const spread = b.h - b.l;
@@ -300,15 +308,24 @@ export function confirmOn5m(f: IntradayFrames, h: IntradaySetupHit, now: number,
     if (b.t + M5 > now) return null;
     if (b.l <= h.stop) return null;
     if (!(b.c > b.o && b.c >= setupBar.c && Number.isFinite(f.s5.ema20[j]) && b.c > f.s5.ema20[j])) continue;
-    const entry = b.c;
-    const stop = Math.min(h.stop, entry - p.min_stop_atr * atr15, entry * (1 - p.min_stop_pct));
-    const R = entry - stop;
-    // Structure too far from the entry (chased) → no trade; widening to the minimum distance is fine.
-    if (!(R > 0) || entry - h.stop > p.max_stop_atr * atr15) return null;
-    const target = Math.max(h.structural_target, entry + p.min_rr * R);
-    return { ...h, setup_bar_time: setupBar.t, confirm_time: b.t + M5, entry, stop, target, stop_distance: R, rr: (target - entry) / R };
+    const plan = planAtPrice(b.c, h.stop, h.structural_target, atr15, p);
+    if (!plan) return null;
+    return { ...h, ...plan, setup_bar_time: setupBar.t, confirm_time: b.t + M5 };
   }
   return null;
+}
+
+/**
+ * Long plan at `entry` against a structural stop: the stop is widened (never tightened) to the minimum distance,
+ * the trade is rejected when structure is too far away (chasing), and the target is at least min_rr × R.
+ */
+export function planAtPrice(entry: number, structuralStop: number, structuralTarget: number, atr15: number, p: IntradayParams = INTRADAY_PARAMS) {
+  if (!(entry > 0) || !(atr15 > 0) || !(structuralStop < entry)) return null;
+  const stop = Math.min(structuralStop, entry - p.min_stop_atr * atr15, entry * (1 - p.min_stop_pct));
+  const R = entry - stop;
+  if (!(R > 0) || entry - structuralStop > p.max_stop_atr * atr15) return null;
+  const target = Math.max(structuralTarget, entry + p.min_rr * R);
+  return { entry, stop, target, stop_distance: R, rr: (target - entry) / R };
 }
 
 /** Live scan: setups on recent closed 15m bars whose 5m confirmation has already printed by `now`. */

@@ -61,6 +61,9 @@ const CHART_BARS_MAX = 400;
 export const STRATEGY_VERSION = "v2";
 /** Intraday (15m/5m) strategy runs in its own per-minute tick — see intraday-engine.ts. */
 export const INTRADAY_STRATEGY_VERSION = "intraday";
+/** Trades opened from the "search trade" button — managed by the intraday tick like intraday trades. */
+export const MANUAL_STRATEGY_VERSION = "manual";
+export const isIntradayManaged = (v: string | null | undefined) => v === INTRADAY_STRATEGY_VERSION || v === MANUAL_STRATEGY_VERSION;
 /** The 4h v2 scan is replaced by the intraday strategy (testing phase); open v2 positions are still managed. */
 const V2_SCAN_ENABLED = false;
 
@@ -85,6 +88,8 @@ export type TickSummary = {
 const iso = (ms: number) => new Date(ms).toISOString();
 /** An intraday limit entry that hasn't filled within 15 minutes is stale — cancel it. */
 const INTRADAY_ENTRY_EXPIRY_MS = 15 * 60_000;
+/** A manual limit (pullback) entry waits up to an hour. */
+const MANUAL_ENTRY_EXPIRY_MS = 60 * 60_000;
 const round = (x: number, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
 
 export function toSym(u: Pick<UniverseRow, "symbol" | "asset_class" | "provider_symbol">): UniverseSymbol {
@@ -315,7 +320,8 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
     return { done: true, patch: {} };
   }
   const order = await alpaca.getOrder(trade.broker_entry_order_id);
-  const d = pendingDecision(order, Date.parse(trade.trigger_timestamp), now, trade.strategy_version === INTRADAY_STRATEGY_VERSION ? INTRADAY_ENTRY_EXPIRY_MS : undefined);
+  const expiry = trade.strategy_version === INTRADAY_STRATEGY_VERSION ? INTRADAY_ENTRY_EXPIRY_MS : trade.strategy_version === MANUAL_STRATEGY_VERSION ? MANUAL_ENTRY_EXPIRY_MS : undefined;
+  const d = pendingDecision(order, Date.parse(trade.trigger_timestamp), now, expiry);
   const patch: Record<string, unknown> = { broker_status: order.status, broker_filled_qty: Number(order.filled_qty) };
   const cancel = (reason: string) => {
     p.state = "CANCELLED";
@@ -345,7 +351,7 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
       events.push(...applyExternalFill(p, d.price, d.qty, d.at));
       const isDailyTrend = trade.strategy_version === "daily_trend";
       if (trade.asset_class === "STOCK" && !isDailyTrend) {
-        // v2 stocks entered on a bracket — its legs already carry the stop/target.
+        // v2 / intraday / manual stocks entered on a bracket — its legs already carry the stop/target.
         const legs = bracketLegs(order);
         patch.broker_stop_order_id = legs.stop?.id ?? null;
         patch.broker_target_order_id = legs.target?.id ?? null;
@@ -420,7 +426,7 @@ function repriceExit(p: SimPosition, price: number) {
 
 async function learnFromClosedTrades(closedNow: TradeRow[], summary: TickSummary) {
   // Intraday trades are rated, not reviewed (rating-only phase) — no per-trade lessons.
-  for (const t of closedNow.filter((x) => x.track === "AGENT" && x.state === "CLOSED" && !x.lesson_id && x.strategy_version !== INTRADAY_STRATEGY_VERSION).slice(0, MAX_LESSONS_PER_TICK)) {
+  for (const t of closedNow.filter((x) => x.track === "AGENT" && x.state === "CLOSED" && !x.lesson_id && !isIntradayManaged(x.strategy_version)).slice(0, MAX_LESSONS_PER_TICK)) {
     const { data: trig } = t.trigger_id ? await getSupabase().from("trading_triggers").select("agent_market_read, agent_thesis, agent_invalidation, agent_reasoning, score, setup").eq("id", t.trigger_id).maybeSingle() : { data: null };
     summary.agent_calls += 1;
     const lesson = await reviewClosedTrade({
@@ -1158,7 +1164,7 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
   const lastPrices = new Map<string, number>();
   const earningsNext = openTrades.some((t) => t.asset_class === "STOCK") ? await fetchEarningsSymbols(nextTradingDays(isoDateInZone(new Date(now), "America/New_York"), 2)) : new Set<string>();
   // Intraday positions are managed on 5m bars by the per-minute intraday tick.
-  await advancePositions({ trades: openTrades.filter((t) => t.strategy_version !== INTRADAY_STRATEGY_VERSION), frames, universe, params, calendar, earningsNext, agentEnabled: settings.agent_enabled, now, summary, lastPrices });
+  await advancePositions({ trades: openTrades.filter((t) => !isIntradayManaged(t.strategy_version)), frames, universe, params, calendar, earningsNext, agentEnabled: settings.agent_enabled, now, summary, lastPrices });
 
   if (settings.agent_enabled) {
     try {

@@ -17,6 +17,9 @@ import type { PlanLineRow } from "@/lib/finance/plan";
 import type { FinanceSourcesStatusResponse } from "@/lib/finance/sources-status";
 import type { RecurringSuggestion } from "@/lib/finance/recurring";
 
+export type TradingProposalOption = Omit<import("@/lib/trading/trade-finder").ProposalOption, "rating_input">;
+export type TradingProposal = { id: string | null; created_at?: string; expires_at?: string; scanned: number; stocks_open: boolean; equity?: number; options: TradingProposalOption[]; errors: string[] };
+
 export type TradingTradeDetail = {
   trade: import("@/lib/trading/store").TradeRow;
   trigger: import("@/lib/trading/service").TriggerRow | null;
@@ -546,6 +549,9 @@ export const api = {
   tradingBacktest: (c: ApiConfig, id: string) => apiFetch<TradingBacktestDetail>(c, `/trading/backtests/${encodeURIComponent(id)}`),
   runTradingBacktest: (c: ApiConfig, body: { preset: "CRYPTO" | "STOCKS" | "ALL"; years: number }) =>
     apiFetch<{ id: string }>(c, "/trading/backtests", { method: "POST", body }),
+  tradingSearch: (c: ApiConfig) => apiFetch<TradingProposal>(c, "/trading/search", { method: "POST", body: {} }),
+  tradingEnterProposal: (c: ApiConfig, id: string, body: Record<string, unknown>) =>
+    apiFetch<{ trade_id: string; broker: boolean; order_type: string; entry: number; stop: number; target: number; size: number; notes: string[] }>(c, `/trading/proposals/${encodeURIComponent(id)}/enter`, { method: "POST", body }),
   tradingControl: (c: ApiConfig, body: Record<string, unknown>) =>
     apiFetch<{ ok: boolean; message: string }>(c, "/trading/control", { method: "POST", body }),
   tradingUniverse: (c: ApiConfig) =>

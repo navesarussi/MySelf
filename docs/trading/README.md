@@ -32,6 +32,23 @@ crons are daily-only; auth token lives in `myself.trading_cron_tokens`). Code: `
   after fees+slippage (≈0.27R/trade on a ~1.5% stop). Best: WYCKOFF_SOS in trend (gross +0.22R, net −0.05R).
   This is a measurement phase — not a proven edge.
 
+### Universe + "search trade" button (2026-09-14)
+
+- **Universe** (`lib/trading/intraday-universe.ts`, table `trading_intraday_universe`, rebuilt by the tick once a day
+  after 12:00 UTC): Binance USDT pairs ≥ $10M/24h (no stablecoins/gold/tokenized stocks) + Alpaca-listed stocks/ETFs
+  with price ≥ $5, 20-day avg dollar volume ≥ $50M (SIP daily bars), daily ATR ≥ 1.5%, top 150 by dollar volume.
+  Stocks use Alpaca IEX 5m/15m bars (regular session only), enter 09:45–15:30 ET, are flattened 10 min before the
+  close, and have a 0.5% minimum stop (crypto 1.2%). SPY/BTC are loaded as market context for the agent.
+- **Search** (`POST /api/v1/trading/search`, `lib/trading/trade-finder.ts`): ranks every scannable symbol by tier
+  (CONFIRMED setup → ARMED → RECENT (last 2h, still valid) → WATCH (trend only)) then deterministic score, skips
+  symbols already held, and asks the agent to plan the top 3 (MARKET/LIMIT, entry, stop, target, 1–10 rating +
+  explanation). Limits are enforced in code (`enforcePlan`): long only, LIMIT within 1×ATR15 below price, stop ≥ min
+  distance and not beyond structure, target ≥ 2R — otherwise the deterministic plan is used. Stored in
+  `trading_proposals` for 10 minutes.
+- **Enter now** (`POST /api/v1/trading/proposals/:id/enter`): re-validates against the live price
+  (`validateManualPlan`: stop below price, user target ≥ 2R, untouched target lifted to 2R), the risk envelope and
+  buying power, then opens a `strategy_version = "manual"` trade (paper), managed by the intraday tick.
+
 ## Strategy v2 (4h scan disabled in the testing phase)
 
 Research (2026-09, IS 2021-07→2024-03 / OOS 2024-03→2026-09, 16 crypto): v1 trend-pullback with a fixed 2R

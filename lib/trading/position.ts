@@ -47,6 +47,8 @@ export type SimPosition = {
   peak_price?: number;
   target_extensions?: number;
   initial_target_price?: number;
+  /** Override of EXECUTION_RULES.PENDING_EXPIRY_BARS (e.g. a manual limit order waiting for a pullback). */
+  pending_expiry_bars?: number;
 };
 
 export type StepContext = {
@@ -175,7 +177,7 @@ function tryFill(p: SimPosition, bar: Bar, events: PositionEvent[]): "open" | "i
   }
   if (raw === null || how === null) {
     p.pending_bars += 1;
-    if (p.pending_bars >= EXECUTION_RULES.PENDING_EXPIRY_BARS) {
+    if (p.pending_bars >= (p.pending_expiry_bars ?? EXECUTION_RULES.PENDING_EXPIRY_BARS)) {
       const runaway = bar.l > p.entry_limit * (1 + EXECUTION_RULES.MAX_ENTRY_SLIPPAGE);
       p.state = "CANCELLED";
       p.cancel_reason = runaway ? "SLIPPAGE_EXCEEDED" : "NOT_FILLED";
