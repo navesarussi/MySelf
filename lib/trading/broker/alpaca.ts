@@ -61,10 +61,20 @@ export function alpacaPositionSymbol(symbol: string, assetClass: AssetClass) {
 }
 
 /** Tick-size rounding Alpaca accepts: stocks ≥ $1 → cents; crypto → magnitude-based. */
+export function priceDecimals(price: number, assetClass: AssetClass) {
+  if (assetClass === "STOCK") return price >= 1 ? 2 : 4;
+  // Alpaca crypto price increment is 1e-9: sub-$1 coins (PEPE ≈ 0.0000035) need all 9 decimals, not 6.
+  return price >= 1000 ? 2 : price >= 1 ? 4 : 9;
+}
+
 export function roundPrice(price: number, assetClass: AssetClass) {
-  if (assetClass === "STOCK") return Math.round(price * (price >= 1 ? 100 : 10_000)) / (price >= 1 ? 100 : 10_000);
-  const decimals = price >= 1000 ? 2 : price >= 1 ? 4 : 6;
-  return Math.round(price * 10 ** decimals) / 10 ** decimals;
+  const d = priceDecimals(price, assetClass);
+  return Math.round(price * 10 ** d) / 10 ** d;
+}
+
+/** Wire format: fixed decimals — never exponent notation (String(3.4e-7) === "3.4e-7" is rejected). */
+export function priceStr(price: number, assetClass: AssetClass) {
+  return roundPrice(price, assetClass).toFixed(priceDecimals(price, assetClass));
 }
 
 export function roundQty(qty: number, assetClass: AssetClass) {
@@ -101,15 +111,15 @@ export const alpaca = {
       side: "buy",
       type: market ? "market" : "limit",
       time_in_force: input.timeInForce ?? "gtc",
-      ...(market ? {} : { limit_price: String(roundPrice(input.limit, input.assetClass)) }),
+      ...(market ? {} : { limit_price: priceStr(input.limit, input.assetClass) }),
       client_order_id: input.clientId,
     };
     if (input.assetClass === "STOCK" && input.bracket !== false) {
       return call<AlpacaOrder>("POST", "/v2/orders", {
         ...base,
         order_class: "bracket",
-        take_profit: { limit_price: String(roundPrice(input.target, "STOCK")) },
-        stop_loss: { stop_price: String(roundPrice(input.stop, "STOCK")) },
+        take_profit: { limit_price: priceStr(input.target, "STOCK") },
+        stop_loss: { stop_price: priceStr(input.stop, "STOCK") },
       });
     }
     return call<AlpacaOrder>("POST", "/v2/orders", base);
@@ -123,8 +133,8 @@ export const alpaca = {
       side: "sell",
       type: "stop_limit",
       time_in_force: "gtc",
-      stop_price: String(roundPrice(input.stop, "CRYPTO_ALT")),
-      limit_price: String(roundPrice(input.stop * 0.99, "CRYPTO_ALT")),
+      stop_price: priceStr(input.stop, "CRYPTO_ALT"),
+      limit_price: priceStr(input.stop * 0.99, "CRYPTO_ALT"),
       client_order_id: input.clientId,
     });
   },
@@ -137,7 +147,7 @@ export const alpaca = {
       side: "sell",
       type: "stop",
       time_in_force: "gtc",
-      stop_price: String(roundPrice(input.stop, "STOCK")),
+      stop_price: priceStr(input.stop, "STOCK"),
       client_order_id: input.clientId,
     });
   },
@@ -147,8 +157,8 @@ export const alpaca = {
   /** Replace returns a NEW order id. */
   replaceOrder: (id: string, patch: { stop_price?: number; limit_price?: number }, assetClass: AssetClass) =>
     call<AlpacaOrder>("PATCH", `/v2/orders/${id}`, {
-      ...(patch.stop_price !== undefined ? { stop_price: String(roundPrice(patch.stop_price, assetClass)) } : {}),
-      ...(patch.limit_price !== undefined ? { limit_price: String(roundPrice(patch.limit_price, assetClass)) } : {}),
+      ...(patch.stop_price !== undefined ? { stop_price: priceStr(patch.stop_price, assetClass) } : {}),
+      ...(patch.limit_price !== undefined ? { limit_price: priceStr(patch.limit_price, assetClass) } : {}),
     }),
 
   cancelOrder: async (id: string) => {

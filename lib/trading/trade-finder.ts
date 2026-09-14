@@ -3,7 +3,7 @@ import { planIntradayTrade, type RatingSnapshot, type TradePlanProposal } from "
 import { RISK_ENVELOPE } from "./config";
 import { MANUAL_STRATEGY_VERSION } from "./engine";
 import { livePrice, loadIntradayFrames, type IntradaySymbol, type LoadedFrames } from "./intraday-data";
-import { insertIntradayTrade, intradayEnvelopeBlocks, loadIntradayAccount, placeIntradayBrokerEntry, ratingSnapshotFor, scannableSymbols, sizeIntraday, stockSession, symbolsToLoad } from "./intraday-engine";
+import { insertIntradayTrade, intradayEnvelopeBlocks, loadIntradayAccount, placeIntradayBrokerEntry, ratingSnapshotFor, scannableSymbols, sizeIntraday, stockSession, symbolsToLoad, syncBrokerEntryNow, syncSimEntryNow } from "./intraday-engine";
 import { getIntradayUniverse, type IntradayUniverseRow } from "./intraday-universe";
 import { M15, M5, confirmOn5m, detectIntradaySetup, features, intradayParamsFor, planAtPrice, scoreIntraday, type IntradayParams, type IntradaySetupHit } from "./strategy/intraday";
 import { closedIdx } from "./strategy/series";
@@ -280,6 +280,16 @@ export async function enterProposal(id: string, req: EnterRequest, now = Date.no
     if (!placed.ok) throw new EnterError(`broker_rejected:${placed.reason ?? ""}`);
     broker = true;
   }
+  let state: string | null = "PENDING";
+  if (broker && orderType === "MARKET") {
+    // Give the market order a moment to fill, then adopt the fill + place the protective stop now.
+    for (let attempt = 0; attempt < 3 && state === "PENDING"; attempt++) {
+      await new Promise((r) => setTimeout(r, 1200));
+      state = await syncBrokerEntryNow(tradeId).catch(() => "PENDING");
+    }
+  } else if (!broker) {
+    state = await syncSimEntryNow(tradeId, live, orderType, now);
+  }
   await sb.from("trading_proposals").update({ status: "ENTERED", trade_id: tradeId }).eq("id", id);
   await logEvent({
     kind: "MANUAL_ENTRY",
@@ -287,7 +297,7 @@ export async function enterProposal(id: string, req: EnterRequest, now = Date.no
     message: `${broker ? "[Alpaca demo] " : "[סימולציה] "}כניסה מהחיפוש: ${sym.symbol} ${orderType} ${v.entry.toPrecision(6)} · סטופ ${v.stop.toPrecision(6)} · יעד ${v.target.toPrecision(6)} · דירוג ${opt.plan.rating ?? "—"}/10`.slice(0, 300),
     push: true,
   });
-  return { trade_id: tradeId, broker, order_type: orderType, entry: v.entry, stop: v.stop, target: v.target, size: plan.size, notes: v.notes };
+  return { trade_id: tradeId, broker, state, order_type: orderType, entry: v.entry, stop: v.stop, target: v.target, size: plan.size, notes: v.notes };
 }
 
 export type { LoadedFrames };

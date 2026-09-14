@@ -9,8 +9,9 @@ export async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   try {
     const result = await findBestTrade();
+    const options = (result.options ?? []).map(({ rating_input: _omit, ...o }) => o);
     // Bars fed to the agent stay server-side (they are stored with the proposal for the journal).
-    return NextResponse.json({ ...result, options: result.options.map(({ rating_input: _omit, ...o }) => o) });
+    return NextResponse.json({ ...result, options, errors: result.errors ?? [] });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "search_failed" }, { status: 500 });
   }

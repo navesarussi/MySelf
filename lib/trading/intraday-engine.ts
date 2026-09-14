@@ -5,7 +5,8 @@ import { marketClock } from "./broker/alpaca-data";
 import { INTRADAY_STRATEGY_VERSION, isIntradayManaged, loadAccount, mirrorToBroker, persistTrade, resolveBrokerEntry, type Account, type TickSummary } from "./engine";
 import { loadIntradayFrames, type IntradaySymbol, type LoadedFrames } from "./intraday-data";
 import { getIntradayUniverse, providerSymbolFor, refreshIntradayUniverse, type IntradayUniverseRow } from "./intraday-universe";
-import { newPendingPosition, openRiskR, stepPosition, type SimPosition } from "./position";
+import { applyExternalFill, newPendingPosition, openRiskR, stepPosition, type SimPosition } from "./position";
+import { EXECUTION_RULES } from "./config";
 import { checkNewEntry, type EnvelopeBlock } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
 import { closedIdx } from "./strategy/series";
@@ -228,6 +229,41 @@ export async function placeIntradayBrokerEntry(input: { tradeId: string; sym: In
     await logEvent({ kind: "BROKER_REJECTED", symbol: input.sym.symbol, severity: "warn", message: `${input.sym.symbol}: הברוקר דחה פקודה תוך-יומית — ${reason}` });
     return { ok: false, reason };
   }
+}
+
+/**
+ * Resolve a just-placed broker entry immediately (a market order usually fills within a second) so the trade shows
+ * OPEN with its broker-side protective stop right away instead of waiting for the next 5-minute tick.
+ */
+export async function syncBrokerEntryNow(tradeId: string, now = Date.now()): Promise<TradeRow["state"] | null> {
+  const trade = (await getOpenTrades()).find((t) => t.id === tradeId);
+  if (!trade?.broker || trade.state !== "PENDING") return trade?.state ?? null;
+  const pos: SimPosition = { ...trade.sim_state };
+  const events: TradeRow["events"] = [...(trade.events ?? [])];
+  const outcome = await resolveBrokerEntry(trade, pos, events, now);
+  await updateTrade(trade.id, { ...simColumns(pos), ...outcome.patch, events });
+  return pos.state;
+}
+
+/** Fill a sim-only pending entry at the live price (market now; limit when price already touched). */
+export async function syncSimEntryNow(tradeId: string, live: number, orderType: "MARKET" | "LIMIT", now = Date.now()): Promise<TradeRow["state"] | null> {
+  const trade = (await getOpenTrades()).find((t) => t.id === tradeId);
+  if (!trade || trade.broker || trade.state !== "PENDING" || !(live > 0)) return trade?.state ?? null;
+  const pos: SimPosition = { ...trade.sim_state };
+  if (orderType === "LIMIT" && live > pos.entry_limit) return "PENDING";
+  const slip = EXECUTION_RULES.ASSUMED_SLIPPAGE[trade.asset_class];
+  const raw = orderType === "MARKET" ? live : Math.min(live, pos.entry_limit);
+  const events: TradeRow["events"] = [...(trade.events ?? [])];
+  if (raw <= pos.stop_price) {
+    pos.state = "CANCELLED";
+    pos.cancel_reason = "GAP_BELOW_STOP";
+    pos.closed_at = now;
+    events.push({ type: "CANCELLED", reason: pos.cancel_reason, at: now });
+  } else {
+    events.push(...applyExternalFill(pos, raw * (1 + slip), pos.size, now));
+  }
+  await updateTrade(trade.id, { ...simColumns(pos), events });
+  return pos.state;
 }
 
 export function scannableSymbols(universe: IntradayUniverseRow[], session: StockSession): IntradayUniverseRow[] {

@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ALPACA_PAPER_BASE, alpacaPositionSymbol, alpacaSymbol, roundPrice, roundQty } from "../trading/broker/alpaca";
+import { ALPACA_PAPER_BASE, alpacaPositionSymbol, alpacaSymbol, priceStr, roundPrice, roundQty } from "../trading/broker/alpaca";
+import { fmtPrice } from "../trading/format";
 import { bracketLegs, brokerExit, pendingDecision, protectiveAdjustments } from "../trading/broker/sync";
 import { agentValueReport, type JournalTrade } from "../trading/learning";
 import { isBaselineCandidate } from "../trading/strategy/candidates";
@@ -37,6 +38,15 @@ describe("alpaca adapter (paper only)", () => {
     assert.equal(roundPrice(123.456, "STOCK"), 123.46);
     assert.equal(roundQty(12.9, "STOCK"), 12);
     assert.equal(roundQty(0.12345678, "CRYPTO_ALT"), 0.123456);
+  });
+
+  it("keeps precision on sub-cent coins (PEPE) and never sends exponent notation", () => {
+    assert.equal(roundPrice(0.0000034155780627, "CRYPTO_ALT"), 0.000003416);
+    assert.equal(priceStr(0.0000034155780627, "CRYPTO_ALT"), "0.000003416");
+    assert.equal(priceStr(0.00000034, "CRYPTO_ALT"), "0.000000340");
+    assert.equal(priceStr(77123.456, "CRYPTO_MAJOR"), "77123.46");
+    assert.equal(priceStr(123.456, "STOCK"), "123.46");
+    assert.equal(fmtPrice(0.0000034155), "0.000003416");
   });
 });
 

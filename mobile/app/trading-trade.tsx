@@ -248,7 +248,7 @@ export default function TradingTradeScreen() {
             <TradingText muted bold size={tokens.textXs}>
               {t("trading.scoreReasons")}
             </TradingText>
-            {snap.candidate.reasons.map((r) => (
+            {(snap.candidate.reasons ?? []).map((r) => (
               <TradingText key={r} size={tokens.textXs}>
                 {r}
               </TradingText>
@@ -276,7 +276,7 @@ export default function TradingTradeScreen() {
             </Text>
           </View>
         ) : null}
-        {trigger?.vetoes.length || trigger?.envelope_blocks.length ? (
+        {trigger?.vetoes?.length || trigger?.envelope_blocks?.length ? (
           <TradingText size={tokens.textXs} color={c.warn}>
             {[...(trigger?.vetoes ?? []), ...(trigger?.envelope_blocks ?? [])].join(" · ")}
           </TradingText>

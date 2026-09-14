@@ -12,6 +12,7 @@ import { queryClient, queryKeys } from "../src/query";
 import { Badge, Btn, Card, Chip, EmptyState, Input, Screen, SectionTitle } from "../src/components/ui";
 import { KpiGrid } from "../src/components/trading/charts";
 import { TradingText } from "../src/components/trading/blocks";
+import { useLivePrice } from "../src/components/trading/use-live-price";
 import { fmtPct, fmtPrice, fmtUsd } from "@/lib/trading/format";
 
 type Draft = { order_type: "MARKET" | "LIMIT"; entry: string; stop: string; target: string };
@@ -51,7 +52,8 @@ export default function TradingSearchScreen() {
     setError(null);
     setResult(null);
     try {
-      const res = await api.tradingSearch({ token, serverUrl });
+      const raw = await api.tradingSearch({ token, serverUrl });
+      const res: TradingProposal = { ...raw, options: raw.options ?? [], errors: raw.errors ?? [] };
       setResult(res);
       setSelected(0);
       setDraft(res.options[0] ? toDraft(res.options[0]) : null);
@@ -69,9 +71,11 @@ export default function TradingSearchScreen() {
     }
   }, [params.auto, search]);
 
-  const option = result?.options[selected] ?? null;
+  const option = result?.options?.[selected] ?? null;
+  const live = useLivePrice(option?.symbol, option?.asset_class, Boolean(option));
+  const marketPx = live.price ?? option?.price ?? null;
   const edited = option && draft ? draft.order_type !== option.plan.order_type || n(draft.entry) !== option.plan.entry || n(draft.stop) !== option.plan.stop || n(draft.target) !== option.plan.target : false;
-  const entryPx = draft && option ? (draft.order_type === "MARKET" ? option.price : n(draft.entry)) : null;
+  const entryPx = draft && option ? (draft.order_type === "MARKET" ? marketPx : n(draft.entry)) : null;
   const stopPx = draft ? n(draft.stop) : null;
   const targetPx = draft ? n(draft.target) : null;
   const risk = entryPx && stopPx && stopPx < entryPx ? entryPx - stopPx : null;
@@ -124,7 +128,7 @@ export default function TradingSearchScreen() {
         </Card>
       ) : null}
 
-      {result && !result.options.length ? <EmptyState text={t("trading.searchNone", { n: result.scanned })} /> : null}
+      {result && !(result.options ?? []).length ? <EmptyState text={t("trading.searchNone", { n: result.scanned })} /> : null}
 
       {result && option && draft ? (
         <>
@@ -133,9 +137,9 @@ export default function TradingSearchScreen() {
             {result.stocks_open ? ` · ${t("trading.stocksOpen")}` : ` · ${t("trading.stocksClosed")}`}
           </TradingText>
 
-          {result.options.length > 1 ? (
+          {(result.options ?? []).length > 1 ? (
             <View style={{ ...row, gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-              {result.options.map((o, i) => (
+              {(result.options ?? []).map((o, i) => (
                 <Chip
                   key={o.symbol}
                   label={`${o.symbol}${o.plan.rating ? ` ${o.plan.rating}/10` : ""}`}
@@ -177,6 +181,29 @@ export default function TradingSearchScreen() {
             )}
           </Card>
 
+          <Card style={{ marginTop: 8, borderColor: c.accent + "55" }}>
+            <View style={{ ...row, gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+              <TradingText muted size={tokens.textXs}>
+                {t("trading.livePrice")}
+              </TradingText>
+              <Badge label={live.source === "stream" ? t("trading.liveStream") : live.source === "poll" ? t("trading.livePoll") : t("trading.liveWaiting")} tone={live.price ? "good" : "default"} />
+            </View>
+            <View style={{ ...row, gap: 8, alignItems: "baseline", marginTop: 4 }}>
+              <TradingText bold size={28} color={live.direction === "up" ? c.good : live.direction === "down" ? c.warn : c.ink} style={{ writingDirection: "ltr" }}>
+                {fmtPrice(marketPx)}
+              </TradingText>
+              {live.direction === "up" ? (
+                <TradingText color={c.good} bold>
+                  ▲
+                </TradingText>
+              ) : live.direction === "down" ? (
+                <TradingText color={c.warn} bold>
+                  ▼
+                </TradingText>
+              ) : null}
+            </View>
+          </Card>
+
           <SectionTitle>{t("trading.searchPlan")}</SectionTitle>
           <Card>
             <View style={{ ...row, gap: 6, marginBottom: 10 }}>
@@ -184,7 +211,7 @@ export default function TradingSearchScreen() {
               <Chip label={t("trading.orderLimit")} active={draft.order_type === "LIMIT"} onPress={() => setDraft({ ...draft, order_type: "LIMIT" })} />
             </View>
             <TradingText muted size={tokens.textXs}>
-              {draft.order_type === "MARKET" ? t("trading.entryMarketHint", { price: fmtPrice(option.price) }) : t("trading.entry")}
+              {draft.order_type === "MARKET" ? t("trading.entryMarketHint", { price: fmtPrice(marketPx) }) : t("trading.entry")}
             </TradingText>
             {draft.order_type === "LIMIT" ? <Input value={draft.entry} onChangeText={(v) => setDraft({ ...draft, entry: v })} keyboardType="decimal-pad" style={{ writingDirection: "ltr" }} /> : null}
             <TradingText muted size={tokens.textXs}>
@@ -209,9 +236,9 @@ export default function TradingSearchScreen() {
             ]}
           />
 
-          {option.envelope_blocks.length ? (
+          {(option.envelope_blocks ?? []).length ? (
             <Card style={{ borderColor: c.warn }}>
-              <TradingText color={c.warn}>{t("trading.searchBlocked", { blocks: option.envelope_blocks.join(", ") })}</TradingText>
+              <TradingText color={c.warn}>{t("trading.searchBlocked", { blocks: (option.envelope_blocks ?? []).join(", ") })}</TradingText>
             </Card>
           ) : null}
           {!draftValid ? (
@@ -221,7 +248,7 @@ export default function TradingSearchScreen() {
           ) : null}
 
           <View style={{ marginTop: 10 }}>
-            <Btn label={entering ? t("trading.entering") : t("trading.enterNow")} onPress={() => void enter()} disabled={entering || searching || !draftValid || option.envelope_blocks.length > 0} />
+            <Btn label={entering ? t("trading.entering") : t("trading.enterNow")} onPress={() => void enter()} disabled={entering || searching || !draftValid || (option.envelope_blocks ?? []).length > 0 || (draft.order_type === "MARKET" && !marketPx)} />
           </View>
           <TradingText muted size={tokens.textXs}>
             {t("trading.searchFootnote")}

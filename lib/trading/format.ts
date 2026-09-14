@@ -26,7 +26,8 @@ export function fmtPct(x: number | null | undefined, digits = 1): string {
 export function fmtPrice(x: number | null | undefined): string {
   if (x === null || x === undefined || !Number.isFinite(x)) return "—";
   const a = Math.abs(x);
-  const digits = a >= 1000 ? 0 : a >= 100 ? 1 : a >= 1 ? 2 : a >= 0.01 ? 4 : 6;
+  // Tiny prices (PEPE ≈ 0.0000035) keep 4 significant digits instead of rounding to 0.000003.
+  const digits = a >= 1000 ? 0 : a >= 100 ? 1 : a >= 1 ? 2 : a >= 0.01 ? 4 : a > 0 ? Math.min(12, Math.ceil(-Math.log10(a)) + 3) : 2;
   return x.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
