@@ -75,6 +75,8 @@ export type HomePayload = {
   libraryEntries: Pick<ContentEntry, "id" | "title" | "category" | "tags" | "updated_at">[];
   openTasksCount: number;
   inProgressTasksCount: number;
+  doneTasksCount: number;
+  avgTaskCloseDays: number | null;
   financeUncategorizedCount: number;
   finance?: {
     month: string;
@@ -189,8 +191,16 @@ export const api = {
     apiFetch<Habit>(c, `/habits/${id}`, { method: "PATCH", body }),
   deleteHabit: (c: ApiConfig, id: string) =>
     apiFetch<{ ok: boolean }>(c, `/habits/${id}`, { method: "DELETE" }),
-  reportHabit: (c: ApiConfig, id: string, type: "check_in" | "fall" | "reset") =>
-    apiFetch<Habit>(c, `/habits/${id}/report`, { method: "POST", body: { type } }),
+  reportHabit: (
+    c: ApiConfig,
+    id: string,
+    type: "check_in" | "fall" | "reset",
+    opts?: { for_date?: string }
+  ) =>
+    apiFetch<Habit>(c, `/habits/${id}/report`, {
+      method: "POST",
+      body: opts?.for_date ? { type, for_date: opts.for_date } : { type },
+    }),
 
   goals: (c: ApiConfig) => apiFetch<Goal[]>(c, "/goals"),
   createGoal: (c: ApiConfig, body: Partial<Goal>) =>

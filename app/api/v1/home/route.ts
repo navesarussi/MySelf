@@ -3,6 +3,7 @@ import { getSupabase } from "@/lib/supabase";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
 import { dedupeHabits } from "@/lib/habit-stats";
+import { avgTaskCloseDays } from "@/lib/task-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
 import { summarizeCashflow } from "@/lib/finance/cashflow";
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest) {
     libraryRes,
     openTasksCountRes,
     inProgressTasksCountRes,
+    doneTasksCountRes,
+    doneTasksTimingRes,
     financeUncategorizedRes,
     financeMonthRes,
     tradingSettingsRes,
@@ -89,6 +92,8 @@ export async function GET(req: NextRequest) {
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("status", "in_progress"),
+    supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "done"),
+    supabase.from("tasks").select("created_at, updated_at, status").eq("status", "done").limit(500),
     supabase
       .from("finance_transactions")
       .select("id", { count: "exact", head: true })
@@ -131,6 +136,8 @@ export async function GET(req: NextRequest) {
     libraryEntries: libraryRes.data || [],
     openTasksCount: openTasksCountRes.count || 0,
     inProgressTasksCount: inProgressTasksCountRes.count || 0,
+    doneTasksCount: doneTasksCountRes.count || 0,
+    avgTaskCloseDays: avgTaskCloseDays((doneTasksTimingRes.data ?? []) as Task[]),
     financeUncategorizedCount: financeUncategorizedRes.count || 0,
     finance: {
       month,

@@ -11,7 +11,15 @@ import { HomeListsFeed } from "../../src/components/home/home-lists-feed";
 import { HomeGoalModal } from "../../src/components/home-goal-modal";
 import { HomeLibraryModal } from "../../src/components/home-library-modal";
 import { NEXT_STATUS } from "../../src/components/task-card";
-import { dedupeHabits, effectiveStreak, habitReportDay, sortHabitsByReportUrgency, todayISO } from "@/lib/habit-stats";
+import {
+  dedupeHabits,
+  effectiveStreak,
+  habitReportDay,
+  isAwaitingReport,
+  isReportDue,
+  sortHabitsByReportUrgency,
+  todayISO,
+} from "@/lib/habit-stats";
 import { achievabilityScore, rankGoalsForHome } from "@/lib/goals-rank";
 import { filterDueRelationships } from "@/lib/relationships-due";
 import { topPriorityTasks } from "@/lib/task-priority";
@@ -28,9 +36,10 @@ export default function HomeScreen() {
   const todayDate = new Date();
   const uniqueHabits = useMemo(() => dedupeHabits(data?.habits ?? [], today), [data?.habits, today]);
   const habitsPendingToday = useMemo(
-    () => sortHabitsByReportUrgency(uniqueHabits).filter((h) => h.last_checked_on !== habitReportDay(h.report_time)),
+    () => sortHabitsByReportUrgency(uniqueHabits).filter((h) => isAwaitingReport(h)),
     [uniqueHabits]
   );
+  const habitsOverdueToday = useMemo(() => uniqueHabits.filter((h) => isReportDue(h)), [uniqueHabits]);
   const dueRelationships = useMemo(
     () => filterDueRelationships((data?.relationships ?? []) as Relationship[], todayDate),
     [data?.relationships, todayDate]
@@ -46,7 +55,7 @@ export default function HomeScreen() {
   const bestStreak = uniqueHabits.reduce((m, h) => Math.max(m, effectiveStreak(h, habitReportDay(h.report_time))), 0);
   const topTasks = useMemo(() => topPriorityTasks(data?.openTasks ?? [], 10), [data?.openTasks]);
   const heroCount = homeHeroCount({
-    habitsPending: habitsPendingToday.length,
+    habitsOverdue: habitsOverdueToday.length,
     dueRelationships: dueRelationships.length,
     tasksDueSoon: dueSoonTasks,
     financeUncategorized: data?.financeUncategorizedCount ?? 0,
@@ -81,7 +90,10 @@ export default function HomeScreen() {
               activeGoals: data.activeGoals.length,
               openTasks: data.openTasksCount + data.inProgressTasksCount,
               habitsPending: habitsPendingToday.length,
+              habitsOverdue: habitsOverdueToday.length,
               tasksDueSoon: dueSoonTasks,
+              doneTasks: data.doneTasksCount,
+              avgTaskCloseDays: data.avgTaskCloseDays,
               bestStreak,
               readyGoals: data.activeGoals.filter((g) => achievabilityScore(g) >= 3).length,
               financeUncategorized: data.financeUncategorizedCount,
@@ -95,6 +107,23 @@ export default function HomeScreen() {
             pending={habitsPendingToday}
             failureTotal={uniqueHabits.reduce((s, h) => s + (h.failure_count ?? 0), 0)}
             busy={isPending}
+            onBackfill={async (h, date, type) => {
+              const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+              await run((config) => api.reportHabit(config, h.id, type, { for_date: date }), {
+                itemId: h.id,
+                flash: { success: type === "check_in" ? "flash.checkInRecorded" : "flash.fallRecorded" },
+                onError: () => {
+                  if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+                },
+                onSuccess: (updated) => {
+                  if (updated) {
+                    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => patchHabitInHome(old, h.id, updated));
+                  }
+                  queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+                  queryClient.invalidateQueries({ queryKey: queryKeys.home });
+                },
+              });
+            }}
             onCheckIn={async (h) => {
               const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
               const todayStr = habitReportDay(h.report_time);

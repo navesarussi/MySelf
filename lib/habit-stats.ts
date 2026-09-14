@@ -1,5 +1,7 @@
-import { differenceInCalendarDays } from "date-fns";
+import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import type { Habit } from "@/lib/types";
+
+const MAX_MISSED_REPORT_DAYS = 14;
 
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -25,6 +27,65 @@ export function habitReportDay(reportTime?: string | null, now = new Date()): st
 export function normalizeReportTime(reportTime?: string | null): string {
   const value = (reportTime || "00:00").slice(0, 5);
   return /^\d{2}:\d{2}$/.test(value) ? value : "00:00";
+}
+
+function reportTimeMinutes(reportTime?: string | null): number {
+  const [h = 0, m = 0] = normalizeReportTime(reportTime).split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/** UTC instant when the reporting window for `day` opens. */
+export function reportWindowOpensOn(day: string, reportTime?: string | null): Date {
+  const [h, m] = normalizeReportTime(reportTime).split(":").map(Number);
+  const d = parseISO(`${day}T00:00:00.000Z`);
+  d.setUTCHours(h || 0, m || 0, 0, 0);
+  return d;
+}
+
+/** UTC instant when the reporting window for `day` closes (next window opens). */
+export function reportWindowEndOn(day: string, reportTime?: string | null): Date {
+  const nextDay = format(addDays(parseISO(`${day}T00:00:00.000Z`), 1), "yyyy-MM-dd");
+  return reportWindowOpensOn(nextDay, reportTime);
+}
+
+/** True once today's report_time has passed and the habit was not checked for the active day. */
+export function isReportDue(habit: Habit, now = new Date()): boolean {
+  const day = habitReportDay(habit.report_time, now);
+  if (habit.last_checked_on === day) return false;
+  const minutesNow = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return minutesNow >= reportTimeMinutes(habit.report_time);
+}
+
+/** Habits waiting on the active report day (includes the grace period before report_time). */
+export function isAwaitingReport(habit: Habit, now = new Date()): boolean {
+  const day = habitReportDay(habit.report_time, now);
+  return habit.last_checked_on !== day;
+}
+
+/**
+ * Closed reporting days with no check-in, oldest first (chronological backfill order).
+ * A day is eligible once its full window has ended.
+ */
+export function missedReportDays(
+  habit: Habit,
+  now = new Date(),
+  maxDays = MAX_MISSED_REPORT_DAYS,
+): string[] {
+  const activeDay = habitReportDay(habit.report_time, now);
+  const createdDay = habit.created_at?.slice(0, 10);
+  const missed: string[] = [];
+  let cursor = addDays(parseISO(`${activeDay}T00:00:00.000Z`), -1);
+
+  while (missed.length < maxDays) {
+    const day = format(cursor, "yyyy-MM-dd");
+    if (createdDay && day < createdDay) break;
+    if (habit.last_checked_on && day <= habit.last_checked_on) break;
+    if (now.getTime() < reportWindowEndOn(day, habit.report_time).getTime()) break;
+    missed.push(day);
+    cursor = addDays(cursor, -1);
+  }
+
+  return missed.reverse();
 }
 
 /** Current streak — 0 if the habit was not checked in today or yesterday. */

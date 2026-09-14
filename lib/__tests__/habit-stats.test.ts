@@ -6,6 +6,8 @@ import {
   dedupeHabits,
   effectiveStreak,
   habitReportDay,
+  isReportDue,
+  missedReportDays,
   normalizeReportTime,
   sortHabitsByOldestReport,
   sortHabitsByReportUrgency,
@@ -146,6 +148,38 @@ describe("sortHabitsByOldestReport", () => {
       sorted.map((h) => h.id),
       ["never", "old", "recent"]
     );
+  });
+});
+
+describe("isReportDue", () => {
+  it("is false before report_time on the calendar day", () => {
+    const habit = { ...base, last_checked_on: "2026-07-11", report_time: "18:00" };
+    assert.equal(isReportDue(habit, new Date("2026-07-13T10:00:00Z")), false);
+  });
+
+  it("is true after report_time when the active day is unchecked", () => {
+    const habit = { ...base, last_checked_on: "2026-07-12", report_time: "18:00" };
+    assert.equal(isReportDue(habit, new Date("2026-07-13T19:00:00Z")), true);
+  });
+
+  it("is false when already checked for the active day", () => {
+    const habit = { ...base, last_checked_on: "2026-07-13", report_time: "18:00" };
+    assert.equal(isReportDue(habit, new Date("2026-07-13T19:00:00Z")), false);
+  });
+});
+
+describe("missedReportDays", () => {
+  it("lists closed days after the last check-in", () => {
+    const habit = {
+      ...base,
+      created_at: "2026-06-01T00:00:00Z",
+      last_checked_on: "2026-07-10",
+      report_time: "00:00",
+    };
+    assert.deepEqual(missedReportDays(habit, new Date("2026-07-13T12:00:00Z")), [
+      "2026-07-11",
+      "2026-07-12",
+    ]);
   });
 });
 

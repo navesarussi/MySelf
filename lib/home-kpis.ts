@@ -6,7 +6,10 @@ export type HomeKpiInput = {
   activeGoals: number;
   openTasks: number;
   habitsPending: number;
+  habitsOverdue: number;
   tasksDueSoon: number;
+  doneTasks: number;
+  avgTaskCloseDays: number | null;
   bestStreak: number;
   readyGoals: number;
   financeUncategorized: number;
@@ -26,12 +29,12 @@ export type HomeKpiSpec = {
 };
 
 export function homeHeroCount(i: {
-  habitsPending: number;
+  habitsOverdue: number;
   dueRelationships: number;
   tasksDueSoon: number;
   financeUncategorized: number;
 }): number {
-  return i.habitsPending + i.dueRelationships + i.tasksDueSoon + i.financeUncategorized;
+  return i.habitsOverdue + i.dueRelationships + i.tasksDueSoon + i.financeUncategorized;
 }
 
 export function buildHomeKpis(i: HomeKpiInput): HomeKpiSpec[] {
@@ -47,7 +50,9 @@ export function buildHomeKpis(i: HomeKpiInput): HomeKpiSpec[] {
       id: "habits-pending",
       labelKey: "home.habitsPendingToday",
       value: String(i.habitsPending),
-      tone: i.habitsPending > 0 ? "warn" : "good",
+      hintKey: i.habitsOverdue > 0 ? "home.habitsOverdueSub" : "home.habitsPendingSub",
+      hintParams: i.habitsOverdue > 0 ? { count: i.habitsOverdue } : undefined,
+      tone: i.habitsOverdue > 0 ? "warn" : i.habitsPending > 0 ? "default" : "good",
       href: "/habits",
     },
     {
@@ -83,6 +88,15 @@ export function buildHomeKpis(i: HomeKpiInput): HomeKpiSpec[] {
       labelKey: "home.tasksDueSoon",
       value: String(i.tasksDueSoon),
       tone: i.tasksDueSoon > 0 ? "warn" : "default",
+      href: "/tasks",
+    },
+    {
+      id: "tasks-done",
+      labelKey: "home.tasksDone",
+      value: String(i.doneTasks),
+      hintKey: i.avgTaskCloseDays != null ? "home.avgTaskCloseDays" : undefined,
+      hintParams: i.avgTaskCloseDays != null ? { days: i.avgTaskCloseDays } : undefined,
+      tone: "good",
       href: "/tasks",
     },
     {

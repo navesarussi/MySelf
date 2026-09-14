@@ -43,6 +43,7 @@ export function patchTaskInHome(
 
   let openTasksCount = home.openTasksCount;
   let inProgressTasksCount = home.inProgressTasksCount;
+  let doneTasksCount = home.doneTasksCount;
 
   if (existingTask && patch.status && patch.status !== existingTask.status) {
     if (existingTask.status === "open" && patch.status !== "open") {
@@ -56,6 +57,12 @@ export function patchTaskInHome(
     } else if (existingTask.status !== "in_progress" && patch.status === "in_progress") {
       inProgressTasksCount += 1;
     }
+
+    if (patch.status === "done" && existingTask.status !== "done") {
+      doneTasksCount += 1;
+    } else if (existingTask.status === "done" && patch.status !== "done") {
+      doneTasksCount = Math.max(0, doneTasksCount - 1);
+    }
   }
 
   return {
@@ -63,6 +70,7 @@ export function patchTaskInHome(
     openTasks: nextOpenTasks,
     openTasksCount,
     inProgressTasksCount,
+    doneTasksCount,
   };
 }
 

@@ -7,8 +7,11 @@ const base: HomeKpiInput = {
   dueRelationships: 2,
   activeGoals: 3,
   openTasks: 9,
-  habitsPending: 1,
+  habitsPending: 2,
+  habitsOverdue: 1,
   tasksDueSoon: 3,
+  doneTasks: 42,
+  avgTaskCloseDays: 3.5,
   bestStreak: 12,
   readyGoals: 2,
   financeUncategorized: 5,
@@ -23,7 +26,7 @@ describe("homeHeroCount", () => {
   });
   it("zero when the day is clear", () => {
     assert.equal(
-      homeHeroCount({ habitsPending: 0, dueRelationships: 0, tasksDueSoon: 0, financeUncategorized: 0 }),
+      homeHeroCount({ habitsOverdue: 0, dueRelationships: 0, tasksDueSoon: 0, financeUncategorized: 0 }),
       0
     );
   });

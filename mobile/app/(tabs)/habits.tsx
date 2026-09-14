@@ -30,7 +30,7 @@ import { FormModal } from "../../src/components/form-modal";
 import { HabitCard } from "../../src/components/habit-card";
 import { HabitDetailsModal } from "../../src/components/habit-details-modal";
 import { HabitEditModal, type HabitEditFields } from "../../src/components/habit-edit-modal";
-import { dedupeHabits, sortHabitsByOldestReport } from "@/lib/habit-stats";
+import { dedupeHabits, habitReportDay, sortHabitsByOldestReport } from "@/lib/habit-stats";
 
 type AddFormState = {
   name: string;
@@ -71,16 +71,17 @@ export default function HabitsScreen() {
       const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
       const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
 
+      const todayStr = habitReportDay(h.report_time);
       queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
         patchItemInList(old, h.id, {
           streak_count: (h.streak_count ?? 0) + 1,
-          last_checked_on: new Date().toISOString().slice(0, 10),
+          last_checked_on: todayStr,
         })
       );
       queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
         patchHabitInHome(old, h.id, {
           streak_count: (h.streak_count ?? 0) + 1,
-          last_checked_on: new Date().toISOString().slice(0, 10),
+          last_checked_on: todayStr,
         })
       );
 
@@ -124,6 +125,30 @@ export default function HabitsScreen() {
         },
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+        },
+      });
+    },
+    [run]
+  );
+
+  const handleBackfill = useCallback(
+    async (h: Habit, date: string, type: "check_in" | "fall") => {
+      const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+      await run((config) => api.reportHabit(config, h.id, type, { for_date: date }), {
+        itemId: h.id,
+        flash: { success: type === "check_in" ? "flash.checkInRecorded" : "flash.fallRecorded" },
+        onError: () => {
+          if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+        },
+        onSuccess: (updated) => {
+          if (updated) {
+            queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => patchItemInList(old, h.id, updated));
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => patchHabitInHome(old, h.id, updated));
+          }
+          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
     },
@@ -240,9 +265,10 @@ export default function HabitsScreen() {
         onReset={handleReset}
         onCheckIn={handleCheckIn}
         onReportFall={handleReportFall}
+        onBackfill={handleBackfill}
       />
     ),
-    [isPending, handleReset, handleCheckIn, handleReportFall]
+    [isPending, handleReset, handleCheckIn, handleReportFall, handleBackfill]
   );
 
   const keyExtractor = useCallback((item: Habit) => item.id, []);
@@ -282,6 +308,7 @@ export default function HabitsScreen() {
         }}
         onCheckIn={handleCheckIn}
         onReportFall={handleReportFall}
+        onBackfill={handleBackfill}
         busy={viewingHabit ? isPending(viewingHabit.id) : false}
       />
 

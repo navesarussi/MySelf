@@ -1,6 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
-import { dedupeHabits, effectiveStreak, habitReportDay } from "@/lib/habit-stats";
+import { dedupeHabits, effectiveStreak, isReportDue } from "@/lib/habit-stats";
 import { filterDueRelationships } from "@/lib/relationships-due";
 import { getGmailConnectionStatus } from "@/lib/integrations/gmail/status";
 import { buildGmailDigest } from "@/lib/agent/gmail";
@@ -52,10 +52,7 @@ export async function buildAgentContext(now = new Date(), opts: AgentContextOpti
   const dueRels = filterDueRelationships(relRes.data || [], now);
   const rawEvents = eventsRes.data || [];
 
-  const habitsPending = habits.filter((h: Habit) => {
-    const day = habitReportDay(h.report_time, now);
-    return h.last_checked_on !== day;
-  });
+  const habitsPending = habits.filter((h: Habit) => isReportDue(h, now));
 
   const gmail_digest = opts.gmailDigest && gmailStatus.working ? await buildGmailDigest() : null;
 

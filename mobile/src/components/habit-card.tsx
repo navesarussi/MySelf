@@ -8,7 +8,8 @@ import { Badge, Btn, Card, Row, confirmDelete } from "./ui";
 import { StatTile } from "./habit-stat-tile";
 import { hapticImpact, hapticSelection } from "../haptics";
 import { localeTag } from "@/lib/i18n/core";
-import { effectiveStreak, habitReportDay } from "@/lib/habit-stats";
+import { effectiveStreak, habitReportDay, isReportDue, normalizeReportTime } from "@/lib/habit-stats";
+import { HabitMissedReports } from "./habit-missed-reports";
 import type { Habit } from "@/lib/types";
 import type { HabitEditFields } from "./habit-edit-modal";
 
@@ -22,6 +23,7 @@ export const HabitCard = React.memo(function HabitCard({
   onReset,
   onCheckIn,
   onReportFall,
+  onBackfill,
 }: {
   habit: Habit;
   busy?: boolean;
@@ -30,6 +32,7 @@ export const HabitCard = React.memo(function HabitCard({
   onReset?: (habit: Habit) => void;
   onCheckIn: (habit: Habit) => void | Promise<void>;
   onReportFall: (habit: Habit) => void | Promise<void>;
+  onBackfill?: (habit: Habit, date: string, type: "check_in" | "fall") => void | Promise<void>;
   onSave?: (fields: HabitEditFields) => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
 }) {
@@ -39,6 +42,8 @@ export const HabitCard = React.memo(function HabitCard({
 
   const day = habitReportDay(habit.report_time);
   const checked = habit.last_checked_on === day;
+  const overdue = isReportDue(habit);
+  const reportTime = normalizeReportTime(habit.report_time);
   const streak = effectiveStreak(habit, day);
   const successDays = habit.total_success_days ?? 0;
   const failures = habit.failure_count ?? 0;
@@ -76,7 +81,7 @@ export const HabitCard = React.memo(function HabitCard({
       accessibilityLabel={t("habits.viewDetails")}
       style={({ pressed }) => [{ opacity: pressed && onPress ? tokens.press : 1 }]}
     >
-      <Card>
+      <Card style={overdue ? { borderColor: c.warn, borderWidth: 1 } : undefined}>
         <Row>
           <View style={{ flex: 1 }}>
             <Row wrap>
@@ -136,6 +141,18 @@ export const HabitCard = React.memo(function HabitCard({
         <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 8 }} numberOfLines={1}>
           {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
         </Text>
+        {!checked && !overdue ? (
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 4 }}>
+            {t("habits.reportOpensAt", { time: reportTime })}
+          </Text>
+        ) : null}
+        {overdue ? (
+          <Text style={{ color: c.warn, fontSize: tokens.textXs, fontWeight: "600", textAlign: textStart, writingDirection, marginTop: 4 }}>
+            {t("habits.reportDueNow")}
+          </Text>
+        ) : null}
+
+        {onBackfill ? <HabitMissedReports habit={habit} busy={busy} onBackfill={onBackfill} /> : null}
 
         <Row style={{ marginTop: 10 }}>
           {checked ? (

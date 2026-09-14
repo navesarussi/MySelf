@@ -66,10 +66,16 @@ export default function FinanceScreen() {
     queryKeys.financeTransactions(month),
     (cfg) => api.financeTransactions(cfg, { month, limit: 100 })
   );
+  const { data: uncategorizedTxns, refresh: refreshUncat } = useApiQuery(
+    queryKeys.financeUncategorized,
+    (cfg) => api.financeTransactions(cfg, { uncategorized: true, limit: 500 })
+  );
 
   const refresh = () => {
     void refreshPlan();
     void refreshTx();
+    void refreshUncat();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.home });
   };
 
   const view = useMemo(() => {
@@ -80,7 +86,7 @@ export default function FinanceScreen() {
       weekly_pace: normalizeWeeklyPace(p.weekly_pace),
     };
   }, [plan]);
-  const uncategorized = useMemo(() => (txns ?? []).filter((item) => item.needs_categorization), [txns]);
+  const uncategorized = uncategorizedTxns ?? [];
 
   const openTxn = useCallback(
     (item: FinanceTransaction) => {

@@ -109,7 +109,9 @@ export default function FinanceCategorizeScreen() {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.financeCashflow(month) });
           void queryClient.invalidateQueries({ queryKey: queryKeys.financeTransactions(month) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.financeUncategorized });
           void queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.home });
           router.back();
         },
         onError: () => {

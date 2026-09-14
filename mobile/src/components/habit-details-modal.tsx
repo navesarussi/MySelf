@@ -15,7 +15,8 @@ import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { Badge, Btn, Row } from "./ui";
 import { StatTile } from "./habit-stat-tile";
-import { effectiveStreak, habitReportDay, normalizeReportTime } from "@/lib/habit-stats";
+import { effectiveStreak, habitReportDay, isReportDue, normalizeReportTime } from "@/lib/habit-stats";
+import { HabitMissedReports } from "./habit-missed-reports";
 import { formatLocaleDate } from "@/lib/i18n/core";
 import type { Habit } from "@/lib/types";
 
@@ -26,6 +27,7 @@ export function HabitDetailsModal({
   onEdit,
   onCheckIn,
   onReportFall,
+  onBackfill,
   busy,
 }: {
   habit: Habit | null;
@@ -34,6 +36,7 @@ export function HabitDetailsModal({
   onEdit: (habit: Habit) => void;
   onCheckIn: (habit: Habit) => void;
   onReportFall: (habit: Habit) => void;
+  onBackfill?: (habit: Habit, date: string, type: "check_in" | "fall") => void | Promise<void>;
   busy?: boolean;
 }) {
   const c = useColors();
@@ -45,6 +48,7 @@ export function HabitDetailsModal({
 
   const day = habitReportDay(habit.report_time);
   const checked = habit.last_checked_on === day;
+  const overdue = isReportDue(habit);
   const streak = effectiveStreak(habit, day);
   const successDays = habit.total_success_days ?? 0;
   const failures = habit.failure_count ?? 0;
@@ -103,16 +107,32 @@ export function HabitDetailsModal({
               <StatTile icon="alert-circle-outline" iconColor={c.warn} label={t("common.failures")} value={failures} />
             </Row>
 
-            <View style={{ marginTop: 16, padding: 12, borderRadius: tokens.radiusSm, backgroundColor: c.border + "33" }}>
+            <View
+              style={{
+                marginTop: 16,
+                padding: 12,
+                borderRadius: tokens.radiusSm,
+                backgroundColor: c.border + "33",
+                borderWidth: overdue ? 1 : 0,
+                borderColor: overdue ? c.warn : "transparent",
+              }}
+            >
               <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
                 {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
               </Text>
-              {reportTime !== "00:00" ? (
+              {!checked && !overdue ? (
                 <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 4 }}>
                   {t("habits.reportOpensAt", { time: reportTime })}
                 </Text>
               ) : null}
+              {overdue ? (
+                <Text style={{ color: c.warn, fontSize: tokens.textXs, fontWeight: "600", textAlign: textStart, writingDirection, marginTop: 4 }}>
+                  {t("habits.reportDueNow")}
+                </Text>
+              ) : null}
             </View>
+
+            {onBackfill ? <HabitMissedReports habit={habit} busy={busy} onBackfill={onBackfill} /> : null}
 
             {habit.best_streak > 0 ? (
               <View style={{ marginTop: 18 }}>

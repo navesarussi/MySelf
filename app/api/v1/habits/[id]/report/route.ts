@@ -44,9 +44,15 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (type !== "check_in" && type !== "fall") return badRequest("invalid_type");
 
-  const today = habitReportDay(habit.report_time);
-  if (habit.last_checked_on === today) {
+  const forDate = str(body.for_date);
+  const activeDay = habitReportDay(habit.report_time);
+  const today = forDate && /^\d{4}-\d{2}-\d{2}$/.test(forDate) ? forDate : activeDay;
+  if (forDate && today >= activeDay) return badRequest("invalid_for_date");
+  if (!forDate && habit.last_checked_on === today) {
     return NextResponse.json(habit); // already reported today — no-op, like the web
+  }
+  if (forDate && habit.last_checked_on === today) {
+    return NextResponse.json(habit);
   }
   const result = type === "check_in" ? computeCheckIn(habit, today) : computeFall(habit, today);
 

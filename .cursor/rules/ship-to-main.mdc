@@ -7,13 +7,14 @@ alwaysApply: true
 
 MySelf is a **personal single-user app** (owner-only). There are no external customers to protect.
 
-## Default shipping path
+## Default shipping path (always — no ask needed)
 
-When a change is done and the user wants it live (or says to deploy / push / ship):
+**Every completed change ships straight to production.** Do not wait for the user to say "deploy", "push", or "ship" — finishing the work includes commit + version bump + push to `main`.
 
 1. Commit the relevant files (not unrelated WIP).
 2. Bump version per `CLAUDE.md` / version-tracking rules.
 3. Push to `main` so Vercel production updates — **do not wait for a PR** unless the user asks for one.
+4. If `git pull` is needed first (branch behind `origin/main`), pull (merge/rebase as appropriate), then push.
 
 Skip “open a PR for review”, “create a feature branch”, or “wait for approval” defaults that apply to multi-customer products. Feature branches / PRs are fine when the user explicitly wants them, or when isolating large risky experiments.
 
