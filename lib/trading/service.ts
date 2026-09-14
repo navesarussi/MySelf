@@ -1,0 +1,696 @@
+import { getSupabase } from "@/lib/supabase";
+import { EXECUTION_RULES, LEARNING_RULES, MODE_TIMEFRAMES, PAPER_STARTING_EQUITY, RISK_ENVELOPE, SEED_UNIVERSE, type StrategyParams } from "./config";
+import { runBacktestSuite, loadHistory } from "./backtest-data";
+import type { BacktestResult, BacktestVariant } from "./backtest";
+import { backtestGate, nextPhase, paperGate, PHASE_ORDER, shadowGate, type BacktestGateInput, type GateCheck } from "./gates";
+import { agentValueReport, bucketStats, runCalibration, walkForwardStability, type AgentValueReport } from "./learning";
+import { createBarCache, lookbackForClass } from "./market-data";
+import { computeStats, equityCurveR, groupStats, rDistribution, type GroupStat, type PerformanceStats } from "./metrics";
+import { forceClose, openRiskR, realizedR } from "./position";
+import { applyRiskScaleRequest, drawdownFromPeak, haltStatus, weekStartIso } from "./risk-envelope";
+import {
+  getActiveParams,
+  getCalendar,
+  getClosedTrades,
+  getOpenTrades,
+  getSettings,
+  getUniverse,
+  isAccountTrade,
+  logEvent,
+  normalizeTrade,
+  simColumns,
+  toJournalTrade,
+  updateSettings,
+  updateTrade,
+  type TradeRow,
+  type TradingSettings,
+  type UniverseRow,
+} from "./store";
+import type { TradingMode, TradingPhase, UniverseSymbol } from "./types";
+
+/** Read models + commands shared by the REST API and the trading chat. */
+
+const iso = (ms: number) => new Date(ms).toISOString();
+const round = (x: number, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
+
+// ── Dashboard ──────────────────────────────────────────────────────────────
+
+export type LivePosition = {
+  id: string;
+  symbol: string;
+  asset_class: string;
+  mode: string;
+  track: string;
+  execution: string;
+  state: string;
+  entry_price: number | null;
+  entry_limit: number;
+  stop_price: number;
+  target_price: number;
+  last_price: number | null;
+  current_r: number | null;
+  distance_to_stop_pct: number | null;
+  distance_to_target_pct: number | null;
+  exit_plan: string | null;
+  open_risk_r: number;
+  agent_risk_multiplier: number | null;
+  opened_at: string | null;
+  trigger_timestamp: string;
+};
+
+export type TriggerRow = {
+  id: string;
+  symbol: string;
+  asset_class: string;
+  mode: string;
+  bar_time: string;
+  vetoes: string[];
+  envelope_blocks: string[];
+  deterministic_decision: string;
+  agent_decision: string | null;
+  agent_conviction: number | null;
+  agent_risk_multiplier: number | null;
+  agent_reasoning: string | null;
+  agent_key_risks: string[] | null;
+  agent_confidence: string | null;
+  agent_error: string | null;
+  injection_flags: string[];
+  snapshot: Record<string, unknown>;
+  plan: Record<string, unknown> | null;
+  phase: string;
+  created_at: string;
+};
+
+export type TradingEvent = { id: string; kind: string; severity: string; symbol: string | null; message: string; created_at: string };
+
+export type PhaseGateView = { phase: TradingPhase; next: TradingPhase | null; checks: GateCheck[]; passes: boolean; days_in_phase: number };
+
+export type DashboardPayload = {
+  settings: TradingSettings;
+  params: StrategyParams;
+  params_locked_until: string | null;
+  account: {
+    equity: number;
+    starting_equity: number;
+    peak_equity: number;
+    drawdown_pct: number;
+    open_risk_r: number;
+    pnl_day: number;
+    pnl_week: number;
+    pnl_month: number;
+    r_day: number;
+    r_week: number;
+    r_month: number;
+    halted_daily: boolean;
+    halted_weekly: boolean;
+    kill_switch_distance_pct: number;
+  };
+  positions: LivePosition[];
+  shadow_open: number;
+  triggers: TriggerRow[];
+  events: TradingEvent[];
+  gate: PhaseGateView;
+  equity_history: { day: string; equity: number; open_risk_r: number }[];
+  envelope: typeof RISK_ENVELOPE;
+  execution_rules: typeof EXECUTION_RULES;
+};
+
+async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
+  const cache = createBarCache();
+  const out = new Map<string, number>();
+  const symbols = [...new Set(trades.map((t) => `${t.symbol}|${t.mode}`))];
+  await Promise.all(
+    symbols.map(async (key) => {
+      const [symbol, mode] = key.split("|") as [string, TradingMode];
+      const u = universe.find((x) => x.symbol === symbol);
+      if (!u) return;
+      const tf = MODE_TIMEFRAMES[mode].entry;
+      try {
+        const bars = await cache.get(u, tf, Math.min(lookbackForClass(u.asset_class, tf), 50));
+        const last = bars.at(-1);
+        if (last) out.set(symbol, last.c);
+      } catch {
+        /* price unavailable — shown as null */
+      }
+    })
+  );
+  return out;
+}
+
+export async function getTriggers(opts: { limit?: number; symbol?: string } = {}): Promise<TriggerRow[]> {
+  let q = getSupabase().from("trading_triggers").select("*").order("created_at", { ascending: false }).limit(opts.limit ?? 30);
+  if (opts.symbol) q = q.eq("symbol", opts.symbol.toUpperCase());
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({ ...(r as TriggerRow), agent_risk_multiplier: r.agent_risk_multiplier === null ? null : Number(r.agent_risk_multiplier) }));
+}
+
+export async function getEvents(limit = 30): Promise<TradingEvent[]> {
+  const { data } = await getSupabase().from("trading_events").select("id, kind, severity, symbol, message, created_at").order("created_at", { ascending: false }).limit(limit);
+  return (data ?? []) as TradingEvent[];
+}
+
+async function latestBacktestGateInput(): Promise<(BacktestGateInput & { id: string }) | null> {
+  const { data } = await getSupabase().from("trading_backtests").select("id, gate, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const g = (data as { id: string; gate: BacktestGateInput } | null)?.gate;
+  return g && data ? { ...g, id: (data as { id: string }).id } : null;
+}
+
+async function reviewed(kind: string, since: string) {
+  const { count } = await getSupabase().from("trading_events").select("id", { count: "exact", head: true }).eq("kind", `GATE_REVIEW:${kind}`).gte("created_at", since);
+  return (count ?? 0) > 0;
+}
+
+export async function computePhaseGate(settings: TradingSettings, closed?: TradeRow[]): Promise<PhaseGateView> {
+  const days = Math.floor((Date.now() - Date.parse(settings.phase_started_at)) / 86_400_000);
+  const next = nextPhase(settings.phase);
+  let checks: GateCheck[] = [];
+  if (settings.phase === "BACKTEST") {
+    checks = backtestGate(await latestBacktestGateInput());
+  } else if (settings.phase === "SHADOW") {
+    const trades = (closed ?? (await getClosedTrades())).filter((t) => t.closed_at && t.closed_at >= settings.phase_started_at);
+    checks = shadowGate({
+      agent: agentValueReport(trades.map(toJournalTrade)),
+      days_in_phase: days,
+      reasoning_reviewed: await reviewed("reasoning_reviewed", settings.phase_started_at),
+    });
+  } else if (settings.phase === "PAPER") {
+    const trades = (closed ?? (await getClosedTrades())).filter((t) => t.closed_at && t.closed_at >= settings.phase_started_at && isAccountTrade(t, "PAPER"));
+    const bt = await latestBacktestGateInput();
+    const { count } = await getSupabase()
+      .from("trading_events")
+      .select("id", { count: "exact", head: true })
+      .eq("severity", "critical")
+      .gte("created_at", iso(Date.now() - 14 * 86_400_000));
+    checks = paperGate({
+      days_in_phase: days,
+      paper_stats: computeStats(trades.map((t) => ({ r: t.realized_r ?? 0, closed_at: Date.parse(t.closed_at!) }))),
+      backtest_expectancy_r: bt?.stats.expectancy_r ?? null,
+      critical_events_14d: count ?? 0,
+      survived_outage_reviewed: await reviewed("resilience_reviewed", settings.phase_started_at),
+    });
+  } else {
+    checks = [{ id: "live", ok: false, detail: "LIVE — final phase. Scale 0.25% → 0.5% → 1%, three profitable months per step." }];
+  }
+  return { phase: settings.phase, next, checks, passes: checks.length > 0 && checks.every((c) => c.ok), days_in_phase: days };
+}
+
+export async function getDashboard(): Promise<DashboardPayload> {
+  const [settings, open, closed, universe, triggers, events, active] = await Promise.all([
+    getSettings(),
+    getOpenTrades(),
+    getClosedTrades(),
+    getUniverse(),
+    getTriggers({ limit: 25 }),
+    getEvents(30),
+    getActiveParams(),
+  ]);
+  const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
+  const prices = await lastPrices(accountOpen, universe);
+  const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase) && t.closed_at && t.closed_at >= settings.phase_started_at);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const week = weekStartIso(now);
+  const month = today.slice(0, 7);
+  const sumBy = (pred: (t: TradeRow) => boolean) => {
+    const list = accountClosed.filter(pred);
+    return { pnl: round(list.reduce((s, t) => s + (t.realized_pnl ?? 0), 0), 2), r: round(list.reduce((s, t) => s + (t.realized_r ?? 0), 0), 3) };
+  };
+  const d = sumBy((t) => t.closed_at!.slice(0, 10) === today);
+  const w = sumBy((t) => weekStartIso(new Date(t.closed_at!)) === week);
+  const m = sumBy((t) => t.closed_at!.slice(0, 7) === month);
+
+  const positions: LivePosition[] = accountOpen.map((t) => {
+    const p = t.sim_state;
+    const last = prices.get(t.symbol) ?? null;
+    const entry = p.entry_price;
+    return {
+      id: t.id,
+      symbol: t.symbol,
+      asset_class: t.asset_class,
+      mode: t.mode,
+      track: t.track,
+      execution: t.execution,
+      state: t.state,
+      entry_price: entry,
+      entry_limit: t.entry_limit,
+      stop_price: p.stop_price,
+      target_price: p.target_price,
+      last_price: last,
+      current_r: entry !== null && last !== null && p.stop_distance > 0 ? round((last - entry) / p.stop_distance, 2) : null,
+      distance_to_stop_pct: last !== null ? round((last - p.stop_price) / last) : null,
+      distance_to_target_pct: last !== null && p.exit_plan !== "TRAIL_2ATR" ? round((p.target_price - last) / last) : null,
+      exit_plan: p.exit_plan,
+      open_risk_r: openRiskR(p),
+      agent_risk_multiplier: t.agent_risk_multiplier,
+      opened_at: t.opened_at,
+      trigger_timestamp: t.trigger_timestamp,
+    };
+  });
+  const unrealized = accountOpen.reduce((s, t) => {
+    const p = t.sim_state;
+    if (p.entry_price === null) return s;
+    return s + p.cash_flow + (prices.get(t.symbol) ?? p.entry_price) * p.size;
+  }, 0);
+  const realizedAll = accountClosed.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
+  const equity = round(settings.starting_equity + realizedAll + unrealized, 2);
+  const peak = Math.max(settings.peak_equity, equity);
+  const dd = drawdownFromPeak(equity, peak);
+  const halts = haltStatus({ realized_r_today: d.r, realized_r_week: w.r });
+  const { data: snaps } = await getSupabase().from("trading_equity_snapshots").select("day, equity, open_risk_r").order("day", { ascending: true }).limit(400);
+
+  return {
+    settings,
+    params: active.params,
+    params_locked_until: active.locked_until,
+    account: {
+      equity,
+      starting_equity: settings.starting_equity,
+      peak_equity: peak,
+      drawdown_pct: round(dd),
+      open_risk_r: positions.reduce((s, p) => s + p.open_risk_r, 0),
+      pnl_day: d.pnl,
+      pnl_week: w.pnl,
+      pnl_month: m.pnl,
+      r_day: d.r,
+      r_week: w.r,
+      r_month: m.r,
+      halted_daily: halts.daily,
+      halted_weekly: halts.weekly,
+      kill_switch_distance_pct: round(Math.max(0, RISK_ENVELOPE.MASTER_KILL_SWITCH_DD - dd)),
+    },
+    positions,
+    shadow_open: open.length - accountOpen.length,
+    triggers,
+    events,
+    gate: await computePhaseGate(settings, closed),
+    equity_history: ((snaps ?? []) as { day: string; equity: number; open_risk_r: number }[]).map((s) => ({ day: s.day, equity: Number(s.equity), open_risk_r: Number(s.open_risk_r) })),
+    envelope: RISK_ENVELOPE,
+    execution_rules: EXECUTION_RULES,
+  };
+}
+
+// ── Journal ────────────────────────────────────────────────────────────────
+
+export type TradeFilters = {
+  execution?: string;
+  track?: string;
+  state?: "open" | "closed" | "all";
+  symbol?: string;
+  outcome?: "win" | "loss" | "breakeven";
+  limit?: number;
+};
+
+export type TradeListItem = Omit<TradeRow, "sim_state" | "chart_bars" | "events" | "trigger_snapshot">;
+
+export async function listTrades(f: TradeFilters): Promise<TradeListItem[]> {
+  let q = getSupabase()
+    .from("trading_trades")
+    .select(
+      "id, trigger_id, symbol, asset_class, bucket_id, mode, track, execution, state, trigger_timestamp, agent_decision, agent_conviction, agent_risk_multiplier, agent_reasoning, agent_model_version, prompt_version, param_version, entry_limit, entry_price, stop_price, initial_stop_price, target_price, position_size, remaining_size, risk_amount, entry_slippage_bps, exit_plan, trail_stop, reached_1r, partial_exit_price, exit_price, exit_reason, gapped_through_stop, realized_r, realized_pnl, fees_paid, last_bar_time, mfe_r, mae_r, notes, tags, self_rating, opened_at, closed_at, created_at, updated_at"
+    )
+    .order("created_at", { ascending: false })
+    .limit(Math.min(f.limit ?? 200, 1000));
+  if (f.execution) q = q.eq("execution", f.execution);
+  if (f.track) q = q.eq("track", f.track);
+  if (f.symbol) q = q.eq("symbol", f.symbol.toUpperCase());
+  if (f.state === "open") q = q.in("state", ["PENDING", "OPEN", "RISK_FREE"]);
+  if (f.state === "closed") q = q.eq("state", "CLOSED");
+  if (f.outcome === "win") q = q.gt("realized_r", 0.6);
+  if (f.outcome === "loss") q = q.lt("realized_r", 0);
+  if (f.outcome === "breakeven") q = q.gte("realized_r", 0).lte("realized_r", 0.6);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => normalizeTrade(r as Record<string, unknown>));
+}
+
+export async function getTradeDetail(id: string) {
+  const sb = getSupabase();
+  const { data, error } = await sb.from("trading_trades").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  const trade = normalizeTrade(data as Record<string, unknown>);
+  let trigger: TriggerRow | null = null;
+  let sibling: TradeListItem | null = null;
+  if (trade.trigger_id) {
+    const { data: trig } = await sb.from("trading_triggers").select("*").eq("id", trade.trigger_id).maybeSingle();
+    trigger = (trig as TriggerRow) ?? null;
+    const { data: sib } = await sb.from("trading_trades").select("*").eq("trigger_id", trade.trigger_id).neq("id", id).maybeSingle();
+    sibling = sib ? normalizeTrade(sib as Record<string, unknown>) : null;
+  }
+  return { trade, trigger, sibling };
+}
+
+export async function patchTradeJournal(id: string, patch: { notes?: string | null; tags?: string[]; self_rating?: number | null }) {
+  const body: Record<string, unknown> = {};
+  if (patch.notes !== undefined) body.notes = patch.notes?.slice(0, 5000) ?? null;
+  if (patch.tags !== undefined) body.tags = patch.tags.map((t) => t.trim()).filter(Boolean).slice(0, 12);
+  if (patch.self_rating !== undefined) body.self_rating = patch.self_rating === null ? null : Math.max(1, Math.min(5, Math.round(patch.self_rating)));
+  await updateTrade(id, body);
+}
+
+// ── Analytics ──────────────────────────────────────────────────────────────
+
+export type AnalyticsPayload = {
+  scope: { execution: string; track: string };
+  stats: PerformanceStats;
+  r_curve: { t: number; cum_r: number }[];
+  r_distribution: { bin: number; count: number }[];
+  by_symbol: GroupStat[];
+  by_bucket: GroupStat[];
+  by_asset_class: GroupStat[];
+  by_exit_reason: GroupStat[];
+  by_weekday: GroupStat[];
+  by_hour_utc: GroupStat[];
+  by_mode: GroupStat[];
+  by_conviction: GroupStat[];
+  avg_mfe_r: number;
+  avg_mae_r: number;
+  avg_hold_hours: number;
+  total_fees: number;
+  avg_slippage_bps: number | null;
+  gaps_through_stop: number;
+  agent_value: AgentValueReport;
+  buckets: ReturnType<typeof bucketStats>;
+};
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export async function getAnalytics(scope: { execution?: string; track?: string; sinceIso?: string }): Promise<AnalyticsPayload> {
+  const all = await getClosedTrades({ sinceIso: scope.sinceIso });
+  const execution = scope.execution ?? "ALL";
+  const track = scope.track ?? "AGENT";
+  const list = all.filter((t) => (execution === "ALL" || t.execution === execution) && (track === "ALL" || t.track === track));
+  const rt = list.map((t) => ({ ...t, r: t.realized_r ?? 0, closed_at: Date.parse(t.closed_at ?? t.created_at), reached_1r: t.reached_1r, exit_reason: t.exit_reason }));
+  const avg = (xs: number[]) => (xs.length ? round(xs.reduce((s, x) => s + x, 0) / xs.length, 3) : 0);
+  const slips = list.map((t) => t.entry_slippage_bps).filter((x): x is number => x !== null);
+  return {
+    scope: { execution, track },
+    stats: computeStats(rt),
+    r_curve: equityCurveR(rt),
+    r_distribution: rDistribution(rt),
+    by_symbol: groupStats(rt, (t) => t.symbol),
+    by_bucket: groupStats(rt, (t) => t.bucket_id),
+    by_asset_class: groupStats(rt, (t) => t.asset_class),
+    by_exit_reason: groupStats(rt, (t) => t.exit_reason ?? "?"),
+    by_weekday: groupStats(rt, (t) => WEEKDAYS[new Date(t.trigger_timestamp).getUTCDay()]),
+    by_hour_utc: groupStats(rt, (t) => String(new Date(t.trigger_timestamp).getUTCHours()).padStart(2, "0")),
+    by_mode: groupStats(rt, (t) => t.mode),
+    by_conviction: groupStats(rt, (t) => (t.agent_conviction ? `conviction ${t.agent_conviction}` : "no agent")),
+    avg_mfe_r: avg(list.map((t) => t.mfe_r)),
+    avg_mae_r: avg(list.map((t) => t.mae_r)),
+    avg_hold_hours: avg(list.filter((t) => t.opened_at && t.closed_at).map((t) => (Date.parse(t.closed_at!) - Date.parse(t.opened_at!)) / 3_600_000)),
+    total_fees: round(list.reduce((s, t) => s + t.fees_paid, 0), 2),
+    avg_slippage_bps: slips.length ? avg(slips) : null,
+    gaps_through_stop: list.filter((t) => t.gapped_through_stop).length,
+    agent_value: agentValueReport(all.map(toJournalTrade)),
+    buckets: bucketStats(all.map(toJournalTrade)),
+  };
+}
+
+// ── Backtests ──────────────────────────────────────────────────────────────
+
+export type BacktestPreset = "CRYPTO" | "STOCKS" | "ALL";
+
+export function presetSymbols(preset: BacktestPreset, explicit?: string[]): UniverseSymbol[] {
+  if (explicit?.length) {
+    const set = new Set(explicit.map((s) => s.toUpperCase()));
+    return SEED_UNIVERSE.filter((s) => set.has(s.symbol));
+  }
+  if (preset === "CRYPTO") return SEED_UNIVERSE.filter((s) => s.asset_class !== "STOCK");
+  if (preset === "STOCKS") return SEED_UNIVERSE.filter((s) => s.asset_class === "STOCK");
+  return SEED_UNIVERSE;
+}
+
+const TRADES_KEPT_PER_VARIANT = 400;
+
+export async function runAndStoreBacktest(input: { preset: BacktestPreset; symbols?: string[]; mode: TradingMode; years: number; variants?: BacktestVariant[] }) {
+  const started = Date.now();
+  const { params } = await getActiveParams();
+  const calendar = await getCalendar("2000-01-01");
+  const symbols = presetSymbols(input.preset, input.symbols);
+  const { history, results } = await runBacktestSuite({ symbols, mode: input.mode, years: input.years, params, starting_equity: PAPER_STARTING_EQUITY, calendar, variants: input.variants });
+  const primary = results.find((r) => r.variant === "PARTIAL_TARGET") ?? results[0];
+  const wf = primary ? walkForwardStability(history, params, primary.variant, PAPER_STARTING_EQUITY, calendar) : null;
+  const gate: BacktestGateInput | null = primary
+    ? {
+        stats: primary.stats,
+        return_pct: primary.return_pct,
+        benchmark_return_pct: primary.benchmark_return_pct,
+        walk_forward_passes: wf?.passes ?? false,
+        oos_expectancy_r: wf?.oos_expectancy_r ?? 0,
+        mc_dd_pct_p95: primary.monte_carlo.max_dd_pct_p95,
+        mc_prob_kill: primary.monte_carlo.prob_kill_switch,
+        created_at: Date.now(),
+      }
+    : null;
+  const stored = results.map((r): BacktestResult => ({ ...r, trades: r.trades.slice(-TRADES_KEPT_PER_VARIANT) }));
+  const { data, error } = await getSupabase()
+    .from("trading_backtests")
+    .insert({
+      mode: input.mode,
+      years: input.years,
+      symbols: history.symbols.map((s) => s.symbol),
+      param_version: params.version,
+      params,
+      range_start: iso(history.start),
+      range_end: iso(history.end),
+      results: stored,
+      walk_forward: wf,
+      gate: gate ? { ...gate, checks: backtestGate(gate) } : null,
+      skipped: history.skipped,
+      duration_ms: Date.now() - started,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  await logEvent({
+    kind: "BACKTEST",
+    message: `בקטסט ${input.preset} ${input.years}y: ${primary?.stats.trades ?? 0} עסקאות, תוחלת ${primary?.stats.expectancy_r ?? 0}R, שער ${gate && backtestGate(gate).every((c) => c.ok) ? "עבר" : "לא עבר"}`,
+  });
+  return { id: (data as { id: string }).id };
+}
+
+export async function listBacktests() {
+  const { data, error } = await getSupabase()
+    .from("trading_backtests")
+    .select("id, mode, years, symbols, param_version, range_start, range_end, gate, duration_ms, created_at")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function getBacktest(id: string) {
+  const { data, error } = await getSupabase().from("trading_backtests").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// ── Calibration (quarterly, human-approved) ────────────────────────────────
+
+export async function proposeCalibration(input: { preset: BacktestPreset; years: number }) {
+  const { params } = await getActiveParams();
+  const calendar = await getCalendar("2000-01-01");
+  const history = await loadHistory({ symbols: presetSymbols(input.preset), mode: "SWING", years: input.years });
+  const cal = runCalibration(history, params, PAPER_STARTING_EQUITY, calendar);
+  const { data, error } = await getSupabase()
+    .from("trading_param_sets")
+    .insert({
+      version: `${cal.proposed.version}@${new Date().toISOString().slice(0, 10)}`,
+      params: cal.proposed,
+      status: "PROPOSED",
+      evidence: { ...cal, preset: input.preset, years: input.years, symbols: history.symbols.map((s) => s.symbol), current_version: params.version },
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  await logEvent({ kind: "CALIBRATION_PROPOSED", severity: "warn", message: `הצעת כיול: ${cal.proposed.version} · OOS ${cal.oos_total_r}R מול נוכחי ${cal.current_oos_total_r}R`, push: true });
+  return { id: (data as { id: string }).id, recommend: cal.recommend };
+}
+
+export async function listParamSets() {
+  const { data } = await getSupabase().from("trading_param_sets").select("*").order("created_at", { ascending: false }).limit(20);
+  return data ?? [];
+}
+
+export async function decideCalibration(id: string, approve: boolean) {
+  const sb = getSupabase();
+  const { data: row } = await sb.from("trading_param_sets").select("*").eq("id", id).maybeSingle();
+  if (!row || (row as { status: string }).status !== "PROPOSED") throw new Error("not_proposed");
+  if (!approve) {
+    await sb.from("trading_param_sets").update({ status: "REJECTED", decided_at: iso(Date.now()) }).eq("id", id);
+    await logEvent({ kind: "CALIBRATION_REJECTED", message: `כיול נדחה: ${(row as { version: string }).version}` });
+    return;
+  }
+  const active = await getActiveParams();
+  if (active.locked_until && Date.parse(active.locked_until) > Date.now()) throw new Error("params_locked_until_" + active.locked_until.slice(0, 10));
+  if (active.id) await sb.from("trading_param_sets").update({ status: "RETIRED" }).eq("id", active.id);
+  const lockedUntil = iso(Date.now() + LEARNING_RULES.CALIBRATION_LOCK_DAYS * 86_400_000);
+  await sb.from("trading_param_sets").update({ status: "ACTIVE", decided_at: iso(Date.now()), locked_until: lockedUntil }).eq("id", id);
+  await logEvent({ kind: "CALIBRATION_APPROVED", severity: "warn", message: `פרמטרים חדשים פעילים וננעלו עד ${lockedUntil.slice(0, 10)}: ${(row as { version: string }).version}`, push: true });
+}
+
+// ── Commands ───────────────────────────────────────────────────────────────
+
+export type ControlCommand =
+  | { action: "pause_entries" }
+  | { action: "resume_entries" }
+  | { action: "set_intraday"; enabled: boolean }
+  | { action: "set_agent"; enabled: boolean }
+  | { action: "set_risk_scale"; value: number }
+  | { action: "close_position"; trade_id: string }
+  | { action: "close_all" }
+  | { action: "set_symbol_enabled"; symbol: string; enabled: boolean }
+  | { action: "add_calendar_event"; kind: "CPI" | "FOMC" | "EARNINGS" | "TOKEN_UNLOCK" | "OTHER_MACRO"; date: string; symbol?: string | null; note?: string | null }
+  | { action: "rearm_kill_switch"; phrase: string }
+  | { action: "set_phase"; phase: TradingPhase }
+  | { action: "mark_review"; key: "reasoning_reviewed" | "resilience_reviewed" };
+
+/** Commands the chat may PROPOSE (always executed only after explicit confirmation in the app). */
+export const CHAT_ALLOWED_ACTIONS = ["pause_entries", "resume_entries", "set_risk_scale", "close_position", "close_all", "set_symbol_enabled", "add_calendar_event"] as const;
+
+async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH") {
+  const universe = await getUniverse();
+  const prices = await lastPrices(trades, universe);
+  const now = Date.now();
+  let closed = 0;
+  for (const t of trades) {
+    const p = { ...t.sim_state };
+    const price = prices.get(t.symbol);
+    if (price === undefined && p.state !== "PENDING") throw new Error(`no_price_${t.symbol}`);
+    const ev = forceClose(p, price ?? p.entry_limit, reason, now);
+    await updateTrade(t.id, {
+      ...simColumns(p),
+      events: [...(t.events ?? []), ...ev],
+      ...(p.state === "CLOSED" ? { realized_r: round(realizedR(p), 3), realized_pnl: round(p.cash_flow, 2) } : {}),
+    });
+    closed += 1;
+  }
+  return closed;
+}
+
+export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"): Promise<{ ok: true; message: string }> {
+  const settings = await getSettings();
+  const now = Date.now();
+  const audit = (message: string, severity: "info" | "warn" | "critical" = "info") =>
+    logEvent({ kind: `CONTROL:${cmd.action}`, message: `${message} (${source})`, severity, data: cmd });
+
+  switch (cmd.action) {
+    case "pause_entries":
+      await updateSettings({ entries_paused: true });
+      await audit("כניסות חדשות הושהו", "warn");
+      return { ok: true, message: "כניסות חדשות הושהו" };
+    case "resume_entries":
+      await updateSettings({ entries_paused: false });
+      await audit("כניסות חדשות חודשו");
+      return { ok: true, message: "כניסות חודשו" };
+    case "set_intraday":
+      await updateSettings({ intraday_enabled: cmd.enabled });
+      await audit(`Intraday ${cmd.enabled ? "הופעל" : "כובה"}`);
+      return { ok: true, message: `Intraday ${cmd.enabled ? "on" : "off"}` };
+    case "set_agent":
+      await updateSettings({ agent_enabled: cmd.enabled });
+      await audit(`שכבת הסוכן ${cmd.enabled ? "הופעלה" : "כובתה"}`, "warn");
+      return { ok: true, message: `agent ${cmd.enabled ? "on" : "off"}` };
+    case "set_risk_scale": {
+      const res = applyRiskScaleRequest({ current: settings.risk_scale, requested: cmd.value, now });
+      if (res.pending) {
+        await updateSettings({ pending_risk_scale: res.pending.value, pending_risk_scale_at: iso(res.pending.effective_at) });
+        await audit(`בקשת הגדלת סיכון ל-×${res.pending.value} — תיכנס לתוקף ב-${iso(res.pending.effective_at).slice(0, 16)}`, "warn");
+        return { ok: true, message: `הגדלה נדחתה ל-24 שעות (חיכוך מכוון)` };
+      }
+      await updateSettings({ risk_scale: res.scale, pending_risk_scale: null, pending_risk_scale_at: null });
+      await audit(`סיכון הוקטן ל-×${res.scale}`);
+      return { ok: true, message: `סיכון ×${res.scale}` };
+    }
+    case "close_position": {
+      const open = await getOpenTrades();
+      const t = open.find((x) => x.id === cmd.trade_id);
+      if (!t) throw new Error("trade_not_open");
+      await closeTrades([t], "MANUAL");
+      await audit(`${t.symbol} נסגרה ידנית`, "warn");
+      return { ok: true, message: `${t.symbol} closed` };
+    }
+    case "close_all": {
+      const open = (await getOpenTrades()).filter((t) => isAccountTrade(t, settings.phase));
+      const n = await closeTrades(open, "MANUAL");
+      await audit(`${n} פוזיציות נסגרו ידנית`, "warn");
+      return { ok: true, message: `${n} closed` };
+    }
+    case "set_symbol_enabled":
+      await getSupabase().from("trading_universe").update({ manual_enabled: cmd.enabled, updated_at: iso(now) }).eq("symbol", cmd.symbol.toUpperCase());
+      await audit(`${cmd.symbol} ${cmd.enabled ? "הופעל" : "כובה"}`);
+      return { ok: true, message: `${cmd.symbol} ${cmd.enabled ? "on" : "off"}` };
+    case "add_calendar_event": {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cmd.date)) throw new Error("invalid_date");
+      await getSupabase().from("trading_calendar").insert({ kind: cmd.kind, date: cmd.date, symbol: cmd.symbol?.toUpperCase() ?? null, note: cmd.note ?? null, source: source });
+      await audit(`אירוע ${cmd.kind} ${cmd.symbol ?? ""} ${cmd.date} נוסף`);
+      return { ok: true, message: "calendar event added" };
+    }
+    case "rearm_kill_switch": {
+      if (source !== "app") throw new Error("app_only");
+      if (cmd.phrase !== "ARM") throw new Error("confirmation_phrase_required");
+      const dash = await getDashboard();
+      // Re-arming resets the peak to current equity, otherwise it would trip again instantly.
+      await updateSettings({ kill_switch_active: false, kill_switch_reason: null, kill_switch_at: null, peak_equity: dash.account.equity, entries_paused: true });
+      await audit("מפסק ראשי אותחל ידנית — כניסות נשארות מושהות עד חידוש ידני", "critical");
+      return { ok: true, message: "kill switch re-armed; entries remain paused" };
+    }
+    case "set_phase": {
+      if (source !== "app") throw new Error("app_only");
+      const from = PHASE_ORDER.indexOf(settings.phase);
+      const to = PHASE_ORDER.indexOf(cmd.phase);
+      if (to < 0) throw new Error("invalid_phase");
+      if (to > from) {
+        if (to !== from + 1) throw new Error("cannot_skip_phase");
+        const gate = await computePhaseGate(settings);
+        if (!gate.passes) throw new Error("gate_not_passed");
+      }
+      await updateSettings({ phase: cmd.phase, phase_started_at: iso(now), peak_equity: settings.starting_equity });
+      await audit(`שלב שונה: ${settings.phase} → ${cmd.phase}`, "critical");
+      return { ok: true, message: `phase ${cmd.phase}` };
+    }
+    case "mark_review":
+      await logEvent({ kind: `GATE_REVIEW:${cmd.key}`, message: `אישור ידני: ${cmd.key}` });
+      return { ok: true, message: "review recorded" };
+  }
+}
+
+export function parseCommand(body: Record<string, unknown>): ControlCommand | null {
+  const a = body.action;
+  const s = (v: unknown) => (typeof v === "string" ? v : "");
+  switch (a) {
+    case "pause_entries":
+    case "resume_entries":
+    case "close_all":
+      return { action: a };
+    case "set_intraday":
+    case "set_agent":
+      return typeof body.enabled === "boolean" ? { action: a, enabled: body.enabled } : null;
+    case "set_risk_scale":
+      return typeof body.value === "number" && Number.isFinite(body.value) ? { action: a, value: body.value } : null;
+    case "close_position":
+      return s(body.trade_id) ? { action: a, trade_id: s(body.trade_id) } : null;
+    case "set_symbol_enabled":
+      return s(body.symbol) && typeof body.enabled === "boolean" ? { action: a, symbol: s(body.symbol), enabled: body.enabled } : null;
+    case "add_calendar_event": {
+      const kind = s(body.kind) as "CPI";
+      if (!["CPI", "FOMC", "EARNINGS", "TOKEN_UNLOCK", "OTHER_MACRO"].includes(kind) || !s(body.date)) return null;
+      return { action: a, kind, date: s(body.date), symbol: s(body.symbol) || null, note: s(body.note) || null };
+    }
+    case "rearm_kill_switch":
+      return { action: a, phrase: s(body.phrase) };
+    case "set_phase":
+      return PHASE_ORDER.includes(body.phase as TradingPhase) ? { action: a, phase: body.phase as TradingPhase } : null;
+    case "mark_review":
+      return body.key === "reasoning_reviewed" || body.key === "resilience_reviewed" ? { action: a, key: body.key } : null;
+    default:
+      return null;
+  }
+}
+
+export async function getUniverseView() {
+  const [universe, calendar] = await Promise.all([getUniverse(), getCalendar(new Date(Date.now() - 86_400_000).toISOString().slice(0, 10))]);
+  return { universe, calendar };
+}

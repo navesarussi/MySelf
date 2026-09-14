@@ -10,7 +10,8 @@ export type BottomTabId =
   | "relationships"
   | "goals"
   | "library"
-  | "finance";
+  | "finance"
+  | "trading";
 
 export const ALL_BOTTOM_TAB_IDS: BottomTabId[] = [
   "index",
@@ -21,6 +22,7 @@ export const ALL_BOTTOM_TAB_IDS: BottomTabId[] = [
   "goals",
   "library",
   "finance",
+  "trading",
 ];
 
 export const DEFAULT_BOTTOM_TABS: BottomTabId[] = [
@@ -29,10 +31,14 @@ export const DEFAULT_BOTTOM_TABS: BottomTabId[] = [
   "habits",
   "relationships",
   "finance",
+  "trading",
 ];
 
 /** Bumped when default set changes so existing installs pick up new tabs. */
-const STORAGE_KEY = "myself.bottomTabs.v2";
+const STORAGE_KEY = "myself.bottomTabs.v3";
+/** Previous key: migrated (keeping the user's choices) and the new default tab appended. */
+const LEGACY_STORAGE_KEY = "myself.bottomTabs.v2";
+const TABS_ADDED_IN_V3: BottomTabId[] = ["trading"];
 
 type NavPrefsValue = {
   ready: boolean;
@@ -66,10 +72,21 @@ export function NavPrefsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => {
-        if (!raw) return;
+      .then(async (raw) => {
+        if (raw) {
+          try {
+            setBottomTabs(normalize(JSON.parse(raw)));
+          } catch {
+            /* ignore corrupt prefs */
+          }
+          return;
+        }
+        const legacy = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
+        if (!legacy) return;
         try {
-          setBottomTabs(normalize(JSON.parse(raw)));
+          const migrated = normalize([...normalize(JSON.parse(legacy)), ...TABS_ADDED_IN_V3]);
+          setBottomTabs(migrated);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         } catch {
           /* ignore corrupt prefs */
         }
@@ -128,6 +145,7 @@ export const TAB_LABEL_KEY: Record<BottomTabId, string> = {
   goals: "nav.goals",
   library: "nav.library",
   finance: "nav.finance",
+  trading: "nav.trading",
 };
 
 export const TAB_HREF: Record<BottomTabId, `/${string}`> = {
@@ -139,6 +157,7 @@ export const TAB_HREF: Record<BottomTabId, `/${string}`> = {
   goals: "/goals",
   library: "/library",
   finance: "/finance",
+  trading: "/trading",
 };
 
 export const TAB_ICON: Record<
@@ -151,6 +170,7 @@ export const TAB_ICON: Record<
   | "flag-outline"
   | "book-outline"
   | "wallet-outline"
+  | "trending-up-outline"
 > = {
   index: "home-outline",
   tasks: "checkbox-outline",
@@ -160,4 +180,5 @@ export const TAB_ICON: Record<
   goals: "flag-outline",
   library: "book-outline",
   finance: "wallet-outline",
+  trading: "trending-up-outline",
 };

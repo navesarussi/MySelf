@@ -17,6 +17,41 @@ import type { PlanLineRow } from "@/lib/finance/plan";
 import type { FinanceSourcesStatusResponse } from "@/lib/finance/sources-status";
 import type { RecurringSuggestion } from "@/lib/finance/recurring";
 
+export type TradingTradeDetail = {
+  trade: import("@/lib/trading/store").TradeRow;
+  trigger: import("@/lib/trading/service").TriggerRow | null;
+  sibling: import("@/lib/trading/service").TradeListItem | null;
+};
+
+export type TradingBacktestSummary = {
+  id: string;
+  mode: string;
+  years: number;
+  symbols: string[];
+  param_version: string;
+  range_start: string | null;
+  range_end: string | null;
+  gate: (import("@/lib/trading/gates").BacktestGateInput & { checks: import("@/lib/trading/gates").GateCheck[] }) | null;
+  duration_ms: number | null;
+  created_at: string;
+};
+
+export type TradingBacktestDetail = TradingBacktestSummary & {
+  results: import("@/lib/trading/backtest").BacktestResult[];
+  walk_forward: { folds: { fold: number; start: number; end: number; stats: import("@/lib/trading/metrics").PerformanceStats }[]; oos_expectancy_r: number; passes: boolean } | null;
+  skipped: { symbol: string; reason: string }[] | null;
+};
+
+export type TradingParamSet = {
+  id: string;
+  version: string;
+  params: Record<string, number | string>;
+  status: "PROPOSED" | "ACTIVE" | "REJECTED" | "RETIRED";
+  evidence: { oos_total_r: number; current_oos_total_r: number; recommend: boolean; steps: { test_fold: number; chosen_version: string; out_of_sample: import("@/lib/trading/metrics").PerformanceStats }[] } | null;
+  locked_until: string | null;
+  created_at: string;
+};
+
 export type HomePayload = {
   habits: Habit[];
   activeGoals: Goal[];
@@ -459,6 +494,41 @@ export const api = {
       "/finance/wealth",
       { method: "POST", body }
     ),
+  tradingDashboard: (c: ApiConfig) => apiFetch<import("@/lib/trading/service").DashboardPayload>(c, "/trading/dashboard"),
+  tradingTrades: (c: ApiConfig, filters: Record<string, string | undefined> = {}) => {
+    const q = new URLSearchParams(Object.entries(filters).filter((e): e is [string, string] => Boolean(e[1]))).toString();
+    return apiFetch<import("@/lib/trading/service").TradeListItem[]>(c, `/trading/trades${q ? `?${q}` : ""}`);
+  },
+  tradingTrade: (c: ApiConfig, id: string) =>
+    apiFetch<TradingTradeDetail>(c, `/trading/trades/${encodeURIComponent(id)}`),
+  patchTradingTrade: (c: ApiConfig, id: string, body: { notes?: string | null; tags?: string[]; self_rating?: number | null }) =>
+    apiFetch<TradingTradeDetail>(c, `/trading/trades/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+  tradingTriggers: (c: ApiConfig, symbol?: string) =>
+    apiFetch<import("@/lib/trading/service").TriggerRow[]>(c, `/trading/triggers?limit=100${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}`),
+  tradingAnalytics: (c: ApiConfig, scope: { execution: string; track: string; days: number }) =>
+    apiFetch<import("@/lib/trading/service").AnalyticsPayload>(
+      c,
+      `/trading/analytics?execution=${scope.execution}&track=${scope.track}&days=${scope.days}`
+    ),
+  tradingBacktests: (c: ApiConfig) => apiFetch<TradingBacktestSummary[]>(c, "/trading/backtests"),
+  tradingBacktest: (c: ApiConfig, id: string) => apiFetch<TradingBacktestDetail>(c, `/trading/backtests/${encodeURIComponent(id)}`),
+  runTradingBacktest: (c: ApiConfig, body: { preset: "CRYPTO" | "STOCKS" | "ALL"; years: number; mode?: "SWING" | "INTRADAY" }) =>
+    apiFetch<{ id: string }>(c, "/trading/backtests", { method: "POST", body }),
+  tradingControl: (c: ApiConfig, body: Record<string, unknown>) =>
+    apiFetch<{ ok: boolean; message: string }>(c, "/trading/control", { method: "POST", body }),
+  tradingUniverse: (c: ApiConfig) =>
+    apiFetch<{ universe: import("@/lib/trading/store").UniverseRow[]; calendar: Array<{ id: string; kind: string; date: string; symbol: string | null; note: string | null; source: string }> }>(
+      c,
+      "/trading/universe"
+    ),
+  tradingParamSets: (c: ApiConfig) => apiFetch<TradingParamSet[]>(c, "/trading/calibration"),
+  tradingCalibration: (c: ApiConfig, body: Record<string, unknown>) =>
+    apiFetch<{ ok?: boolean; id?: string; recommend?: boolean }>(c, "/trading/calibration", { method: "POST", body }),
+  tradingChat: (c: ApiConfig) => apiFetch<import("@/lib/trading/chat").ChatMessageRow[]>(c, "/trading/chat"),
+  sendTradingChat: (c: ApiConfig, message: string) =>
+    apiFetch<import("@/lib/trading/chat").ChatMessageRow>(c, "/trading/chat", { method: "POST", body: { message } }),
+  confirmTradingChat: (c: ApiConfig, message_id: string, confirm: boolean) =>
+    apiFetch<{ status: string; message: string }>(c, "/trading/chat/confirm", { method: "POST", body: { message_id, confirm } }),
   agentChat: (
     c: ApiConfig,
     body: { message: string; images?: Array<{ mimeType: string; data: string }> }

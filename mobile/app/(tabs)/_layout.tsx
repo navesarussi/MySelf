@@ -73,6 +73,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="goals" options={tabOptions("goals")} />
         <Tabs.Screen name="library" options={tabOptions("library")} />
         <Tabs.Screen name="finance" options={tabOptions("finance")} />
+        <Tabs.Screen name="trading" options={tabOptions("trading")} />
         <Tabs.Screen name="index" options={tabOptions("index")} />
         <Tabs.Screen
           name="settings"

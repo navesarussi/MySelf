@@ -60,6 +60,12 @@ function AppStack() {
         <Stack.Screen name="finance-history" options={{ title: "Finance" }} />
         <Stack.Screen name="finance-wealth" options={{ title: "Finance" }} />
         <Stack.Screen name="agent-chat" options={{ title: "Agent", presentation: "modal" }} />
+        <Stack.Screen name="trading-journal" options={{ title: "Trading" }} />
+        <Stack.Screen name="trading-trade" options={{ title: "Trading" }} />
+        <Stack.Screen name="trading-analytics" options={{ title: "Trading" }} />
+        <Stack.Screen name="trading-backtests" options={{ title: "Trading" }} />
+        <Stack.Screen name="trading-chat" options={{ title: "Trading" }} />
+        <Stack.Screen name="trading-control" options={{ title: "Trading" }} />
       </Stack>
     </>
   );

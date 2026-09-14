@@ -1,0 +1,261 @@
+import { DEFAULT_STRATEGY_PARAMS, LEARNING_RULES, type StrategyParams } from "./config";
+import { runBacktest, type BacktestVariant } from "./backtest";
+import type { LoadedHistory } from "./backtest-data";
+import { computeStats, mulberry32, type PerformanceStats } from "./metrics";
+import type { CalendarEvent } from "./veto";
+
+/** Learning layer (section 4): bucket stats, binary eligibility gate, agent value, quarterly calibration. */
+
+export type JournalTrade = {
+  id: string;
+  trigger_id: string | null;
+  symbol: string;
+  bucket_id: string;
+  track: "DETERMINISTIC" | "AGENT";
+  execution: "SHADOW" | "PAPER" | "LIVE";
+  realized_r: number;
+  agent_risk_multiplier: number | null;
+  agent_conviction: number | null;
+  reached_1r: boolean;
+  closed_at: number;
+};
+
+// ── 4b. Eligibility gate — binary only ────────────────────────────────────────
+
+export type Eligibility = "ACTIVE" | "DISABLED_POOR" | "REVIEW_SIM";
+
+export type EligibilityDecision = {
+  symbol: string;
+  from: Eligibility;
+  to: Eligibility;
+  reason: string;
+  stats: PerformanceStats;
+};
+
+export function evaluateEligibility(input: {
+  universe: { symbol: string; bucket_id: string | null; eligibility: Eligibility; eligibility_changed_at: number | null }[];
+  /** Closed DETERMINISTIC-track trades — the strategy itself, independent of the agent. */
+  trades: JournalTrade[];
+  now: number;
+}): EligibilityDecision[] {
+  const det = input.trades.filter((t) => t.track === "DETERMINISTIC");
+  const byBucket = new Map<string, JournalTrade[]>();
+  for (const t of det) byBucket.set(t.bucket_id, [...(byBucket.get(t.bucket_id) ?? []), t]);
+  const out: EligibilityDecision[] = [];
+  const dayMs = 86_400_000;
+
+  for (const u of input.universe) {
+    const mine = det.filter((t) => t.symbol === u.symbol);
+    const stats = computeStats(mine.map((t) => ({ r: t.realized_r, closed_at: t.closed_at, reached_1r: t.reached_1r })));
+    const bucketTrades = (u.bucket_id ? byBucket.get(u.bucket_id) ?? [] : []).filter((t) => t.symbol !== u.symbol);
+    const bucket = computeStats(bucketTrades.map((t) => ({ r: t.realized_r, closed_at: t.closed_at })));
+
+    if (u.eligibility === "ACTIVE") {
+      const poor =
+        stats.trades >= LEARNING_RULES.DISABLE_MIN_TRADES &&
+        stats.expectancy_r < LEARNING_RULES.DISABLE_MAX_EXPECTANCY_R &&
+        (bucket.trades === 0 || stats.expectancy_r < bucket.expectancy_r - LEARNING_RULES.DISABLE_BUCKET_GAP_R);
+      if (poor) {
+        out.push({
+          symbol: u.symbol,
+          from: "ACTIVE",
+          to: "DISABLED_POOR",
+          reason: `${stats.trades} trades, expectancy ${stats.expectancy_r}R vs bucket ${bucket.expectancy_r}R`,
+          stats,
+        });
+      }
+    } else if (u.eligibility === "DISABLED_POOR") {
+      if (u.eligibility_changed_at !== null && input.now - u.eligibility_changed_at >= LEARNING_RULES.REENABLE_REVIEW_DAYS * dayMs) {
+        out.push({ symbol: u.symbol, from: "DISABLED_POOR", to: "REVIEW_SIM", reason: "90-day review — simulation only", stats });
+      }
+    } else if (u.eligibility === "REVIEW_SIM" && u.eligibility_changed_at !== null) {
+      const since = mine.filter((t) => t.closed_at >= u.eligibility_changed_at!);
+      const s = computeStats(since.map((t) => ({ r: t.realized_r, closed_at: t.closed_at })));
+      if (s.trades >= LEARNING_RULES.DISABLE_MIN_TRADES) {
+        out.push({
+          symbol: u.symbol,
+          from: "REVIEW_SIM",
+          to: s.expectancy_r >= 0 ? "ACTIVE" : "DISABLED_POOR",
+          reason: `review sample ${s.trades} trades, expectancy ${s.expectancy_r}R`,
+          stats: s,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+export function bucketStats(trades: JournalTrade[]) {
+  const det = trades.filter((t) => t.track === "DETERMINISTIC");
+  const groups = new Map<string, JournalTrade[]>();
+  for (const t of det) groups.set(t.bucket_id, [...(groups.get(t.bucket_id) ?? []), t]);
+  return [...groups.entries()]
+    .map(([bucket_id, list]) => ({
+      bucket_id,
+      symbols: [...new Set(list.map((t) => t.symbol))],
+      stats: computeStats(list.map((t) => ({ r: t.realized_r, closed_at: t.closed_at, reached_1r: t.reached_1r }))),
+    }))
+    .sort((a, b) => b.stats.trades - a.stats.trades);
+}
+
+// ── 4d. Does the agent layer add money? ───────────────────────────────────────
+
+export type AgentValueReport = {
+  triggers: number;
+  deterministic_expectancy_r: number;
+  agent_expectancy_r: number;
+  diff_r: number;
+  diff_ci90: [number, number] | null;
+  agent_skip_rate: number;
+  skipped_winners: number;
+  skipped_losers: number;
+  verdict: "INSUFFICIENT_DATA" | "ADDS_VALUE" | "NEUTRAL" | "DESTROYS_VALUE";
+  by_conviction: { conviction: number; triggers: number; deterministic_expectancy_r: number }[];
+};
+
+export const AGENT_VALUE_MIN_TRIGGERS = 100;
+export const AGENT_VALUE_EPSILON_R = 0.05;
+
+/**
+ * Paired comparison on the same triggers: deterministic R vs agent R × multiplier
+ * (a SKIP contributes 0). `agentCostR` = model cost per trigger expressed in R.
+ */
+export function agentValueReport(trades: JournalTrade[], agentCostR = 0): AgentValueReport {
+  const byTrigger = new Map<string, { det?: JournalTrade; agent?: JournalTrade }>();
+  for (const t of trades) {
+    if (!t.trigger_id) continue;
+    const e = byTrigger.get(t.trigger_id) ?? {};
+    if (t.track === "DETERMINISTIC") e.det = t;
+    else e.agent = t;
+    byTrigger.set(t.trigger_id, e);
+  }
+  const pairs: { det: number; agent: number; skipped: boolean; conviction: number | null }[] = [];
+  for (const { det, agent } of byTrigger.values()) {
+    if (!det) continue;
+    const mult = det.agent_risk_multiplier ?? 0;
+    const skipped = mult === 0;
+    // An agent-track trade exists only when the agent entered; its R is scaled by its multiplier.
+    const agentR = skipped ? 0 : (agent?.realized_r ?? det.realized_r) * mult;
+    pairs.push({ det: det.realized_r, agent: agentR - agentCostR, skipped, conviction: det.agent_conviction });
+  }
+  const n = pairs.length;
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
+  const detE = mean(pairs.map((p) => p.det));
+  const agE = mean(pairs.map((p) => p.agent));
+  const diffs = pairs.map((p) => p.agent - p.det);
+  let ci: [number, number] | null = null;
+  if (n >= 20) {
+    const rand = mulberry32(1234);
+    const boots: number[] = [];
+    for (let b = 0; b < 1000; b++) {
+      let s = 0;
+      for (let i = 0; i < n; i++) s += diffs[Math.floor(rand() * n)];
+      boots.push(s / n);
+    }
+    boots.sort((a, b) => a - b);
+    ci = [round(boots[50]), round(boots[949])];
+  }
+  const diff = agE - detE;
+  const verdict: AgentValueReport["verdict"] =
+    n < AGENT_VALUE_MIN_TRIGGERS ? "INSUFFICIENT_DATA" : diff > AGENT_VALUE_EPSILON_R ? "ADDS_VALUE" : diff < -AGENT_VALUE_EPSILON_R ? "DESTROYS_VALUE" : "NEUTRAL";
+  const convictions = [1, 2, 3, 4, 5].map((c) => {
+    const list = pairs.filter((p) => p.conviction === c);
+    return { conviction: c, triggers: list.length, deterministic_expectancy_r: round(mean(list.map((p) => p.det))) };
+  });
+  return {
+    triggers: n,
+    deterministic_expectancy_r: round(detE),
+    agent_expectancy_r: round(agE),
+    diff_r: round(diff),
+    diff_ci90: ci,
+    agent_skip_rate: n ? round(pairs.filter((p) => p.skipped).length / n) : 0,
+    skipped_winners: pairs.filter((p) => p.skipped && p.det > 0).length,
+    skipped_losers: pairs.filter((p) => p.skipped && p.det <= 0).length,
+    verdict,
+    by_conviction: convictions,
+  };
+}
+
+const round = (x: number, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
+
+// ── Walk-forward (used by the backtest gate and by quarterly calibration) ────
+
+export type FoldResult = { fold: number; start: number; end: number; stats: PerformanceStats };
+
+export function foldRanges(start: number, end: number, folds: number) {
+  const span = (end - start) / folds;
+  return Array.from({ length: folds }, (_, i) => ({ start: Math.round(start + i * span), end: Math.round(start + (i + 1) * span) }));
+}
+
+export function walkForwardStability(history: LoadedHistory, params: StrategyParams, variant: BacktestVariant, startingEquity: number, calendar: CalendarEvent[], folds = 4) {
+  const results: FoldResult[] = foldRanges(history.start, history.end, folds).map((r, i) => ({
+    fold: i + 1,
+    ...r,
+    stats: runBacktest({ ...history, params, variant, starting_equity: startingEquity, start: r.start, end: r.end, calendar }).stats,
+  }));
+  const oos = results.slice(1);
+  const oosMean = oos.reduce((s, f) => s + f.stats.expectancy_r * f.stats.trades, 0) / Math.max(1, oos.reduce((s, f) => s + f.stats.trades, 0));
+  const collapsed = results.filter((f) => f.stats.trades >= 5 && f.stats.expectancy_r < -0.25).length;
+  return { folds: results, oos_expectancy_r: round(oosMean), collapsed_folds: collapsed, passes: oosMean > 0 && collapsed === 0 };
+}
+
+export const CALIBRATION_GRID = {
+  rsi_low: [35, 40, 45],
+  adx_min: [20, 25],
+  atr_stop_mult: [1.5, 2.0],
+};
+
+export function calibrationCandidates(base: StrategyParams = DEFAULT_STRATEGY_PARAMS): StrategyParams[] {
+  const out: StrategyParams[] = [];
+  for (const rsi_low of CALIBRATION_GRID.rsi_low)
+    for (const adx_min of CALIBRATION_GRID.adx_min)
+      for (const atr_stop_mult of CALIBRATION_GRID.atr_stop_mult)
+        out.push({ ...base, rsi_low, adx_min, atr_stop_mult, version: `rsi${rsi_low}-adx${adx_min}-atr${atr_stop_mult}` });
+  return out;
+}
+
+const MIN_TRAIN_TRADES = 30;
+
+/**
+ * Anchored walk-forward: for each fold k≥1, choose the best candidate on folds [0..k-1],
+ * then measure it out of sample on fold k. The proposal is the candidate chosen on all data,
+ * but the evidence shown is the OOS record of the selection procedure itself.
+ */
+export function runCalibration(history: LoadedHistory, current: StrategyParams, startingEquity: number, calendar: CalendarEvent[], folds = 4) {
+  const variant: BacktestVariant = "PARTIAL_TARGET";
+  const candidates = calibrationCandidates(current);
+  const ranges = foldRanges(history.start, history.end, folds);
+  const run = (p: StrategyParams, start: number, end: number) =>
+    runBacktest({ ...history, params: p, variant, starting_equity: startingEquity, start, end, calendar }).stats;
+  const pickBest = (start: number, end: number) => {
+    let best = { params: current, stats: run(current, start, end) };
+    for (const c of candidates) {
+      const s = run(c, start, end);
+      if (s.trades >= MIN_TRAIN_TRADES && s.expectancy_r > best.stats.expectancy_r) best = { params: c, stats: s };
+    }
+    return best;
+  };
+  const steps = ranges.slice(1).map((test, i) => {
+    const train = { start: ranges[0].start, end: ranges[i].end };
+    const chosen = pickBest(train.start, train.end);
+    return {
+      test_fold: i + 2,
+      chosen_version: chosen.params.version,
+      in_sample: chosen.stats,
+      out_of_sample: run(chosen.params, test.start, test.end),
+      current_out_of_sample: run(current, test.start, test.end),
+    };
+  });
+  const final = pickBest(history.start, history.end);
+  const sumR = (xs: PerformanceStats[]) => round(xs.reduce((s, x) => s + x.total_r, 0));
+  const oosR = sumR(steps.map((s) => s.out_of_sample));
+  const currentOosR = sumR(steps.map((s) => s.current_out_of_sample));
+  return {
+    proposed: final.params,
+    proposed_in_sample: final.stats,
+    steps,
+    oos_total_r: oosR,
+    current_oos_total_r: currentOosR,
+    recommend: final.params.version !== current.version && oosR > currentOosR && oosR > 0,
+  };
+}
