@@ -1,51 +1,57 @@
 # Trading — autonomous trading system
 
 Tab **מסחר** in the Expo app. Backend in `lib/trading/**`, API in `app/api/v1/trading/**`, schema in
-`supabase/migrations/0027_trading.sql`.
+`supabase/migrations/0027_trading.sql` + `0028_trading_strategy_v2.sql`.
 
-## Layers → files
+## Terminology
 
-| Spec section | Code |
+- **מערכת המסחר** — the whole end-to-end system.
+- **הסוכן מסחר** — the AI part (`lib/trading/agent-judge.ts`).
+- **האסטרטגיית מסחר** — deterministic part + AI part together.
+
+## Strategy v2 (current)
+
+Research (2026-09, IS 2021-07→2024-03 / OOS 2024-03→2026-09, 16 crypto): v1 trend-pullback with a fixed 2R
+target lost out of sample; **4h breakout from volatility compression, score ≥ 60, in a daily uptrend** was
+positive in both windows (crypto IS +0.22R / OOS +0.37R per trade, Sharpe above buy & hold, max DD ~8% vs ~70%).
+Stocks were roughly flat out of sample. Sample sizes are small — the 95% CI of expectancy still includes 0.
+
+| Layer | Code |
 |---|---|
-| Risk envelope (hard constants) | `lib/trading/config.ts` (`RISK_ENVELOPE`, frozen), `lib/trading/risk-envelope.ts` |
-| 1. Universe screen + buckets | `lib/trading/universe.ts` (daily, in `engine.ts → dailyScreen`) |
-| 2–3. Regime filter + deterministic trigger | `lib/trading/setup.ts` |
-| 4. Hard vetoes (earnings, CPI/FOMC, funding, unlocks, session edges) | `lib/trading/veto.ts`, calendar in `trading_calendar` |
-| 5. Stop first, then size | `setup.ts → stopDistanceFor / buildTradePlan` |
-| 6. Agent judgement (can only reduce) | `lib/trading/agent-judge.ts` (`enforceVerdict`, injection sanitizer) |
-| 7. Position state machine | `lib/trading/position.ts` (shared by backtest + paper + shadow) |
-| 8. Execution (limit, 0.3% slippage cap) | `position.ts → tryFill`; paper only — no broker adapter |
-| 4a–d. Learning | `lib/trading/learning.ts` (bucket stats, eligibility gate, agent value, walk-forward calibration) |
-| Phase gates | `lib/trading/gates.ts` |
-| Live pipeline | `lib/trading/engine.ts → runTick` |
-| Chat (read + proposals needing confirmation) | `lib/trading/chat.ts` |
+| Risk envelope (hard constants) | `config.ts` (`RISK_ENVELOPE`, frozen), `risk-envelope.ts` |
+| Universe screen + buckets | `universe.ts` |
+| Multi-timeframe series (1d / 4h / 1h) | `strategy/series.ts`, `strategy/data-v2.ts` |
+| Market structure: trend legs, levels, divergences | `strategy/structure.ts` |
+| Setups, confluence score, structural targets (≥ 2R), TP extension | `strategy/candidates.ts` |
+| Hard vetoes | `veto.ts` |
+| Sizing (stop first, then size) | `sizing.ts` |
+| Position state machine (1h bars; BE at 1R, chandelier after 2R, TP may only rise) | `position.ts` (`STRUCTURAL`) |
+| Portfolio backtest | `strategy/backtest-v2.ts` |
+| הסוכן מסחר: market read, thesis, invalidation, veto/shrink, target menu, TP-extension veto, lessons, playbook | `agent-judge.ts` |
+| Learning: eligibility gate, agent value, walk-forward calibration | `learning.ts` |
+| Phase gates (risk-adjusted vs buy & hold) | `gates.ts` |
+| Live pipeline | `engine.ts → runTick` |
 
-## Tracks
+## What the AI may and may not do (enforced in code)
 
-Every trigger that survives the vetoes creates:
-
-- a **DETERMINISTIC** shadow trade — the baseline signal, never limited by the portfolio envelope;
-- an **AGENT** trade (if the agent entered and the envelope allows) — this is the *account*: SHADOW
-  in the shadow phase, PAPER in the paper phase.
-
-`agentValueReport` pairs them on the same triggers (agent R × multiplier, SKIP = 0) to answer whether
-the agent layer makes money.
+May: skip, shrink size (×0.75 / ×0.5), choose a larger target from the deterministic menu (all ≥ 2R),
+decline a deterministic TP extension, write post-trade lessons, consolidate evidence-backed playbook rules.
+May not: create a trade without a deterministic candidate, increase size, move a stop toward the loss,
+enter below 2R, bypass the envelope. Every trigger is also simulated by the deterministic baseline so the
+agent's value is measured, not assumed.
 
 ## Setup
 
-1. Migration applies automatically on push (`db-apply.yml`).
-2. Vercel env: `TRADING_CRON_SECRET` (any long random string). Gemini key already exists.
-3. GitHub secrets: `TRADING_CRON_SECRET` (same value) and `MYSELF_API_URL`. Workflow `trading-tick.yml`
-   runs every 15 minutes.
-4. In the app: Trading → Backtests → run. The system starts in phase **BACKTEST** and only advances through
-   the gates.
+1. Migrations apply on push (`db-apply.yml`).
+2. Vercel env: `TRADING_CRON_SECRET`. Gemini key already exists.
+3. GitHub secrets: `TRADING_CRON_SECRET`, `MYSELF_API_URL` — `trading-tick.yml` runs every 15 minutes.
+4. App: Trading → Backtests → run. Starts in phase **BACKTEST**; advances only through gates.
 
-CLI backtest: `npx tsx scripts/trading/backtest.ts --years 4.5 --symbols BTC,ETH,SOL`.
+CLI: `npx tsx scripts/trading/backtest.ts --preset CRYPTO --years 3`.
 
 ## Known limits
 
-- Free data: stocks have ~2 years of 4h history (Yahoo 60m). Crypto via Binance has full history.
-- No news feed is wired; the sanitizer is ready for one (`sanitizeExternalText`).
-- Upcoming CPI dates are not seeded — add them in Control → Calendar.
-- Historical earnings are not vetoed in backtests (no free history); live trading fails closed.
+- Free data: stocks have ~2 years of hourly history (Yahoo 60m). Crypto via Binance has full history.
+- ~15 trades/year on 16 crypto — statistical proof needs more symbols or more time.
+- No news feed wired (sanitizer ready). Upcoming CPI dates must be added in Control → Calendar.
 - **LIVE is intentionally not implemented** (no broker adapter). Check Israeli tax classification first.

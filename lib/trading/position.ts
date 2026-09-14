@@ -39,6 +39,14 @@ export type SimPosition = {
   opened_at: number | null;
   closed_at: number | null;
   cancel_reason: string | null;
+  /** STRUCTURAL plan (strategy v2) — optional so v1 rows stay valid. */
+  partial_fraction?: number;
+  breakeven_at_r?: number;
+  trail_after_r?: number | null;
+  trail_mult?: number;
+  peak_price?: number;
+  target_extensions?: number;
+  initial_target_price?: number;
 };
 
 export type StepContext = {
@@ -50,6 +58,9 @@ export type StepContext = {
   regime_flip?: boolean;
   /** Forced exit at close (earnings ahead for stocks). */
   force_exit_reason?: ExitReason;
+  /** Decided at the PREVIOUS bar close (no look-ahead). Target may only rise; stop only ratchets up. */
+  raise_target_to?: number;
+  raise_stop_to?: number;
 };
 
 export type PositionEvent =
@@ -57,7 +68,8 @@ export type PositionEvent =
   | { type: "CANCELLED"; reason: string; at: number }
   | { type: "PARTIAL_1R"; price: number; at: number }
   | { type: "STOP_MOVED"; from: number; to: number; at: number }
-  | { type: "CLOSED"; price: number; reason: ExitReason; at: number };
+  | { type: "CLOSED"; price: number; reason: ExitReason; at: number }
+  | { type: "TARGET_EXTENDED"; from: number; to: number; at: number };
 
 export function newPendingPosition(input: {
   asset_class: AssetClass;
@@ -188,7 +200,8 @@ function tryFill(p: SimPosition, bar: Bar, events: PositionEvent[]): "open" | "i
   p.entry_slippage_bps = Math.round(slippage * 10_000);
   // Stop stays where the chart put it; keep exact 2:1 from the actual fill.
   p.stop_distance = price - p.stop_price;
-  p.target_price = price + RISK_ENVELOPE.MIN_RR_RATIO * p.stop_distance;
+  // v1 keeps an exact 2:1 from the fill; v2 keeps its structural target (already validated ≥ 2R).
+  if (p.exit_plan !== "STRUCTURAL") p.target_price = price + RISK_ENVELOPE.MIN_RR_RATIO * p.stop_distance;
   p.state = "OPEN";
   p.opened_at = bar.t;
   events.push({ type: "FILLED", price, at: bar.t });
@@ -207,6 +220,11 @@ export function stepPosition(p: SimPosition, bar: Bar, ctx: StepContext): Positi
     if (!fillKind) return events;
   }
   if (p.entry_price === null) return events;
+
+  if (p.exit_plan === "STRUCTURAL") {
+    stepStructural(p, bar, ctx, events, fillKind);
+    return events;
+  }
 
   p.bars_held += 1;
   trackExcursion(p, bar);
@@ -282,6 +300,84 @@ export function stepPosition(p: SimPosition, bar: Bar, ctx: StepContext): Positi
     }
   }
   return events;
+}
+
+/**
+ * Strategy v2 management:
+ *  - before `breakeven_at_r` nothing changes (stop/target locked);
+ *  - at breakeven_at_r: optional partial (partial_fraction), stop → entry;
+ *  - after trail_after_r: chandelier trail = peak − trail_mult × ATR (ratchet only);
+ *  - target may be raised (never lowered) by a decision taken at the previous close.
+ */
+function stepStructural(p: SimPosition, bar: Bar, ctx: StepContext, events: PositionEvent[], fillKind: "open" | "intrabar" | null) {
+  const slip = EXECUTION_RULES.ASSUMED_SLIPPAGE[p.asset_class];
+  const entry = p.entry_price!;
+  const R = p.stop_distance;
+
+  // Decisions from the previous bar close apply before this bar trades.
+  if (ctx.raise_target_to !== undefined && ctx.raise_target_to > p.target_price && p.state !== "PENDING") {
+    events.push({ type: "TARGET_EXTENDED", from: p.target_price, to: ctx.raise_target_to, at: bar.t });
+    p.target_price = ctx.raise_target_to;
+    p.target_extensions = (p.target_extensions ?? 0) + 1;
+  }
+  if (ctx.raise_stop_to !== undefined && ctx.raise_stop_to > p.stop_price && ctx.raise_stop_to < bar.o) {
+    events.push({ type: "STOP_MOVED", from: p.stop_price, to: ctx.raise_stop_to, at: bar.t });
+    p.stop_price = ratchetStop(p.stop_price, ctx.raise_stop_to);
+  }
+
+  p.bars_held += 1;
+  trackExcursion(p, bar);
+  const riskFree = p.stop_price >= entry;
+  const stopReason: ExitReason = p.stop_price > entry + 1e-12 ? "TRAIL" : riskFree ? "BREAKEVEN" : "STOP";
+
+  if (fillKind !== "intrabar" && bar.o <= p.stop_price) {
+    p.gapped_through_stop = bar.o < p.stop_price;
+    close(p, bar.o * (1 - slip), stopReason, bar.t, events);
+    return;
+  }
+  if (bar.l <= p.stop_price) {
+    close(p, p.stop_price * (1 - slip), stopReason, bar.t, events);
+    return;
+  }
+  if (fillKind === "intrabar") {
+    applyCloseRules(p, bar, ctx, events, slip);
+    return;
+  }
+  if (bar.h >= p.target_price) {
+    close(p, Math.max(bar.o, p.target_price), "TARGET", bar.t, events);
+    return;
+  }
+
+  const beAt = entry + (p.breakeven_at_r ?? 1) * R;
+  if (bar.h >= entry + R) p.reached_1r = true;
+  if (p.state === "OPEN" && bar.h >= beAt) {
+    const frac = p.partial_fraction ?? 0;
+    if (frac > 0) {
+      const price = Math.max(bar.o, beAt);
+      p.partial_exit_price = price;
+      sell(p, price, p.initial_size * frac);
+      events.push({ type: "PARTIAL_1R", price, at: bar.t });
+    }
+    const before = p.stop_price;
+    p.stop_price = ratchetStop(p.stop_price, entry);
+    events.push({ type: "STOP_MOVED", from: before, to: p.stop_price, at: bar.t });
+    p.state = "RISK_FREE";
+    return;
+  }
+
+  if (applyCloseRules(p, bar, ctx, events, slip)) return;
+
+  // Chandelier trail once the trade has earned its room.
+  p.peak_price = Math.max(p.peak_price ?? entry, bar.h);
+  if (p.trail_after_r !== null && p.trail_after_r !== undefined && p.peak_price >= entry + p.trail_after_r * R && Number.isFinite(ctx.atr)) {
+    const proposed = Math.max(entry, p.peak_price - (p.trail_mult ?? 3) * ctx.atr);
+    if (proposed > p.stop_price && proposed < bar.c) {
+      events.push({ type: "STOP_MOVED", from: p.stop_price, to: proposed, at: bar.t });
+      p.stop_price = ratchetStop(p.stop_price, proposed);
+      p.trail_stop = p.stop_price;
+      if (p.state === "OPEN") p.state = "RISK_FREE";
+    }
+  }
 }
 
 function applyCloseRules(p: SimPosition, bar: Bar, ctx: StepContext, events: PositionEvent[], slip: number): boolean {

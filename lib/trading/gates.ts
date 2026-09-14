@@ -19,6 +19,10 @@ export type BacktestGateInput = {
   stats: PerformanceStats;
   return_pct: number;
   benchmark_return_pct: number | null;
+  sharpe: number | null;
+  benchmark_sharpe: number | null;
+  max_dd_pct: number;
+  benchmark_max_dd_pct: number | null;
   walk_forward_passes: boolean;
   oos_expectancy_r: number;
   mc_dd_pct_p95: number;
@@ -36,9 +40,11 @@ export function backtestGate(bt: BacktestGateInput): GateCheck[] {
     { id: "walk_forward", ok: bt.walk_forward_passes, detail: `OOS expectancy ${bt.oos_expectancy_r}R` },
     { id: "monte_carlo_dd", ok: bt.mc_dd_pct_p95 <= 0.2 && bt.mc_prob_kill <= 0.1, detail: `p95 DD ${pct(bt.mc_dd_pct_p95)}, kill-switch probability ${pct(bt.mc_prob_kill)}` },
     {
-      id: "beats_buy_and_hold",
-      ok: bt.benchmark_return_pct !== null && bt.return_pct > bt.benchmark_return_pct,
-      detail: `strategy ${pct(bt.return_pct)} vs buy & hold ${bt.benchmark_return_pct === null ? "n/a" : pct(bt.benchmark_return_pct)}`,
+      // Risk-adjusted: a strategy risking ~1% per trade cannot out-return a 100%-invested bull market,
+      // but it must earn more per unit of risk (Sharpe) with a smaller drawdown.
+      id: "beats_buy_and_hold_risk_adjusted",
+      ok: bt.sharpe !== null && bt.benchmark_sharpe !== null && bt.benchmark_max_dd_pct !== null && bt.sharpe > bt.benchmark_sharpe && bt.max_dd_pct < bt.benchmark_max_dd_pct,
+      detail: `Sharpe ${bt.sharpe ?? "n/a"} vs ${bt.benchmark_sharpe ?? "n/a"} · max DD ${pct(bt.max_dd_pct)} vs ${bt.benchmark_max_dd_pct === null ? "n/a" : pct(bt.benchmark_max_dd_pct)} · return ${pct(bt.return_pct)} vs ${bt.benchmark_return_pct === null ? "n/a" : pct(bt.benchmark_return_pct)}`,
     },
   ];
 }

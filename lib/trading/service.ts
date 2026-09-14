@@ -1,15 +1,20 @@
 import { getSupabase } from "@/lib/supabase";
-import { EXECUTION_RULES, LEARNING_RULES, MODE_TIMEFRAMES, PAPER_STARTING_EQUITY, RISK_ENVELOPE, SEED_UNIVERSE, type StrategyParams } from "./config";
-import { runBacktestSuite, loadHistory } from "./backtest-data";
-import type { BacktestResult, BacktestVariant } from "./backtest";
+import { EXECUTION_RULES, LEARNING_RULES, PAPER_STARTING_EQUITY, RISK_ENVELOPE, SEED_UNIVERSE } from "./config";
+import { downsample, runBacktestV2, type V2Result } from "./strategy/backtest-v2";
+import { DEFAULT_V2_PARAMS, type StrategyV2Params } from "./strategy/candidates";
+import { loadFramesV2, warmStart } from "./strategy/data-v2";
 import { backtestGate, nextPhase, paperGate, PHASE_ORDER, shadowGate, type BacktestGateInput, type GateCheck } from "./gates";
 import { agentValueReport, bucketStats, runCalibration, walkForwardStability, type AgentValueReport } from "./learning";
-import { createBarCache, lookbackForClass } from "./market-data";
+import { createBarCache } from "./market-data";
 import { computeStats, equityCurveR, groupStats, rDistribution, type GroupStat, type PerformanceStats } from "./metrics";
 import { forceClose, openRiskR, realizedR } from "./position";
 import { applyRiskScaleRequest, drawdownFromPeak, haltStatus, weekStartIso } from "./risk-envelope";
 import {
-  getActiveParams,
+  getActiveV2Params,
+  getActivePlaybook,
+  listLessons,
+  listPlaybooks,
+  setPlaybookStatus,
   getCalendar,
   getClosedTrades,
   getOpenTrades,
@@ -26,7 +31,7 @@ import {
   type TradingSettings,
   type UniverseRow,
 } from "./store";
-import type { TradingMode, TradingPhase, UniverseSymbol } from "./types";
+import type { TradingPhase, UniverseSymbol } from "./types";
 
 /** Read models + commands shared by the REST API and the trading chat. */
 
@@ -75,6 +80,13 @@ export type TriggerRow = {
   agent_confidence: string | null;
   agent_error: string | null;
   injection_flags: string[];
+  setup: string | null;
+  score: number | null;
+  agent_market_read: string | null;
+  agent_thesis: string | null;
+  agent_invalidation: string | null;
+  agent_target_index: number | null;
+  agent_lessons_applied: string[] | null;
   snapshot: Record<string, unknown>;
   plan: Record<string, unknown> | null;
   phase: string;
@@ -87,7 +99,7 @@ export type PhaseGateView = { phase: TradingPhase; next: TradingPhase | null; ch
 
 export type DashboardPayload = {
   settings: TradingSettings;
-  params: StrategyParams;
+  params: StrategyV2Params;
   params_locked_until: string | null;
   account: {
     equity: number;
@@ -118,15 +130,12 @@ export type DashboardPayload = {
 async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
   const cache = createBarCache();
   const out = new Map<string, number>();
-  const symbols = [...new Set(trades.map((t) => `${t.symbol}|${t.mode}`))];
   await Promise.all(
-    symbols.map(async (key) => {
-      const [symbol, mode] = key.split("|") as [string, TradingMode];
+    [...new Set(trades.map((t) => t.symbol))].map(async (symbol) => {
       const u = universe.find((x) => x.symbol === symbol);
       if (!u) return;
-      const tf = MODE_TIMEFRAMES[mode].entry;
       try {
-        const bars = await cache.get(u, tf, Math.min(lookbackForClass(u.asset_class, tf), 50));
+        const bars = await cache.get(u, "1h", 6);
         const last = bars.at(-1);
         if (last) out.set(symbol, last.c);
       } catch {
@@ -203,7 +212,7 @@ export async function getDashboard(): Promise<DashboardPayload> {
     getUniverse(),
     getTriggers({ limit: 25 }),
     getEvents(30),
-    getActiveParams(),
+    getActiveV2Params(),
   ]);
   const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
   const prices = await lastPrices(accountOpen, universe);
@@ -307,7 +316,7 @@ export async function listTrades(f: TradeFilters): Promise<TradeListItem[]> {
   let q = getSupabase()
     .from("trading_trades")
     .select(
-      "id, trigger_id, symbol, asset_class, bucket_id, mode, track, execution, state, trigger_timestamp, agent_decision, agent_conviction, agent_risk_multiplier, agent_reasoning, agent_model_version, prompt_version, param_version, entry_limit, entry_price, stop_price, initial_stop_price, target_price, position_size, remaining_size, risk_amount, entry_slippage_bps, exit_plan, trail_stop, reached_1r, partial_exit_price, exit_price, exit_reason, gapped_through_stop, realized_r, realized_pnl, fees_paid, last_bar_time, mfe_r, mae_r, notes, tags, self_rating, opened_at, closed_at, created_at, updated_at"
+      "id, trigger_id, symbol, asset_class, bucket_id, mode, track, execution, state, trigger_timestamp, agent_decision, agent_conviction, agent_risk_multiplier, agent_reasoning, agent_model_version, prompt_version, param_version, entry_limit, entry_price, stop_price, initial_stop_price, target_price, position_size, remaining_size, risk_amount, entry_slippage_bps, exit_plan, trail_stop, reached_1r, partial_exit_price, exit_price, exit_reason, gapped_through_stop, realized_r, realized_pnl, fees_paid, last_bar_time, mfe_r, mae_r, notes, tags, self_rating, setup, score, strategy_version, lesson_id, opened_at, closed_at, created_at, updated_at"
     )
     .order("created_at", { ascending: false })
     .limit(Math.min(f.limit ?? 200, 1000));
@@ -338,7 +347,12 @@ export async function getTradeDetail(id: string) {
     const { data: sib } = await sb.from("trading_trades").select("*").eq("trigger_id", trade.trigger_id).neq("id", id).maybeSingle();
     sibling = sib ? normalizeTrade(sib as Record<string, unknown>) : null;
   }
-  return { trade, trigger, sibling };
+  let lesson: import("./store").LessonRow | null = null;
+  if (trade.lesson_id) {
+    const { data: l } = await sb.from("trading_lessons").select("*").eq("id", trade.lesson_id).maybeSingle();
+    lesson = (l as import("./store").LessonRow) ?? null;
+  }
+  return { trade, trigger, sibling, lesson };
 }
 
 export async function patchTradeJournal(id: string, patch: { notes?: string | null; tags?: string[]; self_rating?: number | null }) {
@@ -364,6 +378,9 @@ export type AnalyticsPayload = {
   by_hour_utc: GroupStat[];
   by_mode: GroupStat[];
   by_conviction: GroupStat[];
+  by_setup: GroupStat[];
+  by_score: GroupStat[];
+  target_extensions: number;
   avg_mfe_r: number;
   avg_mae_r: number;
   avg_hold_hours: number;
@@ -397,6 +414,9 @@ export async function getAnalytics(scope: { execution?: string; track?: string; 
     by_hour_utc: groupStats(rt, (t) => String(new Date(t.trigger_timestamp).getUTCHours()).padStart(2, "0")),
     by_mode: groupStats(rt, (t) => t.mode),
     by_conviction: groupStats(rt, (t) => (t.agent_conviction ? `conviction ${t.agent_conviction}` : "no agent")),
+    by_setup: groupStats(rt, (t) => t.setup ?? "v1"),
+    by_score: groupStats(rt, (t) => (t.score === null ? "?" : t.score >= 70 ? "70+" : t.score >= 60 ? "60-69" : "<60")),
+    target_extensions: list.filter((t) => (t.events ?? []).some((e) => e.type === "TARGET_EXTENDED")).length,
     avg_mfe_r: avg(list.map((t) => t.mfe_r)),
     avg_mae_r: avg(list.map((t) => t.mae_r)),
     avg_hold_hours: avg(list.filter((t) => t.opened_at && t.closed_at).map((t) => (Date.parse(t.closed_at!) - Date.parse(t.opened_at!)) / 3_600_000)),
@@ -423,42 +443,63 @@ export function presetSymbols(preset: BacktestPreset, explicit?: string[]): Univ
 }
 
 const TRADES_KEPT_PER_VARIANT = 400;
+/** Free hourly stock history is ~730 days; keep 30 days of margin. */
+const STOCK_MAX_YEARS = 1.9;
 
-export async function runAndStoreBacktest(input: { preset: BacktestPreset; symbols?: string[]; mode: TradingMode; years: number; variants?: BacktestVariant[] }) {
+/** Comparison variants stored with every run, so the value of each strategy component is visible. */
+function backtestVariants(params: StrategyV2Params): { label: string; params: StrategyV2Params }[] {
+  return [
+    { label: "ACTIVE", params },
+    { label: "NO_EXTENSION", params: { ...params, extension_enabled: false } },
+    { label: "PARTIAL_50_AT_1R", params: { ...params, partial_fraction: 0.5 } },
+    { label: "WITH_PULLBACK", params: { ...params, setups: ["BREAKOUT", "PULLBACK"] } },
+  ];
+}
+
+export async function runAndStoreBacktest(input: { preset: BacktestPreset; symbols?: string[]; years: number }) {
   const started = Date.now();
-  const { params } = await getActiveParams();
+  const { params } = await getActiveV2Params();
   const calendar = await getCalendar("2000-01-01");
   const symbols = presetSymbols(input.preset, input.symbols);
-  const { history, results } = await runBacktestSuite({ symbols, mode: input.mode, years: input.years, params, starting_equity: PAPER_STARTING_EQUITY, calendar, variants: input.variants });
-  const primary = results.find((r) => r.variant === "PARTIAL_TARGET") ?? results[0];
-  const wf = primary ? walkForwardStability(history, params, primary.variant, PAPER_STARTING_EQUITY, calendar) : null;
-  const gate: BacktestGateInput | null = primary
-    ? {
-        stats: primary.stats,
-        return_pct: primary.return_pct,
-        benchmark_return_pct: primary.benchmark_return_pct,
-        walk_forward_passes: wf?.passes ?? false,
-        oos_expectancy_r: wf?.oos_expectancy_r ?? 0,
-        mc_dd_pct_p95: primary.monte_carlo.max_dd_pct_p95,
-        mc_prob_kill: primary.monte_carlo.prob_kill_switch,
-        created_at: Date.now(),
-      }
-    : null;
-  const stored = results.map((r): BacktestResult => ({ ...r, trades: r.trades.slice(-TRADES_KEPT_PER_VARIANT) }));
+  const years = symbols.some((s) => s.asset_class === "STOCK") ? Math.min(input.years, STOCK_MAX_YEARS) : input.years;
+  const since = Date.now() - years * 365 * 86_400_000;
+  const { frames, reference, skipped } = await loadFramesV2(symbols, since);
+  const start = warmStart(frames, since);
+  const end = Date.now();
+  const results: V2Result[] = backtestVariants(params).map((v) =>
+    runBacktestV2({ frames, reference, params: v.params, starting_equity: PAPER_STARTING_EQUITY, start, end, calendar, label: v.label })
+  );
+  const primary = results[0];
+  const wf = walkForwardStability({ frames, reference, start, end, startingEquity: PAPER_STARTING_EQUITY, calendar }, params);
+  const gate: BacktestGateInput = {
+    stats: primary.stats,
+    return_pct: primary.return_pct,
+    benchmark_return_pct: primary.benchmark_return_pct,
+    sharpe: primary.sharpe,
+    benchmark_sharpe: primary.benchmark_sharpe,
+    max_dd_pct: primary.max_equity_dd_pct,
+    benchmark_max_dd_pct: primary.benchmark_max_dd_pct,
+    walk_forward_passes: wf.passes,
+    oos_expectancy_r: wf.oos_expectancy_r,
+    mc_dd_pct_p95: primary.monte_carlo.max_dd_pct_p95,
+    mc_prob_kill: primary.monte_carlo.prob_kill_switch,
+    created_at: Date.now(),
+  };
+  const stored = results.map((r) => ({ ...r, trades: r.trades.slice(-TRADES_KEPT_PER_VARIANT), equity_curve: downsample(r.equity_curve, 300) }));
   const { data, error } = await getSupabase()
     .from("trading_backtests")
     .insert({
-      mode: input.mode,
-      years: input.years,
-      symbols: history.symbols.map((s) => s.symbol),
+      mode: "SWING",
+      years,
+      symbols: frames.map((f) => f.symbol),
       param_version: params.version,
       params,
-      range_start: iso(history.start),
-      range_end: iso(history.end),
+      range_start: iso(start),
+      range_end: iso(end),
       results: stored,
       walk_forward: wf,
-      gate: gate ? { ...gate, checks: backtestGate(gate) } : null,
-      skipped: history.skipped,
+      gate: { ...gate, checks: backtestGate(gate) },
+      skipped,
       duration_ms: Date.now() - started,
     })
     .select("id")
@@ -466,7 +507,7 @@ export async function runAndStoreBacktest(input: { preset: BacktestPreset; symbo
   if (error) throw new Error(error.message);
   await logEvent({
     kind: "BACKTEST",
-    message: `בקטסט ${input.preset} ${input.years}y: ${primary?.stats.trades ?? 0} עסקאות, תוחלת ${primary?.stats.expectancy_r ?? 0}R, שער ${gate && backtestGate(gate).every((c) => c.ok) ? "עבר" : "לא עבר"}`,
+    message: `בקטסט ${input.preset} ${years}y: ${primary.stats.trades} עסקאות, תוחלת ${primary.stats.expectancy_r}R, Sharpe ${primary.sharpe}, שער ${backtestGate(gate).every((c) => c.ok) ? "עבר" : "לא עבר"}`,
   });
   return { id: (data as { id: string }).id };
 }
@@ -490,17 +531,20 @@ export async function getBacktest(id: string) {
 // ── Calibration (quarterly, human-approved) ────────────────────────────────
 
 export async function proposeCalibration(input: { preset: BacktestPreset; years: number }) {
-  const { params } = await getActiveParams();
+  const { params } = await getActiveV2Params();
   const calendar = await getCalendar("2000-01-01");
-  const history = await loadHistory({ symbols: presetSymbols(input.preset), mode: "SWING", years: input.years });
-  const cal = runCalibration(history, params, PAPER_STARTING_EQUITY, calendar);
+  const symbols = presetSymbols(input.preset);
+  const since = Date.now() - input.years * 365 * 86_400_000;
+  const { frames, reference } = await loadFramesV2(symbols, since);
+  const start = warmStart(frames, since);
+  const cal = runCalibration({ frames, reference, start, end: Date.now(), startingEquity: PAPER_STARTING_EQUITY, calendar }, params);
   const { data, error } = await getSupabase()
     .from("trading_param_sets")
     .insert({
       version: `${cal.proposed.version}@${new Date().toISOString().slice(0, 10)}`,
-      params: cal.proposed,
+      params: { ...cal.proposed, strategy: "v2" },
       status: "PROPOSED",
-      evidence: { ...cal, preset: input.preset, years: input.years, symbols: history.symbols.map((s) => s.symbol), current_version: params.version },
+      evidence: { ...cal, preset: input.preset, years: input.years, symbols: frames.map((f) => f.symbol), current_version: params.version },
     })
     .select("id")
     .single();
@@ -523,12 +567,19 @@ export async function decideCalibration(id: string, approve: boolean) {
     await logEvent({ kind: "CALIBRATION_REJECTED", message: `כיול נדחה: ${(row as { version: string }).version}` });
     return;
   }
-  const active = await getActiveParams();
+  const active = await getActiveV2Params();
   if (active.locked_until && Date.parse(active.locked_until) > Date.now()) throw new Error("params_locked_until_" + active.locked_until.slice(0, 10));
-  if (active.id) await sb.from("trading_param_sets").update({ status: "RETIRED" }).eq("id", active.id);
+  await sb.from("trading_param_sets").update({ status: "RETIRED" }).eq("status", "ACTIVE");
   const lockedUntil = iso(Date.now() + LEARNING_RULES.CALIBRATION_LOCK_DAYS * 86_400_000);
   await sb.from("trading_param_sets").update({ status: "ACTIVE", decided_at: iso(Date.now()), locked_until: lockedUntil }).eq("id", id);
   await logEvent({ kind: "CALIBRATION_APPROVED", severity: "warn", message: `פרמטרים חדשים פעילים וננעלו עד ${lockedUntil.slice(0, 10)}: ${(row as { version: string }).version}`, push: true });
+}
+
+// ── Learning view (lessons + playbook) ─────────────────────────────────────
+
+export async function getLearningView() {
+  const [playbook, history, lessons] = await Promise.all([getActivePlaybook(), listPlaybooks(10), listLessons(40)]);
+  return { playbook, history, lessons, defaults: DEFAULT_V2_PARAMS };
 }
 
 // ── Commands ───────────────────────────────────────────────────────────────
@@ -536,7 +587,7 @@ export async function decideCalibration(id: string, approve: boolean) {
 export type ControlCommand =
   | { action: "pause_entries" }
   | { action: "resume_entries" }
-  | { action: "set_intraday"; enabled: boolean }
+  | { action: "set_playbook"; version: number; status: "ACTIVE" | "DISABLED" }
   | { action: "set_agent"; enabled: boolean }
   | { action: "set_risk_scale"; value: number }
   | { action: "close_position"; trade_id: string }
@@ -585,10 +636,11 @@ export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"
       await updateSettings({ entries_paused: false });
       await audit("כניסות חדשות חודשו");
       return { ok: true, message: "כניסות חודשו" };
-    case "set_intraday":
-      await updateSettings({ intraday_enabled: cmd.enabled });
-      await audit(`Intraday ${cmd.enabled ? "הופעל" : "כובה"}`);
-      return { ok: true, message: `Intraday ${cmd.enabled ? "on" : "off"}` };
+    case "set_playbook":
+      if (source !== "app") throw new Error("app_only");
+      await setPlaybookStatus(cmd.version, cmd.status);
+      await audit(`playbook v${cmd.version} → ${cmd.status}`, "warn");
+      return { ok: true, message: `playbook v${cmd.version} ${cmd.status}` };
     case "set_agent":
       await updateSettings({ agent_enabled: cmd.enabled });
       await audit(`שכבת הסוכן ${cmd.enabled ? "הופעלה" : "כובתה"}`, "warn");
@@ -665,7 +717,8 @@ export function parseCommand(body: Record<string, unknown>): ControlCommand | nu
     case "resume_entries":
     case "close_all":
       return { action: a };
-    case "set_intraday":
+    case "set_playbook":
+      return typeof body.version === "number" && (body.status === "ACTIVE" || body.status === "DISABLED") ? { action: a, version: body.version, status: body.status } : null;
     case "set_agent":
       return typeof body.enabled === "boolean" ? { action: a, enabled: body.enabled } : null;
     case "set_risk_scale":

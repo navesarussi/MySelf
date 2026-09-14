@@ -1,6 +1,7 @@
-import { DEFAULT_STRATEGY_PARAMS, LEARNING_RULES, type StrategyParams } from "./config";
-import { runBacktest, type BacktestVariant } from "./backtest";
-import type { LoadedHistory } from "./backtest-data";
+import { LEARNING_RULES } from "./config";
+import { runBacktestV2 } from "./strategy/backtest-v2";
+import { DEFAULT_V2_PARAMS, type StrategyV2Params, type SymbolFrames } from "./strategy/candidates";
+import type { AssetClass } from "./types";
 import { computeStats, mulberry32, type PerformanceStats } from "./metrics";
 import type { CalendarEvent } from "./veto";
 
@@ -187,11 +188,21 @@ export function foldRanges(start: number, end: number, folds: number) {
   return Array.from({ length: folds }, (_, i) => ({ start: Math.round(start + i * span), end: Math.round(start + (i + 1) * span) }));
 }
 
-export function walkForwardStability(history: LoadedHistory, params: StrategyParams, variant: BacktestVariant, startingEquity: number, calendar: CalendarEvent[], folds = 4) {
-  const results: FoldResult[] = foldRanges(history.start, history.end, folds).map((r, i) => ({
+export type WalkForwardInput = {
+  frames: SymbolFrames[];
+  reference: Partial<Record<AssetClass, SymbolFrames>>;
+  start: number;
+  end: number;
+  startingEquity: number;
+  calendar: CalendarEvent[];
+};
+
+/** Fixed params across consecutive folds: does the edge persist, or collapse in some regime? */
+export function walkForwardStability(h: WalkForwardInput, params: StrategyV2Params, folds = 4) {
+  const results: FoldResult[] = foldRanges(h.start, h.end, folds).map((r, i) => ({
     fold: i + 1,
     ...r,
-    stats: runBacktest({ ...history, params, variant, starting_equity: startingEquity, start: r.start, end: r.end, calendar }).stats,
+    stats: runBacktestV2({ frames: h.frames, reference: h.reference, params, starting_equity: h.startingEquity, start: r.start, end: r.end, calendar: h.calendar }).stats,
   }));
   const oos = results.slice(1);
   const oosMean = oos.reduce((s, f) => s + f.stats.expectancy_r * f.stats.trades, 0) / Math.max(1, oos.reduce((s, f) => s + f.stats.trades, 0));
@@ -199,34 +210,32 @@ export function walkForwardStability(history: LoadedHistory, params: StrategyPar
   return { folds: results, oos_expectancy_r: round(oosMean), collapsed_folds: collapsed, passes: oosMean > 0 && collapsed === 0 };
 }
 
+/** Deliberately small grid — more knobs on a few hundred trades is curve fitting, not learning. */
 export const CALIBRATION_GRID = {
-  rsi_low: [35, 40, 45],
-  adx_min: [20, 25],
-  atr_stop_mult: [1.5, 2.0],
+  min_score: [50, 60, 70],
+  trail_mult_atr4h: [3, 4],
 };
 
-export function calibrationCandidates(base: StrategyParams = DEFAULT_STRATEGY_PARAMS): StrategyParams[] {
-  const out: StrategyParams[] = [];
-  for (const rsi_low of CALIBRATION_GRID.rsi_low)
-    for (const adx_min of CALIBRATION_GRID.adx_min)
-      for (const atr_stop_mult of CALIBRATION_GRID.atr_stop_mult)
-        out.push({ ...base, rsi_low, adx_min, atr_stop_mult, version: `rsi${rsi_low}-adx${adx_min}-atr${atr_stop_mult}` });
+export function calibrationCandidates(base: StrategyV2Params = DEFAULT_V2_PARAMS): StrategyV2Params[] {
+  const out: StrategyV2Params[] = [];
+  for (const min_score of CALIBRATION_GRID.min_score)
+    for (const trail_mult_atr4h of CALIBRATION_GRID.trail_mult_atr4h)
+      out.push({ ...base, min_score, trail_mult_atr4h, version: `v2-score${min_score}-trail${trail_mult_atr4h}` });
   return out;
 }
 
-const MIN_TRAIN_TRADES = 30;
+const MIN_TRAIN_TRADES = 20;
 
 /**
  * Anchored walk-forward: for each fold k≥1, choose the best candidate on folds [0..k-1],
  * then measure it out of sample on fold k. The proposal is the candidate chosen on all data,
  * but the evidence shown is the OOS record of the selection procedure itself.
  */
-export function runCalibration(history: LoadedHistory, current: StrategyParams, startingEquity: number, calendar: CalendarEvent[], folds = 4) {
-  const variant: BacktestVariant = "PARTIAL_TARGET";
+export function runCalibration(h: WalkForwardInput, current: StrategyV2Params, folds = 3) {
   const candidates = calibrationCandidates(current);
-  const ranges = foldRanges(history.start, history.end, folds);
-  const run = (p: StrategyParams, start: number, end: number) =>
-    runBacktest({ ...history, params: p, variant, starting_equity: startingEquity, start, end, calendar }).stats;
+  const ranges = foldRanges(h.start, h.end, folds);
+  const run = (p: StrategyV2Params, start: number, end: number) =>
+    runBacktestV2({ frames: h.frames, reference: h.reference, params: p, starting_equity: h.startingEquity, start, end, calendar: h.calendar }).stats;
   const pickBest = (start: number, end: number) => {
     let best = { params: current, stats: run(current, start, end) };
     for (const c of candidates) {
@@ -236,8 +245,7 @@ export function runCalibration(history: LoadedHistory, current: StrategyParams, 
     return best;
   };
   const steps = ranges.slice(1).map((test, i) => {
-    const train = { start: ranges[0].start, end: ranges[i].end };
-    const chosen = pickBest(train.start, train.end);
+    const chosen = pickBest(ranges[0].start, ranges[i].end);
     return {
       test_fold: i + 2,
       chosen_version: chosen.params.version,
@@ -246,7 +254,7 @@ export function runCalibration(history: LoadedHistory, current: StrategyParams, 
       current_out_of_sample: run(current, test.start, test.end),
     };
   });
-  const final = pickBest(history.start, history.end);
+  const final = pickBest(h.start, h.end);
   const sumR = (xs: PerformanceStats[]) => round(xs.reduce((s, x) => s + x.total_r, 0));
   const oosR = sumR(steps.map((s) => s.out_of_sample));
   const currentOosR = sumR(steps.map((s) => s.current_out_of_sample));

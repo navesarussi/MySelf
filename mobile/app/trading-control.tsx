@@ -32,6 +32,7 @@ export default function TradingControlScreen() {
   const { data: dash, refresh: refreshDash, loading } = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg));
   const { data: uni, refresh: refreshUni } = useApiQuery(queryKeys.tradingUniverse, (cfg) => api.tradingUniverse(cfg));
   const { data: paramSets, refresh: refreshParams } = useApiQuery(queryKeys.tradingParamSets, (cfg) => api.tradingParamSets(cfg));
+  const { data: learning, refresh: refreshLearning } = useApiQuery(queryKeys.tradingLearning, (cfg) => api.tradingLearning(cfg));
   const [phrase, setPhrase] = useState("");
   const [evKind, setEvKind] = useState<(typeof EVENT_KINDS)[number]>("CPI");
   const [evDate, setEvDate] = useState("");
@@ -42,6 +43,7 @@ export default function TradingControlScreen() {
     void refreshDash();
     void refreshUni();
     void refreshParams();
+    void refreshLearning();
   };
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
   const control = (body: Record<string, unknown>) => run((cfg) => api.tradingControl(cfg, body), { onSuccess: invalidate });
@@ -67,7 +69,6 @@ export default function TradingControlScreen() {
       <SectionTitle>{t("trading.liveControls")}</SectionTitle>
       <Card>
         <SwitchRow label={settings.entries_paused ? t("trading.entriesPaused") : t("trading.resume")} value={!settings.entries_paused} onChange={(v) => void control({ action: v ? "resume_entries" : "pause_entries" })} />
-        <SwitchRow label={t("trading.intraday")} value={settings.intraday_enabled} onChange={(v) => void control({ action: "set_intraday", enabled: v })} />
         <SwitchRow label={t("trading.agentLayer")} value={settings.agent_enabled} onChange={(v) => void control({ action: "set_agent", enabled: v })} />
         <TradingText bold>{t("trading.riskScale", { v: settings.risk_scale })}</TradingText>
         <TradingText muted size={tokens.textXs}>
@@ -126,7 +127,7 @@ export default function TradingControlScreen() {
           </TradingText>
         ) : null}
         <TradingText muted size={tokens.textXs}>
-          RSI {dash.params.rsi_low}–{dash.params.rsi_high} · ADX &gt; {dash.params.adx_min} · stop {dash.params.atr_stop_mult}×ATR · trail {dash.params.trail_atr_mult}×ATR
+          {t("trading.strategyParams")}: {dash.params.setups.map((x) => t(`trading.setup_${x}`)).join(" + ")} · score ≥ {dash.params.min_score} · squeeze ≤ {Math.round(dash.params.squeeze_pct * 100)}% · stop {dash.params.min_stop_atr4h}–{dash.params.max_stop_atr4h}×ATR4h · BE @{dash.params.breakeven_at_r}R · trail @{dash.params.trail_after_r ?? "—"}R {dash.params.trail_mult_atr4h}×ATR · TP ext {dash.params.extension_enabled ? "on" : "off"}
         </TradingText>
         <View style={{ marginTop: 8 }}>
           <Btn
@@ -163,6 +164,54 @@ export default function TradingControlScreen() {
             ) : null}
           </View>
         ))}
+      </Card>
+
+      <SectionTitle>{t("trading.learning")}</SectionTitle>
+      <Card>
+        <TradingText muted size={tokens.textXs}>
+          {t("trading.learningNote")}
+        </TradingText>
+        {learning?.playbook ? (
+          <View style={{ marginTop: 8 }}>
+            <View style={{ ...row, gap: 6 }}>
+              <Badge label={t("trading.playbookVersion", { v: learning.playbook.version })} tone="good" />
+              <View style={{ flex: 1 }} />
+              <Btn small variant="ghost" label={t("trading.disablePlaybook")} onPress={() => void control({ action: "set_playbook", version: learning.playbook!.version, status: "DISABLED" })} />
+            </View>
+            {learning.playbook.rules.map((r, k) => (
+              <View key={k} style={{ marginTop: 8 }}>
+                <TradingText bold size={tokens.textSm}>
+                  {k + 1}. {r.rule}
+                </TradingText>
+                <TradingText muted size={tokens.textXs}>
+                  {r.category} · {r.applies_when} · {t("trading.evidence", { n: r.evidence })}
+                </TradingText>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={{ marginTop: 8 }}>
+            <TradingText muted>{t("trading.noPlaybook")}</TradingText>
+            {(learning?.history ?? []).slice(0, 1).map((pb) => (
+              <View key={pb.version} style={{ marginTop: 6, alignSelf: "flex-start" }}>
+                <Btn small variant="ghost" label={`${t("trading.activatePlaybook")} v${pb.version}`} onPress={() => void control({ action: "set_playbook", version: pb.version, status: "ACTIVE" })} />
+              </View>
+            ))}
+          </View>
+        )}
+        <View style={{ marginTop: 12 }}>
+          <TradingText bold size={tokens.textXs}>
+            {t("trading.recentLessons")}
+          </TradingText>
+          {!learning?.lessons.length ? <TradingText muted size={tokens.textXs}>{t("trading.noLessons")}</TradingText> : null}
+          {(learning?.lessons ?? []).slice(0, 8).map((l) => (
+            <View key={l.id} style={{ marginTop: 6 }}>
+              <TradingText size={tokens.textXs}>
+                {l.symbol} · {fmtR(l.realized_r)} · {t(`trading.quality_${l.decision_quality}`)} — {l.lesson}
+              </TradingText>
+            </View>
+          ))}
+        </View>
       </Card>
 
       <SectionTitle>{t("trading.universe")}</SectionTitle>

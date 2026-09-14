@@ -2,8 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { adx, aggregateBars, atr, ema, returnCorrelation, rsi, sma } from "../trading/indicators";
 import { forceClose, newPendingPosition, openRiskR, ratchetStop, realizedR, stepPosition } from "../trading/position";
-import { buildTradePlan, stopDistanceFor } from "../trading/setup";
-import { DEFAULT_STRATEGY_PARAMS, RISK_ENVELOPE } from "../trading/config";
+import { buildTradePlan } from "../trading/sizing";
+import { RISK_ENVELOPE } from "../trading/config";
 import { applyRiskScaleRequest, checkNewEntry, drawdownFromPeak, shouldTripKillSwitch, weekStartIso } from "../trading/risk-envelope";
 import { computeStats, monteCarlo, wilsonInterval } from "../trading/metrics";
 import { evaluateVetoes, nextTradingDays } from "../trading/veto";
@@ -52,12 +52,6 @@ describe("indicators", () => {
 });
 
 describe("sizing (stop first, then size)", () => {
-  it("stop is the wider of ATR stop and structural stop", () => {
-    const p = DEFAULT_STRATEGY_PARAMS;
-    assert.equal(stopDistanceFor(100, 2, 99, p), 3); // 1.5 × ATR
-    assert.ok(Math.abs(stopDistanceFor(100, 2, 95, p) - 5.4) < 1e-9); // 5 + 0.2 × ATR
-  });
-
   it("risks exactly 1% for crypto and keeps 2:1", () => {
     const plan = buildTradePlan({ entry: 100, stopDistance: 5, equity: 100_000, assetClass: "CRYPTO_ALT", riskScale: 1 })!;
     assert.equal(plan.risk_amount, 1000);
@@ -153,6 +147,62 @@ describe("position state machine", () => {
     assert.equal(openRiskR(p), 0);
     forceClose(p, 104, "KILL_SWITCH", 3);
     assert.equal(p.state, "CLOSED");
+  });
+});
+
+describe("structural management (strategy v2)", () => {
+  const mk = () => {
+    const p = newPendingPosition({ asset_class: "CRYPTO_ALT", entry: 100, stop: 95, size: 10 });
+    p.exit_plan = "STRUCTURAL";
+    p.target_price = 115; // 3R structural target
+    p.breakeven_at_r = 1;
+    p.partial_fraction = 0;
+    p.trail_after_r = 2;
+    p.trail_mult = 3;
+    return p;
+  };
+
+  it("keeps the structural (>2R) target through the fill", () => {
+    const p = mk();
+    stepPosition(p, bar(1, 99.5, 100.2, 99, 100), { atr: 2 });
+    assert.equal(p.state, "OPEN");
+    assert.equal(p.target_price, 115);
+  });
+
+  it("moves stop to breakeven at 1R without selling, then trails after 2R", () => {
+    const p = mk();
+    stepPosition(p, bar(1, 99.5, 100.2, 99, 100), { atr: 2 });
+    const entry = p.entry_price!;
+    stepPosition(p, bar(2, 100.5, entry + p.stop_distance + 0.5, 100.2, 105), { atr: 2 });
+    assert.equal(p.state, "RISK_FREE");
+    assert.equal(p.stop_price, entry);
+    assert.equal(p.size, 10);
+    stepPosition(p, bar(3, 105, 112, 104.5, 111.5), { atr: 1 });
+    assert.ok(p.stop_price > entry, "trail should lock profit after 2R");
+  });
+
+  it("TP extension raises the target and ratchets the stop; can never lower either", () => {
+    const p = mk();
+    stepPosition(p, bar(1, 99.5, 100.2, 99, 100), { atr: 2 });
+    stepPosition(p, bar(2, 100.5, 106, 100.2, 105), { atr: 2 });
+    const ev = stepPosition(p, bar(3, 110, 114, 109, 113), { atr: 2, raise_target_to: 125, raise_stop_to: 108 });
+    assert.ok(ev.some((e) => e.type === "TARGET_EXTENDED"));
+    assert.equal(p.target_price, 125);
+    assert.equal(p.stop_price, 108);
+    stepPosition(p, bar(4, 113, 114, 112, 113.5), { atr: 2, raise_target_to: 110, raise_stop_to: 90 });
+    assert.equal(p.target_price, 125);
+    assert.equal(p.stop_price, 108);
+  });
+
+  it("extended target is honoured: price passing the old target does not close the trade", () => {
+    const p = mk();
+    stepPosition(p, bar(1, 99.5, 100.2, 99, 100), { atr: 2 });
+    stepPosition(p, bar(2, 100.5, 106, 100.2, 105), { atr: 2 });
+    stepPosition(p, bar(3, 112, 116, 111.5, 115.5), { atr: 0.5, raise_target_to: 130, raise_stop_to: 110 });
+    assert.notEqual(p.state, "CLOSED");
+    stepPosition(p, bar(4, 116, 131, 115.5, 130), { atr: 0.5 });
+    assert.equal(p.exit_reason, "TARGET");
+    assert.ok(realizedR(p) > 5);
   });
 });
 

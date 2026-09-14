@@ -196,7 +196,10 @@ export async function fetchBtcDominance(): Promise<number | null> {
 
 export function lookbackForClass(assetClass: AssetClass, tf: Timeframe) {
   // Enough bars for EMA200 on the trend frame plus warm-up on the entry frame.
-  if (tf === "1d") return 420;
+  // Stocks: ~420 trading days ≈ 610 calendar days (daily EMA200 + 400-bar level lookback).
+  if (tf === "1d") return assetClass === "STOCK" ? 610 : 420;
+  // Strategy v2 builds 4h from hourly: EMA200 on 4h + 300-bar level lookback.
+  if (tf === "1h") return 1500;
   if (assetClass === "STOCK" && tf === "4h") return 320;
   return 300;
 }

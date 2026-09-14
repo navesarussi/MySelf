@@ -21,6 +21,7 @@ export type TradingTradeDetail = {
   trade: import("@/lib/trading/store").TradeRow;
   trigger: import("@/lib/trading/service").TriggerRow | null;
   sibling: import("@/lib/trading/service").TradeListItem | null;
+  lesson: import("@/lib/trading/store").LessonRow | null;
 };
 
 export type TradingBacktestSummary = {
@@ -37,9 +38,15 @@ export type TradingBacktestSummary = {
 };
 
 export type TradingBacktestDetail = TradingBacktestSummary & {
-  results: import("@/lib/trading/backtest").BacktestResult[];
+  results: import("@/lib/trading/strategy/backtest-v2").V2Result[];
   walk_forward: { folds: { fold: number; start: number; end: number; stats: import("@/lib/trading/metrics").PerformanceStats }[]; oos_expectancy_r: number; passes: boolean } | null;
   skipped: { symbol: string; reason: string }[] | null;
+};
+
+export type TradingLearningView = {
+  playbook: import("@/lib/trading/store").PlaybookRow | null;
+  history: import("@/lib/trading/store").PlaybookRow[];
+  lessons: import("@/lib/trading/store").LessonRow[];
 };
 
 export type TradingParamSet = {
@@ -512,7 +519,7 @@ export const api = {
     ),
   tradingBacktests: (c: ApiConfig) => apiFetch<TradingBacktestSummary[]>(c, "/trading/backtests"),
   tradingBacktest: (c: ApiConfig, id: string) => apiFetch<TradingBacktestDetail>(c, `/trading/backtests/${encodeURIComponent(id)}`),
-  runTradingBacktest: (c: ApiConfig, body: { preset: "CRYPTO" | "STOCKS" | "ALL"; years: number; mode?: "SWING" | "INTRADAY" }) =>
+  runTradingBacktest: (c: ApiConfig, body: { preset: "CRYPTO" | "STOCKS" | "ALL"; years: number }) =>
     apiFetch<{ id: string }>(c, "/trading/backtests", { method: "POST", body }),
   tradingControl: (c: ApiConfig, body: Record<string, unknown>) =>
     apiFetch<{ ok: boolean; message: string }>(c, "/trading/control", { method: "POST", body }),
@@ -524,6 +531,7 @@ export const api = {
   tradingParamSets: (c: ApiConfig) => apiFetch<TradingParamSet[]>(c, "/trading/calibration"),
   tradingCalibration: (c: ApiConfig, body: Record<string, unknown>) =>
     apiFetch<{ ok?: boolean; id?: string; recommend?: boolean }>(c, "/trading/calibration", { method: "POST", body }),
+  tradingLearning: (c: ApiConfig) => apiFetch<TradingLearningView>(c, "/trading/learning"),
   tradingChat: (c: ApiConfig) => apiFetch<import("@/lib/trading/chat").ChatMessageRow[]>(c, "/trading/chat"),
   sendTradingChat: (c: ApiConfig, message: string) =>
     apiFetch<import("@/lib/trading/chat").ChatMessageRow>(c, "/trading/chat", { method: "POST", body: { message } }),

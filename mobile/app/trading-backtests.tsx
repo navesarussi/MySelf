@@ -35,8 +35,8 @@ function BacktestDetail({ id }: { id: string }) {
           { label: t("trading.winRate"), value: fmtPct(s.win_rate), hint: `1R ${fmtPct(s.reached_1r_rate, 0)}` },
           { label: t("trading.expectancy"), value: fmtR(s.expectancy_r, 3), tone: s.expectancy_r > 0 ? "good" : "warn" },
           { label: t("trading.profitFactor"), value: String(s.profit_factor ?? "∞") },
-          { label: t("trading.maxDd"), value: `${s.max_drawdown_r}R`, hint: `equity ${fmtPct(res.max_equity_dd_pct)}` },
-          { label: "Return", value: fmtPct(res.return_pct), tone: res.return_pct > (res.benchmark_return_pct ?? 0) ? "good" : "warn", hint: `B&H ${fmtPct(res.benchmark_return_pct)}` },
+          { label: t("trading.maxDd"), value: fmtPct(res.max_equity_dd_pct), hint: `${s.max_drawdown_r}R · B&H ${fmtPct(res.benchmark_max_dd_pct)}` },
+          { label: "Sharpe", value: String(res.sharpe ?? "—"), tone: res.sharpe !== null && res.benchmark_sharpe !== null && res.sharpe > res.benchmark_sharpe ? "good" : "warn", hint: `B&H ${res.benchmark_sharpe ?? "—"} · ret ${fmtPct(res.return_pct)} / ${fmtPct(res.benchmark_return_pct)}` },
         ]}
       />
       <Card>
@@ -80,6 +80,14 @@ function BacktestDetail({ id }: { id: string }) {
         ) : null}
       </Card>
       <Card>
+        <GroupBars title={t("trading.bySetup")} rows={res.by_setup.map((g) => ({ key: g.key, value: g.stats.expectancy_r, sub: String(g.stats.trades) }))} />
+        <View style={{ height: 10 }} />
+        <GroupBars title={t("trading.byScore")} rows={res.by_score.map((g) => ({ key: g.key, value: g.stats.expectancy_r, sub: String(g.stats.trades) }))} />
+        <TradingText muted size={tokens.textXs}>
+          {t("trading.extensions")}: {res.trades.filter((x) => x.target_extensions > 0).length}
+        </TradingText>
+      </Card>
+      <Card>
         <GroupBars
           title={t("trading.bySymbol")}
           rows={Object.entries(
@@ -103,7 +111,7 @@ export default function TradingBacktestsScreen() {
   const { row } = useLayoutDir();
   const { run } = useApiMutation();
   const [preset, setPreset] = useState<Preset>("CRYPTO");
-  const [years, setYears] = useState(4.5);
+  const [years, setYears] = useState(3);
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const { data, loading, refresh } = useApiQuery(queryKeys.tradingBacktests, (cfg) => api.tradingBacktests(cfg));
@@ -124,12 +132,12 @@ export default function TradingBacktestsScreen() {
       <Card>
         <Row wrap>
           {(["CRYPTO", "STOCKS", "ALL"] as const).map((p) => (
-            <Chip key={p} label={t(`trading.preset${p === "CRYPTO" ? "Crypto" : p === "STOCKS" ? "Stocks" : "All"}`)} active={preset === p} onPress={() => { setPreset(p); setYears(p === "CRYPTO" ? 4.5 : 2); }} />
+            <Chip key={p} label={t(`trading.preset${p === "CRYPTO" ? "Crypto" : p === "STOCKS" ? "Stocks" : "All"}`)} active={preset === p} onPress={() => { setPreset(p); setYears(p === "CRYPTO" ? 3 : 1.9); }} />
           ))}
         </Row>
         <View style={{ height: 8 }} />
         <Row wrap>
-          {[1, 2, 3, 4.5, 6].map((y) => (
+          {[1, 1.9, 3, 4.5].map((y) => (
             <Chip key={y} label={t("trading.years", { n: y })} active={years === y} onPress={() => setYears(y)} />
           ))}
         </Row>
@@ -154,7 +162,7 @@ export default function TradingBacktestsScreen() {
               <View style={{ ...row, gap: 6, flexWrap: "wrap" }}>
                 <Badge label={passes ? "GO" : "NO-GO"} tone={passes ? "good" : "warn"} />
                 <TradingText bold>
-                  {bt.symbols.length} · {bt.mode} · {bt.years}y
+                  {bt.symbols.length} · {bt.param_version} · {bt.years}y
                 </TradingText>
                 <View style={{ flex: 1 }} />
                 <TradingText muted size={tokens.textXs}>
@@ -163,7 +171,7 @@ export default function TradingBacktestsScreen() {
               </View>
               {bt.gate ? (
                 <TradingText muted size={tokens.textXs}>
-                  {t("trading.vsBuyHold", { ret: fmtPct(bt.gate.return_pct), bh: fmtPct(bt.gate.benchmark_return_pct) })} · {fmtR(bt.gate.stats.expectancy_r, 3)} · {bt.gate.stats.trades}
+                  {t("trading.sharpeVsBh", { s: bt.gate.sharpe ?? "—", b: bt.gate.benchmark_sharpe ?? "—", dd: fmtPct(bt.gate.max_dd_pct), bdd: fmtPct(bt.gate.benchmark_max_dd_pct) })} · {fmtR(bt.gate.stats.expectancy_r, 3)} · {bt.gate.stats.trades}
                 </TradingText>
               ) : null}
             </Pressable>

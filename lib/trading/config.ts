@@ -1,4 +1,4 @@
-import type { AssetClass, TradingMode, UniverseSymbol } from "./types";
+import type { AssetClass, UniverseSymbol } from "./types";
 
 /**
  * RISK ENVELOPE — hard constants. Nothing at runtime (agent, dashboard, chat, DB row)
@@ -33,40 +33,7 @@ export const EXECUTION_RULES = Object.freeze({
   ASSUMED_SLIPPAGE: Object.freeze({ STOCK: 0.0005, CRYPTO_MAJOR: 0.0005, CRYPTO_ALT: 0.001 } as Record<AssetClass, number>),
 });
 
-/**
- * Strategy params — tunable only via the quarterly calibration flow (proposal → your approval →
- * locked for 90 days). These are the defaults when no approved param set exists.
- */
-export type StrategyParams = {
-  version: string;
-  rsi_low: number;
-  rsi_high: number;
-  rsi_confirm: number;
-  adx_min: number;
-  atr_stop_mult: number;
-  swing_buffer_atr: number;
-  ema_touch_atr: number;
-  swing_lookback: number;
-  trail_atr_mult: number;
-};
-
-export const DEFAULT_STRATEGY_PARAMS: StrategyParams = Object.freeze({
-  version: "default-1",
-  rsi_low: 40,
-  rsi_high: 50,
-  rsi_confirm: 50,
-  adx_min: 20,
-  atr_stop_mult: 1.5,
-  swing_buffer_atr: 0.2,
-  ema_touch_atr: 0.5,
-  swing_lookback: 10,
-  trail_atr_mult: 2,
-}) as StrategyParams;
-
-export const MODE_TIMEFRAMES: Record<TradingMode, { entry: "15m" | "4h"; trend: "4h" | "1d" }> = {
-  INTRADAY: { entry: "15m", trend: "4h" },
-  SWING: { entry: "4h", trend: "1d" },
-};
+/** Strategy params live with the strategy: see DEFAULT_V2_PARAMS in strategy/candidates.ts. */
 
 /** Universe screening thresholds (daily). */
 export const UNIVERSE_RULES = Object.freeze({
@@ -107,7 +74,7 @@ export const PHASE_GATES = Object.freeze({
 });
 
 export const AGENT_MODEL_ID = "gemini-3-flash-preview";
-export const AGENT_PROMPT_VERSION = "trade-judge-v1";
+export const AGENT_PROMPT_VERSION = "trade-analyst-v2";
 
 /** Paper account starting equity (USD). */
 export const PAPER_STARTING_EQUITY = 100_000;
@@ -123,6 +90,12 @@ export const SEED_UNIVERSE: UniverseSymbol[] = [
   { symbol: "LINK", asset_class: "CRYPTO_ALT", provider_symbol: "LINKUSDT" },
   { symbol: "DOGE", asset_class: "CRYPTO_ALT", provider_symbol: "DOGEUSDT" },
   { symbol: "LTC", asset_class: "CRYPTO_ALT", provider_symbol: "LTCUSDT" },
+  { symbol: "SUI", asset_class: "CRYPTO_ALT", provider_symbol: "SUIUSDT" },
+  { symbol: "NEAR", asset_class: "CRYPTO_ALT", provider_symbol: "NEARUSDT" },
+  { symbol: "TRX", asset_class: "CRYPTO_ALT", provider_symbol: "TRXUSDT" },
+  { symbol: "UNI", asset_class: "CRYPTO_ALT", provider_symbol: "UNIUSDT" },
+  { symbol: "BCH", asset_class: "CRYPTO_ALT", provider_symbol: "BCHUSDT" },
+  { symbol: "ARB", asset_class: "CRYPTO_ALT", provider_symbol: "ARBUSDT" },
   { symbol: "SPY", asset_class: "STOCK", provider_symbol: "SPY" },
   { symbol: "QQQ", asset_class: "STOCK", provider_symbol: "QQQ" },
   { symbol: "AAPL", asset_class: "STOCK", provider_symbol: "AAPL" },
@@ -133,6 +106,9 @@ export const SEED_UNIVERSE: UniverseSymbol[] = [
   { symbol: "GOOGL", asset_class: "STOCK", provider_symbol: "GOOGL" },
   { symbol: "TSLA", asset_class: "STOCK", provider_symbol: "TSLA" },
   { symbol: "AMD", asset_class: "STOCK", provider_symbol: "AMD" },
+  ...["NFLX", "AVGO", "COST", "JPM", "V", "LLY", "XOM", "ORCL", "PLTR", "COIN", "UBER", "CRM", "MU", "WMT", "IWM"].map(
+    (symbol): UniverseSymbol => ({ symbol, asset_class: "STOCK", provider_symbol: symbol })
+  ),
 ];
 
 /** Super-market regime reference per asset class. */

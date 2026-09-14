@@ -174,15 +174,17 @@ export function TriggerCard({ tr }: { tr: TriggerRow }) {
       <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
         <Text style={{ color: c.ink, fontWeight: "700" }}>{tr.symbol}</Text>
         <Badge label={status.label} tone={status.tone} />
+        {tr.setup ? <Badge label={t(`trading.setup_${tr.setup}`)} /> : null}
+        {tr.score !== null ? <Badge label={t("trading.scoreLabel", { n: tr.score })} tone="accent" /> : null}
         {tr.agent_conviction ? <Badge label={t("trading.conviction", { n: tr.agent_conviction })} tone="accent" /> : null}
         {tr.agent_risk_multiplier !== null && tr.agent_risk_multiplier > 0 && tr.agent_risk_multiplier < 1 ? <Badge label={t("trading.multiplier", { m: tr.agent_risk_multiplier })} /> : null}
         {tr.injection_flags.length ? <Badge label="⚠ injection" tone="warn" /> : null}
         <View style={{ flex: 1 }} />
         <Text style={{ color: c.muted, fontSize: tokens.textXs }}>{fmtDateTime(tr.bar_time)}</Text>
       </View>
-      {tr.agent_reasoning ? (
+      {tr.agent_thesis || tr.agent_reasoning ? (
         <View style={{ marginTop: 6 }}>
-          <TradingText muted>{tr.agent_reasoning}</TradingText>
+          <TradingText muted>{tr.agent_thesis ?? tr.agent_reasoning}</TradingText>
         </View>
       ) : null}
       {tr.agent_error ? (
@@ -208,6 +210,7 @@ export function TradeRowCard({ trade }: { trade: TradeListItem }) {
           <Text style={{ color: c.ink, fontWeight: "800", fontSize: 15 }}>{trade.symbol}</Text>
           <Badge label={t(`trading.state_${trade.state}`)} tone={trade.state === "CLOSED" ? "default" : "accent"} />
           <Badge label={trade.execution} tone={trade.execution === "PAPER" ? "accent" : "default"} />
+          {trade.score !== null ? <Badge label={t("trading.scoreLabel", { n: trade.score })} /> : null}
           {trade.track === "DETERMINISTIC" ? <Badge label="BASE" /> : null}
           <View style={{ flex: 1 }} />
           <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 16 }}>{trade.state === "CLOSED" ? fmtR(r) : "—"}</Text>

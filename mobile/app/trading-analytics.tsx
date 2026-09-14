@@ -101,10 +101,13 @@ export default function TradingAnalyticsScreen() {
               { label: t("trading.slippage"), value: data.avg_slippage_bps === null ? "—" : `${data.avg_slippage_bps}bps` },
               { label: t("trading.fees"), value: fmtUsd(data.total_fees) },
               { label: t("trading.gapped"), value: String(data.gaps_through_stop), tone: data.gaps_through_stop ? "warn" : "default" },
+              { label: t("trading.extensions"), value: String(data.target_extensions) },
             ]}
           />
 
           {[
+            { title: t("trading.bySetup"), rows: data.by_setup },
+            { title: t("trading.byScore"), rows: data.by_score },
             { title: t("trading.bySymbol"), rows: data.by_symbol },
             { title: t("trading.byBucket"), rows: data.by_bucket },
             { title: t("trading.byExit"), rows: data.by_exit_reason },

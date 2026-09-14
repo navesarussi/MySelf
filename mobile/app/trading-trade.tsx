@@ -11,13 +11,15 @@ import { CandleChart, KpiGrid, type ChartLevel, type ChartMarker } from "../src/
 import { TradingText } from "../src/components/trading/blocks";
 import { fmtDateTime, fmtPrice, fmtR, fmtSignedUsd, fmtUsd, rTone } from "@/lib/trading/format";
 
-const SNAPSHOT_KEYS = ["close", "ema20", "ema50", "rsi", "prev_rsi", "atr_pct", "relative_volume", "swing_low", "swing_high", "trend_close", "trend_ema200", "trend_adx", "room_to_resistance_r", "market_regime_ok", "funding_rate", "vix", "btc_dominance_pct"];
+type TfRead = { trend: string; structure: string; rsi: number | null; adx: number | null; volume_ratio: number | null; squeeze_pct: number | null; bearish_divergence: boolean };
+type TriggerSnapshot = {
+  candidate?: { setup: string; score: number; reasons: string[]; target_menu: { price: number; rr: number; kind: string }[] };
+  brief?: { daily: TfRead; h4: TfRead; h1: TfRead; nearest_resistance: { price: number; touches: number } | null; nearest_support: { price: number; touches: number } | null };
+  funding_rate?: number | null;
+  vix?: number | null;
+};
 
-function fmtSnapshot(v: unknown) {
-  if (typeof v === "number") return Math.abs(v) >= 100 ? v.toFixed(1) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(4);
-  if (typeof v === "boolean") return v ? "✓" : "✗";
-  return v === null || v === undefined ? "—" : String(v);
-}
+const fmtNum = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? "—" : v.toFixed(d));
 
 export default function TradingTradeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -47,16 +49,22 @@ export default function TradingTradeScreen() {
       { price: tr.target_price, label: t("trading.target"), tone: "good" },
     ];
     if (tr.exit_price) levels.push({ price: tr.exit_price, label: t("trading.exit"), tone: "muted" });
+    const initialTarget = tr.sim_state?.initial_target_price;
+    if (initialTarget && Math.abs(initialTarget - tr.target_price) > 1e-9) levels.push({ price: initialTarget, label: "TP₀", tone: "muted" });
     const markers: ChartMarker[] = [{ t: Date.parse(tr.trigger_timestamp), label: "T", tone: "accent" }];
     for (const e of tr.events ?? []) {
       if (e.type === "PARTIAL_1R") markers.push({ t: e.at, label: "1R", tone: "good" });
+      if (e.type === "TARGET_EXTENDED") markers.push({ t: e.at, label: "↑TP", tone: "accent" });
       if (e.type === "CLOSED") markers.push({ t: e.at, label: "X", tone: e.price >= (tr.entry_price ?? 0) ? "good" : "warn" });
     }
     return { levels, markers };
   }, [data, t]);
 
   if (!data) return <Screen>{loading ? <Loading /> : null}</Screen>;
-  const { trade, trigger, sibling } = data;
+  const { trade, trigger, sibling, lesson } = data;
+  const snap = (trigger?.snapshot ?? trade.trigger_snapshot ?? {}) as TriggerSnapshot;
+  const menu = snap.candidate?.target_menu ?? [];
+  const chosen = trigger?.agent_target_index ?? null;
   const tone = rTone(trade.realized_r);
   const save = () =>
     run(
@@ -111,7 +119,48 @@ export default function TradingTradeScreen() {
               {trigger.agent_confidence ? <Badge label={trigger.agent_confidence} /> : null}
               <Badge label={trade.agent_model_version} />
             </View>
+            {trigger.agent_market_read ? (
+              <View style={{ marginBottom: 8 }}>
+                <TradingText muted bold size={tokens.textXs}>
+                  {t("trading.marketRead")}
+                </TradingText>
+                <TradingText>{trigger.agent_market_read}</TradingText>
+              </View>
+            ) : null}
+            {trigger.agent_thesis ? (
+              <View style={{ marginBottom: 8 }}>
+                <TradingText muted bold size={tokens.textXs}>
+                  {t("trading.thesis")}
+                </TradingText>
+                <TradingText>{trigger.agent_thesis}</TradingText>
+              </View>
+            ) : null}
+            {trigger.agent_invalidation ? (
+              <View style={{ marginBottom: 8 }}>
+                <TradingText muted bold size={tokens.textXs}>
+                  {t("trading.invalidation")}
+                </TradingText>
+                <TradingText>{trigger.agent_invalidation}</TradingText>
+              </View>
+            ) : null}
             <TradingText>{trigger.agent_reasoning}</TradingText>
+            {chosen !== null && menu[chosen] ? (
+              <TradingText muted size={tokens.textXs}>
+                {t("trading.targetChosen", { i: chosen, rr: menu[chosen].rr, kind: menu[chosen].kind })}
+              </TradingText>
+            ) : null}
+            {trigger.agent_lessons_applied?.length ? (
+              <View style={{ marginTop: 8 }}>
+                <TradingText muted bold size={tokens.textXs}>
+                  {t("trading.lessonsApplied")}
+                </TradingText>
+                {trigger.agent_lessons_applied.map((l) => (
+                  <TradingText key={l} muted size={tokens.textXs}>
+                    • {l}
+                  </TradingText>
+                ))}
+              </View>
+            ) : null}
             {trigger.agent_key_risks?.length ? (
               <View style={{ marginTop: 8 }}>
                 <TradingText muted bold size={tokens.textXs}>
@@ -129,6 +178,25 @@ export default function TradingTradeScreen() {
           <TradingText muted>{trigger?.agent_error ?? t("trading.noAgent")}</TradingText>
         )}
       </Card>
+
+      {lesson ? (
+        <>
+          <SectionTitle>{t("trading.lesson")}</SectionTitle>
+          <Card>
+            <View style={{ ...row, gap: 6, marginBottom: 6 }}>
+              <Badge label={t(`trading.quality_${lesson.decision_quality}`)} tone={lesson.decision_quality === "GOOD" ? "good" : lesson.decision_quality === "POOR" ? "warn" : "default"} />
+              <Badge label={lesson.category} />
+            </View>
+            <TradingText>{lesson.what_happened}</TradingText>
+            <View style={{ marginTop: 6 }}>
+              <TradingText bold>{lesson.lesson}</TradingText>
+            </View>
+            <TradingText muted size={tokens.textXs}>
+              {lesson.applies_when}
+            </TradingText>
+          </Card>
+        </>
+      ) : null}
 
       {sibling ? (
         <Pressable onPress={() => router.replace(`/trading-trade?id=${sibling.id}` as `/${string}`)}>
@@ -149,7 +217,7 @@ export default function TradingTradeScreen() {
           <TradingText key={i} size={tokens.textXs}>
             {fmtDateTime(e.at, locale)} · {e.type}
             {"price" in e ? ` @ ${fmtPrice(e.price)}` : ""}
-            {e.type === "STOP_MOVED" && e.from !== e.to ? ` ${fmtPrice(e.from)} → ${fmtPrice(e.to)}` : ""}
+            {(e.type === "STOP_MOVED" || e.type === "TARGET_EXTENDED") && e.from !== e.to ? ` ${fmtPrice(e.from)} → ${fmtPrice(e.to)}` : ""}
             {e.type === "CLOSED" || e.type === "CANCELLED" ? ` (${e.reason})` : ""}
             {e.note ? ` — ${e.note}` : ""}
           </TradingText>
@@ -158,14 +226,43 @@ export default function TradingTradeScreen() {
 
       <SectionTitle>{t("trading.snapshot")}</SectionTitle>
       <Card>
-        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-          {SNAPSHOT_KEYS.filter((k) => k in (trade.trigger_snapshot ?? {}) || (trigger?.snapshot && k in trigger.snapshot)).map((k) => (
-            <View key={k} style={{ width: "50%", paddingVertical: 3 }}>
-              <Text style={{ color: c.muted, fontSize: 10 }}>{k}</Text>
-              <Text style={{ color: c.ink, fontSize: tokens.textSm, fontWeight: "600" }}>{fmtSnapshot((trigger?.snapshot ?? trade.trigger_snapshot)[k])}</Text>
+        {snap.candidate ? (
+          <View style={{ marginBottom: 8 }}>
+            <View style={{ ...row, gap: 6, marginBottom: 4 }}>
+              <Badge label={t(`trading.setup_${snap.candidate.setup}`)} tone="accent" />
+              <Badge label={t("trading.scoreLabel", { n: snap.candidate.score })} />
             </View>
-          ))}
-        </View>
+            <TradingText muted bold size={tokens.textXs}>
+              {t("trading.scoreReasons")}
+            </TradingText>
+            {snap.candidate.reasons.map((r) => (
+              <TradingText key={r} size={tokens.textXs}>
+                {r}
+              </TradingText>
+            ))}
+          </View>
+        ) : null}
+        {snap.brief ? (
+          <View style={{ direction: "ltr" }}>
+            {(["daily", "h4", "h1"] as const).map((k) => {
+              const r = snap.brief![k];
+              return (
+                <View key={k} style={{ flexDirection: "row", paddingVertical: 3, borderBottomWidth: 1, borderBottomColor: c.border }}>
+                  <Text style={{ width: 44, color: c.muted, fontSize: tokens.textXs }}>{k}</Text>
+                  <Text style={{ flex: 1, color: c.ink, fontSize: tokens.textXs }}>
+                    {r.trend} · {r.structure} · RSI {fmtNum(r.rsi)} · ADX {fmtNum(r.adx)} · vol×{fmtNum(r.volume_ratio, 2)} · sq {r.squeeze_pct === null ? "—" : Math.round(r.squeeze_pct * 100) + "%"}
+                    {r.bearish_divergence ? " · div⚠" : ""}
+                  </Text>
+                </View>
+              );
+            })}
+            <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 4 }}>
+              R {snap.brief.nearest_resistance ? `${fmtPrice(snap.brief.nearest_resistance.price)} (${snap.brief.nearest_resistance.touches}×)` : "—"} · S {snap.brief.nearest_support ? `${fmtPrice(snap.brief.nearest_support.price)} (${snap.brief.nearest_support.touches}×)` : "—"}
+              {snap.funding_rate !== undefined && snap.funding_rate !== null ? ` · funding ${(snap.funding_rate * 100).toFixed(3)}%` : ""}
+              {snap.vix ? ` · VIX ${snap.vix.toFixed(1)}` : ""}
+            </Text>
+          </View>
+        ) : null}
         {trigger?.vetoes.length || trigger?.envelope_blocks.length ? (
           <TradingText size={tokens.textXs} color={c.warn}>
             {[...(trigger?.vetoes ?? []), ...(trigger?.envelope_blocks ?? [])].join(" · ")}

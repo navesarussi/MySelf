@@ -43,6 +43,7 @@ export const queryKeys = {
   tradingBacktest: (id: string) => ["trading", "backtest", id] as const,
   tradingUniverse: ["trading", "universe"] as const,
   tradingParamSets: ["trading", "paramSets"] as const,
+  tradingLearning: ["trading", "learning"] as const,
   tradingTriggers: (symbol?: string) => ["trading", "triggers", symbol ?? "all"] as const,
   tradingChat: ["trading", "chat"] as const,
   tradingAll: ["trading"] as const,

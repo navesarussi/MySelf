@@ -36,9 +36,10 @@ export type ExitReason =
   | "REGIME_FLIP"
   | "EARNINGS"
   | "MANUAL"
-  | "KILL_SWITCH";
+  | "KILL_SWITCH"
+  | "TIME_STOP";
 /** What happens to the remaining half after the 1R partial exit. */
-export type ExitPlan = "TARGET_2R" | "TRAIL_2ATR";
+export type ExitPlan = "TARGET_2R" | "TRAIL_2ATR" | "STRUCTURAL";
 
 export type UniverseSymbol = {
   symbol: string;

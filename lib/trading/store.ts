@@ -1,8 +1,9 @@
 import { getSupabase } from "@/lib/supabase";
 import { sendPush } from "@/lib/push/send";
-import { DEFAULT_STRATEGY_PARAMS, PAPER_STARTING_EQUITY, SEED_UNIVERSE, type StrategyParams } from "./config";
+import { PAPER_STARTING_EQUITY, SEED_UNIVERSE } from "./config";
 import { FOMC_DATES } from "./calendar-seed";
 import type { JournalTrade } from "./learning";
+import { DEFAULT_V2_PARAMS, type StrategyV2Params } from "./strategy/candidates";
 import type { PositionEvent, SimPosition } from "./position";
 import type { AssetClass, Bar, ExitPlan, TradingMode, TradingPhase } from "./types";
 import type { CalendarEvent } from "./veto";
@@ -13,7 +14,6 @@ export type TradingSettings = {
   phase: TradingPhase;
   phase_started_at: string;
   entries_paused: boolean;
-  intraday_enabled: boolean;
   risk_scale: number;
   pending_risk_scale: number | null;
   pending_risk_scale_at: string | null;
@@ -40,7 +40,6 @@ export async function getSettings(): Promise<TradingSettings> {
     phase: (r.phase as TradingPhase) ?? "BACKTEST",
     phase_started_at: String(r.phase_started_at ?? new Date().toISOString()),
     entries_paused: Boolean(r.entries_paused),
-    intraday_enabled: Boolean(r.intraday_enabled),
     risk_scale: num(r.risk_scale, 1),
     pending_risk_scale: numOrNull(r.pending_risk_scale),
     pending_risk_scale_at: (r.pending_risk_scale_at as string) ?? null,
@@ -107,11 +106,13 @@ export async function getUniverse(): Promise<UniverseRow[]> {
   return (data ?? []) as UniverseRow[];
 }
 
-export async function getActiveParams(): Promise<{ params: StrategyParams; locked_until: string | null; id: string | null }> {
+/** Active strategy v2 params: an approved param set tagged `strategy: "v2"`, else research defaults. */
+export async function getActiveV2Params(): Promise<{ params: StrategyV2Params; locked_until: string | null; id: string | null }> {
   const { data } = await getSupabase().from("trading_param_sets").select("*").eq("status", "ACTIVE").maybeSingle();
-  if (!data) return { params: DEFAULT_STRATEGY_PARAMS, locked_until: null, id: null };
-  const row = data as { id: string; version: string; params: StrategyParams; locked_until: string | null };
-  return { params: { ...DEFAULT_STRATEGY_PARAMS, ...row.params, version: row.version }, locked_until: row.locked_until, id: row.id };
+  const row = data as { id: string; version: string; params: Record<string, unknown>; locked_until: string | null } | null;
+  if (!row || row.params.strategy !== "v2") return { params: DEFAULT_V2_PARAMS, locked_until: row?.locked_until ?? null, id: null };
+  const { strategy: _s, ...rest } = row.params;
+  return { params: { ...DEFAULT_V2_PARAMS, ...(rest as object), version: row.version }, locked_until: row.locked_until, id: row.id };
 }
 
 export async function getCalendar(fromIso: string): Promise<(CalendarEvent & { id: string; note: string | null; source: string })[]> {
@@ -169,6 +170,10 @@ export type TradeRow = {
   notes: string | null;
   tags: string[];
   self_rating: number | null;
+  setup: string | null;
+  score: number | null;
+  strategy_version: string | null;
+  lesson_id: string | null;
   opened_at: string | null;
   closed_at: string | null;
   created_at: string;
@@ -274,4 +279,67 @@ export async function updateTrade(id: string, patch: Record<string, unknown>) {
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(`update trade: ${error.message}`);
+}
+
+// ── Lessons & playbook (self-learning) ────────────────────────────────────
+
+export type PlaybookRow = { version: number; rules: import("./agent-judge").PlaybookRule[]; lessons_used: number; status: "ACTIVE" | "RETIRED" | "DISABLED"; created_at: string };
+export type LessonRow = {
+  id: string;
+  trade_id: string | null;
+  symbol: string;
+  setup: string | null;
+  realized_r: number;
+  category: string;
+  decision_quality: "GOOD" | "NEUTRAL" | "POOR";
+  what_happened: string;
+  lesson: string;
+  applies_when: string;
+  playbook_version: number | null;
+  created_at: string;
+};
+
+export async function getActivePlaybook(): Promise<PlaybookRow | null> {
+  const { data } = await getSupabase().from("trading_playbook").select("*").eq("status", "ACTIVE").order("version", { ascending: false }).limit(1).maybeSingle();
+  return (data as PlaybookRow) ?? null;
+}
+
+export async function listPlaybooks(limit = 10): Promise<PlaybookRow[]> {
+  const { data } = await getSupabase().from("trading_playbook").select("*").order("version", { ascending: false }).limit(limit);
+  return (data ?? []) as PlaybookRow[];
+}
+
+export async function listLessons(limit = 50): Promise<LessonRow[]> {
+  const { data } = await getSupabase().from("trading_lessons").select("*").order("created_at", { ascending: false }).limit(limit);
+  return ((data ?? []) as LessonRow[]).map((l) => ({ ...l, realized_r: Number(l.realized_r) }));
+}
+
+export async function countLessonsSince(iso: string | null): Promise<number> {
+  let q = getSupabase().from("trading_lessons").select("id", { count: "exact", head: true });
+  if (iso) q = q.gt("created_at", iso);
+  const { count } = await q;
+  return count ?? 0;
+}
+
+export async function insertLesson(row: Omit<LessonRow, "id" | "created_at">) {
+  const { data, error } = await getSupabase().from("trading_lessons").upsert(row, { onConflict: "trade_id", ignoreDuplicates: true }).select("id").maybeSingle();
+  if (error) throw new Error(`insert lesson: ${error.message}`);
+  return (data as { id: string } | null)?.id ?? null;
+}
+
+/** New playbook version becomes ACTIVE; the previous active one is retired (kept for audit/rollback). */
+export async function activatePlaybook(rules: PlaybookRow["rules"], lessonsUsed: number): Promise<number> {
+  const sb = getSupabase();
+  const { data: last } = await sb.from("trading_playbook").select("version").order("version", { ascending: false }).limit(1).maybeSingle();
+  const version = ((last as { version: number } | null)?.version ?? 0) + 1;
+  await sb.from("trading_playbook").update({ status: "RETIRED" }).eq("status", "ACTIVE");
+  const { error } = await sb.from("trading_playbook").insert({ version, rules, lessons_used: lessonsUsed, status: "ACTIVE" });
+  if (error) throw new Error(`playbook: ${error.message}`);
+  return version;
+}
+
+export async function setPlaybookStatus(version: number, status: PlaybookRow["status"]) {
+  const sb = getSupabase();
+  if (status === "ACTIVE") await sb.from("trading_playbook").update({ status: "RETIRED" }).eq("status", "ACTIVE");
+  await sb.from("trading_playbook").update({ status }).eq("version", version);
 }
