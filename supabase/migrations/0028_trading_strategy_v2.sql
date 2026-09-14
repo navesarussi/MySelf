@@ -4,6 +4,9 @@ ALTER TABLE myself.trading_trades ADD COLUMN IF NOT EXISTS setup text;
 ALTER TABLE myself.trading_trades ADD COLUMN IF NOT EXISTS score smallint;
 ALTER TABLE myself.trading_trades ADD COLUMN IF NOT EXISTS strategy_version text;
 ALTER TABLE myself.trading_trades ADD COLUMN IF NOT EXISTS lesson_id uuid;
+-- v2 manages positions with the STRUCTURAL exit plan.
+ALTER TABLE myself.trading_trades DROP CONSTRAINT IF EXISTS trading_trades_exit_plan_check;
+ALTER TABLE myself.trading_trades ADD CONSTRAINT trading_trades_exit_plan_check CHECK (exit_plan IN ('TARGET_2R', 'TRAIL_2ATR', 'STRUCTURAL'));
 CREATE INDEX IF NOT EXISTS trading_trades_setup_idx ON myself.trading_trades (setup, track, state);
 
 ALTER TABLE myself.trading_triggers ADD COLUMN IF NOT EXISTS setup text;
