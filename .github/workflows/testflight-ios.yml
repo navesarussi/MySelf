@@ -68,6 +68,11 @@ jobs:
           ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
         run: bash scripts/ci-write-asc-key.sh
 
+      - name: Sync EAS buildNumber with App Store Connect
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: node scripts/sync-eas-ios-build-number.mjs || true
+
       - name: Build iOS locally & submit to TestFlight
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -86,3 +91,5 @@ jobs:
             --path ./build-myself.ipa \
             --non-interactive \
             --wait
+          EXPECTED="$(npx eas-cli build:version:get -p ios 2>/dev/null | grep -oE '[0-9]+$' || echo 54)"
+          node scripts/asc-poll-build.mjs "$EXPECTED"

@@ -66,6 +66,19 @@ gh secret set EXPO_TOKEN --repo navesarussi/MySelf
 
 GitHub → **Actions** → **TestFlight iOS** → **Run workflow**.
 
+### אם העלאה "מצליחה" אבל build לא מופיע ב-ASC
+
+1. **Activity** ב-App Store Connect (לא רק TestFlight) — חפש `Invalid` / `Failed`.
+2. שגיאה נפוצה (**90626**): תיאור App Intent לא יכול להכיל המילה `apple` (כולל "Apple Pay").
+   הקובץ: `mobile/native-ios/LogApplePayExpenseIntent.swift` — השתמש ב"תשלום" / "Wallet", לא "Apple Pay".
+3. סנכרון מונה EAS עם ASC (אם EAS קפץ ל-70+ בלי builds ב-ASC):
+
+```bash
+cd mobile
+node scripts/sync-eas-ios-build-number.mjs
+bash scripts/build-and-submit-testflight.sh
+```
+
 ### עדכונים בטלפון
 
 בודקים פנימיים (קבוצת `tests`) מקבלים עדכון אוטומטית ב-TestFlight אחרי ש-Apple מסיימת לעבד את ה-build (בדרך כלל 5–15 דקות).

@@ -4,7 +4,8 @@ import Foundation
 @available(iOS 16.0, *)
 struct LogApplePayExpenseIntent: AppIntent {
   static var title: LocalizedStringResource = "רשום הוצאה ל־MySelf"
-  static var description = IntentDescription("שולח עסקת Apple Pay ל-MySelf לרישום והסיווג.")
+  // ASC rejects Intent descriptions containing "apple" (error 90626) — do not use "Apple Pay" here.
+  static var description = IntentDescription("שולח עסקת תשלום ל-MySelf לרישום והסיווג.")
   static var openAppWhenRun: Bool = false
 
   @Parameter(title: "סכום")
