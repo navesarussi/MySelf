@@ -9,6 +9,8 @@ export function buildTradePlan(input: {
   assetClass: AssetClass;
   /** Global live risk scale (≤ 1) × agent multiplier (≤ 1). */
   riskScale: number;
+  /** Extra notional ceiling (e.g. remaining cash buying power) — can only shrink the position. */
+  maxNotional?: number;
 }): TradePlan | null {
   const { entry, stopDistance, equity, assetClass } = input;
   if (!(entry > 0) || !(stopDistance > 0) || !(stopDistance < entry) || !(equity > 0)) return null;
@@ -17,7 +19,7 @@ export function buildTradePlan(input: {
   const riskAmount = RISK_ENVELOPE.MAX_RISK_PER_TRADE[assetClass] * equity * scale;
   if (riskAmount <= 0) return null;
   let size = riskAmount / stopDistance;
-  const maxNotional = RISK_ENVELOPE.MAX_ASSET_EXPOSURE * equity;
+  const maxNotional = Math.min(RISK_ENVELOPE.MAX_ASSET_EXPOSURE * equity, input.maxNotional ?? Infinity);
   let reduced = false;
   // Over exposure → shrink the position, never tighten the stop.
   if (size * entry > maxNotional) {

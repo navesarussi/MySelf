@@ -111,7 +111,20 @@ export default function TradingTradeScreen() {
 
       <SectionTitle>{t("trading.agentReasoning")}</SectionTitle>
       <Card>
-        {trigger?.agent_decision ? (
+        {trade.strategy_version === "intraday" ? (
+          <>
+            <View style={{ ...row, gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+              <Badge label={trade.agent_rating ? t("trading.agentRating", { n: trade.agent_rating }) : t("trading.ratingPending")} tone={trade.agent_rating ? "accent" : "default"} />
+              {trade.agent_rating ? <Badge label={trade.agent_model_version} /> : null}
+            </View>
+            {trade.agent_rating_explanation ? <TradingText>{trade.agent_rating_explanation}</TradingText> : null}
+            {trigger?.agent_error ? (
+              <TradingText size={tokens.textXs} color={c.warn}>
+                {t("trading.agentError", { msg: trigger.agent_error })}
+              </TradingText>
+            ) : null}
+          </>
+        ) : trigger?.agent_decision ? (
           <>
             <View style={{ ...row, gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
               <Badge label={trigger.agent_decision === "ENTER" ? t("trading.decisionEnter") : t("trading.decisionSkip")} tone={trigger.agent_decision === "ENTER" ? "good" : "default"} />

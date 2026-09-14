@@ -191,3 +191,29 @@ export function groupStats<T extends RTrade>(trades: T[], keyOf: (t: T) => strin
     .map(([key, list]) => ({ key, stats: computeStats(list) }))
     .sort((a, b) => b.stats.trades - a.stats.trades);
 }
+
+export type RatingValue = { rated: number; correlation: number | null; high_expectancy_r: number | null; high_n: number; low_expectancy_r: number | null; low_n: number };
+
+/** Pearson correlation between the agent's rating and realized R, plus high (≥7) vs low (≤4) expectancy. */
+export function ratingValue(trades: { agent_rating: number | null; realized_r: number | null }[]): RatingValue {
+  const rated = trades.filter((t) => t.agent_rating !== null && t.realized_r !== null) as { agent_rating: number; realized_r: number }[];
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const high = rated.filter((t) => t.agent_rating >= 7).map((t) => t.realized_r);
+  const low = rated.filter((t) => t.agent_rating <= 4).map((t) => t.realized_r);
+  let correlation: number | null = null;
+  if (rated.length >= 5) {
+    const mx = mean(rated.map((t) => t.agent_rating))!;
+    const my = mean(rated.map((t) => t.realized_r))!;
+    let cov = 0;
+    let vx = 0;
+    let vy = 0;
+    for (const t of rated) {
+      cov += (t.agent_rating - mx) * (t.realized_r - my);
+      vx += (t.agent_rating - mx) ** 2;
+      vy += (t.realized_r - my) ** 2;
+    }
+    correlation = vx > 0 && vy > 0 ? Math.round((cov / Math.sqrt(vx * vy)) * 1000) / 1000 : null;
+  }
+  const r3 = (x: number | null) => (x === null ? null : Math.round(x * 1000) / 1000);
+  return { rated: rated.length, correlation, high_expectancy_r: r3(mean(high)), high_n: high.length, low_expectancy_r: r3(mean(low)), low_n: low.length };
+}

@@ -10,6 +10,7 @@ import type { AssetClass, Bar, Timeframe, UniverseSymbol } from "./types";
  */
 
 export const TF_MS: Record<Timeframe, number> = {
+  "5m": 5 * 60_000,
   "15m": 15 * 60_000,
   "1h": 60 * 60_000,
   "4h": 4 * 60 * 60_000,
@@ -99,6 +100,7 @@ export async function fetchBars(sym: UniverseSymbol, tf: Timeframe, sinceMs: num
     const bars = await yahooBars(sym.provider_symbol, "1d", yahooRangeFor(days, 3650));
     return onlyClosed(bars.filter((b) => b.t >= sinceMs - 86_400_000), TF_MS["1d"], now);
   }
+  if (tf === "5m") throw new Error("stock_5m_unsupported");
   if (tf === "15m") {
     const bars = await yahooBars(sym.provider_symbol, "15m", `${Math.min(days, 59)}d`);
     return onlyClosed(bars.filter((b) => b.t >= sinceMs), TF_MS["15m"], now);

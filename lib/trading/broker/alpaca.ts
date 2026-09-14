@@ -26,7 +26,7 @@ export type AlpacaOrder = {
   created_at: string;
 };
 
-export type AlpacaAccount = { equity: string; cash: string; buying_power: string; status: string; trading_blocked: boolean; account_blocked: boolean; currency: string };
+export type AlpacaAccount = { equity: string; cash: string; buying_power: string; non_marginable_buying_power?: string; status: string; trading_blocked: boolean; account_blocked: boolean; currency: string };
 export type AlpacaPosition = { symbol: string; qty: string; avg_entry_price: string; current_price: string; unrealized_pl: string };
 
 export function isAlpacaConfigured() {

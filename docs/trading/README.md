@@ -9,7 +9,30 @@ Tab **מסחר** in the Expo app. Backend in `lib/trading/**`, API in `app/api/v
 - **הסוכן מסחר** — the AI part (`lib/trading/agent-judge.ts`).
 - **האסטרטגיית מסחר** — deterministic part + AI part together.
 
-## Strategy v2 (current)
+## Intraday strategy — testing phase (2026-09-14)
+
+Crypto only, per-minute tick (`/api/trading/intraday-tick`, scheduled by Supabase **pg_cron** because Vercel Hobby
+crons are daily-only; auth token lives in `myself.trading_cron_tokens`). Code: `lib/trading/strategy/intraday.ts`
+(pure), `lib/trading/intraday-engine.ts` (live), `lib/trading/agent-rater.ts` (rating-only agent).
+
+- **Setups on closed 15m bars** (one per bar, priority order): `WYCKOFF_SPRING` (tested sideways range → shakeout below
+  support closing back inside), `WYCKOFF_LPS` (low-volume pullback to broken resistance after an SOS), `WYCKOFF_SOS`
+  (wide-spread, high-volume close above the range), `BREAKOUT_15M` (20-bar high after a Bollinger squeeze, control group).
+  Longs only with the 15m trend (close > EMA200, EMA50 > EMA200).
+- **Entry on 5m**: within 30 min of the setup, the first 5m bar that closes up, holds the setup close and is above its
+  EMA20. A 5m low through the stop first kills the setup. Stop = structure, widened to ≥ 1.2% / 0.6×ATR15; target =
+  max(structure, 2R). BE at 1R, 2×ATR15 chandelier after 1.5R, time stop 12h.
+- **Agent = rating only**: every entered trade gets a 1–10 score + short Hebrew paragraph, computed from the trigger
+  snapshot (no look-ahead). It never changes entry, size or exits. Analytics → "does the rating predict outcome?"
+  (correlation rating↔R, expectancy for ≥7 vs ≤4).
+- **Risk (testing)**: envelope loosened in `config.ts` (2% crypto risk/trade, 10 positions, correlation cap off,
+  −10R day / −25R week halts, kill switch at −30%). No leverage for crypto at Alpaca, so the 25% notional cap usually
+  binds and real risk per trade is ~0.3–0.5% of equity. No macro/funding vetoes for intraday.
+- **Backtest (90d, 26 coins, `scripts/trading/intraday-backtest.ts`)**: ~8.6 trades/day, gross +0.02R, net −0.25R
+  after fees+slippage (≈0.27R/trade on a ~1.5% stop). Best: WYCKOFF_SOS in trend (gross +0.22R, net −0.05R).
+  This is a measurement phase — not a proven edge.
+
+## Strategy v2 (4h scan disabled in the testing phase)
 
 Research (2026-09, IS 2021-07→2024-03 / OOS 2024-03→2026-09, 16 crypto): v1 trend-pullback with a fixed 2R
 target lost out of sample; **4h breakout from volatility compression, score ≥ 60, in a daily uptrend** was

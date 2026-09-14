@@ -92,6 +92,28 @@ export default function TradingAnalyticsScreen() {
             </>
           ) : null}
 
+          {data.rating_value && data.rating_value.rated > 0 ? (
+            <>
+              <SectionTitle>{t("trading.ratingValue")}</SectionTitle>
+              <Card>
+                <TradingText>{t("trading.ratingValueBody", { n: data.rating_value.rated, corr: data.rating_value.correlation === null ? "—" : String(data.rating_value.correlation) })}</TradingText>
+                <TradingText muted size={tokens.textXs}>
+                  {t("trading.ratingHighLow", {
+                    high: data.rating_value.high_expectancy_r === null ? "—" : fmtR(data.rating_value.high_expectancy_r, 2),
+                    hn: data.rating_value.high_n,
+                    low: data.rating_value.low_expectancy_r === null ? "—" : fmtR(data.rating_value.low_expectancy_r, 2),
+                    ln: data.rating_value.low_n,
+                  })}
+                </TradingText>
+                {data.by_rating.length ? (
+                  <View style={{ marginTop: 10 }}>
+                    <GroupBars title={t("trading.byRating")} rows={toBars(data.by_rating)} />
+                  </View>
+                ) : null}
+              </Card>
+            </>
+          ) : null}
+
           <SectionTitle>{t("trading.execQuality")}</SectionTitle>
           <KpiGrid
             items={[
@@ -106,6 +128,7 @@ export default function TradingAnalyticsScreen() {
           />
 
           {[
+            { title: t("trading.byStrategy"), rows: data.by_strategy ?? [] },
             { title: t("trading.bySetup"), rows: data.by_setup },
             { title: t("trading.byScore"), rows: data.by_score },
             { title: t("trading.bySymbol"), rows: data.by_symbol },

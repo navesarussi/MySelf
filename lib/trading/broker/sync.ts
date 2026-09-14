@@ -20,7 +20,7 @@ export type PendingDecision =
   | { kind: "EXPIRE" }
   | { kind: "DEAD"; reason: string };
 
-export function pendingDecision(order: AlpacaOrder, triggerAt: number, now: number): PendingDecision {
+export function pendingDecision(order: AlpacaOrder, triggerAt: number, now: number, expiryMs = ENTRY_EXPIRY_MS): PendingDecision {
   const filledQty = num(order.filled_qty);
   const qty = num(order.qty);
   const price = num(order.filled_avg_price);
@@ -31,7 +31,7 @@ export function pendingDecision(order: AlpacaOrder, triggerAt: number, now: numb
     if (filledQty > 0) return filledQty / qty >= MIN_PARTIAL_FILL ? { kind: "PARTIAL_KEEP", price, qty: filledQty, at } : { kind: "PARTIAL_UNWIND", price, qty: filledQty, ratio: filledQty / qty };
     return { kind: "DEAD", reason: `BROKER_${order.status.toUpperCase()}` };
   }
-  if (now - triggerAt < ENTRY_EXPIRY_MS) return { kind: "WAIT" };
+  if (now - triggerAt < expiryMs) return { kind: "WAIT" };
   if (filledQty > 0) return filledQty / qty >= MIN_PARTIAL_FILL ? { kind: "PARTIAL_KEEP", price, qty: filledQty, at } : { kind: "PARTIAL_UNWIND", price, qty: filledQty, ratio: filledQty / qty };
   return { kind: "EXPIRE" };
 }

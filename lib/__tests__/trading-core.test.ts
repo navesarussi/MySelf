@@ -52,9 +52,10 @@ describe("indicators", () => {
 });
 
 describe("sizing (stop first, then size)", () => {
-  it("risks exactly 1% for crypto and keeps 2:1", () => {
-    const plan = buildTradePlan({ entry: 100, stopDistance: 5, equity: 100_000, assetClass: "CRYPTO_ALT", riskScale: 1 })!;
-    assert.equal(plan.risk_amount, 1000);
+  it("risks exactly the envelope % for crypto and keeps 2:1", () => {
+    // Wide stop so the exposure cap can't bind: notional = risk / 5%.
+    const plan = buildTradePlan({ entry: 100, stopDistance: 5, equity: 100_000, assetClass: "CRYPTO_ALT", riskScale: 0.5 })!;
+    assert.equal(plan.risk_amount, RISK_ENVELOPE.MAX_RISK_PER_TRADE.CRYPTO_ALT * 100_000 * 0.5);
     assert.equal(plan.target, 110);
     assert.equal(plan.stop, 95);
   });
@@ -68,7 +69,13 @@ describe("sizing (stop first, then size)", () => {
 
   it("clamps risk scale above 1 — nothing can raise risk", () => {
     const plan = buildTradePlan({ entry: 100, stopDistance: 10, equity: 100_000, assetClass: "STOCK", riskScale: 3 })!;
-    assert.equal(plan.risk_amount, 500);
+    assert.equal(plan.risk_amount, RISK_ENVELOPE.MAX_RISK_PER_TRADE.STOCK * 100_000);
+  });
+
+  it("an extra notional ceiling (buying power) only shrinks the position", () => {
+    const plan = buildTradePlan({ entry: 100, stopDistance: 5, equity: 100_000, assetClass: "CRYPTO_ALT", riskScale: 1, maxNotional: 1_000 })!;
+    assert.ok(plan.notional <= 1_000 + 1e-6);
+    assert.equal(plan.stop, 95);
   });
 });
 
@@ -214,22 +221,28 @@ describe("risk envelope", () => {
   });
 
   it("daily/weekly halts and kill switch", () => {
-    assert.ok(checkNewEntry({ ...base, realized_r_today: -3 }, "SOL", []).includes("DAILY_LOSS_HALT"));
-    assert.ok(checkNewEntry({ ...base, realized_r_week: -6 }, "SOL", []).includes("WEEKLY_LOSS_HALT"));
-    assert.ok(shouldTripKillSwitch(85_000, 100_000));
-    assert.ok(!shouldTripKillSwitch(86_000, 100_000));
+    const E = RISK_ENVELOPE;
+    assert.ok(checkNewEntry({ ...base, realized_r_today: E.DAILY_LOSS_HALT_R }, "SOL", []).includes("DAILY_LOSS_HALT"));
+    assert.ok(!checkNewEntry({ ...base, realized_r_today: E.DAILY_LOSS_HALT_R + 0.5 }, "SOL", []).includes("DAILY_LOSS_HALT"));
+    assert.ok(checkNewEntry({ ...base, realized_r_week: E.WEEKLY_LOSS_HALT_R }, "SOL", []).includes("WEEKLY_LOSS_HALT"));
+    assert.ok(shouldTripKillSwitch(100_000 * (1 - E.MASTER_KILL_SWITCH_DD), 100_000));
+    assert.ok(!shouldTripKillSwitch(100_000 * (1 - E.MASTER_KILL_SWITCH_DD) + 1_000, 100_000));
     assert.ok(Math.abs(drawdownFromPeak(90, 100) - 0.1) < 1e-12);
   });
 
   it("caps concurrency, open risk and correlated positions (cross asset)", () => {
     const pos = (symbol: string, r = 1) => ({ symbol, notional: 1, open_risk_r: r });
-    const five = { ...base, positions: ["A", "B", "C", "D", "E"].map((s) => pos(s, 0)) };
-    assert.ok(checkNewEntry(five, "X", []).includes("MAX_CONCURRENT"));
-    const risky = { ...base, positions: ["A", "B", "C", "D"].map((s) => pos(s, 1.25)) };
+    const E = RISK_ENVELOPE;
+    const names = (n: number) => Array.from({ length: n }, (_, k) => `S${k}`);
+    const full = { ...base, positions: names(E.MAX_CONCURRENT_POSITIONS).map((s) => pos(s, 0)) };
+    assert.ok(checkNewEntry(full, "X", []).includes("MAX_CONCURRENT"));
+    const n = E.MAX_CONCURRENT_POSITIONS - 1;
+    const risky = { ...base, positions: names(n).map((s) => pos(s, E.MAX_TOTAL_OPEN_RISK_R / n)) };
     assert.ok(checkNewEntry(risky, "X", []).includes("MAX_OPEN_RISK"));
-    const corr = { ...base, positions: [pos("BTC"), pos("COIN")] };
-    assert.ok(checkNewEntry(corr, "ETH", ["BTC", "COIN"]).includes("MAX_CORRELATED"));
-    assert.ok(!checkNewEntry(corr, "ETH", ["BTC"]).includes("MAX_CORRELATED"));
+    const corrNames = names(E.MAX_CORRELATED_POSITIONS);
+    const corr = { ...base, positions: corrNames.map((s) => pos(s, 0)) };
+    assert.ok(checkNewEntry(corr, "ETH", corrNames).includes("MAX_CORRELATED"));
+    assert.ok(!checkNewEntry(corr, "ETH", corrNames.slice(1)).includes("MAX_CORRELATED"));
   });
 
   it("risk scale: lowering is instant, raising is deferred", () => {

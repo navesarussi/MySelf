@@ -5,19 +5,22 @@ import type { AssetClass, UniverseSymbol } from "./types";
  * can change these. Changing them means editing this file and deploying — deliberate
  * friction so risk is never raised in a stressed moment.
  */
+// TESTING PHASE (2026-09-14, paper account only, user-approved "aggressive-controlled"): risk and position
+// caps raised, correlation cap effectively off, halts loosened. Previous values in comments — restore before LIVE.
 export const RISK_ENVELOPE = Object.freeze({
-  MAX_RISK_PER_TRADE: Object.freeze({ STOCK: 0.005, CRYPTO_MAJOR: 0.01, CRYPTO_ALT: 0.01 } as Record<AssetClass, number>),
+  MAX_RISK_PER_TRADE: Object.freeze({ STOCK: 0.01, CRYPTO_MAJOR: 0.02, CRYPTO_ALT: 0.02 } as Record<AssetClass, number>), // was 0.005 / 0.01
   MIN_RR_RATIO: 2.0,
-  MAX_CONCURRENT_POSITIONS: 5,
-  MAX_TOTAL_OPEN_RISK_R: 5,
-  MAX_CORRELATED_POSITIONS: 2,
+  MAX_CONCURRENT_POSITIONS: 10, // was 5
+  MAX_TOTAL_OPEN_RISK_R: 10, // was 5
+  MAX_CORRELATED_POSITIONS: 10, // was 2
   /** |ρ| of 60 daily returns above which two symbols count as correlated (cross asset class). */
   CORRELATION_THRESHOLD: 0.7,
-  DAILY_LOSS_HALT_R: -3,
-  WEEKLY_LOSS_HALT_R: -6,
+  DAILY_LOSS_HALT_R: -10, // was -3
+  WEEKLY_LOSS_HALT_R: -25, // was -6
   /** Drawdown from peak equity that trips the master kill switch. */
-  MASTER_KILL_SWITCH_DD: 0.15,
-  MAX_ASSET_EXPOSURE: 0.2,
+  MASTER_KILL_SWITCH_DD: 0.3, // was 0.15
+  /** Max notional per position. Crypto has no leverage at Alpaca, so this caps real risk well below MAX_RISK_PER_TRADE on tight stops. */
+  MAX_ASSET_EXPOSURE: 0.25, // was 0.2
   /** Allowed agent risk multipliers — the agent can only reduce. */
   AGENT_RISK_MULTIPLIERS: Object.freeze([0, 0.5, 0.75, 1] as const),
 });
@@ -96,6 +99,10 @@ export const SEED_UNIVERSE: UniverseSymbol[] = [
   { symbol: "UNI", asset_class: "CRYPTO_ALT", provider_symbol: "UNIUSDT" },
   { symbol: "BCH", asset_class: "CRYPTO_ALT", provider_symbol: "BCHUSDT" },
   { symbol: "ARB", asset_class: "CRYPTO_ALT", provider_symbol: "ARBUSDT" },
+  // Extra liquid alts (≥ $5M/day on Binance) — breadth for the intraday strategy's trade frequency.
+  ...["DOT", "PEPE", "AAVE", "APT", "INJ", "FIL", "POL", "TON", "ICP", "HBAR"].map(
+    (symbol): UniverseSymbol => ({ symbol, asset_class: "CRYPTO_ALT", provider_symbol: `${symbol}USDT` })
+  ),
   { symbol: "SPY", asset_class: "STOCK", provider_symbol: "SPY" },
   { symbol: "QQQ", asset_class: "STOCK", provider_symbol: "QQQ" },
   { symbol: "AAPL", asset_class: "STOCK", provider_symbol: "AAPL" },

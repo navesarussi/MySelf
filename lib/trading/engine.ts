@@ -19,6 +19,7 @@ import {
   getActiveV2Params,
   getCalendar,
   getClosedTrades,
+  getClosedTradesLite,
   getOpenTrades,
   getSettings,
   getUniverse,
@@ -58,8 +59,12 @@ const LESSONS_PER_PLAYBOOK = 8;
 const CHART_BARS_BEFORE = 120;
 const CHART_BARS_MAX = 400;
 export const STRATEGY_VERSION = "v2";
+/** Intraday (15m/5m) strategy runs in its own per-minute tick — see intraday-engine.ts. */
+export const INTRADAY_STRATEGY_VERSION = "intraday";
+/** The 4h v2 scan is replaced by the intraday strategy (testing phase); open v2 positions are still managed. */
+const V2_SCAN_ENABLED = false;
 
-type TickSummary = {
+export type TickSummary = {
   phase: string;
   positions_updated: number;
   closed: number;
@@ -78,9 +83,11 @@ type TickSummary = {
 };
 
 const iso = (ms: number) => new Date(ms).toISOString();
+/** An intraday limit entry that hasn't filled within 15 minutes is stale — cancel it. */
+const INTRADAY_ENTRY_EXPIRY_MS = 15 * 60_000;
 const round = (x: number, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
 
-function toSym(u: Pick<UniverseRow, "symbol" | "asset_class" | "provider_symbol">): UniverseSymbol {
+export function toSym(u: Pick<UniverseRow, "symbol" | "asset_class" | "provider_symbol">): UniverseSymbol {
   return { symbol: u.symbol, asset_class: u.asset_class, provider_symbol: u.provider_symbol };
 }
 
@@ -104,7 +111,7 @@ type FrameCache = ReturnType<typeof createFrameCache>;
 
 // ── Account ─────────────────────────────────────────────────────────────────
 
-type Account = { equity: number; realizedToday: number; realizedWeek: number; open: TradeRow[] };
+export type Account = { equity: number; realizedToday: number; realizedWeek: number; open: TradeRow[] };
 
 function markToMarket(t: TradeRow, lastPrice: number | undefined) {
   const p = t.sim_state;
@@ -112,9 +119,8 @@ function markToMarket(t: TradeRow, lastPrice: number | undefined) {
   return p.cash_flow + (lastPrice ?? p.entry_price) * p.size;
 }
 
-async function loadAccount(settings: TradingSettings, openTrades: TradeRow[], lastPrices: Map<string, number>, now: number): Promise<Account> {
-  const closed = (await getClosedTrades()).filter((t) => isAccountTrade(t, settings.phase));
-  const inPhase = closed.filter((t) => t.closed_at && Date.parse(t.closed_at) >= Date.parse(settings.phase_started_at));
+export async function loadAccount(settings: TradingSettings, openTrades: TradeRow[], lastPrices: Map<string, number>, now: number): Promise<Account> {
+  const inPhase = (await getClosedTradesLite(settings.phase_started_at)).filter((t) => isAccountTrade(t, settings.phase));
   const today = new Date(now).toISOString().slice(0, 10);
   const week = weekStartIso(new Date(now));
   const open = openTrades.filter((t) => isAccountTrade(t, settings.phase));
@@ -256,7 +262,7 @@ async function advancePositions(input: {
   }
 }
 
-async function persistTrade(
+export async function persistTrade(
   trade: TradeRow,
   p: SimPosition,
   events: TradeRow["events"],
@@ -286,7 +292,8 @@ async function persistTrade(
       symbol: trade.symbol,
       message: p.state === "CANCELLED" ? `${trade.symbol}: פקודת כניסה בוטלה (${p.cancel_reason})` : `${trade.symbol}: נסגרה ${p.exit_reason} · ${r >= 0 ? "+" : ""}${r.toFixed(2)}R`,
       data: { trade_id: trade.id },
-      push: closedNow && trade.execution !== "SHADOW",
+      // Intraday closes are too frequent to push — they stay in the journal/event log.
+      push: closedNow && trade.execution !== "SHADOW" && trade.strategy_version !== INTRADAY_STRATEGY_VERSION,
     });
   }
   trade.sim_state = p;
@@ -300,7 +307,7 @@ async function persistTrade(
 
 // ── 1b. Broker mirror (Alpaca paper) ───────────────────────────────────────
 
-async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events: TradeRow["events"], now: number): Promise<{ done: boolean; patch: Record<string, unknown> }> {
+export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events: TradeRow["events"], now: number): Promise<{ done: boolean; patch: Record<string, unknown> }> {
   if (!trade.broker_entry_order_id) {
     p.state = "CANCELLED";
     p.cancel_reason = "BROKER_ORDER_MISSING";
@@ -308,7 +315,7 @@ async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events: Trade
     return { done: true, patch: {} };
   }
   const order = await alpaca.getOrder(trade.broker_entry_order_id);
-  const d = pendingDecision(order, Date.parse(trade.trigger_timestamp), now);
+  const d = pendingDecision(order, Date.parse(trade.trigger_timestamp), now, trade.strategy_version === INTRADAY_STRATEGY_VERSION ? INTRADAY_ENTRY_EXPIRY_MS : undefined);
   const patch: Record<string, unknown> = { broker_status: order.status, broker_filled_qty: Number(order.filled_qty) };
   const cancel = (reason: string) => {
     p.state = "CANCELLED";
@@ -356,7 +363,7 @@ async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events: Trade
 }
 
 /** Make the broker match the strategy: adopt broker exits, close on strategy exits, move protective orders. */
-async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: TradeRow["events"], lastPrice: number | null, now: number): Promise<Record<string, unknown>> {
+export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: TradeRow["events"], lastPrice: number | null, now: number): Promise<Record<string, unknown>> {
   const patch: Record<string, unknown> = {};
   const stopId = (trade.broker_stop_order_id as string | null) ?? null;
   const targetId = (trade.broker_target_order_id as string | null) ?? null;
@@ -412,7 +419,8 @@ function repriceExit(p: SimPosition, price: number) {
 // ── 2. Self-learning: post-trade lessons → playbook ────────────────────────
 
 async function learnFromClosedTrades(closedNow: TradeRow[], summary: TickSummary) {
-  for (const t of closedNow.filter((x) => x.track === "AGENT" && x.state === "CLOSED" && !x.lesson_id).slice(0, MAX_LESSONS_PER_TICK)) {
+  // Intraday trades are rated, not reviewed (rating-only phase) — no per-trade lessons.
+  for (const t of closedNow.filter((x) => x.track === "AGENT" && x.state === "CLOSED" && !x.lesson_id && x.strategy_version !== INTRADAY_STRATEGY_VERSION).slice(0, MAX_LESSONS_PER_TICK)) {
     const { data: trig } = t.trigger_id ? await getSupabase().from("trading_triggers").select("agent_market_read, agent_thesis, agent_invalidation, agent_reasoning, score, setup").eq("id", t.trigger_id).maybeSingle() : { data: null };
     summary.agent_calls += 1;
     const lesson = await reviewClosedTrade({
@@ -1149,7 +1157,8 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
   const openTrades = await getOpenTrades();
   const lastPrices = new Map<string, number>();
   const earningsNext = openTrades.some((t) => t.asset_class === "STOCK") ? await fetchEarningsSymbols(nextTradingDays(isoDateInZone(new Date(now), "America/New_York"), 2)) : new Set<string>();
-  await advancePositions({ trades: openTrades, frames, universe, params, calendar, earningsNext, agentEnabled: settings.agent_enabled, now, summary, lastPrices });
+  // Intraday positions are managed on 5m bars by the per-minute intraday tick.
+  await advancePositions({ trades: openTrades.filter((t) => t.strategy_version !== INTRADAY_STRATEGY_VERSION), frames, universe, params, calendar, earningsNext, agentEnabled: settings.agent_enabled, now, summary, lastPrices });
 
   if (settings.agent_enabled) {
     try {
@@ -1202,7 +1211,7 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
   } else if (settings.kill_switch_active) summary.skipped_reason = "kill_switch_active";
   else {
     const playbook = await getActivePlaybook();
-    await scan({ settings, universe: universeRows, params, frames, cache, calendar, account, playbook, now, started, summary });
+    if (V2_SCAN_ENABLED) await scan({ settings, universe: universeRows, params, frames, cache, calendar, account, playbook, now, started, summary });
     // Daily-trend scans once per day (its signal only changes on a daily close) — gate separately from
     // v2's 4h scan, but share the SAME account/portfolio state so the combined envelope is respected.
     if (settings.last_daily_trend_scan_date !== today) {

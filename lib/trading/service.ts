@@ -7,7 +7,7 @@ import { backtestGate, nextPhase, paperGate, PHASE_ORDER, shadowGate, type Backt
 import { agentValueReport, bucketStats, runCalibration, walkForwardStability, type AgentValueReport } from "./learning";
 import { createBarCache } from "./market-data";
 import { alpaca, flattenAtBroker, isAlpacaConfigured } from "./broker/alpaca";
-import { computeStats, equityCurveR, groupStats, rDistribution, type GroupStat, type PerformanceStats } from "./metrics";
+import { computeStats, equityCurveR, groupStats, rDistribution, ratingValue, type GroupStat, type PerformanceStats, type RatingValue } from "./metrics";
 import { forceClose, openRiskR, realizedR } from "./position";
 import { applyRiskScaleRequest, drawdownFromPeak, haltStatus, weekStartIso } from "./risk-envelope";
 import {
@@ -93,6 +93,8 @@ export type TriggerRow = {
   agent_lessons_applied: string[] | null;
   baseline_enter: boolean;
   strategy_version: string;
+  agent_rating: number | null;
+  agent_rating_explanation: string | null;
   snapshot: Record<string, unknown>;
   plan: Record<string, unknown> | null;
   phase: string;
@@ -346,7 +348,7 @@ export async function listTrades(f: TradeFilters): Promise<TradeListItem[]> {
   let q = getSupabase()
     .from("trading_trades")
     .select(
-      "id, trigger_id, symbol, asset_class, bucket_id, mode, track, execution, state, trigger_timestamp, agent_decision, agent_conviction, agent_risk_multiplier, agent_reasoning, agent_model_version, prompt_version, param_version, entry_limit, entry_price, stop_price, initial_stop_price, target_price, position_size, remaining_size, risk_amount, entry_slippage_bps, exit_plan, trail_stop, reached_1r, partial_exit_price, exit_price, exit_reason, gapped_through_stop, realized_r, realized_pnl, fees_paid, last_bar_time, mfe_r, mae_r, notes, tags, self_rating, setup, score, strategy_version, lesson_id, broker, broker_status, baseline_enter, opened_at, closed_at, created_at, updated_at"
+      "id, trigger_id, symbol, asset_class, bucket_id, mode, track, execution, state, trigger_timestamp, agent_decision, agent_conviction, agent_risk_multiplier, agent_reasoning, agent_model_version, prompt_version, param_version, entry_limit, entry_price, stop_price, initial_stop_price, target_price, position_size, remaining_size, risk_amount, entry_slippage_bps, exit_plan, trail_stop, reached_1r, partial_exit_price, exit_price, exit_reason, gapped_through_stop, realized_r, realized_pnl, fees_paid, last_bar_time, mfe_r, mae_r, notes, tags, self_rating, setup, score, strategy_version, lesson_id, broker, broker_status, baseline_enter, agent_rating, agent_rating_explanation, opened_at, closed_at, created_at, updated_at"
     )
     .order("created_at", { ascending: false })
     .limit(Math.min(f.limit ?? 200, 1000));
@@ -410,6 +412,10 @@ export type AnalyticsPayload = {
   by_conviction: GroupStat[];
   by_setup: GroupStat[];
   by_score: GroupStat[];
+  by_strategy: GroupStat[];
+  /** Rating-only agent (intraday): does the 1–10 score predict realized R? */
+  by_rating: GroupStat[];
+  rating_value: RatingValue;
   target_extensions: number;
   avg_mfe_r: number;
   avg_mae_r: number;
@@ -446,6 +452,12 @@ export async function getAnalytics(scope: { execution?: string; track?: string; 
     by_conviction: groupStats(rt, (t) => (t.agent_conviction ? `conviction ${t.agent_conviction}` : "no agent")),
     by_setup: groupStats(rt, (t) => t.setup ?? "v1"),
     by_score: groupStats(rt, (t) => (t.score === null ? "?" : t.score >= 70 ? "70+" : t.score >= 60 ? "60-69" : "<60")),
+    by_strategy: groupStats(rt, (t) => t.strategy_version ?? "v2"),
+    by_rating: groupStats(
+      rt.filter((t) => t.agent_rating !== null),
+      (t) => (t.agent_rating! >= 8 ? "8-10" : t.agent_rating! >= 6 ? "6-7" : t.agent_rating! >= 4 ? "4-5" : "1-3")
+    ),
+    rating_value: ratingValue(list),
     target_extensions: list.filter((t) => (t.events ?? []).some((e) => e.type === "TARGET_EXTENDED")).length,
     avg_mfe_r: avg(list.map((t) => t.mfe_r)),
     avg_mae_r: avg(list.map((t) => t.mae_r)),

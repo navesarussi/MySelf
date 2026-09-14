@@ -2,7 +2,7 @@
 
 export type AssetClass = "STOCK" | "CRYPTO_MAJOR" | "CRYPTO_ALT";
 export type TradingMode = "INTRADAY" | "SWING";
-export type Timeframe = "15m" | "1h" | "4h" | "1d";
+export type Timeframe = "5m" | "15m" | "1h" | "4h" | "1d";
 
 /** Rollout phases — each is a Go/No-Go gate; LIVE has no broker adapter wired yet. */
 export type TradingPhase = "BACKTEST" | "SHADOW" | "PAPER" | "LIVE";

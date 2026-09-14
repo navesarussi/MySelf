@@ -28,6 +28,10 @@ export type TradingSettings = {
   last_screen_date: string | null;
   last_daily_trend_scan_date: string | null;
   execution_venue: "SIM" | "ALPACA_PAPER";
+  /** Per-minute intraday (15m/5m) strategy switch + its own heartbeat. */
+  intraday_enabled: boolean;
+  last_intraday_tick_at: string | null;
+  last_intraday_summary: Record<string, unknown> | null;
   updated_at: string;
 };
 
@@ -56,6 +60,9 @@ export async function getSettings(): Promise<TradingSettings> {
     last_screen_date: (r.last_screen_date as string) ?? null,
     last_daily_trend_scan_date: (r.last_daily_trend_scan_date as string) ?? null,
     execution_venue: r.execution_venue === "ALPACA_PAPER" ? "ALPACA_PAPER" : "SIM",
+    intraday_enabled: Boolean(r.intraday_enabled),
+    last_intraday_tick_at: (r.last_intraday_tick_at as string) ?? null,
+    last_intraday_summary: (r.last_intraday_summary as Record<string, unknown>) ?? null,
     updated_at: String(r.updated_at ?? new Date().toISOString()),
   };
 }
@@ -185,6 +192,9 @@ export type TradeRow = {
   broker_status: string | null;
   broker_filled_qty: number | null;
   baseline_enter: boolean;
+  /** Rating-only agent (intraday): 1–10 + short explanation; never affects the trade. */
+  agent_rating: number | null;
+  agent_rating_explanation: string | null;
   opened_at: string | null;
   closed_at: string | null;
   created_at: string;
@@ -255,6 +265,18 @@ export async function getClosedTrades(opts: { sinceIso?: string; limit?: number 
   const { data, error } = await q;
   if (error) throw new Error(`closed trades: ${error.message}`);
   return (data ?? []).map((r) => normalizeTrade(r as Record<string, unknown>));
+}
+
+/** Closed trades without the heavy jsonb columns — enough for equity and halt accounting. */
+export async function getClosedTradesLite(sinceIso: string): Promise<Pick<TradeRow, "id" | "track" | "execution" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">[]> {
+  const { data, error } = await getSupabase()
+    .from("trading_trades")
+    .select("id, track, execution, closed_at, realized_r, realized_pnl, created_at")
+    .eq("state", "CLOSED")
+    .gte("closed_at", sinceIso)
+    .limit(20000);
+  if (error) throw new Error(`closed trades: ${error.message}`);
+  return (data ?? []).map((r) => ({ ...(r as Record<string, unknown>), realized_r: numOrNull((r as Record<string, unknown>).realized_r), realized_pnl: numOrNull((r as Record<string, unknown>).realized_pnl) }) as Pick<TradeRow, "id" | "track" | "execution" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">);
 }
 
 export function toJournalTrade(t: TradeRow): JournalTrade {

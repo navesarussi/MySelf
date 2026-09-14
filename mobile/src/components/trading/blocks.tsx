@@ -166,6 +166,7 @@ export function TriggerCard({ tr }: { tr: TriggerRow }) {
         {tr.score !== null ? <Badge label={t("trading.scoreLabel", { n: tr.score })} tone="accent" /> : null}
         {!tr.baseline_enter ? <Badge label={t("trading.aiOnly")} /> : null}
         {tr.agent_conviction ? <Badge label={t("trading.conviction", { n: tr.agent_conviction })} tone="accent" /> : null}
+        {tr.agent_rating ? <Badge label={t("trading.agentRating", { n: tr.agent_rating })} tone="accent" /> : null}
         {tr.agent_risk_multiplier !== null && tr.agent_risk_multiplier > 0 && tr.agent_risk_multiplier < 1 ? <Badge label={t("trading.multiplier", { m: tr.agent_risk_multiplier })} /> : null}
         {tr.injection_flags.length ? <Badge label={t("trading.injectionFlag")} tone="warn" /> : null}
         <View style={{ flex: 1 }} />
@@ -204,6 +205,7 @@ export function TradeRowCard({ trade }: { trade: TradeListItem }) {
           <Badge label={t(`trading.state_${trade.state}`)} tone={trade.state === "CLOSED" ? "default" : "accent"} />
           <Badge label={trade.execution} tone={trade.execution === "PAPER" ? "accent" : "default"} />
           {trade.score !== null ? <Badge label={t("trading.scoreLabel", { n: trade.score })} /> : null}
+          {trade.agent_rating ? <Badge label={t("trading.agentRating", { n: trade.agent_rating })} tone="accent" /> : null}
           {trade.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
           {!trade.baseline_enter ? <Badge label={t("trading.aiOnly")} tone="accent" /> : null}
           {trade.track === "DETERMINISTIC" ? <Badge label={t("trading.trackBase")} /> : null}
@@ -212,6 +214,7 @@ export function TradeRowCard({ trade }: { trade: TradeListItem }) {
         </View>
         <View style={{ marginTop: 4 }}>
           <TradingText muted size={tokens.textXs}>
+            {trade.setup ? `${t(`trading.setup_${trade.setup}`)} · ` : ""}
             {fmtDateTime(trade.trigger_timestamp)} · {t("trading.entry")} {fmtPrice(trade.entry_price ?? trade.entry_limit)}
             {trade.exit_price ? ` · ${t("trading.exit")} ${fmtPrice(trade.exit_price)}` : ""}
             {trade.exit_reason ? ` · ${trade.exit_reason}` : ""}
