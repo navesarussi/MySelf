@@ -127,6 +127,8 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
           <Text style={{ color: c.ink, fontWeight: "800", fontSize: 16 }}>{p.symbol}</Text>
           <Badge label={t(`trading.state_${p.state}`)} tone={p.state === "RISK_FREE" ? "good" : p.state === "PENDING" ? "default" : "accent"} />
           {p.agent_risk_multiplier !== null && p.agent_risk_multiplier < 1 ? <Badge label={t("trading.multiplier", { m: p.agent_risk_multiplier })} /> : null}
+          {p.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
+          {!p.baseline_enter ? <Badge label={t("trading.aiOnly")} tone="accent" /> : null}
           <View style={{ flex: 1 }} />
           <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 18 }}>{fmtR(p.current_r)}</Text>
         </View>
@@ -176,6 +178,7 @@ export function TriggerCard({ tr }: { tr: TriggerRow }) {
         <Badge label={status.label} tone={status.tone} />
         {tr.setup ? <Badge label={t(`trading.setup_${tr.setup}`)} /> : null}
         {tr.score !== null ? <Badge label={t("trading.scoreLabel", { n: tr.score })} tone="accent" /> : null}
+        {!tr.baseline_enter ? <Badge label={t("trading.aiOnly")} /> : null}
         {tr.agent_conviction ? <Badge label={t("trading.conviction", { n: tr.agent_conviction })} tone="accent" /> : null}
         {tr.agent_risk_multiplier !== null && tr.agent_risk_multiplier > 0 && tr.agent_risk_multiplier < 1 ? <Badge label={t("trading.multiplier", { m: tr.agent_risk_multiplier })} /> : null}
         {tr.injection_flags.length ? <Badge label="⚠ injection" tone="warn" /> : null}
@@ -211,6 +214,8 @@ export function TradeRowCard({ trade }: { trade: TradeListItem }) {
           <Badge label={t(`trading.state_${trade.state}`)} tone={trade.state === "CLOSED" ? "default" : "accent"} />
           <Badge label={trade.execution} tone={trade.execution === "PAPER" ? "accent" : "default"} />
           {trade.score !== null ? <Badge label={t("trading.scoreLabel", { n: trade.score })} /> : null}
+          {trade.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
+          {!trade.baseline_enter ? <Badge label={t("trading.aiOnly")} tone="accent" /> : null}
           {trade.track === "DETERMINISTIC" ? <Badge label="BASE" /> : null}
           <View style={{ flex: 1 }} />
           <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 16 }}>{trade.state === "CLOSED" ? fmtR(r) : "—"}</Text>

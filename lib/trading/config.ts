@@ -74,7 +74,7 @@ export const PHASE_GATES = Object.freeze({
 });
 
 export const AGENT_MODEL_ID = "gemini-3-flash-preview";
-export const AGENT_PROMPT_VERSION = "trade-analyst-v2";
+export const AGENT_PROMPT_VERSION = "trade-analyst-v3-discretion";
 
 /** Paper account starting equity (USD). */
 export const PAPER_STARTING_EQUITY = 100_000;

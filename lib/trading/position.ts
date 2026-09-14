@@ -392,6 +392,29 @@ function applyCloseRules(p: SimPosition, bar: Bar, ctx: StepContext, events: Pos
   return false;
 }
 
+/** A real broker filled the entry: adopt its price/quantity (the sim never fills broker trades itself). */
+export function applyExternalFill(p: SimPosition, price: number, qty: number, at: number): PositionEvent[] {
+  const f = fee(p, price, qty);
+  p.initial_size = qty;
+  p.size = qty;
+  p.cash_flow = -(price * qty + f);
+  p.fees_paid = f;
+  p.entry_price = price;
+  p.entry_slippage_bps = Math.round((price / p.entry_limit - 1) * 10_000);
+  p.stop_distance = price - p.stop_price;
+  p.state = "OPEN";
+  p.opened_at = at;
+  return [{ type: "FILLED", price, at }];
+}
+
+/** A real broker filled the exit (protective stop / take-profit / market close). */
+export function applyExternalExit(p: SimPosition, price: number, reason: ExitReason, at: number): PositionEvent[] {
+  const events: PositionEvent[] = [];
+  if (p.state !== "OPEN" && p.state !== "RISK_FREE") return events;
+  close(p, price, reason, at, events);
+  return events;
+}
+
 /** Emergency/manual exit at a market price (kill switch, confirmed chat command). */
 export function forceClose(p: SimPosition, price: number, reason: ExitReason, at: number): PositionEvent[] {
   const events: PositionEvent[] = [];

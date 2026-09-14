@@ -6,6 +6,7 @@ import { loadFramesV2, warmStart } from "./strategy/data-v2";
 import { backtestGate, nextPhase, paperGate, PHASE_ORDER, shadowGate, type BacktestGateInput, type GateCheck } from "./gates";
 import { agentValueReport, bucketStats, runCalibration, walkForwardStability, type AgentValueReport } from "./learning";
 import { createBarCache } from "./market-data";
+import { alpaca, flattenAtBroker, isAlpacaConfigured } from "./broker/alpaca";
 import { computeStats, equityCurveR, groupStats, rDistribution, type GroupStat, type PerformanceStats } from "./metrics";
 import { forceClose, openRiskR, realizedR } from "./position";
 import { applyRiskScaleRequest, drawdownFromPeak, haltStatus, weekStartIso } from "./risk-envelope";
@@ -61,6 +62,9 @@ export type LivePosition = {
   agent_risk_multiplier: number | null;
   opened_at: string | null;
   trigger_timestamp: string;
+  broker: string | null;
+  broker_status: string | null;
+  baseline_enter: boolean;
 };
 
 export type TriggerRow = {
@@ -87,6 +91,7 @@ export type TriggerRow = {
   agent_invalidation: string | null;
   agent_target_index: number | null;
   agent_lessons_applied: string[] | null;
+  baseline_enter: boolean;
   snapshot: Record<string, unknown>;
   plan: Record<string, unknown> | null;
   phase: string;
@@ -125,7 +130,27 @@ export type DashboardPayload = {
   equity_history: { day: string; equity: number; open_risk_r: number }[];
   envelope: typeof RISK_ENVELOPE;
   execution_rules: typeof EXECUTION_RULES;
+  broker: BrokerStatus;
 };
+
+export type BrokerStatus = {
+  configured: boolean;
+  venue: "SIM" | "ALPACA_PAPER";
+  connected: boolean;
+  equity: number | null;
+  cash: number | null;
+  error: string | null;
+};
+
+export async function getBrokerStatus(venue: "SIM" | "ALPACA_PAPER"): Promise<BrokerStatus> {
+  if (!isAlpacaConfigured()) return { configured: false, venue, connected: false, equity: null, cash: null, error: null };
+  try {
+    const a = await alpaca.account();
+    return { configured: true, venue, connected: !a.trading_blocked && !a.account_blocked, equity: Number(a.equity), cash: Number(a.cash), error: a.trading_blocked ? "trading_blocked" : null };
+  } catch (err) {
+    return { configured: true, venue, connected: false, equity: null, cash: null, error: err instanceof Error ? err.message.slice(0, 160) : "error" };
+  }
+}
 
 async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
   const cache = createBarCache();
@@ -254,6 +279,9 @@ export async function getDashboard(): Promise<DashboardPayload> {
       agent_risk_multiplier: t.agent_risk_multiplier,
       opened_at: t.opened_at,
       trigger_timestamp: t.trigger_timestamp,
+      broker: t.broker,
+      broker_status: t.broker_status,
+      baseline_enter: t.baseline_enter,
     };
   });
   const unrealized = accountOpen.reduce((s, t) => {
@@ -296,6 +324,7 @@ export async function getDashboard(): Promise<DashboardPayload> {
     equity_history: ((snaps ?? []) as { day: string; equity: number; open_risk_r: number }[]).map((s) => ({ day: s.day, equity: Number(s.equity), open_risk_r: Number(s.open_risk_r) })),
     envelope: RISK_ENVELOPE,
     execution_rules: EXECUTION_RULES,
+    broker: await getBrokerStatus(settings.execution_venue),
   };
 }
 
@@ -316,7 +345,7 @@ export async function listTrades(f: TradeFilters): Promise<TradeListItem[]> {
   let q = getSupabase()
     .from("trading_trades")
     .select(
-      "id, trigger_id, symbol, asset_class, bucket_id, mode, track, execution, state, trigger_timestamp, agent_decision, agent_conviction, agent_risk_multiplier, agent_reasoning, agent_model_version, prompt_version, param_version, entry_limit, entry_price, stop_price, initial_stop_price, target_price, position_size, remaining_size, risk_amount, entry_slippage_bps, exit_plan, trail_stop, reached_1r, partial_exit_price, exit_price, exit_reason, gapped_through_stop, realized_r, realized_pnl, fees_paid, last_bar_time, mfe_r, mae_r, notes, tags, self_rating, setup, score, strategy_version, lesson_id, opened_at, closed_at, created_at, updated_at"
+      "id, trigger_id, symbol, asset_class, bucket_id, mode, track, execution, state, trigger_timestamp, agent_decision, agent_conviction, agent_risk_multiplier, agent_reasoning, agent_model_version, prompt_version, param_version, entry_limit, entry_price, stop_price, initial_stop_price, target_price, position_size, remaining_size, risk_amount, entry_slippage_bps, exit_plan, trail_stop, reached_1r, partial_exit_price, exit_price, exit_reason, gapped_through_stop, realized_r, realized_pnl, fees_paid, last_bar_time, mfe_r, mae_r, notes, tags, self_rating, setup, score, strategy_version, lesson_id, broker, broker_status, baseline_enter, opened_at, closed_at, created_at, updated_at"
     )
     .order("created_at", { ascending: false })
     .limit(Math.min(f.limit ?? 200, 1000));
@@ -588,6 +617,8 @@ export type ControlCommand =
   | { action: "pause_entries" }
   | { action: "resume_entries" }
   | { action: "set_playbook"; version: number; status: "ACTIVE" | "DISABLED" }
+  | { action: "start_demo" }
+  | { action: "stop_demo" }
   | { action: "set_agent"; enabled: boolean }
   | { action: "set_risk_scale"; value: number }
   | { action: "close_position"; trade_id: string }
@@ -608,7 +639,8 @@ async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH")
   let closed = 0;
   for (const t of trades) {
     const p = { ...t.sim_state };
-    const price = prices.get(t.symbol);
+    const brokerPx = t.broker ? await flattenAtBroker(t) : null;
+    const price = brokerPx ?? prices.get(t.symbol);
     if (price === undefined && p.state !== "PENDING") throw new Error(`no_price_${t.symbol}`);
     const ev = forceClose(p, price ?? p.entry_limit, reason, now);
     await updateTrade(t.id, {
@@ -636,6 +668,22 @@ export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"
       await updateSettings({ entries_paused: false });
       await audit("כניסות חדשות חודשו");
       return { ok: true, message: "כניסות חודשו" };
+    case "start_demo": {
+      // Demo = Alpaca PAPER account only (the adapter has no live endpoint). The user chose to skip the
+      // backtest/shadow gates for demo money; the bypass is recorded. Real money stays gated.
+      if (source !== "app") throw new Error("app_only");
+      const broker = await getBrokerStatus("ALPACA_PAPER");
+      if (!broker.configured) throw new Error("alpaca_not_configured");
+      if (!broker.connected || broker.equity === null) throw new Error(`alpaca_not_connected:${broker.error ?? ""}`);
+      await updateSettings({ phase: "PAPER", execution_venue: "ALPACA_PAPER", phase_started_at: iso(now), starting_equity: broker.equity, peak_equity: broker.equity, entries_paused: false });
+      await audit(`מסחר דמו חי הופעל בחשבון Alpaca Paper ($${Math.round(broker.equity)}) — שערי בקטסט/צל עוקפו לדמו בלבד`, "critical");
+      return { ok: true, message: "demo started" };
+    }
+    case "stop_demo":
+      if (source !== "app") throw new Error("app_only");
+      await updateSettings({ execution_venue: "SIM", entries_paused: true });
+      await audit("מסחר דמו הושהה: כניסות חדשות עצורות, פוזיציות קיימות ממשיכות להיות מנוהלות", "warn");
+      return { ok: true, message: "demo paused" };
     case "set_playbook":
       if (source !== "app") throw new Error("app_only");
       await setPlaybookStatus(cmd.version, cmd.status);
@@ -716,6 +764,9 @@ export function parseCommand(body: Record<string, unknown>): ControlCommand | nu
     case "pause_entries":
     case "resume_entries":
     case "close_all":
+      return { action: a };
+    case "start_demo":
+    case "stop_demo":
       return { action: a };
     case "set_playbook":
       return typeof body.version === "number" && (body.status === "ACTIVE" || body.status === "DISABLED") ? { action: a, version: body.version, status: body.status } : null;

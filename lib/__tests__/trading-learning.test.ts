@@ -51,6 +51,7 @@ describe("agent bounds (enforced in code)", () => {
     const tf = { trend: "UP" as const, structure: "UPTREND" as const, rsi: 55, adx: 26, atr_pct: 0.02, volume_ratio: 1.4, squeeze_pct: 0.2, bearish_divergence: false, dist_ema20_atr: 0.8 };
     const { prompt, flags } = buildJudgePrompt({
       symbol: "SOL",
+      baseline_would_enter: false,
       asset_class: "CRYPTO_ALT",
       candidate: { symbol: "SOL", asset_class: "CRYPTO_ALT", setup: "BREAKOUT", t: 0, entry: 100, stop: 96, target: 110, rr: 2.5, score: 65, target_kind: "RESISTANCE", target_menu: [{ price: 110, rr: 2.5, kind: "RESISTANCE" }], factors: {}, reasons: ["+20 daily uptrend"] },
       target_menu: [{ price: 110, rr: 2.5, kind: "RESISTANCE" }],

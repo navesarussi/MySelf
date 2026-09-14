@@ -55,6 +55,22 @@ export const DEFAULT_V2_PARAMS: StrategyV2Params = {
   setups: ["BREAKOUT"],
 };
 
+/**
+ * AI-discretion pool: a wider opportunity set (both setups, lower score floor) from which הסוכן מסחר picks.
+ * The deterministic baseline still only "takes" candidates that pass DEFAULT_V2_PARAMS — measured separately.
+ * Hard rules (≥ 2R, structural stop, envelope) apply to every pool candidate.
+ */
+export const DISCRETION_POOL_PARAMS: StrategyV2Params = {
+  ...DEFAULT_V2_PARAMS,
+  version: "v2-ai-pool-1",
+  min_score: 40,
+  setups: ["BREAKOUT", "PULLBACK"],
+};
+
+export function isBaselineCandidate(c: Pick<Candidate, "setup" | "score">, baseline: StrategyV2Params = DEFAULT_V2_PARAMS) {
+  return baseline.setups.includes(c.setup) && c.score >= baseline.min_score;
+}
+
 export type SymbolFrames = {
   symbol: string;
   asset_class: AssetClass;

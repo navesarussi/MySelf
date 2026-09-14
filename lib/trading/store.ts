@@ -26,6 +26,7 @@ export type TradingSettings = {
   last_tick_at: string | null;
   last_tick_summary: Record<string, unknown> | null;
   last_screen_date: string | null;
+  execution_venue: "SIM" | "ALPACA_PAPER";
   updated_at: string;
 };
 
@@ -52,6 +53,7 @@ export async function getSettings(): Promise<TradingSettings> {
     last_tick_at: (r.last_tick_at as string) ?? null,
     last_tick_summary: (r.last_tick_summary as Record<string, unknown>) ?? null,
     last_screen_date: (r.last_screen_date as string) ?? null,
+    execution_venue: r.execution_venue === "ALPACA_PAPER" ? "ALPACA_PAPER" : "SIM",
     updated_at: String(r.updated_at ?? new Date().toISOString()),
   };
 }
@@ -174,6 +176,13 @@ export type TradeRow = {
   score: number | null;
   strategy_version: string | null;
   lesson_id: string | null;
+  broker: "ALPACA_PAPER" | null;
+  broker_entry_order_id: string | null;
+  broker_stop_order_id: string | null;
+  broker_target_order_id: string | null;
+  broker_status: string | null;
+  broker_filled_qty: number | null;
+  baseline_enter: boolean;
   opened_at: string | null;
   closed_at: string | null;
   created_at: string;
@@ -259,6 +268,7 @@ export function toJournalTrade(t: TradeRow): JournalTrade {
     agent_conviction: t.agent_conviction,
     reached_1r: t.reached_1r,
     closed_at: t.closed_at ? Date.parse(t.closed_at) : 0,
+    baseline_enter: t.baseline_enter ?? true,
   };
 }
 

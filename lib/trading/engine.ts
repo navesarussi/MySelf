@@ -5,7 +5,9 @@ import { returnCorrelation } from "./indicators";
 import { evaluateEligibility } from "./learning";
 import { createBarCache, fetchBidAskSpreadPct, fetchBtcDominance, fetchEarningsSymbols, fetchFundingRate, fetchVix, lookbackForClass, type BarCache } from "./market-data";
 import { computeStats } from "./metrics";
-import { forceClose, newPendingPosition, openRiskR, realizedR, stepPosition, type PositionEvent, type SimPosition } from "./position";
+import { applyExternalExit, applyExternalFill, forceClose, newPendingPosition, openRiskR, realizedR, stepPosition, type PositionEvent, type SimPosition } from "./position";
+import { alpaca, flattenAtBroker, isAlpacaConfigured } from "./broker/alpaca";
+import { bracketLegs, brokerExit, pendingDecision, protectiveAdjustments } from "./broker/sync";
 import { checkNewEntry, drawdownFromPeak, shouldTripKillSwitch, weekStartIso } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
 import {
@@ -32,7 +34,7 @@ import {
   type TradingSettings,
   type UniverseRow,
 } from "./store";
-import { analystBrief, evaluateCandidates, extensionDecision, lastBars, universeContext, type Candidate, type StrategyV2Params, type SymbolFrames } from "./strategy/candidates";
+import { DISCRETION_POOL_PARAMS, analystBrief, evaluateCandidates, extensionDecision, isBaselineCandidate, lastBars, universeContext, type Candidate, type StrategyV2Params, type SymbolFrames } from "./strategy/candidates";
 import { framesFromBars } from "./strategy/data-v2";
 import { closedIdx } from "./strategy/series";
 import { bucketId, screenFailures, screenMetricsAt } from "./universe";
@@ -161,12 +163,30 @@ async function advancePositions(input: {
 
       for (const trade of trades) {
         const p: SimWithReview = { ...trade.sim_state };
+        const events: TradeRow["events"] = [...(trade.events ?? [])];
+        const brokerPatch: Record<string, unknown> = {};
         // trigger_timestamp is the 4h close; the first manageable hourly bar is the one that opens at it.
-        const from = trade.last_bar_time ? Date.parse(trade.last_bar_time) : Date.parse(trade.trigger_timestamp) - 1;
+        let from = trade.last_bar_time ? Date.parse(trade.last_bar_time) : Date.parse(trade.trigger_timestamp) - 1;
+
+        // Real (paper) broker: fills come from the broker, never from the simulator.
+        if (trade.broker && p.state === "PENDING") {
+          const outcome = await resolveBrokerEntry(trade, p, events, input.now);
+          Object.assign(brokerPatch, outcome.patch);
+          if (outcome.done) {
+            await persistTrade(trade, p, events, brokerPatch, from, h1, input);
+            continue;
+          }
+          if (p.state === "PENDING") {
+            if (Object.keys(brokerPatch).length) await updateTrade(trade.id, brokerPatch);
+            continue;
+          }
+          // Manage from the first full hour after the fill.
+          from = Math.floor((p.opened_at ?? input.now) / H1) * H1 + H1 - 1;
+        }
+
         const freshIdx: number[] = [];
         for (let i = 0; i < h1.length; i++) if (h1[i].t > from) freshIdx.push(i);
-        if (!freshIdx.length) continue;
-        const events: TradeRow["events"] = [...(trade.events ?? [])];
+        if (!freshIdx.length && !trade.broker) continue;
 
         for (const i of freshIdx) {
           const bar = h1[i];
@@ -218,39 +238,162 @@ async function advancePositions(input: {
           if (p.state === "CLOSED" || p.state === "CANCELLED") break;
         }
 
-        const lastSeen = h1[freshIdx[freshIdx.length - 1]].t;
-        const closedNow = p.state === "CLOSED";
-        await updateTrade(trade.id, {
-          ...simColumns(p),
-          events,
-          last_bar_time: iso(lastSeen),
-          chart_bars: mergeChartBars(trade.chart_bars ?? [], h1.filter((b) => b.t > from && b.t <= (p.closed_at ?? lastSeen))),
-          ...(closedNow ? { realized_r: round(realizedR(p), 3), realized_pnl: round(p.cash_flow, 2) } : {}),
-        });
-        input.summary.positions_updated += 1;
-        if ((closedNow || p.state === "CANCELLED") && trade.track === "AGENT") {
-          input.summary.closed += 1;
-          const r = realizedR(p);
-          await logEvent({
-            kind: p.state === "CANCELLED" ? "ORDER_CANCELLED" : "TRADE_CLOSED",
-            symbol,
-            message: p.state === "CANCELLED" ? `${symbol}: פקודת כניסה בוטלה (${p.cancel_reason})` : `${symbol}: נסגרה ${p.exit_reason} · ${r >= 0 ? "+" : ""}${r.toFixed(2)}R`,
-            data: { trade_id: trade.id },
-            push: closedNow && trade.execution !== "SHADOW",
-          });
+        if (trade.broker && (p.state === "OPEN" || p.state === "RISK_FREE" || p.state === "CLOSED")) {
+          Object.assign(brokerPatch, await mirrorToBroker(trade, p, events, input.lastPrices.get(symbol) ?? null, input.now));
         }
-        trade.sim_state = p;
-        trade.state = p.state;
-        if (closedNow) {
-          trade.realized_r = round(realizedR(p), 3);
-          trade.chart_bars = mergeChartBars(trade.chart_bars ?? [], h1.filter((b) => b.t > from && b.t <= (p.closed_at ?? lastSeen)));
-          trade.events = events;
-        }
+        await persistTrade(trade, p, events, brokerPatch, from, h1, input);
       }
     } catch (err) {
       input.summary.errors.push(`advance ${symbol}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+}
+
+async function persistTrade(
+  trade: TradeRow,
+  p: SimPosition,
+  events: TradeRow["events"],
+  brokerPatch: Record<string, unknown>,
+  from: number,
+  h1: Bar[],
+  input: { summary: TickSummary; now: number }
+) {
+  const lastBar = [...h1].reverse().find((b) => b.t > from);
+  const lastSeen = lastBar ? lastBar.t : trade.last_bar_time ? Date.parse(trade.last_bar_time) : null;
+  const closedNow = p.state === "CLOSED";
+  const chart = mergeChartBars(trade.chart_bars ?? [], h1.filter((b) => b.t > from && b.t <= (p.closed_at ?? lastSeen ?? input.now)));
+  await updateTrade(trade.id, {
+    ...simColumns(p),
+    ...brokerPatch,
+    events,
+    ...(lastSeen !== null ? { last_bar_time: iso(lastSeen) } : {}),
+    chart_bars: chart,
+    ...(closedNow ? { realized_r: round(realizedR(p), 3), realized_pnl: round(p.cash_flow, 2) } : {}),
+  });
+  input.summary.positions_updated += 1;
+  if ((closedNow || p.state === "CANCELLED") && trade.track === "AGENT" && trade.state !== p.state) {
+    input.summary.closed += 1;
+    const r = realizedR(p);
+    await logEvent({
+      kind: p.state === "CANCELLED" ? "ORDER_CANCELLED" : "TRADE_CLOSED",
+      symbol: trade.symbol,
+      message: p.state === "CANCELLED" ? `${trade.symbol}: פקודת כניסה בוטלה (${p.cancel_reason})` : `${trade.symbol}: נסגרה ${p.exit_reason} · ${r >= 0 ? "+" : ""}${r.toFixed(2)}R`,
+      data: { trade_id: trade.id },
+      push: closedNow && trade.execution !== "SHADOW",
+    });
+  }
+  trade.sim_state = p;
+  trade.state = p.state;
+  if (closedNow) {
+    trade.realized_r = round(realizedR(p), 3);
+    trade.chart_bars = chart;
+    trade.events = events;
+  }
+}
+
+// ── 1b. Broker mirror (Alpaca paper) ───────────────────────────────────────
+
+async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events: TradeRow["events"], now: number): Promise<{ done: boolean; patch: Record<string, unknown> }> {
+  if (!trade.broker_entry_order_id) {
+    p.state = "CANCELLED";
+    p.cancel_reason = "BROKER_ORDER_MISSING";
+    p.closed_at = now;
+    return { done: true, patch: {} };
+  }
+  const order = await alpaca.getOrder(trade.broker_entry_order_id);
+  const d = pendingDecision(order, Date.parse(trade.trigger_timestamp), now);
+  const patch: Record<string, unknown> = { broker_status: order.status, broker_filled_qty: Number(order.filled_qty) };
+  const cancel = (reason: string) => {
+    p.state = "CANCELLED";
+    p.cancel_reason = reason;
+    p.closed_at = now;
+    events.push({ type: "CANCELLED", reason, at: now });
+  };
+  switch (d.kind) {
+    case "WAIT":
+      return { done: false, patch };
+    case "EXPIRE":
+      await alpaca.cancelOrder(order.id);
+      cancel("NOT_FILLED");
+      return { done: true, patch };
+    case "DEAD":
+      cancel(d.reason);
+      return { done: true, patch };
+    case "PARTIAL_UNWIND":
+      // Below the 70% fill floor the position is too small to be the planned trade — exit it.
+      await alpaca.cancelOrder(order.id);
+      await alpaca.closePosition(trade.symbol, trade.asset_class).catch(() => null);
+      cancel(`PARTIAL_FILL_${Math.round(d.ratio * 100)}PCT_UNWOUND`);
+      return { done: true, patch };
+    case "PARTIAL_KEEP":
+    case "FILLED": {
+      if (d.kind === "PARTIAL_KEEP") await alpaca.cancelOrder(order.id);
+      events.push(...applyExternalFill(p, d.price, d.qty, d.at));
+      if (trade.asset_class === "STOCK") {
+        const legs = bracketLegs(order);
+        patch.broker_stop_order_id = legs.stop?.id ?? null;
+        patch.broker_target_order_id = legs.target?.id ?? null;
+      } else {
+        const stop = await alpaca.placeCryptoStop({ symbol: trade.symbol, qty: d.qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` });
+        patch.broker_stop_order_id = stop.id;
+      }
+      return { done: false, patch };
+    }
+  }
+}
+
+/** Make the broker match the strategy: adopt broker exits, close on strategy exits, move protective orders. */
+async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: TradeRow["events"], lastPrice: number | null, now: number): Promise<Record<string, unknown>> {
+  const patch: Record<string, unknown> = {};
+  const stopId = (trade.broker_stop_order_id as string | null) ?? null;
+  const targetId = (trade.broker_target_order_id as string | null) ?? null;
+  const [stopOrder, targetOrder] = await Promise.all([stopId ? alpaca.getOrder(stopId) : null, targetId ? alpaca.getOrder(targetId) : null]);
+  const exit = brokerExit({ stop: stopOrder, target: targetOrder, positionQty: null });
+  const at = now;
+
+  if (exit && Number.isFinite(exit.price)) {
+    if (p.state === "CLOSED") repriceExit(p, exit.price);
+    else events.push(...applyExternalExit(p, exit.price, exit.reason, at));
+    patch.broker_status = `exit_${exit.reason.toLowerCase()}`;
+    return patch;
+  }
+
+  if (p.state === "CLOSED") {
+    // Strategy exit (stop/trail/target/regime/earnings) the broker hasn't executed — flatten at market.
+    for (const id of [stopId, targetId]) if (id) await alpaca.cancelOrder(id);
+    const closeOrder = await alpaca.closePosition(trade.symbol, trade.asset_class).catch((err) => {
+      events.push({ type: "CANCELLED", reason: `BROKER_CLOSE_FAILED:${err instanceof Error ? err.message.slice(0, 80) : "?"}`, at });
+      return null;
+    });
+    if (closeOrder) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const filled = await alpaca.getOrder(closeOrder.id).catch(() => null);
+      const px = Number(filled?.filled_avg_price);
+      if (Number.isFinite(px) && px > 0) repriceExit(p, px);
+      patch.broker_status = `closed_${(p.exit_reason ?? "manual").toLowerCase()}`;
+    }
+    return patch;
+  }
+
+  const adj = protectiveAdjustments({ assetClass: trade.asset_class, simStop: p.stop_price, simTarget: p.target_price, stop: stopOrder, target: targetOrder });
+  if (adj.stopTo !== undefined && stopOrder) {
+    const replaced = await alpaca.replaceOrder(stopOrder.id, trade.asset_class === "STOCK" ? { stop_price: adj.stopTo } : { stop_price: adj.stopTo, limit_price: adj.stopTo * 0.99 }, trade.asset_class);
+    patch.broker_stop_order_id = replaced.id;
+  }
+  if (adj.targetTo !== undefined && targetOrder) {
+    const replaced = await alpaca.replaceOrder(targetOrder.id, { limit_price: adj.targetTo }, trade.asset_class);
+    patch.broker_target_order_id = replaced.id;
+  }
+  if (lastPrice === null) patch.broker_status = "open";
+  return patch;
+}
+
+/** Replace a simulated exit price with the broker's actual fill. */
+function repriceExit(p: SimPosition, price: number) {
+  if (p.exit_price === null) return;
+  const qty = p.initial_size - (p.partial_exit_price !== null ? p.initial_size * (p.partial_fraction ?? 0) : 0);
+  p.cash_flow += (price - p.exit_price) * qty;
+  p.exit_price = price;
 }
 
 // ── 2. Self-learning: post-trade lessons → playbook ────────────────────────
@@ -371,7 +514,8 @@ async function insertTrade(t: {
   verdict: AgentVerdict | null;
   params: StrategyV2Params;
   chart: Bar[];
-}) {
+  baseline_enter: boolean;
+}): Promise<string> {
   const p = newPendingPosition({ asset_class: t.c.asset_class, entry: t.plan.entry, stop: t.plan.stop, size: t.plan.size });
   p.exit_plan = "STRUCTURAL";
   p.target_price = t.target;
@@ -380,7 +524,7 @@ async function insertTrade(t: {
   p.partial_fraction = t.params.partial_fraction;
   p.trail_after_r = t.params.trail_after_r;
   p.trail_mult = t.params.trail_mult_atr4h;
-  const { error } = await getSupabase()
+  const { data, error } = await getSupabase()
     .from("trading_trades")
     .insert({
       trigger_id: t.trigger_id,
@@ -407,10 +551,14 @@ async function insertTrade(t: {
       position_size: t.plan.size,
       risk_amount: t.plan.risk_amount,
       chart_bars: t.chart,
+      baseline_enter: t.baseline_enter,
       events: [],
       ...simColumns(p),
-    });
+    })
+    .select("id")
+    .single();
   if (error) throw new Error(`insert trade: ${error.message}`);
+  return (data as { id: string }).id;
 }
 
 async function scan(input: {
@@ -427,6 +575,12 @@ async function scan(input: {
   summary: TickSummary;
 }) {
   const { settings, params, now, summary } = input;
+  // הסוכן מסחר chooses from a wider pool than the deterministic baseline would take (same management rules).
+  const pool: StrategyV2Params = settings.agent_enabled
+    ? { ...params, min_score: Math.min(params.min_score, DISCRETION_POOL_PARAMS.min_score), setups: DISCRETION_POOL_PARAMS.setups }
+    : params;
+  const useBroker = settings.phase === "PAPER" && settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured();
+  const cryptoTradable = useBroker ? await alpaca.tradableSymbols().catch(() => new Set<string>()) : new Set<string>();
   // Setups are only defined on a completed 4h bar.
   const T = Math.floor(now / H4) * H4;
   const eligible = input.universe.filter((u) => u.manual_enabled && u.screen_passed && u.eligibility !== "DISABLED_POOR");
@@ -454,7 +608,7 @@ async function scan(input: {
     }
     referenceOkBySymbol.set(f.symbol, referenceOk);
     const uctx = f.asset_class === "STOCK" ? ctxStock : ctxCrypto;
-    found.push(...evaluateCandidates(f, T, { reference_ok: referenceOk, rs_rank: uctx.rank.get(f.symbol) ?? null, breadth: uctx.breadth }, params).candidates);
+    found.push(...evaluateCandidates(f, T, { reference_ok: referenceOk, rs_rank: uctx.rank.get(f.symbol) ?? null, breadth: uctx.breadth }, pool).candidates);
   }
   if (!found.length) return;
   found.sort((a, b) => b.score - a.score || b.rr - a.rr);
@@ -503,6 +657,7 @@ async function scan(input: {
       );
       const basePlan = buildTradePlan({ entry: c.entry, stopDistance: c.entry - c.stop, equity: input.account.equity, assetClass: sym.asset_class, riskScale: settings.risk_scale });
       const deterministic = vetoes.length ? "VETO" : blocks.length || !basePlan ? "BLOCKED" : "ENTER";
+      const baselineEnter = isBaselineCandidate(c, params);
       const brief = analystBrief(f, T);
       const snapshot = { candidate: c, brief, correlations, funding_rate: funding ?? null, vix, btc_dominance_pct: dominance };
 
@@ -522,7 +677,8 @@ async function scan(input: {
             envelope_blocks: blocks,
             plan: basePlan ? { ...basePlan, target: c.target, target_menu: c.target_menu } : null,
             deterministic_decision: deterministic,
-            param_version: params.version,
+            baseline_enter: baselineEnter,
+            param_version: pool.version,
             phase: settings.phase,
           },
           { onConflict: "symbol,mode,bar_time", ignoreDuplicates: true }
@@ -540,12 +696,15 @@ async function scan(input: {
       // הסוכן מסחר — analyst judgement (also recorded when the envelope blocks, for shadow measurement).
       let verdict: AgentVerdict | null = null;
       let flags: string[] = [];
-      if (settings.agent_enabled && summary.agent_calls < MAX_AGENT_CALLS_PER_TICK) {
+      // Discretionary candidates the envelope already blocks aren't worth a model call; baseline ones are (measurement).
+      const worthJudging = baselineEnter || blocks.length === 0;
+      if (settings.agent_enabled && worthJudging && summary.agent_calls < MAX_AGENT_CALLS_PER_TICK) {
         summary.agent_calls += 1;
         const i1 = closedIdx(f.h1, T);
         const judged = await judgeTrigger(
           {
             symbol: sym.symbol,
+            baseline_would_enter: baselineEnter,
             asset_class: sym.asset_class,
             candidate: c,
             target_menu: c.target_menu,
@@ -593,9 +752,10 @@ async function scan(input: {
       const base = { trigger_id: triggerId, c, bucket, snapshot: snapshot as unknown as Record<string, unknown>, verdict, params, chart };
 
       // Deterministic baseline — structural target, always simulated forward in shadow.
-      await insertTrade({ ...base, track: "DETERMINISTIC", execution: "SHADOW", plan: basePlan, target: c.target });
+      await insertTrade({ ...base, track: "DETERMINISTIC", execution: "SHADOW", plan: basePlan, target: c.target, baseline_enter: baselineEnter });
 
-      const multiplier = verdict ? verdict.risk_multiplier : 1;
+      // No verdict (agent off / budget) → only what the deterministic baseline would take.
+      const multiplier = verdict ? verdict.risk_multiplier : baselineEnter ? 1 : 0;
       if (settings.phase === "BACKTEST" || multiplier === 0) continue;
       if (blocks.length) {
         summary.blocked += 1;
@@ -605,14 +765,29 @@ async function scan(input: {
       if (!agentPlan) continue;
       const target = c.target_menu[verdict?.target_index ?? 0]?.price ?? c.target;
       const execution = settings.phase === "PAPER" && u.eligibility === "ACTIVE" ? "PAPER" : "SHADOW";
-      await insertTrade({ ...base, track: "AGENT", execution, plan: agentPlan, target });
+      const brokerOk =
+        useBroker && execution === "PAPER" && (sym.asset_class === "STOCK" ? await alpaca.isStockTradable(sym.symbol) : cryptoTradable.has(`${sym.symbol}/USD`));
+      const tradeId = await insertTrade({ ...base, track: "AGENT", execution, plan: agentPlan, target, baseline_enter: baselineEnter });
       summary.entries += 1;
+      if (brokerOk) {
+        try {
+          const order = await alpaca.placeEntry({ symbol: sym.symbol, assetClass: sym.asset_class, qty: agentPlan.size, limit: agentPlan.entry, stop: agentPlan.stop, target, clientId: `${tradeId.slice(0, 18)}-in` });
+          await updateTrade(tradeId, { broker: "ALPACA_PAPER", broker_entry_order_id: order.id, broker_status: order.status });
+        } catch (err) {
+          const reason = err instanceof Error ? err.message.slice(0, 160) : "broker_error";
+          await updateTrade(tradeId, { state: "CANCELLED", exit_reason: "BROKER_REJECTED", broker: "ALPACA_PAPER", broker_status: reason, closed_at: iso(now) });
+          await logEvent({ kind: "BROKER_REJECTED", symbol: sym.symbol, severity: "warn", message: `${sym.symbol}: הברוקר דחה את הפקודה — ${reason}` });
+          continue;
+        }
+      } else if (useBroker && execution === "PAPER") {
+        await logEvent({ kind: "BROKER_UNSUPPORTED", symbol: sym.symbol, message: `${sym.symbol}: לא נסחר ב-Alpaca — העסקה נשארת בסימולציה` });
+      }
       input.account.open.push({ symbol: sym.symbol, entry_limit: agentPlan.entry, remaining_size: agentPlan.size, state: "PENDING", sim_state: { state: "PENDING", entry_price: null, stop_price: agentPlan.stop } } as TradeRow);
       if (execution === "PAPER") {
         await logEvent({
           kind: "ORDER_PLACED",
           symbol: sym.symbol,
-          message: `${sym.symbol} ${c.setup} ${c.score}: Limit ${agentPlan.entry.toPrecision(6)} · סטופ ${agentPlan.stop.toPrecision(6)} · יעד ${target.toPrecision(6)} · ×${multiplier} · ${verdict?.thesis ?? "deterministic"}`.slice(0, 300),
+          message: `${brokerOk ? "[Alpaca demo] " : ""}${sym.symbol} ${c.setup} ${c.score}${baselineEnter ? "" : " (AI)"}: Limit ${agentPlan.entry.toPrecision(6)} · סטופ ${agentPlan.stop.toPrecision(6)} · יעד ${target.toPrecision(6)} · ×${multiplier} · ${verdict?.thesis ?? "deterministic"}`.slice(0, 300),
           push: true,
         });
       }
@@ -659,13 +834,24 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
 
   const stillOpen = openTrades.filter((t) => t.state === "PENDING" || t.state === "OPEN" || t.state === "RISK_FREE");
   const account = await loadAccount(settings, stillOpen, lastPrices, now);
+  if (settings.phase === "PAPER" && settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured()) {
+    // The demo account's real equity (includes positions the strategy doesn't know about) sizes every trade.
+    try {
+      const acct = await alpaca.account();
+      if (acct.trading_blocked || acct.account_blocked) summary.errors.push("alpaca_account_blocked");
+      account.equity = Number(acct.equity);
+    } catch (err) {
+      summary.errors.push(`alpaca_account: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+    }
+  }
   const peak = Math.max(settings.peak_equity, account.equity);
 
   // Master kill switch — full stop, manual re-arm only.
   if (!settings.kill_switch_active && shouldTripKillSwitch(account.equity, peak)) {
     for (const t of account.open) {
       const p = { ...t.sim_state };
-      const ev: PositionEvent[] = forceClose(p, lastPrices.get(t.symbol) ?? p.entry_price ?? p.entry_limit, "KILL_SWITCH", now);
+      const brokerPx = t.broker ? await flattenAtBroker(t).catch(() => null) : null;
+      const ev: PositionEvent[] = forceClose(p, brokerPx ?? lastPrices.get(t.symbol) ?? p.entry_price ?? p.entry_limit, "KILL_SWITCH", now);
       await updateTrade(t.id, { ...simColumns(p), events: [...(t.events ?? []), ...ev], ...(p.state === "CLOSED" ? { realized_r: realizedR(p), realized_pnl: p.cash_flow } : {}) });
     }
     const reason = `Drawdown ${(drawdownFromPeak(account.equity, peak) * 100).toFixed(1)}% מהשיא`;

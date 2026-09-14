@@ -19,6 +19,8 @@ export type JournalTrade = {
   agent_conviction: number | null;
   reached_1r: boolean;
   closed_at: number;
+  /** Would the deterministic strategy alone have entered? (false = AI-discretion opportunity) */
+  baseline_enter?: boolean;
 };
 
 // ── 4b. Eligibility gate — binary only ────────────────────────────────────────
@@ -137,7 +139,9 @@ export function agentValueReport(trades: JournalTrade[], agentCostR = 0): AgentV
     const skipped = mult === 0;
     // An agent-track trade exists only when the agent entered; its R is scaled by its multiplier.
     const agentR = skipped ? 0 : (agent?.realized_r ?? det.realized_r) * mult;
-    pairs.push({ det: det.realized_r, agent: agentR - agentCostR, skipped, conviction: det.agent_conviction });
+    // The DETERMINISTIC row always carries the outcome; the baseline only "earns" it if it would have entered.
+    const detR = det.baseline_enter === false ? 0 : det.realized_r;
+    pairs.push({ det: detR, agent: agentR - agentCostR, skipped, conviction: det.agent_conviction });
   }
   const n = pairs.length;
   const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
@@ -171,7 +175,7 @@ export function agentValueReport(trades: JournalTrade[], agentCostR = 0): AgentV
     diff_ci90: ci,
     agent_skip_rate: n ? round(pairs.filter((p) => p.skipped).length / n) : 0,
     skipped_winners: pairs.filter((p) => p.skipped && p.det > 0).length,
-    skipped_losers: pairs.filter((p) => p.skipped && p.det <= 0).length,
+    skipped_losers: pairs.filter((p) => p.skipped && p.det < 0).length,
     verdict,
     by_conviction: convictions,
   };

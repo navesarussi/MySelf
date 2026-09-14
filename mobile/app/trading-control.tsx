@@ -66,6 +66,39 @@ export default function TradingControlScreen() {
 
   return (
     <Screen title={t("trading.hubControl")} subtitle={t("trading.controlSubtitle")} onRefresh={refreshAll} refreshing={loading}>
+      <SectionTitle>{t("trading.demoTitle")}</SectionTitle>
+      <Card style={dash.broker.connected ? { borderColor: c.good } : undefined}>
+        <TradingText muted size={tokens.textXs}>
+          {t("trading.demoNote")}
+        </TradingText>
+        <View style={{ marginTop: 8 }}>
+          {!dash.broker.configured ? (
+            <TradingText color={c.warn}>{t("trading.demoNotConfigured")}</TradingText>
+          ) : dash.broker.connected ? (
+            <TradingText bold color={c.good}>
+              {t("trading.demoConnected", { equity: Math.round(dash.broker.equity ?? 0).toLocaleString("en-US") })}
+            </TradingText>
+          ) : (
+            <TradingText color={c.warn}>{t("trading.demoError", { error: dash.broker.error ?? "?" })}</TradingText>
+          )}
+        </View>
+        <View style={{ ...row, gap: 8, marginTop: 10 }}>
+          {settings.execution_venue === "ALPACA_PAPER" && settings.phase === "PAPER" ? (
+            <>
+              <Badge label={t("trading.demoActive")} tone="good" />
+              <View style={{ flex: 1 }} />
+              <Btn small variant="warn" label={t("trading.stopDemo")} onPress={() => void control({ action: "stop_demo" })} />
+            </>
+          ) : (
+            <Btn
+              label={t("trading.startDemo")}
+              disabled={!dash.broker.connected}
+              onPress={() => confirmDelete(t("trading.startDemoConfirm"), () => void control({ action: "start_demo", confirm: true }), t("trading.startDemo"), t("common.cancel"))}
+            />
+          )}
+        </View>
+      </Card>
+
       <SectionTitle>{t("trading.liveControls")}</SectionTitle>
       <Card>
         <SwitchRow label={settings.entries_paused ? t("trading.entriesPaused") : t("trading.resume")} value={!settings.entries_paused} onChange={(v) => void control({ action: v ? "resume_entries" : "pause_entries" })} />

@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   const body = await readJson(req);
   const cmd = parseCommand(body);
   if (!cmd) return badRequest("invalid_command");
-  const destructive = ["close_position", "close_all", "rearm_kill_switch", "set_phase"].includes(cmd.action);
+  const destructive = ["close_position", "close_all", "rearm_kill_switch", "set_phase", "start_demo"].includes(cmd.action);
   if (destructive && body.confirm !== true) return badRequest("confirmation_required");
   try {
     return NextResponse.json(await executeCommand(cmd, "app"));
