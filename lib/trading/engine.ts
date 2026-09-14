@@ -666,8 +666,28 @@ async function scanDailyTrend(input: {
   const eligible = input.universe.filter((u) => u.manual_enabled && u.screen_passed && u.eligibility !== "DISABLED_POOR");
   if (!eligible.length) return;
 
+  // The regime reference (SPY/BTC) must exist for the group filter regardless of ITS OWN screen — a broad
+  // index/large-cap naturally has low ATR% and can legitimately fail the volatility screen while still being
+  // the correct regime gauge (v2's scan() already does this; scanning it here matches that, not a re-screen).
+  const buildReference = async (ref: UniverseSymbol): Promise<DailyAsset | undefined> => {
+    try {
+      const bars = await barsFor(cache, ref, "1d");
+      return bars.length >= 260 ? buildDailyAsset(ref.symbol, ref.asset_class, dailyTrendGroup(ref.symbol, ref.asset_class), bars) : undefined;
+    } catch (err) {
+      summary.errors.push(`daily-reference ${ref.symbol}: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+  };
+  // ETF group intentionally has no regime reference — matches the validated research config exactly.
+  const references: Record<string, DailyAsset | undefined> = { CRYPTO: await buildReference(REGIME_REFERENCE.CRYPTO_ALT), STOCKS: await buildReference(REGIME_REFERENCE.STOCK), ETF: undefined };
+
   const assets: DailyAsset[] = [];
   for (const u of eligible) {
+    if (u.symbol === references.CRYPTO?.symbol || u.symbol === references.STOCKS?.symbol) {
+      // Already built above — reuse rather than refetch (cache would hit anyway, this just skips the extra pass).
+      assets.push((u.symbol === references.CRYPTO?.symbol ? references.CRYPTO : references.STOCKS)!);
+      continue;
+    }
     try {
       const bars = await barsFor(cache, toSym(u), "1d");
       if (bars.length < 260) continue;
@@ -677,8 +697,6 @@ async function scanDailyTrend(input: {
     }
   }
   if (!assets.length) return;
-  // ETF group intentionally has no regime reference — matches the validated research config exactly.
-  const references: Record<string, DailyAsset | undefined> = { CRYPTO: assets.find((a) => a.symbol === "BTC"), STOCKS: assets.find((a) => a.symbol === "SPY"), ETF: undefined };
 
   // Symbols may publish their latest daily close at different UTC times (crypto vs. lagging equities data) —
   // scan once per distinct "latest bar" timestamp so each group is ranked against its own freshest cohort.
