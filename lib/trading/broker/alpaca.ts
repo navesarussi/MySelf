@@ -89,10 +89,11 @@ export const alpaca = {
   },
 
   /**
-   * Entry. Stocks: bracket (limit entry + broker-side stop + take-profit, OCO).
-   * Crypto: plain limit entry — Alpaca has no crypto brackets, so the stop is placed right after the fill.
+   * Entry. Stocks with a real fixed target (v2): bracket (limit entry + broker-side stop + take-profit, OCO).
+   * `bracket: false` (daily-trend — trail-only, no real take-profit price) or crypto (no crypto brackets on
+   * Alpaca): plain limit entry; the caller places a protective stop separately once it sees the fill.
    */
-  placeEntry(input: { symbol: string; assetClass: AssetClass; qty: number; limit: number; stop: number; target: number; clientId: string }) {
+  placeEntry(input: { symbol: string; assetClass: AssetClass; qty: number; limit: number; stop: number; target: number; clientId: string; bracket?: boolean }) {
     const base = {
       symbol: alpacaSymbol(input.symbol, input.assetClass),
       qty: String(roundQty(input.qty, input.assetClass)),
@@ -102,7 +103,7 @@ export const alpaca = {
       limit_price: String(roundPrice(input.limit, input.assetClass)),
       client_order_id: input.clientId,
     };
-    if (input.assetClass === "STOCK") {
+    if (input.assetClass === "STOCK" && input.bracket !== false) {
       return call<AlpacaOrder>("POST", "/v2/orders", {
         ...base,
         order_class: "bracket",
@@ -123,6 +124,19 @@ export const alpaca = {
       time_in_force: "gtc",
       stop_price: String(roundPrice(input.stop, "CRYPTO_ALT")),
       limit_price: String(roundPrice(input.stop * 0.99, "CRYPTO_ALT")),
+      client_order_id: input.clientId,
+    });
+  },
+
+  /** Broker-side protective stop for a non-bracket stock entry (plain stop-market, no limit cushion needed). */
+  placeStockStop(input: { symbol: string; qty: number; stop: number; clientId: string }) {
+    return call<AlpacaOrder>("POST", "/v2/orders", {
+      symbol: input.symbol,
+      qty: String(roundQty(input.qty, "STOCK")),
+      side: "sell",
+      type: "stop",
+      time_in_force: "gtc",
+      stop_price: String(roundPrice(input.stop, "STOCK")),
       client_order_id: input.clientId,
     });
   },

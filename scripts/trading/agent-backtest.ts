@@ -42,7 +42,7 @@ const run = (filter?: Parameters<typeof runDailyTrend>[0]["filter"], priority?: 
 type Signal = { key: string; symbol: string; group: string; t: number; rs: number | null; room_r: number | null; features: Record<string, number | null> };
 const signals: Signal[] = [];
 runDailyTrend({ assets, references, params: { ...params, max_concurrent: 999 }, start: FROM, end: TO, starting_equity: 1e12, filter: (c) => {
-  signals.push({ key: `${c.symbol}|${c.t}`, symbol: c.symbol, group: c.group, t: c.t, rs: c.rs, room_r: c.room_r, features: c.features as unknown as Record<string, number | null> });
+  signals.push({ key: `${c.symbol}|${c.t}`, symbol: c.symbol, group: c.group, t: c.t, rs: c.rs, room_r: c.room, features: c.features as unknown as Record<string, number | null> });
   return false;
 } });
 

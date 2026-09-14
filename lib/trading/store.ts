@@ -26,6 +26,7 @@ export type TradingSettings = {
   last_tick_at: string | null;
   last_tick_summary: Record<string, unknown> | null;
   last_screen_date: string | null;
+  last_daily_trend_scan_date: string | null;
   execution_venue: "SIM" | "ALPACA_PAPER";
   updated_at: string;
 };
@@ -53,6 +54,7 @@ export async function getSettings(): Promise<TradingSettings> {
     last_tick_at: (r.last_tick_at as string) ?? null,
     last_tick_summary: (r.last_tick_summary as Record<string, unknown>) ?? null,
     last_screen_date: (r.last_screen_date as string) ?? null,
+    last_daily_trend_scan_date: (r.last_daily_trend_scan_date as string) ?? null,
     execution_venue: r.execution_venue === "ALPACA_PAPER" ? "ALPACA_PAPER" : "SIM",
     updated_at: String(r.updated_at ?? new Date().toISOString()),
   };

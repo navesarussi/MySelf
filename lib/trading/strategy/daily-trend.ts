@@ -11,6 +11,8 @@ import { keyLevels, nextResistance } from "./structure";
 /**
  * Strategy family "daily trend": multi-asset (crypto + stocks + ETFs) trend breakouts on daily closes.
  * Research engine with the same position state machine, sizing and risk envelope as live trading.
+ * `scanDailyTrendCandidates` / `donchianExitBreached` are the exact functions the LIVE engine calls too —
+ * one code path, so the walk-forward numbers in docs/trading/research-2026-09.md are what actually runs.
  */
 
 const D1 = 86_400_000;
@@ -45,6 +47,18 @@ export const DEFAULT_DAILY_TREND: DailyTrendParams = {
   max_concurrent: RISK_ENVELOPE.MAX_CONCURRENT_POSITIONS,
   use_structural_target: false,
   min_room_r: 2,
+};
+
+/** Walk-forward chosen config (docs/trading/research-2026-09.md): 100-day breakout, 3×ATR stop, 3×ATR chandelier trail. */
+export const LIVE_DAILY_TREND_PARAMS: DailyTrendParams = {
+  ...DEFAULT_DAILY_TREND,
+  version: "daily-trend-b100-t3-s3-c5",
+  breakout_days: 100,
+  exit_days: 20,
+  trail_atr: 3,
+  stop_atr: 3,
+  rs_min: 0,
+  max_concurrent: RISK_ENVELOPE.MAX_CONCURRENT_POSITIONS,
 };
 
 export type DailyAsset = { symbol: string; asset_class: AssetClass; group: string; d1: TfSeries; sma200: number[]; idx: Map<number, number> };
@@ -120,24 +134,8 @@ function entryFeatures(a: DailyAsset, i: number, ref: DailyAsset | undefined, t:
   };
 }
 
-export type DailyResult = {
-  params: DailyTrendParams;
-  stats: PerformanceStats;
-  trades: DailyTrade[];
-  cagr: number;
-  sharpe: number | null;
-  max_dd: number;
-  exposure: number;
-  kill_switch_at: number | null;
-  equity: { t: number; equity: number }[];
-  by_group: GroupStat[];
-  by_exit: GroupStat[];
-  monte_carlo: MonteCarloResult;
-  blocked: Record<string, number>;
-};
-
 /** Relative strength: 126-day log return / realized vol, ranked within each group (0..1). */
-function rsRanks(assets: DailyAsset[], t: number) {
+export function dailyRsRanks(assets: DailyAsset[], t: number) {
   const byGroup = new Map<string, { symbol: string; score: number }[]>();
   for (const a of assets) {
     const i = a.idx.get(t);
@@ -156,6 +154,88 @@ function rsRanks(assets: DailyAsset[], t: number) {
   return out;
 }
 
+export type DailyCandidate = { symbol: string; group: string; a: DailyAsset; i: number; t: number; rs: number | null; room: number | null; stopDist: number; entry: number; stop: number; target: number; features: EntryFeatures };
+
+/**
+ * Pure per-day candidate scan (no portfolio/account state) — called by both the backtester and the
+ * live engine, so a signal fires identically in research and in production.
+ */
+export function scanDailyTrendCandidates(assets: DailyAsset[], t: number, references: Record<string, DailyAsset | undefined>, p: DailyTrendParams, ranks?: Map<string, number>): DailyCandidate[] {
+  const rs = ranks ?? dailyRsRanks(assets, t);
+  const cands: DailyCandidate[] = [];
+  for (const a of assets) {
+    const i = a.idx.get(t);
+    if (i === undefined || i < Math.max(210, p.breakout_days + 1)) continue;
+    const bars = a.d1.bars;
+    const close = bars[i].c;
+    let hi = -Infinity;
+    for (let j = i - p.breakout_days; j < i; j++) hi = Math.max(hi, bars[j].h);
+    if (!(close > hi)) continue;
+    if (p.require_sma200 && !(close > a.sma200[i])) continue;
+    if (p.require_reference) {
+      const ref = references[a.group];
+      if (ref && ref.symbol !== a.symbol) {
+        const ri = closedIdx(ref.d1, t + D1);
+        if (ri < 0 || !(ref.d1.bars[ri].c > ref.sma200[ri])) continue;
+      }
+    }
+    const rank = rs.get(a.symbol) ?? null;
+    if (rank !== null && rank < p.rs_min) continue;
+    const atrv = a.d1.atr[i];
+    if (!Number.isFinite(atrv)) continue;
+    const stopDist = p.stop_atr * atrv;
+    const res = nextResistance(keyLevels(a.d1, i, 400), close + 0.25 * stopDist, 2);
+    const room = res ? (res.price - close) / stopDist : null;
+    if (room !== null && room < p.min_room_r) continue;
+    const target = p.use_structural_target && res ? res.price : close + 100 * stopDist;
+    const features = entryFeatures(a, i, references[a.group], t, p.breakout_days);
+    cands.push({ symbol: a.symbol, group: a.group, a, i, t, rs: rank, room, stopDist, entry: close, stop: close - stopDist, target, features });
+  }
+  return cands;
+}
+
+/**
+ * Confluence score (0-100, display/journal only — NOT an entry gate; research found hard-filtering on
+ * these only marginally helped out of sample, see docs/trading/research-2026-09.md).
+ */
+export function scoreDailyCandidate(f: EntryFeatures, rs: number | null): number {
+  let s = 0;
+  if (f.volume_ratio >= 1.2) s += 25;
+  if (f.squeeze_pct !== null && f.squeeze_pct <= 0.5) s += 25;
+  s += f.adx <= 32 ? 20 : -10;
+  if (f.breakout_atr > 0.3) s += 15;
+  if (rs !== null && rs > 0.5) s += 15;
+  return Math.max(0, Math.min(100, s));
+}
+
+/**
+ * The 20-day-low Donchian exit — a close below the rolling low, checked once per day.
+ * Takes a daily `TfSeries` directly (not a full `DailyAsset`) so the live engine can reuse the daily
+ * series it already has on `SymbolFrames.d1` for any open position, without building a separate DailyAsset.
+ */
+export function donchianExitBreached(daily: TfSeries, i: number, exitDays: number): boolean {
+  if (i <= exitDays) return false;
+  let lo = Infinity;
+  for (let j = i - exitDays; j < i; j++) lo = Math.min(lo, daily.bars[j].l);
+  return daily.bars[i].c < lo;
+}
+
+export type DailyResult = {
+  params: DailyTrendParams;
+  stats: PerformanceStats;
+  trades: DailyTrade[];
+  cagr: number;
+  sharpe: number | null;
+  max_dd: number;
+  exposure: number;
+  kill_switch_at: number | null;
+  equity: { t: number; equity: number }[];
+  by_group: GroupStat[];
+  by_exit: GroupStat[];
+  monte_carlo: MonteCarloResult;
+  blocked: Record<string, number>;
+};
+
 export function runDailyTrend(input: {
   assets: DailyAsset[];
   references: Record<string, DailyAsset | undefined>;
@@ -164,7 +244,7 @@ export function runDailyTrend(input: {
   end: number;
   starting_equity: number;
   /** Optional entry filter (research: learned rules / agent decisions). */
-  filter?: (c: { symbol: string; group: string; t: number; rs: number | null; room_r: number | null; features: EntryFeatures }) => boolean;
+  filter?: (c: DailyCandidate) => boolean;
   /** Optional priority when capacity is limited (higher first); default = relative strength. */
   priority?: (c: { symbol: string; t: number; rs: number | null }) => number;
 }): DailyResult {
@@ -200,14 +280,8 @@ export function runDailyTrend(input: {
       const l = live[k];
       const i = l.a.idx.get(t);
       if (i === undefined) continue;
-      const bars = l.a.d1.bars;
-      let donchianExit = false;
-      if (l.pos.entry_price !== null && i > p.exit_days) {
-        let lo = Infinity;
-        for (let j = i - p.exit_days; j < i; j++) lo = Math.min(lo, bars[j].l);
-        donchianExit = bars[i].c < lo;
-      }
-      stepPosition(l.pos, bars[i], {
+      const donchianExit = l.pos.entry_price !== null && donchianExitBreached(l.a.d1, i, p.exit_days);
+      stepPosition(l.pos, l.a.d1.bars[i], {
         atr: l.a.d1.atr[i - 1] ?? NaN,
         force_exit_reason: donchianExit ? "TRAIL" : undefined,
       });
@@ -241,45 +315,15 @@ export function runDailyTrend(input: {
     if (killAt !== null) continue;
 
     // 3) scan today's close
-    const ranks = rsRanks(input.assets, t);
-    const cands: { a: DailyAsset; i: number; rs: number | null; room: number | null; stopDist: number; target: number; features: EntryFeatures }[] = [];
-    for (const a of input.assets) {
-      const i = a.idx.get(t);
-      if (i === undefined || i < Math.max(210, p.breakout_days + 1)) continue;
-      const bars = a.d1.bars;
-      const close = bars[i].c;
-      let hi = -Infinity;
-      for (let j = i - p.breakout_days; j < i; j++) hi = Math.max(hi, bars[j].h);
-      if (!(close > hi)) continue;
-      if (p.require_sma200 && !(close > a.sma200[i])) continue;
-      if (p.require_reference) {
-        const ref = input.references[a.group];
-        if (ref && ref.symbol !== a.symbol) {
-          const ri = closedIdx(ref.d1, t + D1);
-          if (ri < 0 || !(ref.d1.bars[ri].c > ref.sma200[ri])) continue;
-        }
-      }
-      const rs = ranks.get(a.symbol) ?? null;
-      if (rs !== null && rs < p.rs_min) continue;
-      const atrv = a.d1.atr[i];
-      if (!Number.isFinite(atrv)) continue;
-      const stopDist = p.stop_atr * atrv;
-      const res = nextResistance(keyLevels(a.d1, i, 400), close + 0.25 * stopDist, 2);
-      const room = res ? (res.price - close) / stopDist : null;
-      if (room !== null && room < p.min_room_r) {
-        blocked.NO_ROOM = (blocked.NO_ROOM ?? 0) + 1;
-        continue;
-      }
-      const target = p.use_structural_target && res ? res.price : close + 100 * stopDist;
-      const features = entryFeatures(a, i, input.references[a.group], t, p.breakout_days);
-      if (input.filter && !input.filter({ symbol: a.symbol, group: a.group, t, rs, room_r: room, features })) {
-        blocked.FILTER = (blocked.FILTER ?? 0) + 1;
-        continue;
-      }
-      cands.push({ a, i, rs, room, stopDist, target, features });
+    const ranks = dailyRsRanks(input.assets, t);
+    let cands = scanDailyTrendCandidates(input.assets, t, input.references, p, ranks);
+    if (input.filter) {
+      const before = cands.length;
+      cands = cands.filter(input.filter);
+      if (before !== cands.length) blocked.FILTER = (blocked.FILTER ?? 0) + (before - cands.length);
     }
     const prio = input.priority;
-    cands.sort((x, y) => (prio ? prio({ symbol: y.a.symbol, t, rs: y.rs }) - prio({ symbol: x.a.symbol, t, rs: x.rs }) : 0) || (y.rs ?? 0.5) - (x.rs ?? 0.5));
+    cands.sort((x, y) => (prio ? prio({ symbol: y.symbol, t, rs: y.rs }) - prio({ symbol: x.symbol, t, rs: x.rs }) : 0) || (y.rs ?? 0.5) - (x.rs ?? 0.5));
     const dayIso = new Date(t).toISOString().slice(0, 10);
     for (const c of cands) {
       if (live.length >= p.max_concurrent) {
@@ -303,15 +347,14 @@ export function runDailyTrend(input: {
           entries_paused: false,
           positions: live.map((l) => ({ symbol: l.a.symbol, notional: l.pos.entry_limit * l.pos.size, open_risk_r: openRiskR(l.pos) })),
         },
-        c.a.symbol,
+        c.symbol,
         correlated
       ).filter((b) => b !== "MAX_CONCURRENT"); // the concurrency cap is the research parameter (checked above)
       if (blocks.length) {
         blocks.forEach((b) => (blocked[b] = (blocked[b] ?? 0) + 1));
         continue;
       }
-      const close = c.a.d1.bars[c.i].c;
-      const plan = buildTradePlan({ entry: close, stopDistance: c.stopDist, equity, assetClass: c.a.asset_class, riskScale: 1 });
+      const plan = buildTradePlan({ entry: c.entry, stopDistance: c.stopDist, equity, assetClass: c.a.asset_class, riskScale: 1 });
       if (!plan) continue;
       const pos = newPendingPosition({ asset_class: c.a.asset_class, entry: plan.entry, stop: plan.stop, size: plan.size });
       pos.exit_plan = "STRUCTURAL";

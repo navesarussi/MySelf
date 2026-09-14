@@ -92,6 +92,7 @@ export type TriggerRow = {
   agent_target_index: number | null;
   agent_lessons_applied: string[] | null;
   baseline_enter: boolean;
+  strategy_version: string;
   snapshot: Record<string, unknown>;
   plan: Record<string, unknown> | null;
   phase: string;

@@ -109,7 +109,23 @@ export const SEED_UNIVERSE: UniverseSymbol[] = [
   ...["NFLX", "AVGO", "COST", "JPM", "V", "LLY", "XOM", "ORCL", "PLTR", "COIN", "UBER", "CRM", "MU", "WMT", "IWM"].map(
     (symbol): UniverseSymbol => ({ symbol, asset_class: "STOCK", provider_symbol: symbol })
   ),
+  // Wider breadth for the daily-trend strategy (docs/trading/research-2026-09.md): more independent symbols
+  // is the only legitimate way to raise trade frequency — the entry/exit rules are unchanged from research.
+  ...["JNJ", "PG", "HD", "MA", "BAC", "ABBV", "KO", "PEP", "CSCO", "ACN", "MRK", "ADBE", "TXN", "LIN", "PM", "HON", "UNP", "LOW", "SBUX", "INTC", "IBM", "CAT", "DE", "BA", "GS", "MS", "BLK", "SCHW", "NOW", "INTU", "AMAT", "QCOM", "BKNG", "ISRG", "VRTX", "REGN", "GILD", "DIS", "PYPL", "XYZ"].map(
+    (symbol): UniverseSymbol => ({ symbol, asset_class: "STOCK", provider_symbol: symbol })
+  ),
+  // ETFs used in the daily-trend research (bias-free liquidity/diversification check) — see docs/trading/research-2026-09.md.
+  ...["GLD", "SLV", "TLT", "IEF", "XLE", "XLF", "XLK", "XLV", "XLI", "XLY", "XLP", "XLU", "EEM", "EFA", "USO", "DBC", "SMH", "ARKK", "VNQ", "HYG", "DIA"].map(
+    (symbol): UniverseSymbol => ({ symbol, asset_class: "STOCK", provider_symbol: symbol })
+  ),
 ];
+
+/** Group classification for the daily-trend strategy (cross-sectional RS ranking + regime reference). */
+export function dailyTrendGroup(symbol: string, assetClass: AssetClass): "CRYPTO" | "ETF" | "STOCKS" {
+  if (assetClass !== "STOCK") return "CRYPTO";
+  const ETF_SYMBOLS = new Set(["SPY", "QQQ", "IWM", "GLD", "SLV", "TLT", "IEF", "XLE", "XLF", "XLK", "XLV", "XLI", "XLY", "XLP", "XLU", "EEM", "EFA", "USO", "DBC", "SMH", "ARKK", "VNQ", "HYG", "DIA"]);
+  return ETF_SYMBOLS.has(symbol) ? "ETF" : "STOCKS";
+}
 
 /** Super-market regime reference per asset class. */
 export const REGIME_REFERENCE: Record<AssetClass, UniverseSymbol> = {
