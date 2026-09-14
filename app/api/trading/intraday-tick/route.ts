@@ -6,7 +6,7 @@ export const maxDuration = 120;
 
 /**
  * Scheduler auth: Vercel/GitHub secrets, or a token stored in myself.trading_cron_tokens (RLS, service-role only).
- * The DB token exists because the per-minute scheduler is Supabase pg_cron (Vercel Hobby crons are daily-only).
+ * The DB token exists because the scheduler is Supabase pg_cron (Vercel Hobby crons are daily-only).
  */
 async function isSchedulerAuthorized(req: NextRequest): Promise<boolean> {
   const auth = req.headers.get("authorization") ?? "";
@@ -19,7 +19,7 @@ async function isSchedulerAuthorized(req: NextRequest): Promise<boolean> {
   return Boolean(data);
 }
 
-/** Intraday (15m setup / 5m entry) tick — called every minute by Supabase pg_cron. */
+/** Intraday (15m setup / 5m entry) tick — pg_cron job `trading-intraday-tick`, 1 minute after every 5m close (1-59/5). */
 async function handle(req: NextRequest) {
   if (!(await isSchedulerAuthorized(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {

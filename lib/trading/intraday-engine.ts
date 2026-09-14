@@ -11,7 +11,7 @@ import { INTRADAY_PARAMS, M15, M5, buildIntradayFrames, scanIntraday, type Intra
 import { ensureSeeded, getOpenTrades, getSettings, getUniverse, logEvent, simColumns, updateTrade, type TradeRow, type TradingSettings, type UniverseRow } from "./store";
 
 /**
- * מערכת המסחר — intraday tick, every minute (Supabase pg_cron → /api/trading/intraday-tick).
+ * מערכת המסחר — intraday tick, 1 minute after every 5m close (Supabase pg_cron "1-59/5 * * * *" → /api/trading/intraday-tick).
  * Crypto only: setups on closed 15m bars, entry timing + position management on closed 5m bars.
  * הסוכן מסחר is in RATING-ONLY mode here: entries are fully deterministic; the agent scores each entered trade.
  * Idempotent: triggers are unique per (symbol, INTRADAY, setup bar, strategy) and positions only step unseen bars.

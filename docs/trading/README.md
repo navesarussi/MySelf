@@ -11,7 +11,7 @@ Tab **מסחר** in the Expo app. Backend in `lib/trading/**`, API in `app/api/v
 
 ## Intraday strategy — testing phase (2026-09-14)
 
-Crypto only, per-minute tick (`/api/trading/intraday-tick`, scheduled by Supabase **pg_cron** because Vercel Hobby
+Crypto only, tick every 5 minutes one minute after each 5m close (`/api/trading/intraday-tick`, Supabase **pg_cron** job `trading-intraday-tick`, `1-59/5 * * * *`, because Vercel Hobby
 crons are daily-only; auth token lives in `myself.trading_cron_tokens`). Code: `lib/trading/strategy/intraday.ts`
 (pure), `lib/trading/intraday-engine.ts` (live), `lib/trading/agent-rater.ts` (rating-only agent).
 
