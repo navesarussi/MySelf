@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { usePathname, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useI18n } from "../i18n";
@@ -14,9 +14,7 @@ export function AppTopBar({ onMenuPress }: { onMenuPress: () => void }) {
   const { t } = useI18n();
   const { writingDirection, row } = useLayoutDir();
   const router = useRouter();
-  const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const isHome = pathname === "/" || pathname === "/index" || pathname.endsWith("/(tabs)");
   const version = getAppVersion();
 
   return (
@@ -58,35 +56,31 @@ export function AppTopBar({ onMenuPress }: { onMenuPress: () => void }) {
             paddingHorizontal: 4,
           }}
         >
-          {!isHome ? (
-            <>
-              <Text
-                style={{
-                  color: c.ink,
-                  fontSize: 17,
-                  fontWeight: "700",
-                  textAlign: "center",
-                  writingDirection,
-                }}
-                numberOfLines={1}
-              >
-                {t("nav.brand")}
-              </Text>
-              <Text
-                style={{
-                  color: c.muted,
-                  fontSize: 10,
-                  fontWeight: "400",
-                  textAlign: "center",
-                  writingDirection,
-                  marginTop: 1,
-                }}
-                numberOfLines={1}
-              >
-                v{version}
-              </Text>
-            </>
-          ) : null}
+          <Text
+            style={{
+              color: c.ink,
+              fontSize: 17,
+              fontWeight: "700",
+              textAlign: "center",
+              writingDirection,
+            }}
+            numberOfLines={1}
+          >
+            {t("nav.brand")}
+          </Text>
+          <Text
+            style={{
+              color: c.muted,
+              fontSize: 10,
+              fontWeight: "400",
+              textAlign: "center",
+              writingDirection,
+              marginTop: 1,
+            }}
+            numberOfLines={1}
+          >
+            v{version}
+          </Text>
         </View>
 
         <View style={{ ...row, gap: 4 }}>
