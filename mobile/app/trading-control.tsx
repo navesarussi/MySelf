@@ -29,7 +29,10 @@ export default function TradingControlScreen() {
   const c = useColors();
   const { row } = useLayoutDir();
   const { run } = useApiMutation();
-  const { data: dash, refresh: refreshDash, loading } = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg));
+  const { data: dash, refresh: refreshDash, loading } = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg), {
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+  });
   const { data: uni, refresh: refreshUni } = useApiQuery(queryKeys.tradingUniverse, (cfg) => api.tradingUniverse(cfg));
   const { data: paramSets, refresh: refreshParams } = useApiQuery(queryKeys.tradingParamSets, (cfg) => api.tradingParamSets(cfg));
   const { data: learning, refresh: refreshLearning } = useApiQuery(queryKeys.tradingLearning, (cfg) => api.tradingLearning(cfg));
@@ -45,7 +48,10 @@ export default function TradingControlScreen() {
     void refreshParams();
     void refreshLearning();
   };
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+  };
   const control = (body: Record<string, unknown>) => run((cfg) => api.tradingControl(cfg, body), { onSuccess: invalidate });
 
   if (!dash) return <Screen title={t("trading.hubControl")}>{loading ? <Loading /> : null}</Screen>;

@@ -5,7 +5,8 @@ import { DEFAULT_V2_PARAMS, type StrategyV2Params } from "./strategy/candidates"
 import { loadFramesV2, warmStart } from "./strategy/data-v2";
 import { backtestGate, nextPhase, paperGate, PHASE_ORDER, shadowGate, type BacktestGateInput, type GateCheck } from "./gates";
 import { agentValueReport, bucketStats, runCalibration, walkForwardStability, type AgentValueReport } from "./learning";
-import { createBarCache } from "./market-data";
+import { latestStockPrices } from "./broker/alpaca-data";
+import { livePrice, type IntradaySymbol } from "./intraday-data";
 import { alpaca, flattenAtBroker, isAlpacaConfigured } from "./broker/alpaca";
 import { computeStats, equityCurveR, groupStats, rDistribution, ratingValue, type GroupStat, type PerformanceStats, type RatingValue } from "./metrics";
 import { forceClose, openRiskR, realizedR } from "./position";
@@ -155,23 +156,75 @@ export async function getBrokerStatus(venue: "SIM" | "ALPACA_PAPER"): Promise<Br
   }
 }
 
-async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
-  const cache = createBarCache();
+/** Latest tradable prices for open positions — stocks via Alpaca IEX, crypto via Binance. */
+async function livePricesForTrades(trades: TradeRow[], universe: UniverseRow[]) {
   const out = new Map<string, number>();
-  await Promise.all(
-    [...new Set(trades.map((t) => t.symbol))].map(async (symbol) => {
-      const u = universe.find((x) => x.symbol === symbol);
-      if (!u) return;
-      try {
-        const bars = await cache.get(u, "1h", 6);
-        const last = bars.at(-1);
-        if (last) out.set(symbol, last.c);
-      } catch {
-        /* price unavailable — shown as null */
+  const symbols = [...new Set(trades.map((t) => t.symbol))];
+  const stockProvider: string[] = [];
+  const crypto: IntradaySymbol[] = [];
+  for (const symbol of symbols) {
+    const u = universe.find((x) => x.symbol === symbol);
+    if (!u) continue;
+    if (u.asset_class === "STOCK") stockProvider.push(u.provider_symbol);
+    else crypto.push({ symbol, asset_class: u.asset_class, provider_symbol: u.provider_symbol });
+  }
+  if (stockProvider.length) {
+    try {
+      const px = await latestStockPrices(stockProvider);
+      for (const symbol of symbols) {
+        const u = universe.find((x) => x.symbol === symbol);
+        if (u?.asset_class === "STOCK") {
+          const p = px.get(u.provider_symbol);
+          if (p) out.set(symbol, p);
+        }
       }
+    } catch {
+      /* transient — positions show last known price */
+    }
+  }
+  await Promise.all(
+    crypto.map(async (sym) => {
+      const p = await livePrice(sym);
+      if (p) out.set(sym.symbol, p);
     })
   );
   return out;
+}
+
+function computeEquity(
+  settings: TradingSettings,
+  accountOpen: TradeRow[],
+  accountClosed: TradeRow[],
+  prices: Map<string, number>
+) {
+  const unrealized = accountOpen.reduce((s, t) => {
+    const p = t.sim_state;
+    if (p.entry_price === null) return s;
+    return s + p.cash_flow + (prices.get(t.symbol) ?? p.entry_price) * p.size;
+  }, 0);
+  const realizedAll = accountClosed.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
+  return round(settings.starting_equity + realizedAll + unrealized, 2);
+}
+
+/** Lightweight live equity for home KPI — mirrors dashboard math without full payload. */
+export async function getLiveEquity(): Promise<number | null> {
+  try {
+    const [settings, open, closed, universe] = await Promise.all([getSettings(), getOpenTrades(), getClosedTrades(), getUniverse()]);
+    const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
+    const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase) && t.closed_at && t.closed_at >= settings.phase_started_at);
+    const prices = await livePricesForTrades(accountOpen, universe);
+    let equity = computeEquity(settings, accountOpen, accountClosed, prices);
+    if (settings.phase === "PAPER" && settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured()) {
+      try {
+        equity = Number((await alpaca.account()).equity);
+      } catch {
+        /* keep computed equity */
+      }
+    }
+    return equity;
+  } catch {
+    return null;
+  }
 }
 
 export async function getTriggers(opts: { limit?: number; symbol?: string } = {}): Promise<TriggerRow[]> {
@@ -243,7 +296,7 @@ export async function getDashboard(): Promise<DashboardPayload> {
     getActiveV2Params(),
   ]);
   const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
-  const prices = await lastPrices(accountOpen, universe);
+  const prices = await livePricesForTrades(accountOpen, universe);
   const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase) && t.closed_at && t.closed_at >= settings.phase_started_at);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
@@ -287,13 +340,14 @@ export async function getDashboard(): Promise<DashboardPayload> {
       baseline_enter: t.baseline_enter,
     };
   });
-  const unrealized = accountOpen.reduce((s, t) => {
-    const p = t.sim_state;
-    if (p.entry_price === null) return s;
-    return s + p.cash_flow + (prices.get(t.symbol) ?? p.entry_price) * p.size;
-  }, 0);
-  const realizedAll = accountClosed.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
-  const equity = round(settings.starting_equity + realizedAll + unrealized, 2);
+  let equity = computeEquity(settings, accountOpen, accountClosed, prices);
+  if (settings.phase === "PAPER" && settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured()) {
+    try {
+      equity = Number((await alpaca.account()).equity);
+    } catch {
+      /* keep computed equity */
+    }
+  }
   const peak = Math.max(settings.peak_equity, equity);
   const dd = drawdownFromPeak(equity, peak);
   const halts = haltStatus({ realized_r_today: d.r, realized_r_week: w.r });
@@ -647,7 +701,7 @@ export const CHAT_ALLOWED_ACTIONS = ["pause_entries", "resume_entries", "set_ris
 
 async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH") {
   const universe = await getUniverse();
-  const prices = await lastPrices(trades, universe);
+  const prices = await livePricesForTrades(trades, universe);
   const now = Date.now();
   let closed = 0;
   for (const t of trades) {

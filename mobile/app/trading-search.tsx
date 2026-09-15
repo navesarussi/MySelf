@@ -97,6 +97,7 @@ export default function TradingSearchScreen() {
       const res = await api.tradingEnterProposal({ token, serverUrl }, result.id, body);
       toast.show(t("trading.searchEntered", { symbol: option.symbol }), "success");
       void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
       router.replace(`/trading-trade?id=${res.trade_id}` as `/${string}`);
     } catch (err) {
       setError(err instanceof ApiError ? errorText(err.message) : t("common.error"));
