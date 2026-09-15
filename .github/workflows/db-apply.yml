@@ -31,12 +31,10 @@ jobs:
             exit 0
           fi
           if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ]; then
-            supabase link --project-ref roeefqpdbftlndzsvhfj
             for f in supabase/migrations/*.sql; do
               echo "→ $f"
-              supabase db query --linked -f "$f"
+              bash scripts/apply-supabase-sql.sh "$f"
             done
-            supabase db query --linked "NOTIFY pgrst, 'reload schema';"
             exit 0
           fi
           echo "ERROR: add DATABASE_URL or SUPABASE_ACCESS_TOKEN to GitHub Actions secrets."
