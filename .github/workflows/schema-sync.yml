@@ -1,0 +1,33 @@
+name: Production schema sync
+
+# Applies idempotent DDL on Vercel via DATABASE_URL (GitHub db-apply skips without secrets).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lib/db-admin.ts"
+      - "app/api/admin/schema-sync/**"
+      - "supabase/migrations/0035_agent_whatsapp_dedup.sql"
+      - ".github/workflows/schema-sync.yml"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Apply schema on production
+        env:
+          MYSELF_API_URL: ${{ secrets.MYSELF_API_URL }}
+          TRADING_CRON_SECRET: ${{ secrets.TRADING_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MYSELF_API_URL:-}" ] || [ -z "${TRADING_CRON_SECRET:-}" ]; then
+            echo "MYSELF_API_URL / TRADING_CRON_SECRET not configured — skipping."
+            exit 0
+          fi
+          code=$(curl -sS -o response.json -w "%{http_code}" --max-time 60 \
+            -H "Authorization: Bearer ${TRADING_CRON_SECRET}" \
+            "${MYSELF_API_URL%/}/api/admin/schema-sync")
+          cat response.json
+          test "$code" = "200"

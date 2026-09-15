@@ -39,7 +39,8 @@ jobs:
             supabase db query --linked "NOTIFY pgrst, 'reload schema';"
             exit 0
           fi
-          echo "Skipping: add DATABASE_URL or SUPABASE_ACCESS_TOKEN to GitHub Actions secrets."
+          echo "ERROR: add DATABASE_URL or SUPABASE_ACCESS_TOKEN to GitHub Actions secrets."
+          exit 1
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

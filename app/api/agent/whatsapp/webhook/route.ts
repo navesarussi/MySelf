@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAgentSettings, isAuthorizedWhatsAppSender } from "@/lib/agent/settings";
 import { handleCodingTaskRequest } from "@/lib/agent/coding/bridge";
 import { runAgentChat } from "@/lib/agent/run";
+import { scheduleAgentWhatsAppDedupSchema } from "@/lib/db-admin";
 import {
   claimWhatsAppInbound,
   finalizeWhatsAppInbound,
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest) {
 
 /** Inbound WhatsApp messages (POST) — text + voice notes. */
 export async function POST(req: NextRequest) {
+  scheduleAgentWhatsAppDedupSchema();
+
   let body: unknown;
   try {
     body = await req.json();

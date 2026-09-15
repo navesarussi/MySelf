@@ -4,9 +4,19 @@ import type { MotivationKind } from "@/lib/agent/types";
 
 export type InboundClaimResult = "claimed" | "duplicate" | "error";
 
-/** Atomically claim a WhatsApp inbound message id before processing. */
+/** Claim a WhatsApp inbound message id before processing (select + unique index). */
 export async function claimWhatsAppInbound(messageId: string): Promise<InboundClaimResult> {
-  const { error } = await getSupabase().from("agent_messages").insert({
+  const sb = getSupabase();
+  const { data: existing } = await sb
+    .from("agent_messages")
+    .select("id")
+    .eq("external_id", messageId)
+    .eq("direction", "inbound")
+    .eq("channel", "whatsapp")
+    .maybeSingle();
+  if (existing) return "duplicate";
+
+  const { error } = await sb.from("agent_messages").insert({
     direction: "inbound",
     channel: "whatsapp",
     content: "[processing]",
