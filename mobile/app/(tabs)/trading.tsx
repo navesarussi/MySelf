@@ -17,11 +17,17 @@ export default function TradingScreen() {
   const { row } = useLayoutDir();
   const { run } = useApiMutation();
   const router = useRouter();
-  const { data, loading, error, refresh } = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg), { staleTime: 30_000 });
+  const { data, loading, error, refresh } = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg), {
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+  });
 
   const control = (body: Record<string, unknown>) =>
     run((cfg) => api.tradingControl(cfg, body), {
-      onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll }),
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      },
     });
 
   const equityValues = useMemo(() => (data?.equity_history ?? []).map((s) => s.equity), [data]);

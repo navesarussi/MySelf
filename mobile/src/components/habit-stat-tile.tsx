@@ -10,11 +10,13 @@ export function StatTile({
   iconColor,
   label,
   value,
+  compact,
 }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   iconColor: string;
   label: string;
   value: number;
+  compact?: boolean;
 }) {
   const c = useColors();
   const { writingDirection } = useLayoutDir();
@@ -22,21 +24,29 @@ export function StatTile({
     <View
       style={{
         flex: 1,
-        minWidth: 70,
+        minWidth: compact ? 62 : 70,
         backgroundColor: c.border + "40",
         borderRadius: tokens.radiusSm,
-        paddingVertical: 8,
+        paddingVertical: compact ? 4 : 8,
         paddingHorizontal: 4,
         alignItems: "center",
       }}
     >
       <Row style={{ gap: 3, justifyContent: "center" }}>
-        <Ionicons name={icon} size={12} color={iconColor} />
+        <Ionicons name={icon} size={compact ? 11 : 12} color={iconColor} />
         <Text style={{ color: c.muted, fontSize: tokens.textXs, writingDirection }} numberOfLines={1}>
           {label}
         </Text>
       </Row>
-      <Text style={{ color: c.ink, fontWeight: "800", fontSize: 17, marginTop: 2, writingDirection }}>
+      <Text
+        style={{
+          color: c.ink,
+          fontWeight: "800",
+          fontSize: compact ? 15 : 17,
+          marginTop: compact ? 1 : 2,
+          writingDirection,
+        }}
+      >
         {value}
       </Text>
     </View>

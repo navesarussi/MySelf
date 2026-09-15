@@ -81,7 +81,12 @@ export const HabitCard = React.memo(function HabitCard({
       accessibilityLabel={t("habits.viewDetails")}
       style={({ pressed }) => [{ opacity: pressed && onPress ? tokens.press : 1 }]}
     >
-      <Card style={overdue ? { borderColor: c.warn, borderWidth: 1 } : undefined}>
+      <Card
+        style={[
+          { paddingVertical: 8, paddingHorizontal: 10, marginBottom: 8 },
+          overdue ? { borderColor: c.warn, borderWidth: 1 } : undefined,
+        ]}
+      >
         <Row>
           <View style={{ flex: 1 }}>
             <Row wrap>
@@ -131,30 +136,28 @@ export const HabitCard = React.memo(function HabitCard({
           </Row>
         </Row>
 
-        <Row wrap style={{ marginTop: 8, gap: 6 }}>
-          <StatTile icon="flame" iconColor={c.accent2} label={t("common.streak")} value={streak} />
-          <StatTile icon="trending-up-outline" iconColor={c.accent} label={t("common.peak")} value={habit.best_streak} />
-          <StatTile icon="thumbs-up-outline" iconColor={c.good} label={t("common.positives")} value={successDays} />
-          <StatTile icon="alert-circle-outline" iconColor={c.warn} label={t("common.failures")} value={failures} />
+        <Row wrap style={{ marginTop: 6, gap: 4 }}>
+          <StatTile compact icon="flame" iconColor={c.accent2} label={t("common.streak")} value={streak} />
+          <StatTile compact icon="trending-up-outline" iconColor={c.accent} label={t("common.peak")} value={habit.best_streak} />
+          <StatTile compact icon="thumbs-up-outline" iconColor={c.good} label={t("common.positives")} value={successDays} />
+          <StatTile compact icon="alert-circle-outline" iconColor={c.warn} label={t("common.failures")} value={failures} />
         </Row>
 
-        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 8 }} numberOfLines={1}>
-          {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
-        </Text>
-        {!checked && !overdue ? (
-          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection, marginTop: 4 }}>
-            {t("habits.reportOpensAt", { time: reportTime })}
+        <Row wrap style={{ marginTop: 5, gap: 4 }}>
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }} numberOfLines={1}>
+            {t("habits.lastReported")}: {lastReported ?? t("habits.neverReported")}
+            {!checked && !overdue ? ` · ${t("habits.reportOpensAt", { time: reportTime })}` : null}
           </Text>
-        ) : null}
-        {overdue ? (
-          <Text style={{ color: c.warn, fontSize: tokens.textXs, fontWeight: "600", textAlign: textStart, writingDirection, marginTop: 4 }}>
-            {t("habits.reportDueNow")}
-          </Text>
-        ) : null}
+          {overdue ? (
+            <Text style={{ color: c.warn, fontSize: tokens.textXs, fontWeight: "600", writingDirection }}>
+              {t("habits.reportDueNow")}
+            </Text>
+          ) : null}
+        </Row>
 
         {onBackfill ? <HabitMissedReports habit={habit} busy={busy} onBackfill={onBackfill} /> : null}
 
-        <Row style={{ marginTop: 10 }}>
+        <Row style={{ marginTop: 6 }}>
           {checked ? (
             <Badge label={t("habits.checkedToday")} tone="good" />
           ) : (

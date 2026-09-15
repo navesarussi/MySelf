@@ -74,7 +74,12 @@ export default function TradingTradeScreen() {
           tags: tags.split(",").map((x) => x.trim()).filter(Boolean),
           self_rating: rating,
         }),
-      { onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll }) }
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        },
+      }
     );
 
   return (

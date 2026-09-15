@@ -15,12 +15,12 @@ export function currentMonthKey(d = new Date()): string {
 }
 
 export function shapeTradingSnapshot(
-  row: Record<string, unknown> | null | undefined
+  row: Record<string, unknown> | null | undefined,
+  liveEquity?: number | null
 ): HomeTradingSnapshot | null {
   if (!row) return null;
-  const peak = Number(row.peak_equity);
   const start = Number(row.starting_equity);
-  const equity = Number.isFinite(peak) ? peak : Number.isFinite(start) ? start : 0;
+  const equity = Number.isFinite(liveEquity) ? liveEquity! : Number.isFinite(start) ? start : 0;
   return {
     phase: typeof row.phase === "string" && row.phase ? row.phase : "BACKTEST",
     equity,

@@ -12,14 +12,26 @@ describe("shapeTradingSnapshot", () => {
   it("returns null when the settings row is missing", () => {
     assert.equal(shapeTradingSnapshot(null), null);
   });
-  it("prefers peak equity then starting equity", () => {
+  it("prefers live equity over starting equity", () => {
+    const snap = shapeTradingSnapshot(
+      {
+        phase: "PAPER",
+        peak_equity: 101500,
+        starting_equity: 100000,
+        kill_switch_active: false,
+      },
+      99850
+    );
+    assert.deepEqual(snap, { phase: "PAPER", equity: 99850, kill_switch_active: false });
+  });
+  it("falls back to starting equity when live equity is unavailable", () => {
     const snap = shapeTradingSnapshot({
       phase: "PAPER",
       peak_equity: 101500,
       starting_equity: 100000,
       kill_switch_active: false,
     });
-    assert.deepEqual(snap, { phase: "PAPER", equity: 101500, kill_switch_active: false });
+    assert.deepEqual(snap, { phase: "PAPER", equity: 100000, kill_switch_active: false });
   });
   it("defaults phase and flags", () => {
     const snap = shapeTradingSnapshot({ starting_equity: "100000" });
