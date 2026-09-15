@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
+      - name: Wait for Vercel deploy
+        run: sleep 120
+
       - name: Apply schema on production
         env:
           MYSELF_API_URL: ${{ secrets.MYSELF_API_URL }}
