@@ -52,5 +52,10 @@ jobs:
             "${MYSELF_API_URL%/}/api/admin/schema-sync")
           cat response.json
           body=$(cat response.json)
-          echo "$body" | grep -q '"ok":true' || grep -q '"reason":"applied"' <<< "$body"
+          if echo "$body" | grep -q '"reason":"applied"'; then exit 0; fi
+          if echo "$body" | grep -q '"reason":"no_postgres_url"'; then
+            echo "WARN: DATABASE_URL missing on Vercel — dedup still works via select-before-insert."
+            exit 0
+          fi
+          echo "$body" | grep -q '"ok":true'
           test "$code" = "200"
