@@ -138,10 +138,60 @@ function applyRules(
 
 export type IngestResult = { created: FinanceTransaction[]; skipped: number };
 
-export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): Promise<IngestResult> {
-  const created: FinanceTransaction[] = [];
-  let skipped = 0;
-  const [history, rulesMap] = await Promise.all([loadCategoryHistory(), fetchMerchantRulesMap()]);
+/** Rows per upsert statement. Keeps a large first-time bank import well inside
+ *  the serverless request budget without building one giant statement. */
+const INSERT_CHUNK = 200;
+
+/** Concurrent push sends. Each notification is deduped by its own txn id, so
+ *  these are independent — the cap only protects Expo and the DB from a burst. */
+const NOTIFY_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await fn(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
+/**
+ * Ingest a batch of scraped/shortcut transactions.
+ *
+ * Categorisation stays sequential: a row categorised here is unshifted onto the
+ * history so later rows in the same batch can learn from it. That pass is pure
+ * in-memory, so only the writes are batched — previously this issued one INSERT
+ * and one awaited push per transaction, which meant a few hundred serial round
+ * trips for a single bank sync and a request that timed out before finishing.
+ */
+export type PreparedRow = {
+  row: Record<string, unknown>;
+  externalKey: string;
+  hadRule: boolean;
+};
+
+export type PreparedBatch = {
+  prepared: PreparedRow[];
+  /** Inputs dropped because an earlier row in the same batch had the same key. */
+  duplicatesInBatch: number;
+};
+
+/**
+ * Pure planning pass: normalise, categorise, and collapse within-batch
+ * duplicates. Sequential by design — a row categorised here is unshifted onto
+ * `history` (mutated in place) so later rows in the same batch can learn from
+ * it. Split out from the writes so it can be tested without a database.
+ */
+export function prepareIngestRows(
+  inputs: FinanceIngestInput[],
+  rulesMap: Map<string, MerchantRule>,
+  history: MerchantCategoryRow[]
+): PreparedBatch {
+  const prepared: PreparedRow[] = [];
+  const seenKeys = new Set<string>();
+  let duplicatesInBatch = 0;
 
   for (const raw of inputs) {
     const input = applyRules(normalizeInput(raw), rulesMap, history);
@@ -176,23 +226,53 @@ export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): P
       });
     }
 
-    const { data, error } = await getSupabase().from("finance_transactions").insert(row).select("*").maybeSingle();
-    if (error) {
-      if (error.code === "23505") {
-        skipped += 1;
-        continue;
-      }
-      throw new Error(error.message);
-    }
-    if (!data) {
-      skipped += 1;
+    // A repeat of a key already in this batch would be rejected by the same
+    // unique constraint one statement later; count it as skipped up front.
+    if (seenKeys.has(input.external_key)) {
+      duplicatesInBatch += 1;
       continue;
     }
-    const txn = rowToTxn(data as Record<string, unknown>);
-    created.push(txn);
-    const hadRule = Boolean(matchMerchantRule(input.merchant, input.description, rulesMap)?.category);
-    await notifyCategorize(txn, { hasMerchantRule: hadRule });
+    seenKeys.add(input.external_key);
+    prepared.push({
+      row,
+      externalKey: input.external_key,
+      hadRule: Boolean(matchMerchantRule(input.merchant, input.description, rulesMap)?.category),
+    });
   }
+
+  return { prepared, duplicatesInBatch };
+}
+
+export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): Promise<IngestResult> {
+  const [history, rulesMap] = await Promise.all([loadCategoryHistory(), fetchMerchantRulesMap()]);
+  const { prepared, duplicatesInBatch } = prepareIngestRows(inputs, rulesMap, history);
+
+  let skipped = duplicatesInBatch;
+  const created: FinanceTransaction[] = [];
+  for (let i = 0; i < prepared.length; i += INSERT_CHUNK) {
+    const chunk = prepared.slice(i, i + INSERT_CHUNK);
+    // ignoreDuplicates makes the unique violation a no-op instead of an error,
+    // and select() returns only the rows that were actually inserted.
+    const { data, error } = await getSupabase()
+      .from("finance_transactions")
+      .upsert(
+        chunk.map((p) => p.row),
+        { onConflict: "external_key", ignoreDuplicates: true }
+      )
+      .select("*");
+    if (error) throw new Error(error.message);
+
+    const rows = (data ?? []) as Record<string, unknown>[];
+    for (const r of rows) created.push(rowToTxn(r));
+    skipped += chunk.length - rows.length;
+  }
+
+  const ruleByKey = new Map(prepared.map((p) => [p.externalKey, p.hadRule]));
+  await mapWithConcurrency(created, NOTIFY_CONCURRENCY, async (txn) => {
+    await notifyCategorize(txn, { hasMerchantRule: ruleByKey.get(txn.external_key) ?? false }).catch(
+      () => undefined
+    );
+  });
 
   if (created.length > 0) {
     const months = Array.from(new Set(created.map((t) => t.txn_date.slice(0, 7))));
