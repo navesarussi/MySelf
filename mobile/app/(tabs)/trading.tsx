@@ -21,7 +21,10 @@ export default function TradingScreen() {
 
   const control = (body: Record<string, unknown>) =>
     run((cfg) => api.tradingControl(cfg, body), {
-      onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll }),
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      },
     });
 
   const equityValues = useMemo(() => (data?.equity_history ?? []).map((s) => s.equity), [data]);

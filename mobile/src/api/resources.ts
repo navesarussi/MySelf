@@ -89,6 +89,7 @@ export type HomePayload = {
   trading?: {
     phase: string;
     equity: number;
+    starting_equity: number;
     kill_switch_active: boolean;
   } | null;
 };

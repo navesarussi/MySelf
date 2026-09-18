@@ -9,6 +9,7 @@ import { createBarCache } from "./market-data";
 import { alpaca, flattenAtBroker, isAlpacaConfigured } from "./broker/alpaca";
 import { computeStats, equityCurveR, groupStats, rDistribution, ratingValue, type GroupStat, type PerformanceStats, type RatingValue } from "./metrics";
 import { forceClose, openRiskR, realizedR } from "./position";
+import { equityFromTrades } from "./account-equity";
 import { applyRiskScaleRequest, drawdownFromPeak, haltStatus, weekStartIso } from "./risk-envelope";
 import {
   getActiveV2Params,
@@ -287,13 +288,7 @@ export async function getDashboard(): Promise<DashboardPayload> {
       baseline_enter: t.baseline_enter,
     };
   });
-  const unrealized = accountOpen.reduce((s, t) => {
-    const p = t.sim_state;
-    if (p.entry_price === null) return s;
-    return s + p.cash_flow + (prices.get(t.symbol) ?? p.entry_price) * p.size;
-  }, 0);
-  const realizedAll = accountClosed.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
-  const equity = round(settings.starting_equity + realizedAll + unrealized, 2);
+  const equity = equityFromTrades(settings, accountOpen, accountClosed, prices);
   const peak = Math.max(settings.peak_equity, equity);
   const dd = drawdownFromPeak(equity, peak);
   const halts = haltStatus({ realized_r_today: d.r, realized_r_week: w.r });

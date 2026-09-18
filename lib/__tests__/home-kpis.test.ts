@@ -16,7 +16,8 @@ const base: HomeKpiInput = {
   readyGoals: 2,
   financeUncategorized: 5,
   financeNet: -420,
-  tradingEquity: 101500,
+  tradingEquity: 99659,
+  tradingStartingEquity: 100000,
   tradingKill: false,
 };
 

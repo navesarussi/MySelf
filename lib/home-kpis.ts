@@ -15,6 +15,7 @@ export type HomeKpiInput = {
   financeUncategorized: number;
   financeNet: number;
   tradingEquity: number | null;
+  tradingStartingEquity: number | null;
   tradingKill: boolean;
 };
 
@@ -115,11 +116,14 @@ export function buildHomeKpis(i: HomeKpiInput): HomeKpiSpec[] {
     },
   ];
   if (i.tradingEquity !== null) {
+    const pnl = i.tradingStartingEquity != null ? i.tradingEquity - i.tradingStartingEquity : 0;
     items.splice(5, 0, {
       id: "trading",
       labelKey: "home.tradingEquity",
       value: String(i.tradingEquity),
-      tone: i.tradingKill ? "warn" : "default",
+      hintKey: i.tradingStartingEquity != null ? "home.tradingPnl" : undefined,
+      hintParams: i.tradingStartingEquity != null ? { pnl: Math.round(pnl) } : undefined,
+      tone: i.tradingKill ? "warn" : pnl < 0 ? "warn" : pnl > 0 ? "good" : "default",
       href: "/trading",
     });
   }

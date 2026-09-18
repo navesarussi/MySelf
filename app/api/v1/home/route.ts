@@ -6,6 +6,8 @@ import { dedupeHabits } from "@/lib/habit-stats";
 import { avgTaskCloseDays } from "@/lib/task-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
+import { computeLiveEquity } from "@/lib/trading/account-equity";
+import { getSettings } from "@/lib/trading/store";
 import { summarizeCashflow } from "@/lib/finance/cashflow";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
@@ -123,6 +125,14 @@ export async function GET(req: NextRequest) {
       openTasks.length < ((tasksRes.data as unknown as TaskJoin[] | null)?.length ?? 0)
   );
 
+  let liveEquity: number | null = null;
+  try {
+    const settings = await getSettings();
+    liveEquity = await computeLiveEquity(settings);
+  } catch {
+    liveEquity = null;
+  }
+
   return NextResponse.json({
     habits,
     activeGoals,
@@ -144,6 +154,6 @@ export async function GET(req: NextRequest) {
       net_actual: summarizeCashflow(financeMonthRes.data ?? [], month).net,
       uncategorized_count: financeUncategorizedRes.count || 0,
     },
-    trading: shapeTradingSnapshot(tradingSettingsRes.data as Record<string, unknown> | null),
+    trading: shapeTradingSnapshot(tradingSettingsRes.data as Record<string, unknown> | null, liveEquity),
   });
 }
