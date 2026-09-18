@@ -36,7 +36,10 @@ export default function TradingChatScreen() {
 
   const resolve = (id: string, confirm: boolean) =>
     run((cfg) => api.confirmTradingChat(cfg, id, confirm), {
-      onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll }),
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      },
     });
 
   const bubble = (role: "user" | "assistant", content: string, key: string, extra?: React.ReactNode) => (

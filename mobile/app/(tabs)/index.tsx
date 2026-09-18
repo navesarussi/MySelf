@@ -28,7 +28,10 @@ import type { ContentEntry, Goal, Relationship, Task } from "@/lib/types";
 
 export default function HomeScreen() {
   const { t, locale } = useI18n();
-  const { data, loading, error, refresh } = useApiQuery(queryKeys.home, api.home);
+  const { data, loading, error, refresh } = useApiQuery(queryKeys.home, api.home, {
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
   const { run, isPending } = useApiMutation();
   const [goalForm, setGoalForm] = useState<Goal | null>(null);
   const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags"> | null>(null);

@@ -6,6 +6,7 @@ import { dedupeHabits } from "@/lib/habit-stats";
 import { avgTaskCloseDays } from "@/lib/task-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
+import { getLiveEquity } from "@/lib/trading/service";
 import { summarizeCashflow } from "@/lib/finance/cashflow";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
@@ -106,7 +107,10 @@ export async function GET(req: NextRequest) {
     supabase.from("trading_settings").select("phase, peak_equity, starting_equity, kill_switch_active").eq("id", true).maybeSingle(),
   ]);
 
-  const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
+  const [selected, liveEquity] = await Promise.all([
+    Promise.resolve(selectHomeEvents(eventsRes.data || [], new Date(), 10)),
+    getLiveEquity(),
+  ]);
 
   const openTasks = dedupeTasks(
     ((tasksRes.data ?? []) as unknown as TaskJoin[]).map((row) => ({
@@ -144,6 +148,6 @@ export async function GET(req: NextRequest) {
       net_actual: summarizeCashflow(financeMonthRes.data ?? [], month).net,
       uncategorized_count: financeUncategorizedRes.count || 0,
     },
-    trading: shapeTradingSnapshot(tradingSettingsRes.data as Record<string, unknown> | null),
+    trading: shapeTradingSnapshot(tradingSettingsRes.data as Record<string, unknown> | null, liveEquity),
   });
 }
