@@ -39,6 +39,24 @@ export async function applySessionCookie(
   });
 }
 
+/** Length-independent equality.
+ *
+ *  `===` on a secret returns as soon as two bytes differ, so how long the
+ *  comparison takes leaks how much of the prefix was right. Written by hand
+ *  rather than with node:crypto.timingSafeEqual because this module also runs
+ *  in the Edge runtime (proxy.ts), where node:crypto is unavailable. */
+export function safeEqual(a: string, b: string): boolean {
+  // Length difference is folded in rather than short-circuited on, and the loop
+  // always runs to the longer length. charCodeAt past the end is NaN, which
+  // `| 0` normalises to 0 — a mismatch the length term above still catches.
+  let diff = a.length ^ b.length;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    diff |= (a.charCodeAt(i) | 0) ^ (b.charCodeAt(i) | 0);
+  }
+  return diff === 0;
+}
+
 let cachedSecret: string | null = null;
 let cachedExpected: string | null = null;
 
@@ -48,5 +66,5 @@ export async function isValidSessionToken(token: string | undefined, secret: str
     cachedSecret = secret;
     cachedExpected = await hmac(secret);
   }
-  return token === cachedExpected;
+  return safeEqual(token, cachedExpected);
 }
