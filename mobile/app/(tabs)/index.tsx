@@ -29,7 +29,6 @@ import type { ContentEntry, Goal, Relationship, Task } from "@/lib/types";
 export default function HomeScreen() {
   const { t, locale } = useI18n();
   const { data, loading, error, refresh } = useApiQuery(queryKeys.home, api.home);
-  const { data: tradingDash } = useApiQuery(queryKeys.tradingDashboard, api.tradingDashboard, { staleTime: 30_000 });
   const { run, isPending } = useApiMutation();
   const [goalForm, setGoalForm] = useState<Goal | null>(null);
   const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags"> | null>(null);
@@ -99,10 +98,12 @@ export default function HomeScreen() {
               readyGoals: data.activeGoals.filter((g) => achievabilityScore(g) >= 3).length,
               financeUncategorized: data.financeUncategorizedCount,
               financeNet: data.finance?.net_actual ?? 0,
-              tradingEquity: tradingDash?.account.equity ?? data.trading?.equity ?? null,
-              tradingStartingEquity:
-                tradingDash?.account.starting_equity ?? data.trading?.starting_equity ?? null,
-              tradingKill: Boolean(tradingDash?.settings.kill_switch_active ?? data.trading?.kill_switch_active),
+              // /api/v1/home carries live equity now, computed with the same
+              // formula the dashboard uses, so the home screen no longer pulls
+              // the whole trading dashboard to read three scalars.
+              tradingEquity: data.trading?.equity ?? null,
+              tradingStartingEquity: data.trading?.starting_equity ?? null,
+              tradingKill: Boolean(data.trading?.kill_switch_active),
             }}
           />
           <HomeHabitsFeed

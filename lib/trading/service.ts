@@ -234,10 +234,14 @@ export async function computePhaseGate(settings: TradingSettings, closed?: Trade
 }
 
 export async function getDashboard(): Promise<DashboardPayload> {
-  const [settings, open, closed, universe, triggers, events, active] = await Promise.all([
-    getSettings(),
+  // Settings first: every consumer of `closed` below — the P&L sums, the
+  // positions table and computePhaseGate — discards anything closed before
+  // phase_started_at, so the phase bound belongs in the query rather than in a
+  // JS filter over every closed trade ever recorded.
+  const settings = await getSettings();
+  const [open, closed, universe, triggers, events, active] = await Promise.all([
     getOpenTrades(),
-    getClosedTrades(),
+    getClosedTrades({ sinceIso: settings.phase_started_at }),
     getUniverse(),
     getTriggers({ limit: 25 }),
     getEvents(30),
