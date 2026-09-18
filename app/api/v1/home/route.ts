@@ -151,6 +151,7 @@ export async function GET(req: NextRequest) {
     financeMonth: financeMonthRes,
   });
   if (!tradingRes) degraded.push("trading");
+  else if (tradingRes.equityFailed) degraded.push("trading.equity");
 
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
 

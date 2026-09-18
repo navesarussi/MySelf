@@ -67,15 +67,22 @@ export async function computeLiveEquity(settings: TradingSettings): Promise<numb
   return equityFromTrades(settings, accountOpen, accountClosed, prices);
 }
 
-/** Settings + live equity in one pass, so callers never fetch trading_settings twice. */
+/** Settings + live equity in one pass, so callers never fetch trading_settings
+ *  twice.
+ *
+ *  A null liveEquity makes shapeTradingSnapshot fall back to starting_equity,
+ *  which looks like a real number on the dashboard — so `equityFailed` lets the
+ *  caller say the figure is stale instead of showing it as current. */
 export async function loadTradingSnapshot(): Promise<{
   settings: TradingSettings;
   liveEquity: number | null;
+  equityFailed: boolean;
 }> {
   const settings = await getSettings();
   try {
-    return { settings, liveEquity: await computeLiveEquity(settings) };
-  } catch {
-    return { settings, liveEquity: null };
+    return { settings, liveEquity: await computeLiveEquity(settings), equityFailed: false };
+  } catch (err) {
+    console.error("[trading] live equity", err instanceof Error ? err.message : err);
+    return { settings, liveEquity: null, equityFailed: true };
   }
 }
