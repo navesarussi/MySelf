@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomBytes } from "crypto";
 import { setOAuthState } from "@/lib/integrations/oauth-state";
+import { isOAuthStartAuthorized, unauthorized } from "@/lib/api/auth";
 import { isAllowedAppRedirect } from "@/lib/integrations/mobile-redirect";
 import { githubAuthUrl } from "@/lib/integrations/task-sources/github/client";
 import { githubConfigured } from "@/lib/integrations/github-config";
@@ -17,6 +18,11 @@ const cookieOpts = {
 };
 
 export async function GET(req: NextRequest) {
+  // Starting this flow binds whichever account authorises it to the shared
+  // integration token row, so it must require an existing session — proxy.ts
+  // lets non-/api/v1 routes through and leaves the check to the handler.
+  if (!(await isOAuthStartAuthorized(req))) return unauthorized();
+
   if (!githubConfigured()) {
     return NextResponse.json({ error: "github_not_configured" }, { status: 500 });
   }
@@ -27,7 +33,7 @@ export async function GET(req: NextRequest) {
 
   const state = randomBytes(16).toString("hex");
   const nextPath = next && next.startsWith("/") && !next.startsWith("//") ? next : undefined;
-  await setOAuthState(state, nextPath);
+  await setOAuthState("github", state, nextPath);
 
   if (appRedirect && isAllowedAppRedirect(appRedirect)) {
     const jar = await cookies();

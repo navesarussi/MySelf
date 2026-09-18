@@ -54,9 +54,11 @@ describe("query-patch helpers", () => {
       libraryEntries: [],
       openTasksCount: 1,
       inProgressTasksCount: 1,
+      doneTasksCount: 0,
+      avgTaskCloseDays: null,
       financeUncategorizedCount: 0,
       finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
-      trading: { phase: "PAPER", equity: 100000, kill_switch_active: false },
+      trading: { phase: "PAPER", equity: 100000, starting_equity: 100000, kill_switch_active: false },
     };
 
     const updated = patchTaskInHome(mockHome, "t1", { status: "done" });
@@ -82,9 +84,11 @@ describe("query-patch helpers", () => {
       libraryEntries: [],
       openTasksCount: 0,
       inProgressTasksCount: 1,
+      doneTasksCount: 0,
+      avgTaskCloseDays: null,
       financeUncategorizedCount: 0,
       finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
-      trading: { phase: "PAPER", equity: 100000, kill_switch_active: false },
+      trading: { phase: "PAPER", equity: 100000, starting_equity: 100000, kill_switch_active: false },
     };
 
     const updated = removeTaskFromHome(mockHome, "t1");
@@ -109,9 +113,11 @@ describe("query-patch helpers", () => {
       libraryEntries: [],
       openTasksCount: 0,
       inProgressTasksCount: 0,
+      doneTasksCount: 0,
+      avgTaskCloseDays: null,
       financeUncategorizedCount: 0,
       finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
-      trading: { phase: "PAPER", equity: 100000, kill_switch_active: false },
+      trading: { phase: "PAPER", equity: 100000, starting_equity: 100000, kill_switch_active: false },
     };
 
     const updated = patchHabitInHome(mockHome, "h1", { streak_count: 3 });
@@ -135,9 +141,11 @@ describe("query-patch helpers", () => {
       libraryEntries: [],
       openTasksCount: 0,
       inProgressTasksCount: 0,
+      doneTasksCount: 0,
+      avgTaskCloseDays: null,
       financeUncategorizedCount: 0,
       finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
-      trading: { phase: "PAPER", equity: 100000, kill_switch_active: false },
+      trading: { phase: "PAPER", equity: 100000, starting_equity: 100000, kill_switch_active: false },
     };
 
     const updated = patchRelationshipInHome(mockHome, "r1", { last_contact_date: "2026-09-12" });

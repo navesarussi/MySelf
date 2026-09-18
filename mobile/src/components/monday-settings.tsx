@@ -67,10 +67,14 @@ export function MondaySettingsSection() {
         : ExpoLinking.createURL("/settings");
     const connectUrl = `${API_URL}/api/integrations/monday/connect?app_redirect=${encodeURIComponent(appRedirect)}`;
     if (Platform.OS === "web") {
+      // Same-origin navigation — the session cookie authorises it.
       window.location.href = connectUrl;
       return;
     }
-    const result = await WebBrowser.openAuthSessionAsync(connectUrl, appRedirect);
+    // The system browser may not carry the session cookie, so pass the token
+    // explicitly; the connect route requires an authenticated caller.
+    const authedUrl = `${connectUrl}&token=${encodeURIComponent(token ?? "")}`;
+    const result = await WebBrowser.openAuthSessionAsync(authedUrl, appRedirect);
     if (result.type !== "cancel") await accountsQ.refresh();
   }
 

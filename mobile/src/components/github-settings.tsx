@@ -72,10 +72,14 @@ export function GithubSettingsSection() {
         : ExpoLinking.createURL("/settings");
     const url = `${API_URL}/api/integrations/github/connect?next=${encodeURIComponent("/settings")}&app_redirect=${encodeURIComponent(redirect)}`;
     if (Platform.OS === "web") {
+      // Same-origin navigation — the session cookie authorises it.
       window.location.href = url;
       return;
     }
-    const result = await WebBrowser.openAuthSessionAsync(url, redirect);
+    // The system browser may not carry the session cookie, so pass the token
+    // explicitly; the connect route requires an authenticated caller.
+    const authedUrl = `${url}&token=${encodeURIComponent(token ?? "")}`;
+    const result = await WebBrowser.openAuthSessionAsync(authedUrl, redirect);
     if (result.type !== "cancel") statusQ.refresh();
   }
 

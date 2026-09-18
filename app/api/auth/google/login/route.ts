@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   const state = crypto.randomUUID();
   const nextPath = next.startsWith("/") && !next.startsWith("//") ? next : "/";
-  await setOAuthState(state, nextPath);
+  await setOAuthState("google", state, nextPath);
 
   if (appRedirect && isAllowedAppRedirect(appRedirect)) {
     const jar = await cookies();

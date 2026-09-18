@@ -1,50 +1,31 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { exchangeGmailCode } from "@/lib/integrations/gmail/client";
 import { GOOGLE_GMAIL_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken, saveIntegrationToken } from "@/lib/integrations/tokens";
 import { consumeOAuthNext, consumeOAuthState } from "@/lib/integrations/oauth-state";
-import {
-  appendTokenToRedirect,
-  isAllowedAppRedirect,
-} from "@/lib/integrations/mobile-redirect";
+import { redirectToAppOrNext } from "@/lib/integrations/oauth-redirect";
 import { setFlashCookie } from "@/lib/flash";
 
 const APP_REDIRECT_COOKIE = "gmail_oauth_app_redirect";
 
-function redirectToAppOrNext(
-  jar: Awaited<ReturnType<typeof cookies>>,
-  url: NextRequest["nextUrl"],
-  next: string
-) {
-  const appRedirect = jar.get(APP_REDIRECT_COOKIE)?.value;
-  jar.delete(APP_REDIRECT_COOKIE);
-  if (appRedirect && isAllowedAppRedirect(appRedirect)) {
-    const sessionToken = jar.get("session")?.value;
-    const target = sessionToken
-      ? appendTokenToRedirect(appRedirect, sessionToken)
-      : appRedirect;
-    return NextResponse.redirect(target);
-  }
-  return NextResponse.redirect(new URL(next, url.origin));
-}
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl;
   const jar = await cookies();
   const error = url.searchParams.get("error");
-  const next = await consumeOAuthNext();
+  const next = await consumeOAuthNext("google");
 
   if (error) {
     setFlashCookie(jar, "חיבור Gmail בוטל", "error");
-    return redirectToAppOrNext(jar, url, next);
+    return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
   }
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  if (!code || !state || !(await consumeOAuthState(state))) {
+  if (!code || !state || !(await consumeOAuthState("google", state))) {
     setFlashCookie(jar, "שגיאת OAuth — נסה שוב", "error");
-    return redirectToAppOrNext(jar, url, next);
+    return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
   }
 
   try {
@@ -62,7 +43,7 @@ export async function GET(req: NextRequest) {
     });
 
     setFlashCookie(jar, "Gmail מחובר — הבוט יכול לקרוא מיילים");
-    return redirectToAppOrNext(jar, url, next);
+    return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
     if (msg === "missing_refresh_token") {
@@ -72,6 +53,6 @@ export async function GET(req: NextRequest) {
     } else {
       setFlashCookie(jar, "חיבור Gmail נכשל", "error");
     }
-    return redirectToAppOrNext(jar, url, next);
+    return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
   }
 }

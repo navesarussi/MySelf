@@ -10,37 +10,18 @@ import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { saveGoogleTokensToAllProviders } from "@/lib/integrations/google-unified";
 import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
 import { consumeOAuthNext, consumeOAuthState } from "@/lib/integrations/oauth-state";
-import {
-  appendTokenToRedirect,
-  isAllowedAppRedirect,
-} from "@/lib/integrations/mobile-redirect";
-import { applySessionCookie } from "@/lib/auth";
+import { redirectToAppOrNext } from "@/lib/integrations/oauth-redirect";
+import { applySessionCookie, makeSessionToken } from "@/lib/auth";
 import { setFlashCookie } from "@/lib/flash";
 
 const APP_REDIRECT_COOKIE = "google_oauth_app_redirect";
 
-function redirectToAppOrNext(
-  jar: Awaited<ReturnType<typeof cookies>>,
-  url: NextRequest["nextUrl"],
-  next: string
-) {
-  const appRedirect = jar.get(APP_REDIRECT_COOKIE)?.value;
-  jar.delete(APP_REDIRECT_COOKIE);
-  if (appRedirect && isAllowedAppRedirect(appRedirect)) {
-    const sessionToken = jar.get("session")?.value;
-    const target = sessionToken
-      ? appendTokenToRedirect(appRedirect, sessionToken)
-      : appRedirect;
-    return NextResponse.redirect(target);
-  }
-  return NextResponse.redirect(new URL(next, url.origin));
-}
 
 export async function handleGoogleOAuthCallback(req: NextRequest) {
   const url = req.nextUrl;
   const jar = await cookies();
   const error = url.searchParams.get("error");
-  const next = await consumeOAuthNext();
+  const next = await consumeOAuthNext("google");
 
   if (error) {
     setFlashCookie(jar, "הכניסה בוטלה", "error");
@@ -49,7 +30,7 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  if (!code || !state || !(await consumeOAuthState(state))) {
+  if (!code || !state || !(await consumeOAuthState("google", state))) {
     setFlashCookie(jar, "שגיאה בכניסה — נסה שוב", "error");
     return NextResponse.redirect(new URL("/login", url.origin));
   }
@@ -79,7 +60,16 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
       await saveGoogleTokensToAllProviders(tokens);
     }
 
-    const res = redirectToAppOrNext(jar, url, next);
+    // This response mints the session, so the cookie is not on the request yet —
+    // hand the deep link the same token applySessionCookie is about to set.
+    const sessionToken = await makeSessionToken(secret);
+    const res = redirectToAppOrNext({
+      jar,
+      origin: url.origin,
+      next,
+      appRedirectCookie: APP_REDIRECT_COOKIE,
+      sessionToken,
+    });
     await applySessionCookie(res, secret);
 
     if (isPrimary) {

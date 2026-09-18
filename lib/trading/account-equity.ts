@@ -1,6 +1,6 @@
 import { createBarCache } from "./market-data";
 import {
-  getClosedTrades,
+  getClosedTradesLite,
   getOpenTrades,
   getSettings,
   getUniverse,
@@ -11,6 +11,9 @@ import {
 } from "./store";
 
 const round = (x: number, d = 2) => Math.round(x * 10 ** d) / 10 ** d;
+
+/** Closed-trade shape the equity formula actually needs — satisfied by the lite projection. */
+type ClosedPnl = Pick<TradeRow, "realized_pnl">;
 
 async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
   const cache = createBarCache();
@@ -34,7 +37,7 @@ async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
 export function equityFromTrades(
   settings: TradingSettings,
   accountOpen: TradeRow[],
-  accountClosed: TradeRow[],
+  accountClosed: ClosedPnl[],
   prices: Map<string, number>
 ): number {
   const unrealized = accountOpen.reduce((s, t) => {
@@ -46,13 +49,33 @@ export function equityFromTrades(
   return round(settings.starting_equity + realizedAll + unrealized, 2);
 }
 
-/** Live account equity — same formula as the trading dashboard. */
+/** Live account equity — same formula as the trading dashboard.
+ *
+ *  Closed trades come from the lite projection filtered server-side to the
+ *  current phase: the full row carries heavy jsonb (sim_state, events, agent
+ *  reasoning) that the equity sum never reads, and the unfiltered query walks
+ *  every closed trade ever recorded. */
 export async function computeLiveEquity(settings: TradingSettings): Promise<number> {
-  const [open, closed, universe] = await Promise.all([getOpenTrades(), getClosedTrades(), getUniverse()]);
+  const [open, closed, universe] = await Promise.all([
+    getOpenTrades(),
+    getClosedTradesLite(settings.phase_started_at),
+    getUniverse(),
+  ]);
   const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
+  const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase));
   const prices = await lastPrices(accountOpen, universe);
-  const accountClosed = closed.filter(
-    (t) => isAccountTrade(t, settings.phase) && t.closed_at && t.closed_at >= settings.phase_started_at
-  );
   return equityFromTrades(settings, accountOpen, accountClosed, prices);
+}
+
+/** Settings + live equity in one pass, so callers never fetch trading_settings twice. */
+export async function loadTradingSnapshot(): Promise<{
+  settings: TradingSettings;
+  liveEquity: number | null;
+}> {
+  const settings = await getSettings();
+  try {
+    return { settings, liveEquity: await computeLiveEquity(settings) };
+  } catch {
+    return { settings, liveEquity: null };
+  }
 }

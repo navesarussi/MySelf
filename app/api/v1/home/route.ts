@@ -6,13 +6,33 @@ import { dedupeHabits } from "@/lib/habit-stats";
 import { avgTaskCloseDays } from "@/lib/task-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
-import { computeLiveEquity } from "@/lib/trading/account-equity";
-import { getSettings } from "@/lib/trading/store";
+import { loadTradingSnapshot } from "@/lib/trading/account-equity";
 import { summarizeCashflow } from "@/lib/finance/cashflow";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
 
+/** Rows sampled for the average-close-days KPI. Ordered by updated_at so the
+ *  sample is the most recent N and the number is stable between loads — an
+ *  unordered limit let Postgres return an arbitrary subset each time. */
+const DONE_TASK_SAMPLE = 500;
+
 type TaskJoin = Task & { projects?: { name: string } | { name: string }[] | null };
+
+type QueryLike = { error?: { message?: string } | null };
+
+/** Home renders partial data rather than failing, so a query that errors would
+ *  otherwise be indistinguishable from "no rows". Log it and tell the client. */
+function collectFailures(named: Record<string, unknown>): string[] {
+  const failed: string[] = [];
+  for (const [name, res] of Object.entries(named)) {
+    const err = (res as QueryLike | null)?.error;
+    if (err) {
+      failed.push(name);
+      console.error("[home]", name, err.message ?? err);
+    }
+  }
+  return failed;
+}
 
 function projectNameFromJoin(projects: TaskJoin["projects"]): string | undefined {
   if (!projects) return undefined;
@@ -44,7 +64,7 @@ export async function GET(req: NextRequest) {
     doneTasksTimingRes,
     financeUncategorizedRes,
     financeMonthRes,
-    tradingSettingsRes,
+    tradingRes,
   ] = await Promise.all([
     supabase
       .from("habits")
@@ -95,7 +115,12 @@ export async function GET(req: NextRequest) {
       .select("id", { count: "exact", head: true })
       .eq("status", "in_progress"),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "done"),
-    supabase.from("tasks").select("created_at, updated_at, status").eq("status", "done").limit(500),
+    supabase
+      .from("tasks")
+      .select("created_at, updated_at, status")
+      .eq("status", "done")
+      .order("updated_at", { ascending: false })
+      .limit(DONE_TASK_SAMPLE),
     supabase
       .from("finance_transactions")
       .select("id", { count: "exact", head: true })
@@ -105,8 +130,27 @@ export async function GET(req: NextRequest) {
       .select("txn_date, amount, kind, category, needs_categorization, is_internal")
       .gte("txn_date", `${month}-01`)
       .lte("txn_date", monthEnd),
-    supabase.from("trading_settings").select("phase, peak_equity, starting_equity, kill_switch_active").eq("id", true).maybeSingle(),
+    loadTradingSnapshot().catch(() => null),
   ]);
+
+  const degraded = collectFailures({
+    habits: habitsRes,
+    goals: goalsRes,
+    doneGoals: doneGoalsRes,
+    commitments: commitmentsRes,
+    relationships: relRes,
+    events: eventsRes,
+    tasks: tasksRes,
+    projects: projectsRes,
+    library: libraryRes,
+    openTasksCount: openTasksCountRes,
+    inProgressTasksCount: inProgressTasksCountRes,
+    doneTasksCount: doneTasksCountRes,
+    doneTasksTiming: doneTasksTimingRes,
+    financeUncategorized: financeUncategorizedRes,
+    financeMonth: financeMonthRes,
+  });
+  if (!tradingRes) degraded.push("trading");
 
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
 
@@ -125,15 +169,8 @@ export async function GET(req: NextRequest) {
       openTasks.length < ((tasksRes.data as unknown as TaskJoin[] | null)?.length ?? 0)
   );
 
-  let liveEquity: number | null = null;
-  try {
-    const settings = await getSettings();
-    liveEquity = await computeLiveEquity(settings);
-  } catch {
-    liveEquity = null;
-  }
-
   return NextResponse.json({
+    ...(degraded.length > 0 ? { degraded } : {}),
     habits,
     activeGoals,
     doneGoalsCount: doneGoalsRes.count || 0,
@@ -154,6 +191,9 @@ export async function GET(req: NextRequest) {
       net_actual: summarizeCashflow(financeMonthRes.data ?? [], month).net,
       uncategorized_count: financeUncategorizedRes.count || 0,
     },
-    trading: shapeTradingSnapshot(tradingSettingsRes.data as Record<string, unknown> | null, liveEquity),
+    trading: shapeTradingSnapshot(
+      (tradingRes?.settings ?? null) as Record<string, unknown> | null,
+      tradingRes?.liveEquity ?? null
+    ),
   });
 }

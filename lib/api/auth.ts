@@ -14,6 +14,21 @@ export async function isApiAuthorized(req: NextRequest): Promise<boolean> {
   return isValidSessionToken(jar.get(SESSION_COOKIE)?.value, secret);
 }
 
+/** Auth for OAuth *initiation* routes, which are browser navigations rather
+ *  than fetches.
+ *
+ *  The web SPA arrives with the session cookie. The native app cannot set an
+ *  Authorization header on a navigation and opens the URL in a system browser
+ *  that may not carry the cookie, so it passes the same session token as a
+ *  `token` query parameter — the mirror of how the callback hands the token
+ *  back through the deep link. */
+export async function isOAuthStartAuthorized(req: NextRequest): Promise<boolean> {
+  if (await isApiAuthorized(req)) return true;
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) return false;
+  return isValidSessionToken(req.nextUrl.searchParams.get("token") ?? undefined, secret);
+}
+
 export function unauthorized() {
   return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 }

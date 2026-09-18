@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import type { GateCheck } from "@/lib/trading/gates";
@@ -11,11 +11,13 @@ import { useColors, tokens } from "../../theme";
 import { Badge, Btn, Card } from "../ui";
 import { HubLinks } from "../ui/hub-links";
 
-export function TradingText({ children, muted, bold, size, color }: { children: React.ReactNode; muted?: boolean; bold?: boolean; size?: number; color?: string }) {
+/** `style` is an escape hatch for numeric content that must stay LTR inside the
+ *  RTL layout (prices, ratios) — it overrides the direction defaults below. */
+export function TradingText({ children, muted, bold, size, color, style }: { children: React.ReactNode; muted?: boolean; bold?: boolean; size?: number; color?: string; style?: StyleProp<TextStyle> }) {
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
   return (
-    <Text style={{ color: color ?? (muted ? c.muted : c.ink), fontWeight: bold ? "700" : "400", fontSize: size ?? tokens.textSm, textAlign: textStart, writingDirection, lineHeight: (size ?? tokens.textSm) * 1.45 }}>
+    <Text style={[{ color: color ?? (muted ? c.muted : c.ink), fontWeight: bold ? "700" : "400", fontSize: size ?? tokens.textSm, textAlign: textStart, writingDirection, lineHeight: (size ?? tokens.textSm) * 1.45 }, style]}>
       {children}
     </Text>
   );
