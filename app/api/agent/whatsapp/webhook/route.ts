@@ -3,7 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAgentSettings, isAuthorizedWhatsAppSender } from "@/lib/agent/settings";
 import { processWhatsAppInbound } from "@/lib/agent/whatsapp-process";
 import { claimWhatsAppInbound } from "@/lib/agent/whatsapp-dedup";
-import { sendWhatsAppReplyOnce, userFacingAgentError } from "@/lib/agent/whatsapp-outbound";
+import {
+  mapAgentErrorCode,
+  sendWhatsAppReplyOnce,
+  userFacingAgentError,
+} from "@/lib/agent/whatsapp-outbound";
 import { parseInboundWhatsAppMessage, verifyWhatsAppWebhook } from "@/lib/whatsapp/client";
 
 export const maxDuration = 60;
@@ -56,7 +60,7 @@ export async function POST(req: NextRequest) {
     try {
       await processWhatsAppInbound(inbound);
     } catch (err) {
-      const code = err instanceof Error ? err.message : "agent_error";
+      const code = mapAgentErrorCode(err);
       console.error("[whatsapp-webhook-after]", code, inbound.messageId);
       await sendWhatsAppReplyOnce(
         inbound.from,

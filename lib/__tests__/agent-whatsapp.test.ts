@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { userFacingAgentError, outboundRef } from "../agent/whatsapp-outbound";
+import { mapAgentErrorCode, userFacingAgentError, outboundRef } from "../agent/whatsapp-outbound";
 import { isAuthorizedWhatsAppSender } from "../whatsapp/phone-match";
 import {
   parseInboundWhatsAppMessage,
@@ -105,8 +105,33 @@ describe("userFacingAgentError", () => {
   it("maps whatsapp_not_configured to Hebrew", () => {
     assert.match(userFacingAgentError("whatsapp_not_configured"), /WhatsApp/);
   });
+  it("maps gemini_credits_depleted to AI Studio guidance", () => {
+    assert.match(userFacingAgentError("gemini_credits_depleted"), /AI Studio|aistudio/i);
+  });
   it("never returns empty", () => {
     assert.ok(userFacingAgentError("agent_timeout").length > 5);
+  });
+});
+
+describe("mapAgentErrorCode", () => {
+  it("maps prepayment credits depleted", () => {
+    assert.equal(
+      mapAgentErrorCode(new Error("prepayment credits are depleted")),
+      "gemini_credits_depleted"
+    );
+  });
+  it("maps credits are depleted", () => {
+    assert.equal(mapAgentErrorCode(new Error("credits are depleted")), "gemini_credits_depleted");
+  });
+  it("maps HTTP 402 billing errors", () => {
+    const err = Object.assign(new Error("Payment Required"), { statusCode: 402, responseBody: "billing" });
+    assert.equal(mapAgentErrorCode(err), "gemini_credits_depleted");
+  });
+  it("preserves known error codes", () => {
+    assert.equal(mapAgentErrorCode(new Error("missing_gemini_api_key")), "missing_gemini_api_key");
+  });
+  it("falls back to agent_error for unknown errors", () => {
+    assert.equal(mapAgentErrorCode(new Error("something broke")), "agent_error");
   });
 });
 

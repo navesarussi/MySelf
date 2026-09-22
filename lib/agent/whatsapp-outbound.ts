@@ -7,9 +7,64 @@ const ERROR_HE: Record<string, string> = {
     "שליחת WhatsApp לא מוגדרת בשרת (חסר טוקן). תבדוק Vercel → WHATSAPP_ACCESS_TOKEN.",
   missing_gemini_api_key:
     "מפתח Gemini חסר בשרת. תוסיף GOOGLE_GENERATIVE_AI_API_KEY ב-Vercel.",
+  gemini_credits_depleted:
+    "נגמרו כספי הקרדיט של Gemini. תטען מחדש ב-Google AI Studio (aistudio.google.com) ואז נסה שוב.",
   agent_timeout: "לקח לי יותר מדי זמן לענות. נסה שוב בהודעה קצרה אחת.",
   agent_error: "משהו נתקע בצד שלי. נסה שוב בעוד דקה.",
 };
+
+const KNOWN_ERROR_CODES = new Set(Object.keys(ERROR_HE));
+
+function collectErrorText(err: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = err;
+  for (let depth = 0; depth < 5 && current != null; depth++) {
+    if (typeof current === "string") {
+      parts.push(current);
+      break;
+    }
+    if (current instanceof Error) {
+      const e = current as Error & {
+        cause?: unknown;
+        statusCode?: number;
+        status?: number;
+        responseBody?: string;
+      };
+      parts.push(e.message);
+      if (typeof e.statusCode === "number") parts.push(String(e.statusCode));
+      if (typeof e.status === "number") parts.push(String(e.status));
+      if (typeof e.responseBody === "string") parts.push(e.responseBody);
+      current = e.cause;
+      continue;
+    }
+    if (typeof current === "object") {
+      const o = current as Record<string, unknown>;
+      if (typeof o.message === "string") parts.push(o.message);
+      if (typeof o.statusCode === "number") parts.push(String(o.statusCode));
+      if (typeof o.status === "number") parts.push(String(o.status));
+      if (typeof o.responseBody === "string") parts.push(o.responseBody);
+      current = o.cause;
+      continue;
+    }
+    break;
+  }
+  return parts.join(" ");
+}
+
+function isGeminiCreditsDepleted(err: unknown): boolean {
+  const text = collectErrorText(err).toLowerCase();
+  if (text.includes("prepayment credits are depleted")) return true;
+  if (text.includes("credits are depleted")) return true;
+  if (/\b402\b/.test(text) && /billing|credit|payment|prepayment/.test(text)) return true;
+  return false;
+}
+
+/** Map thrown agent/Gemini errors to stable user-facing codes. */
+export function mapAgentErrorCode(err: unknown): string {
+  if (isGeminiCreditsDepleted(err)) return "gemini_credits_depleted";
+  if (err instanceof Error && KNOWN_ERROR_CODES.has(err.message)) return err.message;
+  return "agent_error";
+}
 
 export function outboundRef(inboundId: string): string {
   return `out:${inboundId}`;
