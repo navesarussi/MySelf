@@ -1,4 +1,5 @@
 import { createBarCache } from "./market-data";
+import { roundMoney } from "./round";
 import {
   getClosedTradesLite,
   getOpenTrades,
@@ -10,7 +11,6 @@ import {
   type UniverseRow,
 } from "./store";
 
-const round = (x: number, d = 2) => Math.round(x * 10 ** d) / 10 ** d;
 
 /** Closed-trade shape the equity formula actually needs — satisfied by the lite projection. */
 type ClosedPnl = Pick<TradeRow, "realized_pnl">;
@@ -46,7 +46,7 @@ export function equityFromTrades(
     return s + p.cash_flow + (prices.get(t.symbol) ?? p.entry_price) * p.size;
   }, 0);
   const realizedAll = accountClosed.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
-  return round(settings.starting_equity + realizedAll + unrealized, 2);
+  return roundMoney(settings.starting_equity + realizedAll + unrealized);
 }
 
 /** Live account equity — same formula as the trading dashboard.

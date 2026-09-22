@@ -6,6 +6,7 @@ import {
   upsertMerchantRule,
   type MerchantRule,
 } from "@/lib/finance/merchant-rules";
+import { round2 } from "@/lib/finance/money";
 
 export type { RecurringSuggestion } from "@/lib/finance/types-client";
 import type { RecurringSuggestion } from "@/lib/finance/types-client";
@@ -25,9 +26,6 @@ export function getRecentMonths(targetMonth: string, count = 3): string[] {
   return result;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
 
 function isAmountsSimilar(amounts: number[]): boolean {
   if (amounts.length === 0) return false;

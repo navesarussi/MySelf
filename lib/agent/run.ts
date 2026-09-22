@@ -16,8 +16,8 @@ import { createAgentTools, type AgentTools } from "@/lib/agent/tools";
 import type { AgentChannel, MotivationKind } from "@/lib/agent/types";
 import { logAgentMessage } from "@/lib/agent/log";
 import { sanitizeAgentReply } from "@/lib/agent/reply";
+import { GEMINI_MODEL_ID } from "@/lib/ai-model";
 
-const MODEL_ID = "gemini-3-flash-preview";
 
 export { isSimpleStatusQuery };
 
@@ -42,7 +42,7 @@ async function generateOnce(input: {
   try {
     if (input.tools && input.maxSteps) {
       const agent = new ToolLoopAgent({
-        model: google(MODEL_ID),
+        model: google(GEMINI_MODEL_ID),
         instructions: input.system,
         tools: input.tools,
         stopWhen: stepCountIs(input.maxSteps),
@@ -54,7 +54,7 @@ async function generateOnce(input: {
     }
 
     const { text } = await generateText({
-      model: google(MODEL_ID),
+      model: google(GEMINI_MODEL_ID),
       system: input.system,
       prompt: input.prompt,
       maxOutputTokens: 256,

@@ -1,5 +1,6 @@
 import type { FinanceTransaction } from "@/lib/finance/ingest";
 import { lineTypeForCategory } from "@/lib/finance/expense-type";
+import { round2 } from "@/lib/finance/money";
 
 export type WeekBucket = {
   week: number;
@@ -150,8 +151,4 @@ export function weeklyVariablePace(
     spent: current.variable_expense,
     left: round2(variable_budget - current.variable_expense),
   });
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
 }

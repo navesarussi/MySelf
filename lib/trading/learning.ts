@@ -4,6 +4,7 @@ import { DEFAULT_V2_PARAMS, type StrategyV2Params, type SymbolFrames } from "./s
 import type { AssetClass } from "./types";
 import { computeStats, mulberry32, type PerformanceStats } from "./metrics";
 import type { CalendarEvent } from "./veto";
+import { round } from "./round";
 
 /** Learning layer (section 4): bucket stats, binary eligibility gate, agent value, quarterly calibration. */
 
@@ -181,7 +182,6 @@ export function agentValueReport(trades: JournalTrade[], agentCostR = 0): AgentV
   };
 }
 
-const round = (x: number, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
 
 // ── Walk-forward (used by the backtest gate and by quarterly calibration) ────
 

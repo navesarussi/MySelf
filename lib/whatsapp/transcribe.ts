@@ -1,5 +1,6 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
+import { GEMINI_MODEL_ID } from "@/lib/ai-model";
 
 export function normalizeAudioMime(mime: string): string {
   return mime.split(";")[0]?.trim() || "audio/ogg";
@@ -21,7 +22,7 @@ export async function transcribeWhatsAppAudio(input: {
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const { text } = await generateText({
-      model: google("gemini-3-flash-preview"),
+      model: google(GEMINI_MODEL_ID),
       messages: [
         {
           role: "user",

@@ -1,4 +1,5 @@
 import type { HistoryMonthRow } from "@/lib/finance/history";
+import { round2 } from "@/lib/finance/money";
 
 export type TrendDirection = "up" | "down" | "flat";
 
@@ -36,9 +37,6 @@ export type HistoryTrends = {
   plan_summary: HistoryPlanSummary;
 };
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
 
 function sum(nums: number[]): number {
   return round2(nums.reduce((a, b) => a + b, 0));

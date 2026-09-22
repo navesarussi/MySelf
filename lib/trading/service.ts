@@ -34,11 +34,11 @@ import {
   type UniverseRow,
 } from "./store";
 import type { TradingPhase, UniverseSymbol } from "./types";
+import { round } from "./round";
 
 /** Read models + commands shared by the REST API and the trading chat. */
 
 const iso = (ms: number) => new Date(ms).toISOString();
-const round = (x: number, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
 

@@ -14,7 +14,6 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - `lib/i18n/messages.ts` is 2149 lines but healthy: he and en have identical key sets (1012 each) and every one of the 777 literal `t("…")` keys in the codebase is defined. Splitting it is a merge-conflict question, not a correctness one.
 - **Multi-tenancy** — see `docs/architecture/multi-tenancy.md`. 40 tables, 0 with `user_id`, 334 query sites, and 3 tables (`agent_settings`, `trading_settings`, `notification_preferences`) whose `id boolean PRIMARY KEY CHECK (id)` admits exactly one row. **Identity now lands in the token** (`lib/auth.ts`): a v2 session token is `v2.<claims>.<hmac>` carrying `sub` (email), `iat` and `exp`, distinct per user, with a rolling refresh served by `GET /api/v1/session`. `sessionIdentity(req)` in `lib/api/auth.ts` is the read side — the hook the per-user queries will use. Still open: the tables themselves (no `user_id`, no RLS), and per-user revocation, which needs storage the stateless token deliberately avoids. The pre-identity constant token is still accepted so installed builds keep working; `SESSION_REJECT_LEGACY=1` closes that door once the fleet has rolled over.
 - `lib/supabase.ts` builds a single service-role client, which bypasses RLS. Request-path queries need a per-user client before any RLS policy means anything.
-- `dailyScreen` in `lib/trading/engine.ts` walks the universe serially: one market-data fetch and one UPDATE per symbol. Bounded-concurrency pools already exist in `intraday-data.ts` and `intraday-universe.ts` — reuse one here. Daily cron, so low urgency.
 - Introduce `/domain` + `/application` + `/infrastructure` layers when the surface area grows past current pages.
 - Unify Server Action return types (Result pattern) instead of flash cookies only.
 - Unify Google OAuth tokens (calendar + tasks) into one Google credential row with incremental scopes.
@@ -33,6 +32,15 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - [PENDING REFACTOR]: TimelineCanvas clustering still runs on the JS thread (out of NFR-UX-04/05 pass).
 - [PENDING REFACTOR]: Split `lib/finance/plan-store.ts` (222) under 200 lines. `plan.ts` is already at 147.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/finance.tsx` (211) under 200 lines.
+
+## Shared primitives (one home each)
+- `lib/concurrency.ts` — `mapWithConcurrency`. The bounded pool for anything fan-out; there were three copies plus serial loops that wanted one. Used by `dailyScreen`, intraday data/universe loading, finance ingest notifications.
+- `lib/finance/money.ts` — `round2` / `sumAmounts`. Every shekel amount rounds here; nine copies of `round2` lived across the finance modules.
+- `lib/trading/round.ts` — `round` / `roundMoney` for stored trading numbers (six copies).
+- `lib/trading/account-equity.ts` — `equityFromTrades` is the only account-equity formula. The tick and the dashboard both call it; each used to have its own.
+- `lib/ai-model.ts` — `GEMINI_MODEL_ID`. The model id was written out in the chat agent, the trading agent and the transcriber.
+- `lib/api/cron-auth.ts` — scheduler auth. Eight routes each compared the secret with `===`.
+- `lib/habit-report-service.ts` — `applyHabitReport` is the only habit write path (REST, agent, legacy). Three copies existed and only one wrote the `habit_reports` history row.
 
 ## Notes
 - Never mutate cookies inside Server Components (layout). Flash toast is set in Server Actions and read/cleared on the client.

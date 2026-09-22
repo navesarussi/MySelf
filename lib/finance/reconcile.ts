@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import { rowToTxn, type FinanceTransaction } from "@/lib/finance/ingest";
+import { round2 } from "@/lib/finance/money";
 
 export const BATCH_SETTLEMENT_KEYWORDS = [
   "מקס איט פיננ",
@@ -44,9 +45,6 @@ function daysDiff(d1: string, d2: string): number {
   return Math.abs(t1 - t2) / (1000 * 60 * 60 * 24);
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
 
 /** Card issuer named by a Leumi settlement line, when it names one at all. */
 function batchProvider(batch: FinanceTransaction): "max" | "visa_cal" | null {

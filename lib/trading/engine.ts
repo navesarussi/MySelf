@@ -1,4 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
+import { mapWithConcurrency } from "@/lib/concurrency";
+import { equityFromTrades } from "./account-equity";
 import { REGIME_REFERENCE, RISK_ENVELOPE, dailyTrendGroup, isCrypto } from "./config";
 import { consolidatePlaybook, judgeDailyTrendTrigger, judgeTrigger, reviewClosedTrade, reviewExtension, type AgentVerdict, type ExperienceCard } from "./agent-judge";
 import { returnCorrelation } from "./indicators";
@@ -42,6 +44,7 @@ import { closedIdx } from "./strategy/series";
 import { bucketId, screenFailures, screenMetricsAt } from "./universe";
 import { evaluateVetoes, isoDateInZone, mustExitBeforeEarnings, nextTradingDays, type CalendarEvent } from "./veto";
 import type { Bar, UniverseSymbol } from "./types";
+import { round } from "./round";
 
 /**
  * מערכת המסחר — live pipeline, run every 15 minutes (GitHub Actions → /api/trading/tick).
@@ -90,7 +93,6 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const INTRADAY_ENTRY_EXPIRY_MS = 15 * 60_000;
 /** A manual limit (pullback) entry waits up to an hour. */
 const MANUAL_ENTRY_EXPIRY_MS = 60 * 60_000;
-const round = (x: number, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
 
 export function toSym(u: Pick<UniverseRow, "symbol" | "asset_class" | "provider_symbol">): UniverseSymbol {
   return { symbol: u.symbol, asset_class: u.asset_class, provider_symbol: u.provider_symbol };
@@ -118,19 +120,20 @@ type FrameCache = ReturnType<typeof createFrameCache>;
 
 export type Account = { equity: number; realizedToday: number; realizedWeek: number; open: TradeRow[] };
 
-function markToMarket(t: TradeRow, lastPrice: number | undefined) {
-  const p = t.sim_state;
-  if (p.entry_price === null) return 0;
-  return p.cash_flow + (lastPrice ?? p.entry_price) * p.size;
-}
-
+/**
+ * Account state the envelope sizes and halts against.
+ *
+ * Equity comes from `equityFromTrades` — the one place the formula lives. The
+ * tick used to carry its own copy of it, so the number that sizes a position
+ * and the number on the dashboard could drift apart without anything failing.
+ */
 export async function loadAccount(settings: TradingSettings, openTrades: TradeRow[], lastPrices: Map<string, number>, now: number): Promise<Account> {
   const inPhase = (await getClosedTradesLite(settings.phase_started_at)).filter((t) => isAccountTrade(t, settings.phase));
   const today = new Date(now).toISOString().slice(0, 10);
   const week = weekStartIso(new Date(now));
   const open = openTrades.filter((t) => isAccountTrade(t, settings.phase));
   return {
-    equity: settings.starting_equity + inPhase.reduce((s, t) => s + (t.realized_pnl ?? 0), 0) + open.reduce((s, t) => s + markToMarket(t, lastPrices.get(t.symbol)), 0),
+    equity: equityFromTrades(settings, open, inPhase, lastPrices),
     realizedToday: inPhase.filter((t) => t.closed_at!.slice(0, 10) === today).reduce((s, t) => s + (t.realized_r ?? 0), 0),
     realizedWeek: inPhase.filter((t) => weekStartIso(new Date(t.closed_at!)) === week).reduce((s, t) => s + (t.realized_r ?? 0), 0),
     open,
@@ -506,15 +509,21 @@ async function learnFromClosedTrades(closedNow: TradeRow[], summary: TickSummary
 
 // ── 3. Daily screen + eligibility gate ─────────────────────────────────────
 
+/** Market-data fetches per symbol; each is one provider request plus one UPDATE. */
+const SCREEN_CONCURRENCY = 6;
+
 async function dailyScreen(universe: UniverseRow[], cache: BarCache, now: number, summary: TickSummary) {
   const sb = getSupabase();
-  for (const u of universe) {
+  // One symbol at a time meant ~150 round trips in series on a daily run. Each
+  // symbol is independent — it reads its own bars and writes its own row — so
+  // the only reason to serialise was that the loop was written that way.
+  await mapWithConcurrency(universe, SCREEN_CONCURRENCY, async (u) => {
     const sym = toSym(u);
     try {
       const daily = await barsFor(cache, sym, "1d");
       const spread = isCrypto(sym.asset_class) ? await fetchBidAskSpreadPct(sym.provider_symbol) : null;
       const m = screenMetricsAt(daily, daily.length - 1, spread);
-      if (!m) continue;
+      if (!m) return;
       // Typical stop ≈ 1.5 × daily ATR — the spread must be tiny relative to it.
       const failures = screenFailures(m, sym.asset_class, 1.5 * m.atr_pct);
       await sb
@@ -526,7 +535,7 @@ async function dailyScreen(universe: UniverseRow[], cache: BarCache, now: number
     } catch (err) {
       summary.errors.push(`screen ${u.symbol}: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }
+  });
 
   const decisions = evaluateEligibility({
     universe: universe.map((u) => ({ symbol: u.symbol, bucket_id: u.bucket_id, eligibility: u.eligibility, eligibility_changed_at: u.eligibility_changed_at ? Date.parse(u.eligibility_changed_at) : null })),

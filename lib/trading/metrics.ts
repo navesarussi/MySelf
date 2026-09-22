@@ -1,4 +1,5 @@
 import { RISK_ENVELOPE } from "./config";
+import { round } from "./round";
 
 /** Performance statistics over closed trades expressed in R. Pure; shared by backtest, journal and gates. */
 
@@ -28,7 +29,6 @@ export type PerformanceStats = {
   sqn: number | null;
 };
 
-const round = (x: number, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
 
 export function wilsonInterval(successes: number, n: number, z = 1.96): [number, number] {
   if (n === 0) return [0, 1];

@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import type { WealthCategory, WealthItem, WealthSource, WealthSummary } from "@/lib/finance/wealth-types";
+import { round2 } from "@/lib/finance/money";
 
 const CATEGORIES: WealthCategory[] = ["pension", "insurance", "investment", "property", "other"];
 
@@ -110,8 +111,4 @@ export async function bulkUpsertWealthItems(
     results.push(await upsertWealthItem(item));
   }
   return results;
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
 }

@@ -1,4 +1,5 @@
 import type { MonthPlanView } from "@/lib/finance/plan-types";
+import { round2 } from "@/lib/finance/money";
 
 export type ForecastMonth = {
   month: string;
@@ -68,8 +69,4 @@ export function buildFinanceForecast(
     projected_cumulative: cumulative,
     rows,
   };
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
 }

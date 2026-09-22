@@ -2,8 +2,9 @@ import type { FinanceTransaction } from "@/lib/finance/types";
 import type { PlanLineType } from "@/lib/finance/expense-type";
 import { resolveExpenseType, type MerchantRule } from "@/lib/finance/merchant-rules";
 import type { PlanLineRow } from "@/lib/finance/plan-types";
+import { round2 } from "@/lib/finance/money";
 
-export const round2 = (n: number) => Math.round(n * 100) / 100;
+export { round2 } from "@/lib/finance/money";
 
 export type SeedGroup = { name: string; category: string | null; line_type: PlanLineType; amount: number };
 
