@@ -22,6 +22,12 @@ const v=execSync('npx eas-cli build:version:get -p ios',{encoding:'utf8'}).match
 console.log(v?Number(v[1])+1:54);
 ")"
 
+# ASC API key auth — required for HomeWidget extension provisioning in non-interactive mode.
+export ASC_API_KEY_ID="${ASC_API_KEY_ID:-X3N8885G95}"
+export ASC_API_KEY_ISSUER_ID="${ASC_API_KEY_ISSUER_ID:-3a825a1a-0b43-487a-9ba4-1ab24a88f553}"
+# shellcheck source=/dev/null
+source scripts/ci-export-asc-env.sh
+
 npx eas-cli build \
   --platform ios \
   --profile production \
