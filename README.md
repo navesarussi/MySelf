@@ -56,6 +56,8 @@ npm run dev
 2. הגדר את משתני הסביבה ב-Project Settings → Environment Variables.
 3. פרוס. כל push ל-`main` יעלה גרסה חדשה אוטומטית.
 
+**Vercel Hobby crons:** each schedule must run at most once per day. Comma-separated hours in one expression (e.g. `2 5,6,10 * * *`) are rejected; use separate cron entries per UTC hour (see `vercel.json` motivate schedules).
+
 ## בסיס הנתונים
 
 הסכימה נמצאת ב-`supabase/migrations/`. ה-DB רץ תחת schema נפרד בשם `myself` באותו פרויקט

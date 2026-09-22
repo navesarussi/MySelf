@@ -26,8 +26,9 @@ function jerusalemHour(now = new Date()): number {
 }
 
 /**
- * Vercel cron: `2 5,6,10,11,18,19 * * *` (6×/day) — covers default dig_hours [8,13,21]
+ * Vercel cron: six daily entries at UTC 05,06,10,11,18,19 — covers default dig_hours [8,13,21]
  * Jerusalem across IST/IDT. Dig only when Jerusalem hour ∈ dig_hours.
+ * (Hobby plan rejects comma-hour expressions; use separate entries in vercel.json.)
  */
 export async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) {
