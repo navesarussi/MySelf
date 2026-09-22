@@ -185,6 +185,39 @@ export const alpaca = {
 };
 
 /**
+ * Quantity that can actually be sold right now.
+ *
+ * Crypto fees are charged in the asset, so the balance left after an entry fill
+ * is slightly below the filled quantity — around 0.15% on Alpaca. Sizing a
+ * protective sell from the fill therefore gets rejected with
+ * `insufficient balance`, the stop never gets placed, and the position runs
+ * unprotected while the tick retries forever.
+ *
+ * Returns null when the broker reports nothing held.
+ */
+export function clampSellQty(
+  intended: number,
+  available: number,
+  assetClass: AssetClass
+): number | null {
+  if (!Number.isFinite(available) || available <= 0) return null;
+  const target = Number.isFinite(intended) && intended > 0 ? Math.min(intended, available) : available;
+  // Floor, never round up — asking for one unit more than is held is exactly
+  // what returns `insufficient balance`.
+  const qty = roundQty(target, assetClass);
+  return qty > 0 ? qty : null;
+}
+
+export async function sellableQty(
+  symbol: string,
+  assetClass: AssetClass,
+  intended: number
+): Promise<number | null> {
+  const held = await alpaca.position(symbol, assetClass);
+  return clampSellQty(intended, Number(held?.qty), assetClass);
+}
+
+/**
  * Flatten one strategy position at the broker: cancel its entry/protective orders, market-close what is
  * held, and return the close fill price when available (null = nothing held / price not reported yet).
  */

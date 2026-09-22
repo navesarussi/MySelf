@@ -6,7 +6,7 @@ import { evaluateEligibility } from "./learning";
 import { createBarCache, fetchBidAskSpreadPct, fetchBtcDominance, fetchEarningsSymbols, fetchFundingRate, fetchVix, lookbackForClass, type BarCache } from "./market-data";
 import { computeStats } from "./metrics";
 import { applyExternalExit, applyExternalFill, forceClose, newPendingPosition, openRiskR, realizedR, stepPosition, type PositionEvent, type SimPosition } from "./position";
-import { alpaca, flattenAtBroker, isAlpacaConfigured } from "./broker/alpaca";
+import { alpaca, flattenAtBroker, isAlpacaConfigured, sellableQty } from "./broker/alpaca";
 import { bracketLegs, brokerExit, pendingDecision, protectiveAdjustments } from "./broker/sync";
 import { checkNewEntry, drawdownFromPeak, shouldTripKillSwitch, weekStartIso } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
@@ -355,13 +355,24 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
         const legs = bracketLegs(order);
         patch.broker_stop_order_id = legs.stop?.id ?? null;
         patch.broker_target_order_id = legs.target?.id ?? null;
-      } else if (trade.asset_class === "STOCK") {
-        // Daily-trend stocks entered plain (no bracket, no real take-profit) — protective stop only.
-        const stop = await alpaca.placeStockStop({ symbol: trade.symbol, qty: d.qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` });
-        patch.broker_stop_order_id = stop.id;
       } else {
-        const stop = await alpaca.placeCryptoStop({ symbol: trade.symbol, qty: d.qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` });
-        patch.broker_stop_order_id = stop.id;
+        // Size the protective stop from what the broker actually holds, not from
+        // the fill: crypto fees are taken in the asset, so the balance is a
+        // fraction below filled_qty and a sell for the full fill is rejected
+        // with `insufficient balance`. That rejection threw out of the tick, so
+        // the stop was never placed and the position ran unprotected while the
+        // error repeated every 5 minutes.
+        const qty = await sellableQty(trade.symbol, trade.asset_class, d.qty);
+        if (qty === null) {
+          events.push({ type: "CANCELLED", reason: "BROKER_NO_POSITION_FOR_STOP", at: now });
+          patch.broker_status = "stop_skipped_no_position";
+        } else {
+          const stop =
+            trade.asset_class === "STOCK"
+              ? await alpaca.placeStockStop({ symbol: trade.symbol, qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` })
+              : await alpaca.placeCryptoStop({ symbol: trade.symbol, qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` });
+          patch.broker_stop_order_id = stop.id;
+        }
       }
       return { done: false, patch };
     }

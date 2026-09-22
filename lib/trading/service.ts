@@ -644,25 +644,68 @@ export type ControlCommand =
 /** Commands the chat may PROPOSE (always executed only after explicit confirmation in the app). */
 export const CHAT_ALLOWED_ACTIONS = ["pause_entries", "resume_entries", "set_risk_scale", "close_position", "close_all", "set_symbol_enabled", "add_calendar_event"] as const;
 
-async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH") {
+export type CloseOutcome = {
+  closed: string[];
+  failed: { symbol: string; reason: string }[];
+  /** Closed without a live price — exit price and P&L are approximate. */
+  estimated: string[];
+};
+
+/**
+ * Close positions on demand (manual close, or the kill switch).
+ *
+ * Three things this has to get right, each of which it previously got wrong:
+ *
+ *  - A failing broker call must not abort the whole operation, but it must also
+ *    not mark the trade closed. `flattenAtBroker` was awaited with no catch, so
+ *    one Alpaca error threw out of the loop: nothing after it closed, and the
+ *    caller got a bare 409. Marking it closed anyway would be worse — our books
+ *    would read flat against a position the broker still holds.
+ *  - A missing market price must not make a position impossible to close. It
+ *    used to throw `no_price_<symbol>`, which meant the manual exit — the
+ *    escape hatch — stopped working exactly when data feeds are flaky. The
+ *    fallback chain now matches the kill switch in engine.ts, and an estimated
+ *    exit is recorded as an event so the P&L is not silently trusted.
+ *  - One bad symbol must not silently strand the rest. Every trade is attempted
+ *    and the caller is told exactly which closed and which did not.
+ */
+async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH"): Promise<CloseOutcome> {
   const universe = await getUniverse();
   const prices = await lastPrices(trades, universe);
   const now = Date.now();
-  let closed = 0;
+  const out: CloseOutcome = { closed: [], failed: [], estimated: [] };
+
   for (const t of trades) {
     const p = { ...t.sim_state };
-    const brokerPx = t.broker ? await flattenAtBroker(t) : null;
-    const price = brokerPx ?? prices.get(t.symbol);
-    if (price === undefined && p.state !== "PENDING") throw new Error(`no_price_${t.symbol}`);
-    const ev = forceClose(p, price ?? p.entry_limit, reason, now);
-    await updateTrade(t.id, {
-      ...simColumns(p),
-      events: [...(t.events ?? []), ...ev],
-      ...(p.state === "CLOSED" ? { realized_r: round(realizedR(p), 3), realized_pnl: round(p.cash_flow, 2) } : {}),
-    });
-    closed += 1;
+    let brokerPx: number | null = null;
+    if (t.broker) {
+      try {
+        brokerPx = await flattenAtBroker(t);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message.slice(0, 120) : "broker_error";
+        out.failed.push({ symbol: t.symbol, reason: `broker_flatten_failed: ${detail}` });
+        continue;
+      }
+    }
+
+    const market = prices.get(t.symbol);
+    const price = brokerPx ?? market ?? p.entry_price ?? p.entry_limit;
+    const ev = forceClose(p, price, reason, now);
+    const estimated = brokerPx === null && market === undefined && p.state !== "PENDING";
+
+    try {
+      await updateTrade(t.id, {
+        ...simColumns(p),
+        events: [...(t.events ?? []), ...ev],
+        ...(p.state === "CLOSED" ? { realized_r: round(realizedR(p), 3), realized_pnl: round(p.cash_flow, 2) } : {}),
+      });
+      out.closed.push(t.symbol);
+      if (estimated) out.estimated.push(t.symbol);
+    } catch (err) {
+      out.failed.push({ symbol: t.symbol, reason: err instanceof Error ? err.message.slice(0, 120) : "update_failed" });
+    }
   }
-  return closed;
+  return out;
 }
 
 export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"): Promise<{ ok: true; message: string }> {
@@ -720,15 +763,33 @@ export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"
       const open = await getOpenTrades();
       const t = open.find((x) => x.id === cmd.trade_id);
       if (!t) throw new Error("trade_not_open");
-      await closeTrades([t], "MANUAL");
-      await audit(`${t.symbol} נסגרה ידנית`, "warn");
-      return { ok: true, message: `${t.symbol} closed` };
+      const res = await closeTrades([t], "MANUAL");
+      if (res.failed.length) {
+        // The position is still open at the broker — say so rather than
+        // reporting a close that did not happen.
+        await audit(`סגירת ${t.symbol} נכשלה: ${res.failed[0].reason}`, "critical");
+        throw new Error(res.failed[0].reason);
+      }
+      const approx = res.estimated.length ? " (מחיר יציאה משוער — אין ציטוט חי)" : "";
+      await audit(`${t.symbol} נסגרה ידנית${approx}`, "warn");
+      return { ok: true, message: `${t.symbol} closed${approx}` };
     }
     case "close_all": {
       const open = (await getOpenTrades()).filter((t) => isAccountTrade(t, settings.phase));
-      const n = await closeTrades(open, "MANUAL");
-      await audit(`${n} פוזיציות נסגרו ידנית`, "warn");
-      return { ok: true, message: `${n} closed` };
+      const res = await closeTrades(open, "MANUAL");
+      const approx = res.estimated.length ? ` · ${res.estimated.length} במחיר משוער` : "";
+      if (res.failed.length) {
+        // Partial success is the common case when one symbol's broker call
+        // fails; the old code threw and told the caller nothing about the rest.
+        const detail = res.failed.map((f) => `${f.symbol}: ${f.reason}`).join("; ");
+        await audit(`${res.closed.length} נסגרו, ${res.failed.length} נכשלו — ${detail}`, "critical");
+        return {
+          ok: true,
+          message: `${res.closed.length} closed${approx}, ${res.failed.length} failed: ${detail}`,
+        };
+      }
+      await audit(`${res.closed.length} פוזיציות נסגרו ידנית${approx}`, "warn");
+      return { ok: true, message: `${res.closed.length} closed${approx}` };
     }
     case "set_symbol_enabled":
       await getSupabase().from("trading_universe").update({ manual_enabled: cmd.enabled, updated_at: iso(now) }).eq("symbol", cmd.symbol.toUpperCase());

@@ -37,8 +37,8 @@ jobs:
             done
             exit 0
           fi
-          echo "ERROR: add DATABASE_URL or SUPABASE_ACCESS_TOKEN to GitHub Actions secrets."
+          echo "ERROR: add DATABASE_URL or SUPABASE_GITHUB_ACTIONS to GitHub Actions secrets."
           exit 1
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_GITHUB_ACTIONS || secrets.SUPABASE_ACCESS_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
