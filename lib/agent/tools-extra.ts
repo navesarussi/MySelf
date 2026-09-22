@@ -1,6 +1,6 @@
+import { withLog } from "@/lib/agent/tools-log";
 import { tool } from "ai";
 import { z } from "zod";
-import { logAgentAction } from "@/lib/agent/log";
 import { agentBulkUpdateHabits } from "@/lib/agent/data-bulk";
 import {
   agentCreateEvent,
@@ -16,18 +16,6 @@ import {
   agentUpdateLibraryEntry,
   agentUpdatePeriod,
 } from "@/lib/agent/data-extra";
-
-async function withLog<T>(name: string, input: unknown, fn: () => Promise<T>): Promise<T> {
-  try {
-    const result = await fn();
-    await logAgentAction({ tool_name: name, tool_input: input, tool_result: result });
-    return result;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "tool_failed";
-    await logAgentAction({ tool_name: name, tool_input: input, tool_result: { error: message } });
-    throw err;
-  }
-}
 
 /** Extra entity tools: habits write, goals create, library, timeline events/periods. */
 export function createExtraAgentTools() {
