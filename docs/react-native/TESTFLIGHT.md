@@ -66,6 +66,41 @@ gh secret set EXPO_TOKEN --repo navesarussi/MySelf
 
 GitHub → **Actions** → **TestFlight iOS** → **Run workflow**.
 
+### HomeWidget extension — provisioning (multi-target)
+
+Since the iPhone home widget was added, iOS builds have **two** Xcode targets:
+
+| Target | Bundle ID |
+| --- | --- |
+| MeAndMySelf (main app) | `com.navesarussi.myself` |
+| HomeWidget (widget extension) | `com.navesarussi.myself.homewidget` |
+
+Each target needs its own App Store provisioning profile. The TestFlight workflow passes
+`EXPO_ASC_*` env vars (via `mobile/scripts/ci-export-asc-env.sh`) so EAS can create or
+repair the HomeWidget profile non-interactively using the App Store Connect API key.
+
+If CI still fails with `Credentials are not set up` for `HomeWidget`, run this **once**
+on a Mac with Xcode (interactive — not `--non-interactive`):
+
+```bash
+cd mobile
+npm ci
+# Write asc-api-key.p8 (symlink or copy AuthKey_X3N8885G95.p8)
+export ASC_API_KEY_ID="X3N8885G95"
+export ASC_API_KEY_ISSUER_ID="3a825a1a-0b43-487a-9ba4-1ab24a88f553"
+source scripts/ci-export-asc-env.sh
+npx eas-cli build --platform ios --profile production --local
+# Accept prompts to create HomeWidget credentials; EAS stores them remotely.
+```
+
+After that one-time setup, GitHub Actions `--non-interactive` builds reuse the stored
+HomeWidget profile. Verify with:
+
+```bash
+cd mobile && npx eas-cli credentials -p ios
+# → select production → inspect HomeWidget (com.navesarussi.myself.homewidget)
+```
+
 ### אם העלאה "מצליחה" אבל build לא מופיע ב-ASC
 
 1. **Activity** ב-App Store Connect (לא רק TestFlight) — חפש `Invalid` / `Failed`.

@@ -61,7 +61,7 @@ jobs:
         run: npm ci
 
       - name: Install EAS CLI
-        run: npm install -g eas-cli@16
+        run: npm install -g eas-cli@latest
 
       - name: Write ASC API key
         env:
@@ -79,6 +79,8 @@ jobs:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
         run: |
+          # ASC API key lets EAS create HomeWidget provisioning profiles non-interactively.
+          source scripts/ci-export-asc-env.sh
           eas build \
             --platform ios \
             --profile production \
