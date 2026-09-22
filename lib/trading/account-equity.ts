@@ -1,4 +1,5 @@
 import { createBarCache } from "./market-data";
+import { roundMoney } from "./round";
 import {
   getClosedTradesLite,
   getOpenTrades,
@@ -10,7 +11,6 @@ import {
   type UniverseRow,
 } from "./store";
 
-const round = (x: number, d = 2) => Math.round(x * 10 ** d) / 10 ** d;
 
 /** Closed-trade shape the equity formula actually needs — satisfied by the lite projection. */
 type ClosedPnl = Pick<TradeRow, "realized_pnl">;
@@ -46,7 +46,26 @@ export function equityFromTrades(
     return s + p.cash_flow + (prices.get(t.symbol) ?? p.entry_price) * p.size;
   }, 0);
   const realizedAll = accountClosed.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
-  return round(settings.starting_equity + realizedAll + unrealized, 2);
+  return roundMoney(settings.starting_equity + realizedAll + unrealized);
+}
+
+/**
+ * Adopt the broker's equity figure — but only a real one.
+ *
+ * The tick uses the demo account's own equity because it can hold positions the
+ * strategy does not know about. A bare `Number(acct.equity)` on a response that
+ * is missing the field yields NaN, and NaN propagates into `peak_equity`, which
+ * is persisted: `drawdownFromPeak` is then NaN forever and the master kill
+ * switch can never trip again. One bad response, permanently disabled safety.
+ */
+export type BrokerEquity = { ok: true; equity: number } | { ok: false; reason: string };
+
+export function brokerEquity(raw: unknown): BrokerEquity {
+  const equity = typeof raw === "number" ? raw : Number(String(raw ?? "").trim() || NaN);
+  if (!Number.isFinite(equity) || equity <= 0) {
+    return { ok: false, reason: `alpaca_equity_unusable:${JSON.stringify(raw)?.slice(0, 40)}` };
+  }
+  return { ok: true, equity };
 }
 
 /** Live account equity — same formula as the trading dashboard.

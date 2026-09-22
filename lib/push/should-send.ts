@@ -7,7 +7,14 @@ export type ShouldSendResult =
   | { ok: true; dayKey: string }
   | { ok: false; reason: "disabled" | "quiet" | "duplicate" };
 
-/** Check preferences, quiet hours, and same-day dedup. */
+/**
+ * Preferences, quiet hours, and a cheap same-day read.
+ *
+ * The read is an early exit, not the gate: `claimSend` decides, because only
+ * the unique index can. Callers must claim before sending — a check here that
+ * says "not sent yet" is true when it is read and can stop being true a
+ * millisecond later.
+ */
 export async function shouldSend(
   type: NotificationType,
   refId = "",
@@ -36,23 +43,4 @@ export async function shouldSend(
 
   if (data) return { ok: false, reason: "duplicate" };
   return { ok: true, dayKey };
-}
-
-export async function recordSend(input: {
-  type: NotificationType;
-  refId?: string;
-  dayKey: string;
-  title: string;
-  body: string;
-}): Promise<void> {
-  await getSupabase().from("notification_log").upsert(
-    {
-      notif_type: input.type,
-      ref_id: input.refId ?? "",
-      day_key: input.dayKey,
-      title: input.title,
-      body: input.body,
-    },
-    { onConflict: "notif_type,ref_id,day_key", ignoreDuplicates: true }
-  );
 }

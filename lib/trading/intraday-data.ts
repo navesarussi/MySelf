@@ -3,6 +3,7 @@ import { isAlpacaConfigured } from "./broker/alpaca";
 import { fetchBars } from "./market-data";
 import { M15, M5, buildIntradayFrames, type IntradayFrames } from "./strategy/intraday";
 import type { AssetClass, Bar } from "./types";
+import { mapWithConcurrency } from "@/lib/concurrency";
 
 /**
  * Bars for the intraday strategy: crypto from Binance (per symbol), stocks from Alpaca (multi-symbol, IEX feed,
@@ -17,13 +18,6 @@ const MIN_5M = 60;
 export type IntradaySymbol = { symbol: string; asset_class: AssetClass; provider_symbol: string };
 export type LoadedFrames = { sym: IntradaySymbol; f: IntradayFrames; lastPrice: number };
 
-async function pool<T>(items: T[], size: number, fn: (x: T) => Promise<void>) {
-  const queue = [...items];
-  await Promise.all(Array.from({ length: Math.min(size, queue.length) }, async () => {
-    while (queue.length) await fn(queue.shift()!);
-  }));
-}
-
 const closedOnly = (bars: Bar[], ms: number, now: number) => bars.filter((b) => b.t + ms <= now);
 
 export async function loadIntradayFrames(symbols: IntradaySymbol[], now: number, errors: string[]): Promise<Map<string, LoadedFrames>> {
@@ -31,7 +25,7 @@ export async function loadIntradayFrames(symbols: IntradaySymbol[], now: number,
   const crypto = symbols.filter((s) => s.asset_class !== "STOCK");
   const stocks = symbols.filter((s) => s.asset_class === "STOCK");
 
-  await pool(crypto, 8, async (sym) => {
+  await mapWithConcurrency(crypto, 8, async (sym) => {
     try {
       const [b15, b5] = await Promise.all([fetchBars(sym, "15m", now - BARS_15M * M15, now), fetchBars(sym, "5m", now - BARS_5M * M5, now)]);
       if (b15.length < MIN_15M || b5.length < MIN_5M) return;
@@ -47,7 +41,7 @@ export async function loadIntradayFrames(symbols: IntradaySymbol[], now: number,
     for (let i = 0; i < names.length; i += 100) batches.push(names.slice(i, i + 100));
     const m15 = new Map<string, Bar[]>();
     const m5 = new Map<string, Bar[]>();
-    await pool(batches, 3, async (batch) => {
+    await mapWithConcurrency(batches, 3, async (batch) => {
       try {
         // ~26 regular-session 15m bars/day → 400 bars ≈ 16 sessions ≈ 24 calendar days (+ holidays margin).
         const [a, b] = await Promise.all([stockBars(batch, "15Min", now - 30 * 86_400_000, { feed: "iex" }), stockBars(batch, "5Min", now - 8 * 86_400_000, { feed: "iex" })]);

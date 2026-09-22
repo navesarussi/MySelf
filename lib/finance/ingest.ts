@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import { notifyUser } from "@/lib/push/notify";
 import { financeExternalKey, type FinanceSource } from "@/lib/finance/external-key";
 import { inferTxnKind, inferredCategory, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
@@ -145,17 +146,6 @@ const INSERT_CHUNK = 200;
 /** Concurrent push sends. Each notification is deduped by its own txn id, so
  *  these are independent — the cap only protects Expo and the DB from a burst. */
 const NOTIFY_CONCURRENCY = 5;
-
-async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const item = items[cursor++];
-      await fn(item);
-    }
-  });
-  await Promise.all(workers);
-}
 
 /**
  * Ingest a batch of scraped/shortcut transactions.

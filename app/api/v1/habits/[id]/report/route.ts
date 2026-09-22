@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
-import { computeCheckIn, computeFall, habitReportDay } from "@/lib/habit-stats";
-import { upsertHabitReport } from "@/lib/habit-reports-store";
+import { applyHabitReport, loadHabit } from "@/lib/habit-report-service";
 import { badRequest, dbError, isApiAuthorized, notFound, readJson, str, unauthorized } from "@/lib/api/auth";
-import type { Habit } from "@/lib/types";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -22,13 +20,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   const type = str(body.type);
   if (!id) return badRequest("id_required");
 
-  const supabase = getSupabase();
-  const { data: habit } = await supabase.from("habits").select("*").eq("id", id).single<Habit>();
+  const habit = await loadHabit(id);
   if (!habit) return notFound();
 
   if (type === "reset") {
     const hadStreak = habit.streak_count > 0;
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("habits")
       .update({
         streak_count: 0,
@@ -45,33 +42,10 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (type !== "check_in" && type !== "fall") return badRequest("invalid_type");
 
-  const forDate = str(body.for_date);
-  const activeDay = habitReportDay(habit.report_time);
-  const today = forDate && /^\d{4}-\d{2}-\d{2}$/.test(forDate) ? forDate : activeDay;
-  if (forDate && today >= activeDay) return badRequest("invalid_for_date");
-  if (!forDate && habit.last_checked_on === today) {
-    return NextResponse.json(habit); // already reported today — no-op, like the web
+  const result = await applyHabitReport({ habit, outcome: type, forDate: str(body.for_date) || null });
+  if (!result.ok) {
+    return result.reason === "invalid_for_date" ? badRequest("invalid_for_date") : dbError();
   }
-  if (forDate && habit.last_checked_on === today) {
-    return NextResponse.json(habit);
-  }
-  const result = type === "check_in" ? computeCheckIn(habit, today) : computeFall(habit, today);
-
-  const { data, error } = await supabase
-    .from("habits")
-    .update({
-      streak_count: result.streak,
-      best_streak: result.bestStreak,
-      total_success_days: result.totalSuccessDays,
-      failure_count: result.failureCount,
-      last_checked_on: today,
-      last_reported_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) return dbError();
-  await upsertHabitReport(id, today, type === "check_in" ? "check_in" : "fall");
-  revalidateHabitPaths();
-  return NextResponse.json(data);
+  if (!result.noop) revalidateHabitPaths();
+  return NextResponse.json(result.habit);
 }

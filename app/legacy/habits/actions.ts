@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
 import { setFlash } from "@/lib/flash-actions";
-import { computeCheckIn, computeFall, habitReportDay, normalizeReportTime } from "@/lib/habit-stats";
-import type { Habit } from "@/lib/types";
+import { normalizeReportTime } from "@/lib/habit-stats";
+import { applyHabitReport, loadHabit } from "@/lib/habit-report-service";
 
 export async function addHabit(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
@@ -25,26 +25,10 @@ export async function addHabit(formData: FormData) {
 export async function checkInHabit(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
 
-  const { data: habit } = await supabase.from("habits").select("*").eq("id", id).single<Habit>();
+  const habit = await loadHabit(id);
   if (!habit) return;
-
-  const today = habitReportDay(habit.report_time);
-  const result = computeCheckIn(habit, today);
-  if (habit.last_checked_on === today) return;
-
-  await supabase
-    .from("habits")
-    .update({
-      streak_count: result.streak,
-      best_streak: result.bestStreak,
-      total_success_days: result.totalSuccessDays,
-      failure_count: result.failureCount,
-      last_checked_on: today,
-      last_reported_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  await applyHabitReport({ habit, outcome: "check_in" });
 
   await setFlash("flash.checkInRecorded");
   revalidatePath("/legacy/habits");
@@ -54,26 +38,10 @@ export async function checkInHabit(formData: FormData) {
 export async function reportHabitFall(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
 
-  const { data: habit } = await supabase.from("habits").select("*").eq("id", id).single<Habit>();
+  const habit = await loadHabit(id);
   if (!habit) return;
-
-  const today = habitReportDay(habit.report_time);
-  const result = computeFall(habit, today);
-  if (habit.last_checked_on === today) return;
-
-  await supabase
-    .from("habits")
-    .update({
-      streak_count: result.streak,
-      best_streak: result.bestStreak,
-      total_success_days: result.totalSuccessDays,
-      failure_count: result.failureCount,
-      last_checked_on: today,
-      last_reported_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  await applyHabitReport({ habit, outcome: "fall" });
 
   await setFlash("flash.fallRecorded");
   revalidatePath("/legacy/habits");

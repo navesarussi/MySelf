@@ -88,6 +88,47 @@ export function missedReportDays(
   return missed.reverse();
 }
 
+export type HabitReportTarget =
+  | { ok: true; day: string; isBackfill: boolean }
+  | { ok: false; reason: "invalid_for_date" | "already_reported" };
+
+/**
+ * Which reporting day a report request may be written to.
+ *
+ * Reports must move forward in time. `computeCheckIn` derives the streak from
+ * the calendar gap to `last_checked_on`, and the caller then stores the
+ * reported day as the new `last_checked_on` — so accepting a day at or before
+ * the last report produces a negative gap, which resets the streak to 1, adds a
+ * spurious failure, and rewinds `last_checked_on`. A backfill is therefore only
+ * valid for a closed window strictly after the last report and strictly before
+ * the active day, which is exactly the set `missedReportDays` offers.
+ */
+export function resolveHabitReportDay(
+  habit: Habit,
+  forDate: string | null | undefined,
+  now = new Date(),
+): HabitReportTarget {
+  const activeDay = habitReportDay(habit.report_time, now);
+  const requested = forDate?.trim();
+
+  if (!requested) {
+    if (habit.last_checked_on === activeDay) return { ok: false, reason: "already_reported" };
+    return { ok: true, day: activeDay, isBackfill: false };
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(requested)) return { ok: false, reason: "invalid_for_date" };
+  if (requested >= activeDay) return { ok: false, reason: "invalid_for_date" };
+  if (habit.last_checked_on && requested <= habit.last_checked_on) {
+    return { ok: false, reason: "invalid_for_date" };
+  }
+  const createdDay = habit.created_at?.slice(0, 10);
+  if (createdDay && requested < createdDay) return { ok: false, reason: "invalid_for_date" };
+  if (now.getTime() < reportWindowEndOn(requested, habit.report_time).getTime()) {
+    return { ok: false, reason: "invalid_for_date" };
+  }
+  return { ok: true, day: requested, isBackfill: true };
+}
+
 /** Current streak — 0 if the habit was not checked in today or yesterday. */
 export function effectiveStreak(habit: Habit, today = todayISO()): number {
   if (!habit.last_checked_on) return 0;

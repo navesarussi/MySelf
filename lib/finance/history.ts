@@ -1,5 +1,6 @@
 import { summarizeCashflow, type CashflowRow, type CategorySpend } from "@/lib/finance/cashflow";
 import { buildHistoryTrends, type HistoryTrends } from "@/lib/finance/history-trends";
+import { round2 } from "@/lib/finance/money";
 
 export const HISTORY_MONTH_MIN = 1;
 export const HISTORY_MONTH_MAX = 24;
@@ -67,9 +68,6 @@ export function monthKeysEndingAt(endMonth: string, count: number): string[] {
   return keys;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
 
 export function categoryDeltas(
   current: CategorySpend[],

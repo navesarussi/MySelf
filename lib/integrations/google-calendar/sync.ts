@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { fetchAllRows } from "@/lib/db/paginate";
 import { GOOGLE_PROVIDER } from "../google-config";
 import {
   getIntegrationToken,
@@ -14,7 +15,6 @@ import { buildUpsertPayload, shouldRemoveLocal } from "./merge";
 import type { MappedGoogleEvent } from "./types";
 
 const UPSERT_BATCH = 100;
-const PAGE_SIZE = 1000;
 
 async function getValidAccessToken() {
   const row = await getIntegrationToken(GOOGLE_PROVIDER);
@@ -41,54 +41,35 @@ async function getValidAccessToken() {
   return refreshed.access_token;
 }
 
-async function fetchAllExistingGoogleRows() {
+type LocalGoogleEvent = {
+  id: string;
+  source: string;
+  google_event_id: string | null;
+  title_override: string | null;
+  description_override: string | null;
+  hidden_at: string | null;
+};
+
+/**
+ * Every locally stored Google event, with the edits the user made on top of it.
+ *
+ * Ordered by id, because `range()` over an unordered query is not stable in
+ * Postgres: pages could repeat rows and skip others, and a skipped row is a
+ * title override, a description override or a hidden flag that the sync then
+ * overwrites with Google's version — a hidden event reappearing, or an edit
+ * silently reverted.
+ */
+async function fetchAllLocalGoogleEvents(errorTag: string): Promise<LocalGoogleEvent[]> {
   const supabase = getSupabase();
-  const rows: {
-    google_event_id: string;
-    title_override: string | null;
-    description_override: string | null;
-    hidden_at: string | null;
-  }[] = [];
-
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase
-      .from("timeline_events")
-      .select("google_event_id, title_override, description_override, hidden_at")
-      .eq("source", "google_calendar")
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(`sync_fetch_existing_failed:${error.message}`);
-    if (!data?.length) break;
-    rows.push(...data);
-    if (data.length < PAGE_SIZE) break;
-  }
-
-  return rows;
-}
-
-async function fetchAllLocalGoogleEvents() {
-  const supabase = getSupabase();
-  const rows: {
-    id: string;
-    source: string;
-    google_event_id: string | null;
-    title_override: string | null;
-    description_override: string | null;
-    hidden_at: string | null;
-  }[] = [];
-
-  for (let from = 0; ; from += PAGE_SIZE) {
+  return fetchAllRows<LocalGoogleEvent>(async (from, to) => {
     const { data, error } = await supabase
       .from("timeline_events")
       .select("id, source, google_event_id, title_override, description_override, hidden_at")
       .eq("source", "google_calendar")
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(`sync_fetch_local_failed:${error.message}`);
-    if (!data?.length) break;
-    rows.push(...data);
-    if (data.length < PAGE_SIZE) break;
-  }
-
-  return rows;
+      .order("id")
+      .range(from, to);
+    return { data, error: error ? { message: `${errorTag}:${error.message}` } : null };
+  });
 }
 
 export async function syncGoogleCalendar(): Promise<{ imported: number; removed: number }> {
@@ -112,7 +93,7 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
       .filter((mapped): mapped is MappedGoogleEvent => mapped !== null);
 
     const fetchedIds = new Set(mappedEvents.map((event) => event.google_event_id));
-    const existingRows = await fetchAllExistingGoogleRows();
+    const existingRows = await fetchAllLocalGoogleEvents("sync_fetch_existing_failed");
     const existingById = new Map(existingRows.map((row) => [row.google_event_id, row]));
 
     const toUpsert = mappedEvents
@@ -155,7 +136,7 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
       imported,
     });
 
-    const localGoogle = await fetchAllLocalGoogleEvents();
+    const localGoogle = await fetchAllLocalGoogleEvents("sync_fetch_local_failed");
     let removed = 0;
     const toDelete = localGoogle
       .filter((row) => shouldRemoveLocal(row, fetchedIds))

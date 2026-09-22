@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
+import { sessionIdentity, unauthorized } from "@/lib/api/auth";
 import { makeSessionToken } from "@/lib/auth";
 import { appendTokenToRedirect, isAllowedAppRedirect } from "@/lib/integrations/mobile-redirect";
 
@@ -12,10 +12,15 @@ import { appendTokenToRedirect, isAllowedAppRedirect } from "@/lib/integrations/
 const DEFAULT_SCHEME = "myself://auth";
 
 export async function GET(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
   const secret = process.env.AUTH_SECRET;
   if (!secret) return unauthorized();
-  const token = await makeSessionToken(secret);
+  // The token handed to the app names the account, so this hop needs the
+  // identity, not just "some valid session". The Google callback that redirects
+  // here has just set an identity-bearing cookie; an anonymous legacy session
+  // cannot mint one, and signing in again is the correct answer for it.
+  const identity = await sessionIdentity(req);
+  if (!identity) return unauthorized();
+  const token = await makeSessionToken(secret, identity.sub);
 
   if (req.nextUrl.searchParams.get("format") === "json") {
     return NextResponse.json({ token });

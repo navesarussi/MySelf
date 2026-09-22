@@ -3,9 +3,9 @@ import { tool } from "ai";
 import { z } from "zod";
 import { parseWealthImportText } from "@/lib/finance/har-bituach-parse";
 import {
-  bulkUpsertWealthItems,
   deleteWealthItem,
   getWealthSummary,
+  importWealthItems,
   upsertWealthItem,
 } from "@/lib/finance/wealth-store";
 
@@ -49,14 +49,16 @@ export function createFinanceAgentTools() {
         withLog("import_wealth_text", { text_len: input.text.length }, async () => {
           const parsed = parseWealthImportText(input.text);
           if (parsed.length === 0) return { imported: 0, error: "no_items_parsed" };
-          const items = await bulkUpsertWealthItems(
+          // A snapshot re-import refreshes balances; `created` vs `updated`
+          // lets the reply say so instead of implying everything was new.
+          const { items, created, updated } = await importWealthItems(
             parsed.map((p) => ({
               ...p,
               source: input.source ?? "agent",
               as_of_date: new Date().toISOString().slice(0, 10),
             }))
           );
-          return { imported: items.length, items };
+          return { imported: items.length, created, updated, items };
         }),
     }),
 

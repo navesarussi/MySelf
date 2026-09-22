@@ -1,17 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, isValidSessionToken, readSessionToken, verifyScopedToken, type SessionClaims } from "@/lib/auth";
+
+/** The token this request presents, Bearer first then cookie. */
+async function requestTokens(req: NextRequest): Promise<(string | undefined)[]> {
+  const authHeader = req.headers.get("authorization");
+  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : undefined;
+  const jar = await cookies();
+  return [bearer || undefined, jar.get(SESSION_COOKIE)?.value];
+}
 
 /** Route-level auth check for /api/v1 handlers — defense in depth on top of
  *  proxy.ts. Accepts the session token as a Bearer header or the cookie. */
 export async function isApiAuthorized(req: NextRequest): Promise<boolean> {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return false;
-  const authHeader = req.headers.get("authorization");
-  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
-  if (await isValidSessionToken(bearer, secret)) return true;
-  const jar = await cookies();
-  return isValidSessionToken(jar.get(SESSION_COOKIE)?.value, secret);
+  for (const token of await requestTokens(req)) {
+    if (await isValidSessionToken(token, secret)) return true;
+  }
+  return false;
+}
+
+/**
+ * Who this request is, when the token says so. Null for an unauthenticated
+ * request *and* for a pre-identity legacy token, which is valid but anonymous —
+ * callers that need a name (minting a new token, per-user data) must treat the
+ * two the same and not invent an identity.
+ */
+export async function sessionIdentity(req: NextRequest): Promise<SessionClaims | null> {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) return null;
+  for (const token of await requestTokens(req)) {
+    const claims = await readSessionToken(token, secret);
+    if (claims) return claims;
+  }
+  return null;
 }
 
 /** Auth for OAuth *initiation* routes, which are browser navigations rather
@@ -22,11 +45,19 @@ export async function isApiAuthorized(req: NextRequest): Promise<boolean> {
  *  that may not carry the cookie, so it passes the same session token as a
  *  `token` query parameter — the mirror of how the callback hands the token
  *  back through the deep link. */
+export const OAUTH_START_AUDIENCE = "oauth-start";
+
 export async function isOAuthStartAuthorized(req: NextRequest): Promise<boolean> {
   if (await isApiAuthorized(req)) return true;
   const secret = process.env.AUTH_SECRET;
   if (!secret) return false;
-  return isValidSessionToken(req.nextUrl.searchParams.get("token") ?? undefined, secret);
+  const queryToken = req.nextUrl.searchParams.get("token") ?? undefined;
+  // Preferred: a five-minute token minted for this one purpose. A URL ends up in
+  // browser history, Referer headers and access logs, so what travels there must
+  // not be the 90-day session token.
+  if (await verifyScopedToken(queryToken, secret, OAUTH_START_AUDIENCE)) return true;
+  // Accepted until installed native builds have rolled over to the scoped token.
+  return isValidSessionToken(queryToken, secret);
 }
 
 export function unauthorized() {

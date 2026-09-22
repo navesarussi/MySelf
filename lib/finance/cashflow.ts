@@ -1,4 +1,5 @@
 import type { FinanceTransaction } from "@/lib/finance/ingest";
+import { round2 } from "@/lib/finance/money";
 
 export type CashflowRow = Pick<
   FinanceTransaction,
@@ -48,8 +49,4 @@ export function summarizeCashflow(
     uncategorized_count,
     by_category,
   };
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
 }

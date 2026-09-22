@@ -46,6 +46,8 @@ async function storeSet(key: string, value: string | null) {
   }
 }
 
+type SessionResponse = { ok: boolean; email?: string; expires_at?: string; token?: string; legacy?: boolean };
+
 type SessionValue = {
   ready: boolean;
   token: string | null;
@@ -79,9 +81,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const storedToken = await storeGet(TOKEN_KEY);
       if (storedToken) {
         try {
-          await apiFetch({ serverUrl: API_URL, token: storedToken }, "/session");
-          setToken(storedToken);
-          await syncFinanceIngestSessionToken(storedToken);
+          // Sessions expire, so /session hands back a fresh token once the
+          // current one is most of the way through its life. Storing it here is
+          // what keeps a device in regular use permanently signed in.
+          const session = await apiFetch<SessionResponse>(
+            { serverUrl: API_URL, token: storedToken },
+            "/session"
+          );
+          const active = session?.token ?? storedToken;
+          setToken(active);
+          if (session?.token) await storeSet(TOKEN_KEY, session.token);
+          await syncFinanceIngestSessionToken(active);
         } catch {
           await storeSet(TOKEN_KEY, null);
           await syncFinanceIngestSessionToken(null);

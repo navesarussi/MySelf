@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { fetchAllRows } from "@/lib/db/paginate";
 import type { TaskPriority, TaskStatus } from "@/lib/types";
 import type { TaskSourceId } from "./types";
 import { getTaskSourceProvider } from "./registry";
@@ -16,45 +17,41 @@ import { buildExternalTaskUpsert, dedupeDraftsByExternalId, idsToMarkDone } from
 import { MONDAY_PROVIDER } from "../monday-config";
 
 const BATCH_SIZE = 100;
-const PAGE_SIZE = 1000;
 
+/**
+ * Every existing task of this provider, so the upsert can preserve the local
+ * status and priority instead of letting the provider overwrite them.
+ *
+ * Ordered by id: `range()` over an unordered query is not stable in Postgres,
+ * so pages could repeat rows and skip others. A skipped row is a task whose
+ * local status and priority were silently reset on the next sync.
+ */
 async function fetchExistingExternalTaskIds(
   providerId: TaskSourceId,
   accountKeyPrefix?: string
 ) {
   const supabase = getSupabase();
-  const byExternalId = new Map<
-    string,
-    { id: string; status: string; priority: string }
-  >();
-
-  for (let from = 0; ; from += PAGE_SIZE) {
-    let query = supabase
-      .from("tasks")
-      .select("id, external_id, status, priority")
-      .eq("source", providerId)
-      .not("external_id", "is", null)
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (accountKeyPrefix) {
-      query = query.like("external_id", `${accountKeyPrefix}:%`);
+  const rows = await fetchAllRows<{ id: string; external_id: string | null; status: string; priority: string }>(
+    async (from, to) => {
+      let query = supabase
+        .from("tasks")
+        .select("id, external_id, status, priority")
+        .eq("source", providerId)
+        .not("external_id", "is", null)
+        .order("id")
+        .range(from, to);
+      if (accountKeyPrefix) query = query.like("external_id", `${accountKeyPrefix}:%`);
+      const { data, error } = await query;
+      return { data, error: error ? { message: `sync_fetch_existing_failed:${error.message}` } : null };
     }
+  );
 
-    const { data, error } = await query;
-    if (error) throw new Error(`sync_fetch_existing_failed:${error.message}`);
-    if (!data?.length) break;
-    for (const row of data) {
-      if (row.external_id) {
-        byExternalId.set(row.external_id, {
-          id: row.id,
-          status: row.status,
-          priority: row.priority,
-        });
-      }
+  const byExternalId = new Map<string, { id: string; status: string; priority: string }>();
+  for (const row of rows) {
+    if (row.external_id) {
+      byExternalId.set(row.external_id, { id: row.id, status: row.status, priority: row.priority });
     }
-    if (data.length < PAGE_SIZE) break;
   }
-
   return byExternalId;
 }
 
@@ -152,24 +149,30 @@ async function syncSingleAccount(
       accountKey
     );
 
-    let localQuery = supabase
-      .from("tasks")
-      .select("external_id")
-      .eq("source", providerId)
-      .neq("status", "done")
-      .not("external_id", "is", null);
+    // Paged and ordered for the same reason as above: a single unpaged request
+    // stops at PostgREST's row cap, so every open task past it was invisible
+    // here and never got closed when the provider dropped it.
+    const localOpenRows = await fetchAllRows<{ external_id: string | null }>(async (from, to) => {
+      let localQuery = supabase
+        .from("tasks")
+        .select("external_id")
+        .eq("source", providerId)
+        .neq("status", "done")
+        .not("external_id", "is", null)
+        .order("id")
+        .range(from, to);
 
-    if (providerId === MONDAY_PROVIDER && accountKey) {
-      localQuery = localQuery.like("external_id", `${accountKey}:%`);
-    }
-    if (listIdsOverride?.length) {
-      localQuery = localQuery.in("external_list_id", listIdsOverride);
-    }
+      if (providerId === MONDAY_PROVIDER && accountKey) {
+        localQuery = localQuery.like("external_id", `${accountKey}:%`);
+      }
+      if (listIdsOverride?.length) {
+        localQuery = localQuery.in("external_list_id", listIdsOverride);
+      }
+      const { data, error } = await localQuery;
+      return { data, error: error ? { message: `sync_fetch_local_failed:${error.message}` } : null };
+    });
 
-    const { data: localOpenRows, error: fetchError } = await localQuery;
-    if (fetchError) throw new Error(`sync_fetch_local_failed:${fetchError.message}`);
-
-    const localOpenExternalIds = (localOpenRows ?? [])
+    const localOpenExternalIds = localOpenRows
       .map((row) => row.external_id)
       .filter((id): id is string => id !== null);
 

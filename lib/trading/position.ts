@@ -28,6 +28,8 @@ export type SimPosition = {
   partial_exit_price: number | null;
   exit_price: number | null;
   exit_reason: ExitReason | null;
+  /** Size sold by the closing fill — what a broker reprice must adjust. */
+  exit_size?: number;
   gapped_through_stop: boolean;
   entry_slippage_bps: number | null;
   cash_flow: number;
@@ -141,6 +143,7 @@ function sell(p: SimPosition, price: number, size: number) {
 }
 
 function close(p: SimPosition, price: number, reason: ExitReason, at: number, events: PositionEvent[]) {
+  p.exit_size = p.size;
   sell(p, price, p.size);
   p.exit_price = price;
   p.exit_reason = reason;
@@ -396,8 +399,25 @@ function applyCloseRules(p: SimPosition, bar: Bar, ctx: StepContext, events: Pos
   return false;
 }
 
-/** A real broker filled the entry: adopt its price/quantity (the sim never fills broker trades itself). */
+/**
+ * A real broker filled the entry: adopt its price/quantity (the sim never fills
+ * broker trades itself).
+ *
+ * Every R figure divides by `initial_size * stop_distance`, so the stop must
+ * stay strictly below the fill. A fill at or under the protective stop (a gap,
+ * or a stop that was already ratcheted past the resting order) otherwise made
+ * stop_distance zero or negative: realized R came out ±Infinity, and openRiskR
+ * read `stop_price >= entry_price` as a risk-free position. Such a fill is a
+ * real position that is already underwater, so the stop is pulled just under
+ * the fill and the trade is left to exit on the next bar rather than being
+ * silently mismeasured.
+ */
 export function applyExternalFill(p: SimPosition, price: number, qty: number, at: number): PositionEvent[] {
+  if (!(price > 0) || !(qty > 0)) return [];
+  if (p.stop_price >= price) {
+    // Keep a nominal 1bp of risk so R stays finite; the next bar stops it out.
+    p.stop_price = price * (1 - 0.0001);
+  }
   const f = fee(p, price, qty);
   p.initial_size = qty;
   p.size = qty;

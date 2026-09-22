@@ -4,6 +4,7 @@ import { alpacaCryptoBases, listedStockAssets, stockBars } from "./broker/alpaca
 import { isAlpacaConfigured } from "./broker/alpaca";
 import { SEED_UNIVERSE } from "./config";
 import type { AssetClass, Bar } from "./types";
+import { mapWithConcurrency } from "@/lib/concurrency";
 
 /**
  * Intraday universe — rebuilt once a day from liquidity, not a hand-picked list:
@@ -79,13 +80,6 @@ export function selectStockUniverse(daily: Map<string, Bar[]>, opts: { exclude?:
   return out;
 }
 
-async function pool<T>(items: T[], size: number, fn: (x: T) => Promise<void>) {
-  const queue = [...items];
-  await Promise.all(Array.from({ length: Math.min(size, queue.length) }, async () => {
-    while (queue.length) await fn(queue.shift()!);
-  }));
-}
-
 /** Rebuild myself.trading_intraday_universe. Returns counts; errors are thrown for the caller to log. */
 export async function refreshIntradayUniverse(now = Date.now()): Promise<{ crypto: number; stocks: number }> {
   const tickers = (await (await fetch("https://data-api.binance.vision/api/v3/ticker/24hr", { cache: "no-store", signal: AbortSignal.timeout(20_000) })).json()) as { symbol: string; quoteVolume: string; lastPrice: string }[];
@@ -101,7 +95,7 @@ export async function refreshIntradayUniverse(now = Date.now()): Promise<{ crypt
     const batches: string[][] = [];
     for (let i = 0; i < candidates.length; i += 200) batches.push(candidates.slice(i, i + 200));
     const daily = new Map<string, Bar[]>();
-    await pool(batches, 6, async (batch) => {
+    await mapWithConcurrency(batches, 6, async (batch) => {
       const res = await stockBars(batch, "1Day", now - 40 * 86_400_000, { endMs: now - 16 * 60_000, feed: "sip" });
       for (const [s, b] of res) daily.set(s, b);
     });

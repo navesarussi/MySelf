@@ -2,6 +2,7 @@ import { RISK_ENVELOPE } from "../config";
 import type { AssetClass, Bar } from "../types";
 import { closedIdx, confirmedSwings, percentileRank, type TfSeries } from "./series";
 import { bearishDivergence, keyLevels, lastSwingLowBelow, nextResistance, structureState, type StructureState } from "./structure";
+import { round } from "../round";
 
 /**
  * Strategy v2 — deterministic half of the trading strategy.
@@ -105,7 +106,6 @@ export type Candidate = {
   reasons: string[];
 };
 
-const round = (x: number, d = 4) => (Number.isFinite(x) ? Math.round(x * 10 ** d) / 10 ** d : x);
 
 /** Analyst-style multi-timeframe read of one symbol at time t (closed bars only). Also fed to the AI agent. */
 export function analystBrief(f: SymbolFrames, t: number) {

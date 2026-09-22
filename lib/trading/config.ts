@@ -76,7 +76,7 @@ export const PHASE_GATES = Object.freeze({
   PAPER_MAX_EXPECTANCY_DEVIATION_R: 0.4,
 });
 
-export const AGENT_MODEL_ID = "gemini-3-flash-preview";
+export { GEMINI_MODEL_ID as AGENT_MODEL_ID } from "@/lib/ai-model";
 export const AGENT_PROMPT_VERSION = "trade-analyst-v3-discretion";
 
 /** Paper account starting equity (USD). */

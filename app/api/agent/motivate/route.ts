@@ -3,18 +3,14 @@ import { runMotivationMessage } from "@/lib/agent/run";
 import { getAgentSettings, motivationKindForHour } from "@/lib/agent/settings";
 import {
   recordMotivationDig,
-  shouldSendMotivationDig,
+  claimMotivationDig,
+  releaseMotivationDig,
 } from "@/lib/agent/whatsapp-dedup";
 import { mapAgentErrorCode } from "@/lib/agent/whatsapp-outbound";
 import { sendWhatsAppDig } from "@/lib/whatsapp/client";
+import { isCronAuthorized } from "@/lib/api/cron-auth";
 
 export const maxDuration = 60;
-
-function isCronAuthorized(req: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
-}
 
 function jerusalemHour(now = new Date()): number {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -54,7 +50,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const digGate = await shouldSendMotivationDig(kind);
+  const digGate = await claimMotivationDig(kind);
   if (!digGate.ok) {
     return NextResponse.json({
       skipped: true,
@@ -67,15 +63,18 @@ export async function GET(req: NextRequest) {
   try {
     const result = await runMotivationMessage(kind);
     if (!("text" in result)) {
+      await releaseMotivationDig(kind, digGate.dayKey);
       return NextResponse.json(result);
     }
 
     if (!result.text.trim()) {
+      await releaseMotivationDig(kind, digGate.dayKey);
       return NextResponse.json({ skipped: true, reason: "empty_dig", kind, hour });
     }
 
     const sent = await sendWhatsAppDig(settings.whatsapp_phone, result.text);
     if (!sent.ok) {
+      await releaseMotivationDig(kind, digGate.dayKey);
       return NextResponse.json(
         { ok: false, error: sent.error, kind, hour, via: sent.via },
         { status: 502 }
@@ -93,6 +92,8 @@ export async function GET(req: NextRequest) {
       text: result.text,
     });
   } catch (err) {
+    // Nothing went out, so the day's slot must not stay taken.
+    await releaseMotivationDig(kind, digGate.dayKey);
     const code = mapAgentErrorCode(err);
     console.error("[agent-motivate]", code);
     if (code === "gemini_credits_depleted") {

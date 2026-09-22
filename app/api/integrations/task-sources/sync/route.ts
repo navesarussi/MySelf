@@ -3,17 +3,12 @@ import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
 import { getIntegrationToken, listIntegrationTokens } from "@/lib/integrations/tokens";
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import type { TaskSourceId } from "@/lib/integrations/task-sources/types";
+import { isCronAuthorized as isCronRequest } from "@/lib/api/cron-auth";
 
 /** Daily cron syncs run inline; the platform default is far too short for them. */
 export const maxDuration = 60;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-function isCronRequest(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
-}
 
 function syncedWithinDay(lastSyncAt: string | null | undefined): boolean {
   if (!lastSyncAt) return false;

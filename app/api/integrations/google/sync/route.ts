@@ -2,17 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncGoogleCalendar } from "@/lib/integrations/google-calendar/sync";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
+import { isCronAuthorized as isCronRequest } from "@/lib/api/cron-auth";
 
 /** Daily cron syncs run inline; the platform default is far too short for them. */
 export const maxDuration = 60;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-function isCronRequest(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
-}
 
 async function shouldSkipDailySync() {
   const token = await getIntegrationToken(GOOGLE_PROVIDER);

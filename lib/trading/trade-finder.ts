@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { attachProposalTrade, claimProposal, releaseProposal } from "./proposal-claim";
 import { planIntradayTrade, type RatingSnapshot, type TradePlanProposal } from "./agent-rater";
 import { RISK_ENVELOPE } from "./config";
 import { MANUAL_STRATEGY_VERSION } from "./engine";
@@ -196,6 +197,30 @@ export async function enterProposal(id: string, req: EnterRequest, now = Date.no
   const opt = payload.options[req.option ?? 0];
   if (!opt) throw new EnterError("option_not_found");
 
+  // This call places a real (paper) order, so the proposal is consumed before
+  // any of the work below — the read above is a friendly early error, not the
+  // guard. Without an atomic claim a double tap or a retried request runs this
+  // whole function twice and opens two positions in one symbol at full size.
+  if (!(await claimProposal(sb, id))) throw new EnterError("proposal_already_used");
+  try {
+    return await enterClaimedProposal({ sb, id, opt, req, now });
+  } catch (err) {
+    // Nothing was opened — hand the proposal back so the user can adjust and
+    // retry. `releaseProposal` refuses once a trade_id exists.
+    await releaseProposal(sb, id).catch(() => undefined);
+    throw err;
+  }
+}
+
+async function enterClaimedProposal(input: {
+  sb: ReturnType<typeof getSupabase>;
+  id: string;
+  opt: ProposalOption;
+  req: EnterRequest;
+  now: number;
+}) {
+  const { sb, id, opt, req, now } = input;
+
   const settings = await getSettings();
   if (settings.phase !== "PAPER" && settings.phase !== "SHADOW") throw new EnterError(`phase_${settings.phase.toLowerCase()}`);
   if (settings.kill_switch_active) throw new EnterError("kill_switch_active");
@@ -273,6 +298,11 @@ export async function enterProposal(id: string, req: EnterRequest, now = Date.no
     agent: { rating: opt.plan.rating, explanation: opt.plan.explanation, model_version: opt.plan.model_version, prompt_version: opt.plan.prompt_version },
     pending_expiry_bars: orderType === "LIMIT" ? 12 : 1,
   });
+  // Bind the proposal to the trade the moment the trade exists, so a failure
+  // further down can never hand the proposal back and let a second attempt
+  // create a second trade for it. A broker rejection therefore consumes the
+  // proposal — the attempt is recorded, and the search is cheap to re-run.
+  await attachProposalTrade(sb, id, tradeId);
 
   let broker = false;
   if (ia.useBroker && execution === "PAPER" && opt.broker_tradable) {
@@ -290,7 +320,6 @@ export async function enterProposal(id: string, req: EnterRequest, now = Date.no
   } else if (!broker) {
     state = await syncSimEntryNow(tradeId, live, orderType, now);
   }
-  await sb.from("trading_proposals").update({ status: "ENTERED", trade_id: tradeId }).eq("id", id);
   await logEvent({
     kind: "MANUAL_ENTRY",
     symbol: sym.symbol,

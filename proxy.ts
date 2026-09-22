@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
+import { isCronAuthorized, matchesAnySecret } from "@/lib/api/cron-auth";
 
 function rewriteToSpa(req: NextRequest) {
   const url = req.nextUrl.clone();
@@ -10,12 +11,8 @@ function rewriteToSpa(req: NextRequest) {
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname === "/api/integrations/google/sync" && req.method === "POST") {
-    const cronSecret = process.env.CRON_SECRET;
-    const authHeader = req.headers.get("authorization");
-    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
-      return NextResponse.next();
-    }
+  if (pathname === "/api/integrations/google/sync" && req.method === "POST" && isCronAuthorized(req)) {
+    return NextResponse.next();
   }
 
   // Expo export puts fonts/images under public/spa/assets but the bundle requests /assets/…
@@ -59,8 +56,7 @@ export async function proxy(req: NextRequest) {
 
     // iOS Shortcut + GitHub Actions Leumi sync (no session cookie).
     if (pathname === "/api/v1/finance/ingest" && req.method === "POST") {
-      const ingestToken = process.env.FINANCE_INGEST_TOKEN?.trim();
-      if (ingestToken && bearer === ingestToken) {
+      if (matchesAnySecret(authHeader, [process.env.FINANCE_INGEST_TOKEN])) {
         const res = NextResponse.next();
         for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
         return res;
