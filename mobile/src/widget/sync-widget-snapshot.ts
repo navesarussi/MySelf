@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { buildWidgetSnapshot, type WidgetHomeInput } from "@/lib/widget-snapshot";
 import type { HomePayload } from "../api/resources";
 import { writeWidgetSnapshotJson, reloadHomeWidgetTimelines } from "../native/widget-bridge";
@@ -33,4 +34,41 @@ export async function syncWidgetSnapshot(args: {
 export function syncWidgetFromHomeCache(signedIn: boolean): void {
   const home = queryClient.getQueryData<HomePayload>(queryKeys.home) ?? null;
   void syncWidgetSnapshot({ signedIn, home }).catch(() => {});
+}
+
+function isHomeQueryKey(key: readonly unknown[]): boolean {
+  return key.length === 1 && key[0] === queryKeys.home[0];
+}
+
+/**
+ * Keep the iOS home widget aligned with every home-cache write (prefetch,
+ * Home tab, Habits/Tasks optimistic patches, finance categorize, etc.).
+ */
+export function useWidgetHomeQuerySync(signedIn: boolean): void {
+  useEffect(() => {
+    if (!signedIn) {
+      void syncWidgetSnapshot({ signedIn: false, home: null }).catch(() => {});
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => syncWidgetFromHomeCache(true), 200);
+    };
+
+    if (queryClient.getQueryData(queryKeys.home)) schedule();
+
+    const unsub = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated") return;
+      const key = event.query.queryKey;
+      if (!Array.isArray(key) || !isHomeQueryKey(key)) return;
+      schedule();
+    });
+
+    return () => {
+      unsub();
+      if (timer) clearTimeout(timer);
+    };
+  }, [signedIn]);
 }

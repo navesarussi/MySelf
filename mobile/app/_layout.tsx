@@ -16,7 +16,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { SessionProvider, useSession } from "../src/session";
 import type { HomePayload } from "../src/api/resources";
 import { queryKeys } from "../src/query";
-import { syncWidgetSnapshot } from "../src/widget/sync-widget-snapshot";
+import { syncWidgetSnapshot, useWidgetHomeQuerySync } from "../src/widget/sync-widget-snapshot";
 import { setAppVersion } from "../src/api/client";
 import { getAppVersion } from "../src/version";
 import { ThemeCanvas, ThemeProvider, useColors, useTheme } from "../src/theme";
@@ -35,17 +35,24 @@ SplashScreen.preventAutoHideAsync();
 // Set once at module load, not per-request: the version is fixed for the process.
 setAppVersion(getAppVersion());
 
-function useWidgetSnapshotOnBackground() {
+function useWidgetSnapshotLifecycle() {
   const { token } = useSession();
+  const signedIn = !!token;
+  useWidgetHomeQuerySync(signedIn);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active" && signedIn) {
+        // Refresh home after widget App Intents so KPIs rewrite from the server.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        return;
+      }
       if (state !== "background" && state !== "inactive") return;
       const home = queryClient.getQueryData<HomePayload>(queryKeys.home) ?? null;
-      void syncWidgetSnapshot({ signedIn: !!token, home }).catch(() => {});
+      void syncWidgetSnapshot({ signedIn, home }).catch(() => {});
     });
     return () => sub.remove();
-  }, [token]);
+  }, [signedIn]);
 }
 
 function AppStack() {
@@ -53,7 +60,7 @@ function AppStack() {
   const { resolved } = useTheme();
   const { t } = useI18n();
   usePushNotifications();
-  useWidgetSnapshotOnBackground();
+  useWidgetSnapshotLifecycle();
 
   return (
     <>

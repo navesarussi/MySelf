@@ -100,6 +100,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         setToken(newToken);
         await storeSet(TOKEN_KEY, newToken);
         await syncFinanceIngestSessionToken(newToken);
+        // Keychain is ready for App Intents; widget UI refreshes via home-cache sync.
       },
       signOut: async () => {
         setToken(null);

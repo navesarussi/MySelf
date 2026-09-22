@@ -22,10 +22,10 @@ struct HabitCheckInIntent: AppIntent {
       method: "POST",
       json: ["type": "check_in"]
     )
+    // Clear only the acted-on row. Full KPI/hero math is rewritten by the app
+    // from HomePayload — do not invent decrements here.
     if var snap = WidgetSnapshotStore.load() {
       if snap.urgentHabit?.id == habitId { snap.urgentHabit = nil }
-      snap.kpis.habitsPending = max(0, snap.kpis.habitsPending - 1)
-      snap.heroCount = max(0, snap.heroCount - 1)
       snap.updatedAt = ISO8601DateFormatter().string(from: Date())
       WidgetSnapshotStore.save(snap)
     }

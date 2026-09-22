@@ -1,10 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { api, type HomePayload } from "../../src/api/resources";
 import { todayLocalISO } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useApiQuery, useApiMutation, queryKeys, queryClient, patchTaskInHome, patchHabitInHome, patchRelationshipInHome } from "../../src/query";
-import { useSession } from "../../src/session";
-import { syncWidgetFromHomeCache, syncWidgetSnapshot } from "../../src/widget/sync-widget-snapshot";
 import { ErrorNote, Loading, Screen } from "../../src/components/ui";
 import { HomeHero } from "../../src/components/home/home-hero";
 import { HomeKpiSection } from "../../src/components/home/home-kpi-section";
@@ -30,16 +28,8 @@ import type { ContentEntry, Goal, Relationship, Task } from "@/lib/types";
 
 export default function HomeScreen() {
   const { t, locale } = useI18n();
-  const { token } = useSession();
   const { data, loading, error, refresh } = useApiQuery(queryKeys.home, api.home);
   const { run, isPending } = useApiMutation();
-  const signedIn = !!token;
-
-  useEffect(() => {
-    if (data) {
-      void syncWidgetSnapshot({ signedIn, home: data }).catch(() => {});
-    }
-  }, [data, signedIn]);
   const [goalForm, setGoalForm] = useState<Goal | null>(null);
   const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags"> | null>(null);
   const today = todayISO();
@@ -82,7 +72,6 @@ export default function HomeScreen() {
       },
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
-        syncWidgetFromHomeCache(signedIn);
       },
     });
   }
@@ -136,7 +125,6 @@ export default function HomeScreen() {
                   }
                   queryClient.invalidateQueries({ queryKey: queryKeys.habits });
                   queryClient.invalidateQueries({ queryKey: queryKeys.home });
-                  syncWidgetFromHomeCache(signedIn);
                 },
               });
             }}
@@ -154,7 +142,6 @@ export default function HomeScreen() {
                 },
                 onSuccess: () => {
                   queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                  syncWidgetFromHomeCache(signedIn);
                 },
               });
             }}
@@ -171,7 +158,6 @@ export default function HomeScreen() {
                 },
                 onSuccess: () => {
                   queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                  syncWidgetFromHomeCache(signedIn);
                 },
               });
             }}
@@ -186,7 +172,6 @@ export default function HomeScreen() {
                 },
                 onSuccess: () => {
                   queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                  syncWidgetFromHomeCache(signedIn);
                 },
               });
             }}

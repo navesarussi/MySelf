@@ -28,10 +28,10 @@ struct TaskAdvanceIntent: AppIntent {
       method: "PATCH",
       json: ["status": next]
     )
+    // Clear only the acted-on row. Full KPI/hero math is rewritten by the app
+    // from HomePayload — do not invent decrements here.
     if var snap = WidgetSnapshotStore.load() {
       if snap.urgentTask?.id == taskId { snap.urgentTask = nil }
-      snap.kpis.tasksDueSoon = max(0, snap.kpis.tasksDueSoon - 1)
-      snap.heroCount = max(0, snap.heroCount - 1)
       snap.updatedAt = ISO8601DateFormatter().string(from: Date())
       WidgetSnapshotStore.save(snap)
     }
