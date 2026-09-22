@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
-import { quickCategoryOptions } from "@/lib/finance/suggest-txn";
+import { quickCategoryOptions } from "@/lib/finance/categorize-client";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";

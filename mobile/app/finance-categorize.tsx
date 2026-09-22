@@ -18,7 +18,7 @@ import {
   type UncategorizedTxn,
 } from "../src/components/finance/categorize-save";
 import { TxnDateTimeFields } from "../src/components/finance/txn-datetime-fields";
-import { expenseTypeForCategory } from "@/lib/finance/suggest-txn";
+import { expenseTypeForCategory } from "@/lib/finance/categorize-client";
 
 export default function FinanceCategorizeScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();

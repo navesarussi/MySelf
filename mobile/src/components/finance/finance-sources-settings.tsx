@@ -12,7 +12,7 @@ import {
 import { useColors, tokens } from "../../theme";
 import { Btn, Card, Input, Row, SectionTitle } from "../ui";
 import type { FinanceSource } from "@/lib/finance/external-key";
-import type { FinanceSourceSummary } from "@/lib/finance/sources-status";
+import type { FinanceSourceSummary } from "@/lib/finance/types-client";
 
 const SOURCE_ORDER: FinanceSource[] = ["leumi", "apple_pay", "max", "visa_cal"];
 const INGEST_TOKEN_KEY = "FINANCE_INGEST_TOKEN";
