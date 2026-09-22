@@ -3,7 +3,7 @@
 # Requires ci-write-asc-key.sh to have run first (asc-api-key.p8 on disk).
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 key_path="${root}/asc-api-key.p8"
 
 if [[ ! -f "$key_path" ]]; then
