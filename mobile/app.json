@@ -11,6 +11,7 @@
     "backgroundColor": "#0b0c10",
     "ios": {
       "supportsTablet": true,
+      "appleTeamId": "HVW3H3DLRB",
       "bundleIdentifier": "com.navesarussi.myself",
       "infoPlist": {
         "CFBundleDevelopmentRegion": "he",
