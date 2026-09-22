@@ -1,31 +1,18 @@
 import { getSupabase } from "@/lib/supabase";
+import { claimAgentMessage } from "@/lib/agent/whatsapp-claim";
 import { shouldSend, recordSend } from "@/lib/push/should-send";
 import type { MotivationKind } from "@/lib/agent/types";
 
 export type InboundClaimResult = "claimed" | "duplicate" | "error";
 
-/** Claim a WhatsApp inbound message id before processing (select + unique index). */
+/** Claim a WhatsApp inbound message id before processing. */
 export async function claimWhatsAppInbound(messageId: string): Promise<InboundClaimResult> {
-  const sb = getSupabase();
-  const { data: existing } = await sb
-    .from("agent_messages")
-    .select("id")
-    .eq("external_id", messageId)
-    .eq("direction", "inbound")
-    .eq("channel", "whatsapp")
-    .maybeSingle();
-  if (existing) return "duplicate";
-
-  const { error } = await sb.from("agent_messages").insert({
+  return claimAgentMessage({
+    externalId: messageId,
     direction: "inbound",
-    channel: "whatsapp",
-    content: "[processing]",
-    external_id: messageId,
+    placeholder: "[processing]",
+    logTag: "whatsapp-dedup",
   });
-  if (!error) return "claimed";
-  if (error.code === "23505") return "duplicate";
-  console.error("[whatsapp-dedup] claim_failed", error.message);
-  return "error";
 }
 
 export async function finalizeWhatsAppInbound(messageId: string, content: string): Promise<void> {

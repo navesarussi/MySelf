@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { claimAgentMessage } from "@/lib/agent/whatsapp-claim";
 import { sendWhatsAppText } from "@/lib/whatsapp/client";
 
 const ERROR_HE: Record<string, string> = {
@@ -21,27 +22,12 @@ export function userFacingAgentError(code: string): string {
 export async function claimWhatsAppOutbound(
   inboundId: string
 ): Promise<"claimed" | "duplicate" | "error"> {
-  const sb = getSupabase();
-  const ref = outboundRef(inboundId);
-  const { data: existing } = await sb
-    .from("agent_messages")
-    .select("id")
-    .eq("external_id", ref)
-    .eq("direction", "outbound")
-    .eq("channel", "whatsapp")
-    .maybeSingle();
-  if (existing) return "duplicate";
-
-  const { error } = await sb.from("agent_messages").insert({
+  return claimAgentMessage({
+    externalId: outboundRef(inboundId),
     direction: "outbound",
-    channel: "whatsapp",
-    content: "[sending]",
-    external_id: ref,
+    placeholder: "[sending]",
+    logTag: "whatsapp-outbound",
   });
-  if (!error) return "claimed";
-  if (error.code === "23505") return "duplicate";
-  console.error("[whatsapp-outbound] claim_failed", error.message);
-  return "error";
 }
 
 export async function recordWhatsAppOutbound(
