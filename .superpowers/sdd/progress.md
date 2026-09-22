@@ -1,11 +1,8 @@
-# SDD Progress — whatsapp-agent-reliability
+# SDD Progress
 
-Task 1: complete — outbound dedup schema + helpers
-Task 2: complete — async webhook via after()
-Task 3: complete — reply sanitization
-Task 4: complete — voice transcription hardening
-Task 5: complete — task urgency engine
-Task 6: complete — bulk relationships + habits tools
-Task 7: complete — agent performance fast path
-Task 8: complete — health cron
-Task 9: complete — SRS updates
+## whatsapp-agent-reliability
+Task 1–9: complete (merged separately)
+
+## iPhone Home Widget
+Plan: docs/superpowers/plans/2026-09-22-iphone-home-widget.md
+Tasks 1–8: complete; production polish sync + Intent honesty on merge.

@@ -6,6 +6,7 @@ import {
   bootstrapFinanceIngestKeychain,
   syncFinanceIngestSessionToken,
 } from "./native/finance-ingest-keychain";
+import { syncWidgetSnapshot } from "./widget/sync-widget-snapshot";
 
 /** Session = baked-in production API + session token in SecureStore.
  *  After first successful sign-in the device stays logged in until logout. */
@@ -99,11 +100,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         setToken(newToken);
         await storeSet(TOKEN_KEY, newToken);
         await syncFinanceIngestSessionToken(newToken);
+        // Keychain is ready for App Intents; widget UI refreshes via home-cache sync.
       },
       signOut: async () => {
         setToken(null);
         await storeSet(TOKEN_KEY, null);
         await syncFinanceIngestSessionToken(null);
+        void syncWidgetSnapshot({ signedIn: false, home: null }).catch(() => {});
         if (Platform.OS === "web") {
           try {
             await fetch(`${API_URL}/api/logout`, { method: "POST", credentials: "include" });

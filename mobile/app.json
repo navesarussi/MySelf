@@ -2,7 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "1.26.14",
+    "version": "1.27.0",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -11,6 +11,7 @@
     "backgroundColor": "#0b0c10",
     "ios": {
       "supportsTablet": true,
+      "appleTeamId": "HVW3H3DLRB",
       "bundleIdentifier": "com.navesarussi.myself",
       "infoPlist": {
         "CFBundleDevelopmentRegion": "he",
@@ -36,6 +37,7 @@
       "favicon": "./assets/icon.png"
     },
     "plugins": [
+      "./plugins/with-home-widget",
       "./plugins/with-apple-pay-intent",
       "expo-router",
       "expo-secure-store",
@@ -65,7 +67,8 @@
           "sounds": [],
           "enableBackgroundRemoteNotifications": true
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": false

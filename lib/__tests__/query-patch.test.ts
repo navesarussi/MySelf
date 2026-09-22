@@ -57,6 +57,7 @@ describe("query-patch helpers", () => {
       doneTasksCount: 0,
       avgTaskCloseDays: null,
       financeUncategorizedCount: 0,
+      urgentFinance: null,
       finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
       trading: { phase: "PAPER", equity: 100000, starting_equity: 100000, kill_switch_active: false },
     };
@@ -87,6 +88,7 @@ describe("query-patch helpers", () => {
       doneTasksCount: 0,
       avgTaskCloseDays: null,
       financeUncategorizedCount: 0,
+      urgentFinance: null,
       finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
       trading: { phase: "PAPER", equity: 100000, starting_equity: 100000, kill_switch_active: false },
     };
@@ -116,6 +118,7 @@ describe("query-patch helpers", () => {
       doneTasksCount: 0,
       avgTaskCloseDays: null,
       financeUncategorizedCount: 0,
+      urgentFinance: null,
       finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
       trading: { phase: "PAPER", equity: 100000, starting_equity: 100000, kill_switch_active: false },
     };
@@ -144,6 +147,7 @@ describe("query-patch helpers", () => {
       doneTasksCount: 0,
       avgTaskCloseDays: null,
       financeUncategorizedCount: 0,
+      urgentFinance: null,
       finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
       trading: { phase: "PAPER", equity: 100000, starting_equity: 100000, kill_switch_active: false },
     };

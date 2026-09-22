@@ -309,6 +309,21 @@ Finance history screen (`/finance-history`) accepts a custom month count (1–24
 ### FR-AGENT-02
 In-app agent chat accepts text and up to 3 image attachments; vision model extracts wealth/finance data and persists via agent tools (`upsert_wealth_item`, `import_wealth_text`).
 
+### FR-WIDGET-01
+iPhone home screen supports a systemLarge WidgetKit widget showing home urgency hero count and short KPIs (habits pending, tasks due soon, finance uncategorized, next event).
+
+### FR-WIDGET-02
+Widget data comes from an App Group JSON snapshot written by the Expo app after home load/mutations; ranking stays in JS using the same helpers as Home.
+
+### FR-WIDGET-03
+V1 interactions: habit check-in and task status advance via App Intents against existing APIs; finance categorize opens the app via `myself://finance-categorize?id=`.
+
+### FR-WIDGET-04
+Signed-out and empty-urgency states are explicit; failed Intents do not optimistically clear snapshot rows.
+
+### FR-WIDGET-05
+Android widgets, other sizes, Lock Screen/StandBy, and in-widget finance categorization are out of scope for V1.
+
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
 

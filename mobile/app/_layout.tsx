@@ -4,7 +4,7 @@
  */
 import "react-native-gesture-handler";
 import React, { useEffect } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -13,7 +13,10 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { useFonts } from "expo-font";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
-import { SessionProvider } from "../src/session";
+import { SessionProvider, useSession } from "../src/session";
+import type { HomePayload } from "../src/api/resources";
+import { queryKeys } from "../src/query";
+import { syncWidgetSnapshot, useWidgetHomeQuerySync } from "../src/widget/sync-widget-snapshot";
 import { setAppVersion } from "../src/api/client";
 import { getAppVersion } from "../src/version";
 import { ThemeCanvas, ThemeProvider, useColors, useTheme } from "../src/theme";
@@ -32,11 +35,32 @@ SplashScreen.preventAutoHideAsync();
 // Set once at module load, not per-request: the version is fixed for the process.
 setAppVersion(getAppVersion());
 
+function useWidgetSnapshotLifecycle() {
+  const { token } = useSession();
+  const signedIn = !!token;
+  useWidgetHomeQuerySync(signedIn);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active" && signedIn) {
+        // Refresh home after widget App Intents so KPIs rewrite from the server.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        return;
+      }
+      if (state !== "background" && state !== "inactive") return;
+      const home = queryClient.getQueryData<HomePayload>(queryKeys.home) ?? null;
+      void syncWidgetSnapshot({ signedIn, home }).catch(() => {});
+    });
+    return () => sub.remove();
+  }, [signedIn]);
+}
+
 function AppStack() {
   const c = useColors();
   const { resolved } = useTheme();
   const { t } = useI18n();
   usePushNotifications();
+  useWidgetSnapshotLifecycle();
 
   return (
     <>
