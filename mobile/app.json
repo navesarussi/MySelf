@@ -36,6 +36,7 @@
       "favicon": "./assets/icon.png"
     },
     "plugins": [
+      "./plugins/with-home-widget",
       "./plugins/with-apple-pay-intent",
       "expo-router",
       "expo-secure-store",
@@ -65,7 +66,8 @@
           "sounds": [],
           "enableBackgroundRemoteNotifications": true
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": false
