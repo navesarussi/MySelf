@@ -59,7 +59,7 @@ describe("buildWidgetSnapshot", () => {
             source: "manual",
             external_id: null,
             external_list_id: null,
-            external_meta: null,
+            external_meta: {},
             synced_at: null,
             created_at: "2026-09-01T00:00:00Z",
             updated_at: "2026-09-01T00:00:00Z",

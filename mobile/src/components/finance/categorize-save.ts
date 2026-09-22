@@ -2,6 +2,7 @@ import type { HomePayload } from "../../api/resources";
 import { api } from "../../api/resources";
 import type { ApiConfig } from "../../api/client";
 import { queryClient, queryKeys, decFinanceUncategorizedInHome } from "../../query";
+import { syncWidgetFromHomeCache } from "../../widget/sync-widget-snapshot";
 import type { ExpenseTypeValue } from "./categorize-controls";
 import type { FinanceTransaction } from "@/lib/finance/types";
 import { expenseTypeForCategory } from "@/lib/finance/suggest-txn";
@@ -51,6 +52,7 @@ export async function saveCategorization(
     queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.home }),
   ]);
+  syncWidgetFromHomeCache(true);
 }
 
 export function nextUncategorizedId(currentId: string): string | null {
