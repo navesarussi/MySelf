@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import type { WealthCategory, WealthItem, WealthSource, WealthSummary } from "@/lib/finance/wealth-types";
 import { round2 } from "@/lib/finance/money";
+import { matchExistingWealthItem } from "@/lib/finance/wealth-match";
 
 const CATEGORIES: WealthCategory[] = ["pension", "insurance", "investment", "property", "other"];
 
@@ -95,20 +96,43 @@ export async function deleteWealthItem(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-export async function bulkUpsertWealthItems(
-  items: Array<{
-    category: WealthCategory;
-    name: string;
-    provider?: string | null;
-    balance: number;
-    notes?: string | null;
-    source: WealthSource;
-    as_of_date?: string | null;
-  }>
-): Promise<WealthItem[]> {
+export type WealthImportDraft = {
+  category: WealthCategory;
+  name: string;
+  provider?: string | null;
+  balance: number;
+  notes?: string | null;
+  source: WealthSource;
+  as_of_date?: string | null;
+};
+
+export type WealthImportResult = { items: WealthItem[]; created: number; updated: number };
+
+/**
+ * Import a wealth snapshot (pasted Cover / הר הביטוח text, a screenshot the
+ * agent read).
+ *
+ * This used to call `upsertWealthItem` without an id, which always inserts. The
+ * parser deduplicates within one paste, but nothing deduplicated across pastes
+ * and the table has no unique constraint — so importing the same snapshot
+ * twice, or the agent retrying after a timeout, silently doubled the reported
+ * net worth. A snapshot re-import refreshes balances; only genuinely new lines
+ * are created.
+ */
+export async function importWealthItems(items: WealthImportDraft[]): Promise<WealthImportResult> {
+  const existing = await listWealthItems();
   const results: WealthItem[] = [];
+  let created = 0;
+  let updated = 0;
+  // Sequential so two lines of the same paste that resolve to one row (the
+  // parser can emit both "קרן - מנורה" and "קרן — מנורה") update it in order
+  // rather than racing to create two.
   for (const item of items) {
-    results.push(await upsertWealthItem(item));
+    const match = matchExistingWealthItem([...existing, ...results], item);
+    const saved = await upsertWealthItem(match ? { ...item, id: match.id } : item);
+    if (match) updated += 1;
+    else created += 1;
+    results.push(saved);
   }
-  return results;
+  return { items: results, created, updated };
 }

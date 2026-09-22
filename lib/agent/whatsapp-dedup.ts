@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { claimAgentMessage } from "@/lib/agent/whatsapp-claim";
-import { shouldSend, recordSend } from "@/lib/push/should-send";
+import { shouldSend } from "@/lib/push/should-send";
+import { claimSend, releaseSend, sendLogClient } from "@/lib/push/claim";
 import type { MotivationKind } from "@/lib/agent/types";
 
 export type InboundClaimResult = "claimed" | "duplicate" | "error";
@@ -30,26 +31,52 @@ const DIG_REF: Record<MotivationKind, string> = {
   evening: "dig:evening",
 };
 
-/** One proactive dig per kind per Jerusalem day. */
-export async function shouldSendMotivationDig(
+/**
+ * One proactive dig per kind per Jerusalem day.
+ *
+ * The slot is claimed *before* the Gemini call, not after the WhatsApp send.
+ * Reading first and writing last left the whole generate-and-send in between,
+ * so two overlapping cron invocations both generated a dig — paying twice for
+ * the model — and both sent it.
+ */
+export async function claimMotivationDig(
   kind: MotivationKind,
   now = new Date()
 ): Promise<{ ok: true; dayKey: string } | { ok: false; reason: string }> {
   const gate = await shouldSend("agent", DIG_REF[kind], now, { bypassQuiet: true });
   if (!gate.ok) return { ok: false, reason: gate.reason };
+  const claimed = await claimSend(sendLogClient(), {
+    type: "agent",
+    refId: DIG_REF[kind],
+    dayKey: gate.dayKey,
+    title: `WhatsApp ${kind} dig`,
+    body: "",
+  });
+  if (!claimed) return { ok: false, reason: "duplicate" };
   return { ok: true, dayKey: gate.dayKey };
 }
 
+/** Nothing was sent — free the slot so the next cron slot can try again. */
+export async function releaseMotivationDig(kind: MotivationKind, dayKey: string): Promise<void> {
+  await releaseSend(sendLogClient(), {
+    type: "agent",
+    refId: DIG_REF[kind],
+    dayKey,
+    title: "",
+    body: "",
+  }).catch(() => undefined);
+}
+
+/** Record what was actually sent, over the placeholder written by the claim. */
 export async function recordMotivationDig(
   kind: MotivationKind,
   dayKey: string,
   text: string
 ): Promise<void> {
-  await recordSend({
-    type: "agent",
-    refId: DIG_REF[kind],
-    dayKey,
-    title: `WhatsApp ${kind} dig`,
-    body: text.slice(0, 500),
-  });
+  await getSupabase()
+    .from("notification_log")
+    .update({ body: text.slice(0, 500) })
+    .eq("notif_type", "agent")
+    .eq("ref_id", DIG_REF[kind])
+    .eq("day_key", dayKey);
 }

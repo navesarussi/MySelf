@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, readJson, unauthorized } from "@/lib/api/auth";
 import { parseWealthImportText } from "@/lib/finance/har-bituach-parse";
-import { bulkUpsertWealthItems, getWealthSummary, upsertWealthItem } from "@/lib/finance/wealth-store";
+import { getWealthSummary, importWealthItems, upsertWealthItem } from "@/lib/finance/wealth-store";
 import type { WealthCategory, WealthSource } from "@/lib/finance/wealth-types";
 
 const CATEGORIES = new Set<WealthCategory>(["pension", "insurance", "investment", "property", "other"]);
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const parsed = parseWealthImportText(body.import_text);
     if (parsed.length === 0) return badRequest("no_items_parsed");
     try {
-      const items = await bulkUpsertWealthItems(
+      const { items, created, updated } = await importWealthItems(
         parsed.map((p) => ({
           ...p,
           source,
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         }))
       );
       const summary = await getWealthSummary();
-      return NextResponse.json({ imported: items.length, summary });
+      return NextResponse.json({ imported: items.length, created, updated, summary });
     } catch {
       return dbError();
     }

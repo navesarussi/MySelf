@@ -1,4 +1,5 @@
-import { recordSend, shouldSend } from "@/lib/push/should-send";
+import { claimSend, releaseSend, sendLogClient } from "@/lib/push/claim";
+import { shouldSend } from "@/lib/push/should-send";
 import { sendPush } from "@/lib/push/send";
 import type { NotificationType, PushPayload, PushSendResult } from "@/lib/push/types";
 
@@ -16,15 +17,17 @@ export async function notifyUser(
   const gate = await shouldSend(type, refId, new Date(), opts);
   if (!gate.ok) return { ok: false, reason: gate.reason };
 
-  const result = await sendPush(payload);
-  if (result.sent > 0) {
-    await recordSend({
-      type,
-      refId,
-      dayKey: gate.dayKey,
-      title: payload.title,
-      body: payload.body,
-    });
-  }
+  // Claim the day's slot before sending, not after. Reading then sending then
+  // writing let two overlapping runs both read "not sent yet" and both push.
+  const entry = { type, refId, dayKey: gate.dayKey, title: payload.title, body: payload.body };
+  const client = sendLogClient();
+  if (!(await claimSend(client, entry))) return { ok: false, reason: "duplicate" };
+
+  const result = await sendPush(payload).catch(
+    (): PushSendResult => ({ sent: 0, failed: 0, removedTokens: [] })
+  );
+  // Nothing was delivered, so the slot was not really used — free it or the
+  // notification is lost for the rest of the day.
+  if (result.sent === 0) await releaseSend(client, entry).catch(() => undefined);
   return { ok: true, result };
 }
