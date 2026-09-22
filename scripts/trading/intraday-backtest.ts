@@ -12,6 +12,7 @@ import { computeStats } from "../../lib/trading/metrics";
 import { newPendingPosition, realizedR, stepPosition } from "../../lib/trading/position";
 import { closedIdx } from "../../lib/trading/strategy/series";
 import { INTRADAY_PARAMS, M15, M5, buildIntradayFrames, confirmOn5m, detectIntradaySetup, type IntradayCandidate } from "../../lib/trading/strategy/intraday";
+import { timeStopReason } from "../../lib/trading/trend-ride";
 import type { Bar } from "../../lib/trading/types";
 
 const arg = (n: string) => {
@@ -62,7 +63,7 @@ async function main() {
         const bar = f.s5.bars[j];
         const i15 = closedIdx(f.s15, bar.t);
         const timeUp = pos.state !== "PENDING" && pos.bars_held + 1 >= p.time_stop_bars_5m;
-        stepPosition(pos, bar, { atr: i15 >= 0 ? f.s15.atr[i15] : NaN, force_exit_reason: timeUp ? "TIME_STOP" : undefined });
+        stepPosition(pos, bar, { atr: i15 >= 0 ? f.s15.atr[i15] : NaN, let_winners_run: true, force_exit_reason: timeStopReason(pos, timeUp) });
         if (pos.state === "CLOSED" || pos.state === "CANCELLED") break;
       }
       busyUntil = (f.s5.bars[Math.min(j, f.s5.bars.length - 1)]?.t ?? now) + M5;

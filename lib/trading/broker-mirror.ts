@@ -1,4 +1,6 @@
 import { alpaca, sellableQty } from "./broker/alpaca";
+import { flattenAtBroker } from "./broker/flatten";
+import { revertFailedBrokerClose } from "./broker/revert-close";
 import { bracketLegs, brokerExit, brokerSupportsExitPlan, pendingDecision, protectiveAdjustments } from "./broker/sync";
 import { applyExternalExit, applyExternalFill, type SimPosition } from "./position";
 import { logEvent, type TradeRow } from "./store";
@@ -106,7 +108,8 @@ export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: Tr
   }
   const stopId = (trade.broker_stop_order_id as string | null) ?? null;
   const targetId = (trade.broker_target_order_id as string | null) ?? null;
-  const [stopOrder, targetOrder] = await Promise.all([stopId ? alpaca.getOrder(stopId) : null, targetId ? alpaca.getOrder(targetId) : null]);
+  const [stopFetched, targetOrder] = await Promise.all([stopId ? alpaca.getOrder(stopId) : null, targetId ? alpaca.getOrder(targetId) : null]);
+  let stopOrder = stopFetched;
   const exit = brokerExit({ stop: stopOrder, target: targetOrder, positionQty: null });
   const at = now;
 
@@ -118,20 +121,41 @@ export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: Tr
   }
 
   if (p.state === "CLOSED") {
-    // Strategy exit (stop/trail/target/regime/earnings) the broker hasn't executed — flatten at market.
-    for (const id of [stopId, targetId]) if (id) await alpaca.cancelOrder(id);
-    const closeOrder = await alpaca.closePosition(trade.symbol, trade.asset_class).catch((err) => {
-      events.push({ type: "CANCELLED", reason: `BROKER_CLOSE_FAILED:${err instanceof Error ? err.message.slice(0, 80) : "?"}`, at });
-      return null;
-    });
-    if (closeOrder) {
-      await new Promise((r) => setTimeout(r, 1500));
-      const filled = await alpaca.getOrder(closeOrder.id).catch(() => null);
-      const px = Number(filled?.filled_avg_price);
-      if (Number.isFinite(px) && px > 0) repriceExit(p, px);
+    // Strategy exit the broker hasn't executed — flatten, and only keep the
+    // journal closed if the broker is actually flat.
+    try {
+      const px = await flattenAtBroker(trade);
+      if (px !== null) repriceExit(p, px);
       patch.broker_status = `closed_${(p.exit_reason ?? "manual").toLowerCase()}`;
+    } catch (err) {
+      revertFailedBrokerClose(p);
+      const detail = err instanceof Error ? err.message.slice(0, 80) : "?";
+      events.push({ type: "CANCELLED", reason: `BROKER_CLOSE_FAILED:${detail}`, at });
+      patch.broker_status = "close_failed";
+      patch.realized_r = null;
+      patch.realized_pnl = null;
+      await logEvent({
+        kind: "BROKER_DESYNC",
+        symbol: trade.symbol,
+        severity: "critical",
+        message: `${trade.symbol}: סגירה בברוקר נכשלה — העסקה נשארת פתוחה ביומן`,
+        data: { trade_id: trade.id, detail },
+        push: true,
+      });
     }
     return patch;
+  }
+
+  if ((p.state === "OPEN" || p.state === "RISK_FREE") && (!stopOrder || ["canceled", "expired", "rejected", "filled"].includes(stopOrder.status))) {
+    const qty = await sellableQty(trade.symbol, trade.asset_class, p.size);
+    if (qty) {
+      const stop =
+        trade.asset_class === "STOCK"
+          ? await alpaca.placeStockStop({ symbol: trade.symbol, qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` })
+          : await alpaca.placeCryptoStop({ symbol: trade.symbol, qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` });
+      patch.broker_stop_order_id = stop.id;
+      stopOrder = stop;
+    }
   }
 
   const adj = protectiveAdjustments({ assetClass: trade.asset_class, simStop: p.stop_price, simTarget: p.target_price, stop: stopOrder, target: targetOrder });

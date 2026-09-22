@@ -3,13 +3,15 @@ import { D1, createFrameCache, iso, loadAccount, type TickSummary } from "./tick
 import { brokerEquity } from "./account-equity";
 import { createBarCache, fetchEarningsSymbols } from "./market-data";
 import { forceClose, openRiskR, realizedR, type PositionEvent } from "./position";
-import { alpaca, flattenAtBroker, isAlpacaConfigured } from "./broker/alpaca";
+import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
+import { flattenAtBroker } from "./broker/flatten";
 import { advancePositions } from "./advance-positions";
 import { dailyScreen } from "./daily-screen";
 import { learnFromClosedTrades } from "./learn-loop";
 import { scanDailyTrend } from "./scan-daily-trend";
 import { scan } from "./scan-v2";
 import { isIntradayManaged } from "./strategy-versions";
+import { resurrectDesyncedTrades } from "./broker/resurrect";
 import { drawdownFromPeak, shouldTripKillSwitch } from "./risk-envelope";
 import {
   ensureSeeded,
@@ -66,6 +68,13 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
     settings = await getSettings();
   }
 
+  if (settings.phase === "PAPER" && settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured()) {
+    try {
+      await resurrectDesyncedTrades(now);
+    } catch (err) {
+      summary.errors.push(`resurrect: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+    }
+  }
   const openTrades = await getOpenTrades();
   const lastPrices = new Map<string, number>();
   const earningsNext = openTrades.some((t) => t.asset_class === "STOCK") ? await fetchEarningsSymbols(nextTradingDays(isoDateInZone(new Date(now), "America/New_York"), 2)) : new Set<string>();
@@ -103,7 +112,15 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
   if (!settings.kill_switch_active && shouldTripKillSwitch(account.equity, peak)) {
     for (const t of account.open) {
       const p = { ...t.sim_state };
-      const brokerPx = t.broker ? await flattenAtBroker(t).catch(() => null) : null;
+      let brokerPx: number | null = null;
+      if (t.broker) {
+        try {
+          brokerPx = await flattenAtBroker(t);
+        } catch (err) {
+          summary.errors.push(`kill_switch_flatten ${t.symbol}: ${err instanceof Error ? err.message.slice(0, 80) : "?"}`);
+          continue;
+        }
+      }
       const ev: PositionEvent[] = forceClose(p, brokerPx ?? lastPrices.get(t.symbol) ?? p.entry_price ?? p.entry_limit, "KILL_SWITCH", now);
       await updateTrade(t.id, { ...simColumns(p), events: [...(t.events ?? []), ...ev], ...(p.state === "CLOSED" ? { realized_r: realizedR(p), realized_pnl: p.cash_flow } : {}) });
     }

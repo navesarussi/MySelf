@@ -3,6 +3,7 @@ import { compactIntradayBars, rateIntradayTrade, RATER_PROMPT_VERSION, type Rati
 import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
 import { marketClock } from "./broker/alpaca-data";
 import { INTRADAY_STRATEGY_VERSION, isIntradayManaged, loadAccount, mirrorToBroker, persistTrade, resolveBrokerEntry, type Account, type TickSummary } from "./engine";
+import { resurrectDesyncedTrades } from "./broker/resurrect";
 import { loadIntradayFrames, type IntradaySymbol, type LoadedFrames } from "./intraday-data";
 import { getIntradayUniverse, providerSymbolFor, refreshIntradayUniverse, type IntradayUniverseRow } from "./intraday-universe";
 import { applyExternalFill, newPendingPosition, openRiskR, stepPosition, type SimPosition } from "./position";
@@ -12,6 +13,7 @@ import { checkNewEntry, type EnvelopeBlock } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
 import { closedIdx } from "./strategy/series";
 import { INTRADAY_PARAMS, M5, intradayParamsFor, scanIntraday, type IntradayCandidate, type IntradayFeatures, type IntradayFrames } from "./strategy/intraday";
+import { timeStopReason } from "./trend-ride";
 import { getOpenTrades, getSettings, logEvent, simColumns, updateSettings, updateTrade, type TradeRow, type TradingSettings } from "./store";
 import { usSessionMinutes } from "./veto";
 import type { AssetClass, TradePlan } from "./types";
@@ -315,7 +317,7 @@ async function advanceIntraday(trades: TradeRow[], frames: Map<string, LoadedFra
         const timeUp = !isStock && pos.state !== "PENDING" && pos.bars_held + 1 >= p.time_stop_bars_5m;
         // Stocks are day trades: flat before the close (checked on the latest bar only — no look-ahead in history).
         const sessionEnd = isStock && isLast && session.mustFlatten && pos.state !== "PENDING";
-        events.push(...stepPosition(pos, bar, { atr: i15 >= 0 ? f.s15.atr[i15] : NaN, force_exit_reason: timeUp || sessionEnd ? "TIME_STOP" : undefined }));
+        events.push(...stepPosition(pos, bar, { atr: i15 >= 0 ? f.s15.atr[i15] : NaN, let_winners_run: !isStock, force_exit_reason: sessionEnd ? "TIME_STOP" : timeStopReason(pos, timeUp) }));
         if (pos.state === "CLOSED" || pos.state === "CANCELLED") break;
       }
       if (isStock && pos.state === "PENDING" && session.mustFlatten) {
@@ -509,6 +511,13 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
     const universe = await getIntradayUniverse();
     const session = await stockSession(now);
     summary.stocks_open = session.open;
+    if (settings.execution_venue === "ALPACA_PAPER") {
+      try {
+        await resurrectDesyncedTrades(now);
+      } catch (err) {
+        summary.errors.push(`resurrect: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+      }
+    }
     const managed = (await getOpenTrades()).filter((t) => isIntradayManaged(t.strategy_version));
     const frames = await loadIntradayFrames(symbolsToLoad(scannableSymbols(universe, session), managed, session), now, summary.errors);
     summary.symbols = frames.size;

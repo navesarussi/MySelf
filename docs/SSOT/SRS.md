@@ -324,6 +324,12 @@ Signed-out and empty-urgency states are explicit; failed Intents do not optimist
 ### FR-WIDGET-05
 Android widgets, other sizes, Lock Screen/StandBy, and in-widget finance categorization are out of scope for V1.
 
+### FR-TRADING-01
+Paper trading journal and Alpaca paper account stay in sync: a strategy exit is persisted as CLOSED only after the broker is flat. A failed broker flatten leaves the journal open, retries on the next tick, and alerts. Positions the broker still holds after a false journal close are reopened (not flattened) so working trends keep running.
+
+### FR-TRADING-02
+Intraday crypto winners that have earned `trail_after_r` ride the chandelier trail instead of clipping at the original 2R target. TIME_STOP flattens only trades that never made that threshold (chop). Stocks still flatten at the session close.
+
 ### NFR-01
 Data lives in Supabase schema `myself`, isolated from other apps on the shared project.
 

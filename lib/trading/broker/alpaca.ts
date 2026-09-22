@@ -60,6 +60,17 @@ export function alpacaPositionSymbol(symbol: string, assetClass: AssetClass) {
   return assetClass === "STOCK" ? symbol : `${symbol}USD`;
 }
 
+/** Alpaca crypto positions come back as `AVAXUSD`; stocks are already our symbol. */
+export function fromAlpacaPositionSymbol(symbol: string) {
+  return symbol.length > 3 && symbol.endsWith("USD") && !symbol.includes("/") ? symbol.slice(0, -3) : symbol.split("/")[0];
+}
+
+/** 403 insufficient qty/balance — a working sell order is still reserving the size. */
+export function isAlpacaInsufficientQty(err: unknown) {
+  const m = err instanceof Error ? err.message : String(err);
+  return /alpaca_403/.test(m) && /insufficient|available/i.test(m);
+}
+
 /** Tick-size rounding Alpaca accepts: stocks ≥ $1 → cents; crypto → magnitude-based. */
 export function priceDecimals(price: number, assetClass: AssetClass) {
   if (assetClass === "STOCK") return price >= 1 ? 2 : 4;
@@ -179,6 +190,21 @@ export const alpaca = {
     }
   },
 
+  positions: () => call<AlpacaPosition[]>("GET", "/v2/positions"),
+
+  openOrders: (symbol: string, assetClass: AssetClass) =>
+    call<AlpacaOrder[]>("GET", `/v2/orders?status=open&symbols=${encodeURIComponent(alpacaSymbol(symbol, assetClass))}&nested=true`),
+
+  placeMarketSell: (input: { symbol: string; assetClass: AssetClass; qty: number; clientId: string }) =>
+    call<AlpacaOrder>("POST", "/v2/orders", {
+      symbol: alpacaSymbol(input.symbol, input.assetClass),
+      qty: String(roundQty(input.qty, input.assetClass)),
+      side: "sell",
+      type: "market",
+      time_in_force: input.assetClass === "STOCK" ? "day" : "gtc",
+      client_order_id: input.clientId,
+    }),
+
   /** Market-close the whole position. Cancel the protective orders first — they reserve the quantity. */
   closePosition: (symbol: string, assetClass: AssetClass) =>
     call<AlpacaOrder>("DELETE", `/v2/positions/${encodeURIComponent(alpacaPositionSymbol(symbol, assetClass))}`),
@@ -215,19 +241,4 @@ export async function sellableQty(
 ): Promise<number | null> {
   const held = await alpaca.position(symbol, assetClass);
   return clampSellQty(intended, Number(held?.qty), assetClass);
-}
-
-/**
- * Flatten one strategy position at the broker: cancel its entry/protective orders, market-close what is
- * held, and return the close fill price when available (null = nothing held / price not reported yet).
- */
-export async function flattenAtBroker(t: { symbol: string; asset_class: AssetClass; broker_entry_order_id: string | null; broker_stop_order_id: string | null; broker_target_order_id: string | null }): Promise<number | null> {
-  for (const id of [t.broker_entry_order_id, t.broker_stop_order_id, t.broker_target_order_id]) if (id) await alpaca.cancelOrder(id);
-  const held = await alpaca.position(t.symbol, t.asset_class);
-  if (!held || Number(held.qty) <= 0) return null;
-  const order = await alpaca.closePosition(t.symbol, t.asset_class);
-  await new Promise((r) => setTimeout(r, 1500));
-  const filled = await alpaca.getOrder(order.id).catch(() => null);
-  const px = Number(filled?.filled_avg_price);
-  return Number.isFinite(px) && px > 0 ? px : Number(held.current_price) || null;
 }

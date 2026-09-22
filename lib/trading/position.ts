@@ -1,4 +1,5 @@
 import { EXECUTION_RULES, RISK_ENVELOPE } from "./config";
+import { isTrendRide } from "./trend-ride";
 import type { AssetClass, Bar, ExitPlan, ExitReason, PositionState } from "./types";
 
 /**
@@ -62,6 +63,8 @@ export type StepContext = {
   regime_flip?: boolean;
   /** Forced exit at close (earnings ahead for stocks). */
   force_exit_reason?: ExitReason;
+  /** Intraday: once trail_after_r is earned, skip the original target and ride the trail. */
+  let_winners_run?: boolean;
   /** Decided at the PREVIOUS bar close (no look-ahead). Target may only rise; stop only ratchets up. */
   raise_target_to?: number;
   raise_stop_to?: number;
@@ -348,7 +351,7 @@ function stepStructural(p: SimPosition, bar: Bar, ctx: StepContext, events: Posi
     applyCloseRules(p, bar, ctx, events, slip);
     return;
   }
-  if (bar.h >= p.target_price) {
+  if (bar.h >= p.target_price && !(ctx.let_winners_run && isTrendRide(p))) {
     close(p, Math.max(bar.o, p.target_price), "TARGET", bar.t, events);
     return;
   }

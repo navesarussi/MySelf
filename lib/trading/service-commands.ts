@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
-import { flattenAtBroker } from "./broker/alpaca";
+import { flattenAtBroker } from "./broker/flatten";
 import { forceClose, realizedR } from "./position";
 import { applyRiskScaleRequest } from "./risk-envelope";
 import { getOpenTrades, getSettings, getUniverse, isAccountTrade, logEvent, setPlaybookStatus, simColumns, updateSettings, updateTrade, type TradeRow } from "./store";
