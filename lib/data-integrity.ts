@@ -5,7 +5,15 @@ export function normText(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
 
-/** Stable fingerprint for a goal row — mirrors the DB unique index. */
+/**
+ * Stable fingerprint for a goal row.
+ *
+ * There is no matching unique index in the database — `goals` has only its
+ * primary key — so this is the only thing collapsing duplicates, on the read
+ * path. `status` is part of the fingerprint deliberately: a 'done' row and an
+ * 'active' row with the same title are two different states of the goal, and
+ * picking one would be guessing at which the user meant.
+ */
 export function goalFingerprint(goal: Pick<Goal, "title" | "category" | "horizon" | "first_step" | "definition_of_done" | "status">): string {
   return [
     normText(goal.title),

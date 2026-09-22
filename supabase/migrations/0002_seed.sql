@@ -1,6 +1,13 @@
 -- Seed data derived from "מרכז השליטה" v3.0 (08/07/2026).
 -- Dates for past events are best-effort approximations from the doc's relative wording — edit freely in the UI.
--- Idempotent: scripts/db-apply.sh re-runs every migration file; skip when the v3.0 marker exists.
+-- Idempotent: db-apply re-runs every migration file, so this whole block is
+-- skipped once the seed has been applied.
+--
+-- The marker used to be a single timeline_events row. That row is editable and
+-- deletable from the UI like any other event, so losing it re-armed the seed and
+-- a later run inserted a second copy of everything — which is how three goals
+-- ended up with both a 'done' row and a newer 'active' row. The check now also
+-- accepts seeded goals or habits, so no single user action can re-arm it.
 
 do $seed$
 begin
@@ -8,6 +15,10 @@ begin
     select 1 from myself.timeline_events
     where event_date = '2026-07-08' and title = 'מרכז השליטה - גרסה 3.0'
     limit 1
+  ) or exists (
+    select 1 from myself.goals where title = 'צניחה חופשית' limit 1
+  ) or exists (
+    select 1 from myself.habits where name = 'גמילה מסיגריות' limit 1
   ) then
     raise notice 'Seed v3.0 already applied — skipping';
   else
