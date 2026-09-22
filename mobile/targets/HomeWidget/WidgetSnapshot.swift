@@ -44,25 +44,18 @@ struct WidgetSnapshot: Codable {
 }
 
 enum WidgetSnapshotStore {
-  static let appGroupId = "group.com.navesarussi.myself"
-  static let fileName = "widget-snapshot.json"
-
   static func load() -> WidgetSnapshot? {
-    guard let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) else {
-      return nil
-    }
-    let url = dir.appendingPathComponent(fileName)
-    guard let data = try? Data(contentsOf: url) else { return nil }
+    guard let json = WidgetKeychain.widgetSnapshotJson(),
+          let data = json.data(using: .utf8)
+    else { return nil }
     return try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
   }
 
   static func save(_ snap: WidgetSnapshot) {
-    guard let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) else {
-      return
-    }
-    let url = dir.appendingPathComponent(fileName)
-    guard let data = try? JSONEncoder().encode(snap) else { return }
-    try? data.write(to: url, options: .atomic)
+    guard let data = try? JSONEncoder().encode(snap),
+          let json = String(data: data, encoding: .utf8)
+    else { return }
+    _ = WidgetKeychain.setWidgetSnapshotJson(json)
   }
 }
 

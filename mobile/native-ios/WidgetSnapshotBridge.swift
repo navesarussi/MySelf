@@ -4,22 +4,16 @@ import React
 
 @objc(WidgetSnapshotBridge)
 class WidgetSnapshotBridge: NSObject {
-  static let appGroupId = "group.com.navesarussi.myself"
-  static let fileName = "widget-snapshot.json"
-
   @objc static func requiresMainQueueSetup() -> Bool { false }
 
   @objc func writeSnapshot(_ json: String, resolver: RCTPromiseResolveBlock, rejecter: RCTPromiseRejectBlock) {
-    guard let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupId) else {
-      rejecter("no_app_group", "App Group container missing", nil)
-      return
-    }
-    let url = dir.appendingPathComponent(Self.fileName)
-    do {
-      try json.data(using: .utf8)?.write(to: url, options: .atomic)
+    // Shared Keychain (same access group as session token) — works without App Groups
+    // provisioning, which ASC API cannot fully configure for local signing.
+    let ok = FinanceIngestKeychain.set(json, forKey: FinanceIngestKeychain.widgetSnapshotKey)
+    if ok {
       resolver(nil)
-    } catch {
-      rejecter("write_failed", error.localizedDescription, error)
+    } else {
+      rejecter("write_failed", "Failed to write widget snapshot to Keychain", nil)
     }
   }
 

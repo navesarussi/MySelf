@@ -2,7 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "1.27.3",
+    "version": "1.27.6",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -21,7 +21,8 @@
         "UIBackgroundModes": [
           "remote-notification"
         ]
-      }
+      },
+      "buildNumber": "100"
     },
     "android": {
       "package": "com.navesarussi.myself",

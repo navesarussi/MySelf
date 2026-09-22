@@ -7,6 +7,7 @@ enum FinanceIngestKeychain {
   static let accessGroup = "HVW3H3DLRB.com.navesarussi.myself"
   static let ingestTokenKey = "FINANCE_INGEST_TOKEN"
   static let sessionTokenKey = "myself.session_token"
+  static let widgetSnapshotKey = "myself.widget_snapshot"
 
   @discardableResult
   static func set(_ value: String?, forKey key: String) -> Bool {
