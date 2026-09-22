@@ -4,7 +4,6 @@ import { getAgentSettings, isAuthorizedWhatsAppSender } from "@/lib/agent/settin
 import { processWhatsAppInbound } from "@/lib/agent/whatsapp-process";
 import { claimWhatsAppInbound } from "@/lib/agent/whatsapp-dedup";
 import { sendWhatsAppReplyOnce, userFacingAgentError } from "@/lib/agent/whatsapp-outbound";
-import { scheduleAgentWhatsAppDedupSchema } from "@/lib/db-admin";
 import { parseInboundWhatsAppMessage, verifyWhatsAppWebhook } from "@/lib/whatsapp/client";
 
 export const maxDuration = 60;
@@ -23,8 +22,6 @@ export async function GET(req: NextRequest) {
 
 /** Inbound WhatsApp messages (POST) — text + voice notes. */
 export async function POST(req: NextRequest) {
-  scheduleAgentWhatsAppDedupSchema();
-
   let body: unknown;
   try {
     body = await req.json();

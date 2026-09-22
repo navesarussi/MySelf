@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureAgentWhatsAppDedupSchema } from "@/lib/db-admin";
 import { runDataIntegrityMaintenance } from "@/lib/db-maintenance";
 
 function isCronRequest(req: NextRequest) {
@@ -15,9 +14,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const whatsappDedup = await ensureAgentWhatsAppDedupSchema();
     const result = await runDataIntegrityMaintenance();
-    return NextResponse.json({ ok: true, whatsapp_dedup: whatsappDedup, ...result });
+    return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : "maintenance_failed";
     console.error("[data-integrity]", message);
