@@ -116,6 +116,25 @@ export default function TradingScreen() {
         />
       ))}
 
+      {/* close_all only touches account trades, and the dashboard used to drop
+          everything else — so leftover SHADOW rows from an earlier phase stayed
+          open with no way to reach them from the app. */}
+      {data.other_positions?.length ? (
+        <>
+          <SectionTitle>{t("trading.otherPositions")}</SectionTitle>
+          <TradingText muted size={tokens.textXs}>
+            {t("trading.otherPositionsHint")}
+          </TradingText>
+          {data.other_positions.map((p) => (
+            <PositionCard
+              key={p.id}
+              p={p}
+              onClose={() => confirmDelete(t("trading.closeConfirm", { symbol: p.symbol }), () => void control({ action: "close_position", trade_id: p.id, confirm: true }), t("trading.close"), t("common.cancel"))}
+            />
+          ))}
+        </>
+      ) : null}
+
       {equityValues.length > 1 ? (
         <Card>
           <SeriesChart values={equityValues} title={t("trading.equityCurve")} format={(v) => fmtUsd(v)} />

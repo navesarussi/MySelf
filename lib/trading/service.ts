@@ -127,6 +127,8 @@ export type DashboardPayload = {
     kill_switch_distance_pct: number;
   };
   positions: LivePosition[];
+  /** Open but outside the account for this phase (e.g. leftover SHADOW rows). */
+  other_positions: LivePosition[];
   shadow_open: number;
   triggers: TriggerRow[];
   events: TradingEvent[];
@@ -248,7 +250,13 @@ export async function getDashboard(): Promise<DashboardPayload> {
     getActiveV2Params(),
   ]);
   const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
-  const prices = await lastPrices(accountOpen, universe);
+  // Open trades that are not part of the account in this phase — typically
+  // SHADOW rows left over from an earlier phase. They do not count toward
+  // equity, but they are still open and the user must be able to see and close
+  // them; until now they were filtered out of the dashboard entirely, which
+  // left them invisible in the app and untouched by close_all.
+  const otherOpen = open.filter((t) => !isAccountTrade(t, settings.phase));
+  const prices = await lastPrices(open, universe);
   const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase) && t.closed_at && t.closed_at >= settings.phase_started_at);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
@@ -262,7 +270,7 @@ export async function getDashboard(): Promise<DashboardPayload> {
   const w = sumBy((t) => weekStartIso(new Date(t.closed_at!)) === week);
   const m = sumBy((t) => t.closed_at!.slice(0, 7) === month);
 
-  const positions: LivePosition[] = accountOpen.map((t) => {
+  const toLivePosition = (t: TradeRow): LivePosition => {
     const p = t.sim_state;
     const last = prices.get(t.symbol) ?? null;
     const entry = p.entry_price;
@@ -291,7 +299,9 @@ export async function getDashboard(): Promise<DashboardPayload> {
       broker_status: t.broker_status,
       baseline_enter: t.baseline_enter,
     };
-  });
+  };
+  const positions: LivePosition[] = accountOpen.map(toLivePosition);
+  const otherPositions: LivePosition[] = otherOpen.map(toLivePosition);
   const equity = equityFromTrades(settings, accountOpen, accountClosed, prices);
   const peak = Math.max(settings.peak_equity, equity);
   const dd = drawdownFromPeak(equity, peak);
@@ -319,6 +329,7 @@ export async function getDashboard(): Promise<DashboardPayload> {
       kill_switch_distance_pct: round(Math.max(0, RISK_ENVELOPE.MASTER_KILL_SWITCH_DD - dd)),
     },
     positions,
+    other_positions: otherPositions,
     shadow_open: open.length - accountOpen.length,
     triggers,
     events,
