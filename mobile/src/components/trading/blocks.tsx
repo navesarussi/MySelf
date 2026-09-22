@@ -5,7 +5,9 @@ import { Ionicons } from "@expo/vector-icons";
 import type { GateCheck } from "@/lib/trading/gates";
 import type { LivePosition, PhaseGateView, TradeListItem, TriggerRow } from "@/lib/trading/service";
 import { fmtDateTime, fmtPct, fmtPrice, fmtR, rTone } from "@/lib/trading/format";
+import { positionPriceView } from "@/lib/trading/position-display";
 import { useI18n } from "../../i18n";
+import { useLivePrice } from "./use-live-price";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { Badge, Btn, Card } from "../ui";
@@ -99,11 +101,13 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
   const c = useColors();
   const { row } = useLayoutDir();
   const router = useRouter();
-  const tone = rTone(p.current_r);
-  // Progress from stop (0) through entry to target (1).
+  const live = useLivePrice(p.symbol, p.asset_class, true);
+  const view = positionPriceView(p, live.price);
+  const tone = rTone(view.currentR);
   const span = p.target_price - p.stop_price;
-  const pos = p.last_price !== null && span > 0 ? Math.min(1, Math.max(0, (p.last_price - p.stop_price) / span)) : null;
   const entryPos = p.entry_price !== null && span > 0 ? (p.entry_price - p.stop_price) / span : 1 / 3;
+  const priceWaiting = view.lastPrice === null && live.source === null;
+  const lastColor = live.direction === "up" ? c.good : live.direction === "down" ? c.warn : priceWaiting ? c.muted : c.ink;
   return (
     <Pressable
       onPress={() => router.push(`/trading-trade?id=${p.id}` as `/${string}`)}
@@ -118,18 +122,19 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
           {p.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
           {!p.baseline_enter ? <Badge label={t("trading.aiOnly")} tone="accent" /> : null}
           <View style={{ flex: 1 }} />
-          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 18, writingDirection: "ltr" }}>{fmtR(p.current_r)}</Text>
+          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 18, writingDirection: "ltr" }}>{fmtR(view.currentR)}</Text>
         </View>
         <View style={{ height: 8, marginVertical: 10, borderRadius: 4, backgroundColor: c.border, direction: "ltr" }}>
           <View style={{ position: "absolute", left: `${entryPos * 100}%`, top: -2, width: 2, height: 12, backgroundColor: c.muted }} />
-          {pos !== null ? <View style={{ position: "absolute", left: `${pos * 100}%`, top: -3, width: 14, height: 14, marginLeft: -7, borderRadius: 7, backgroundColor: tone === "warn" ? c.warn : c.good }} /> : null}
+          {view.progress !== null ? <View style={{ position: "absolute", left: `${view.progress * 100}%`, top: -3, width: 14, height: 14, marginLeft: -7, borderRadius: 7, backgroundColor: tone === "warn" ? c.warn : c.good }} /> : null}
         </View>
         <View style={{ flexDirection: "row", justifyContent: "space-between", direction: "ltr" }}>
           <Text style={{ color: c.warn, fontSize: tokens.textXs }}>
-            {t("trading.stop")} {fmtPrice(p.stop_price)} ({fmtPct(p.distance_to_stop_pct)})
+            {t("trading.stop")} {fmtPrice(p.stop_price)} ({fmtPct(view.distanceToStopPct)})
           </Text>
-          <Text style={{ color: c.muted, fontSize: tokens.textXs }}>
-            {t("trading.last")} {fmtPrice(p.last_price)}
+          <Text style={{ color: lastColor, fontSize: tokens.textXs, fontWeight: view.lastPrice !== null ? "600" : "400", writingDirection: "ltr" }}>
+            {t("trading.last")} {priceWaiting ? t("trading.liveWaiting") : fmtPrice(view.lastPrice)}
+            {live.direction === "up" ? " ▲" : live.direction === "down" ? " ▼" : ""}
           </Text>
           <Text style={{ color: c.good, fontSize: tokens.textXs }}>
             {p.exit_plan === "TRAIL_2ATR" ? t("trading.trail") : `${t("trading.target")} ${fmtPrice(p.target_price)}`}

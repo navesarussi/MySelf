@@ -111,23 +111,6 @@ export default function HomeScreen() {
             pending={habitsPendingToday}
             failureTotal={uniqueHabits.reduce((s, h) => s + (h.failure_count ?? 0), 0)}
             busy={isPending}
-            onBackfill={async (h, date, type) => {
-              const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-              await run((config) => api.reportHabit(config, h.id, type, { for_date: date }), {
-                itemId: h.id,
-                flash: { success: type === "check_in" ? "flash.checkInRecorded" : "flash.fallRecorded" },
-                onError: () => {
-                  if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-                },
-                onSuccess: (updated) => {
-                  if (updated) {
-                    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => patchHabitInHome(old, h.id, updated));
-                  }
-                  queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                  queryClient.invalidateQueries({ queryKey: queryKeys.home });
-                },
-              });
-            }}
             onCheckIn={async (h) => {
               const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
               const todayStr = habitReportDay(h.report_time);

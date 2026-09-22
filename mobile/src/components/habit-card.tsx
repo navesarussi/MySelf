@@ -9,7 +9,6 @@ import { StatTile } from "./habit-stat-tile";
 import { hapticImpact, hapticSelection } from "../haptics";
 import { localeTag } from "@/lib/i18n/core";
 import { effectiveStreak, habitReportDay, isReportDue, normalizeReportTime } from "@/lib/habit-stats";
-import { HabitMissedReports } from "./habit-missed-reports";
 import type { Habit } from "@/lib/types";
 import type { HabitEditFields } from "./habit-edit-modal";
 
@@ -23,7 +22,6 @@ export const HabitCard = React.memo(function HabitCard({
   onReset,
   onCheckIn,
   onReportFall,
-  onBackfill,
 }: {
   habit: Habit;
   busy?: boolean;
@@ -32,7 +30,6 @@ export const HabitCard = React.memo(function HabitCard({
   onReset?: (habit: Habit) => void;
   onCheckIn: (habit: Habit) => void | Promise<void>;
   onReportFall: (habit: Habit) => void | Promise<void>;
-  onBackfill?: (habit: Habit, date: string, type: "check_in" | "fall") => void | Promise<void>;
   onSave?: (fields: HabitEditFields) => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
 }) {
@@ -151,8 +148,6 @@ export const HabitCard = React.memo(function HabitCard({
             {t("habits.reportDueNow")}
           </Text>
         ) : null}
-
-        {onBackfill ? <HabitMissedReports habit={habit} busy={busy} onBackfill={onBackfill} /> : null}
 
         <Row style={{ marginTop: 10 }}>
           {checked ? (
