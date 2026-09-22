@@ -1,3 +1,10 @@
+# Apply Supabase migrations that have not been applied yet.
+#
+# This used to re-run every file in supabase/migrations on each invocation,
+# which only holds while every migration stays idempotent against every future
+# shape of the schema. It does not: 0003 indexes `tasks.project`, 0007 drops
+# that column, so replaying 0003 fails with `column "project" does not exist`.
+# scripts/db-migrate.ts keeps a ledger and applies each file exactly once.
 name: Apply Supabase migrations
 
 on:
@@ -5,6 +12,7 @@ on:
     branches: [main]
     paths:
       - "supabase/migrations/**"
+      - "scripts/db-migrate.ts"
       - ".github/workflows/db-apply.yml"
   workflow_dispatch:
 
@@ -14,31 +22,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: supabase/setup-cli@v1
+      - uses: actions/setup-node@v4
         with:
-          version: latest
+          node-version: "20"
+          cache: npm
 
-      - name: Apply migrations
-        run: |
-          set -euo pipefail
-          if [ -n "${DATABASE_URL:-}" ]; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client > /dev/null
-            for f in supabase/migrations/*.sql; do
-              echo "→ $f"
-              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
-            done
-            psql "$DATABASE_URL" -c "NOTIFY pgrst, 'reload schema';"
-            exit 0
-          fi
-          if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ]; then
-            for f in supabase/migrations/*.sql; do
-              echo "→ $f"
-              bash scripts/apply-supabase-sql.sh "$f"
-            done
-            exit 0
-          fi
-          echo "ERROR: add DATABASE_URL or SUPABASE_GITHUB_ACTIONS to GitHub Actions secrets."
-          exit 1
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply pending migrations
+        run: npx tsx scripts/db-migrate.ts
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_GITHUB_ACTIONS || secrets.SUPABASE_ACCESS_TOKEN }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}

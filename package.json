@@ -8,7 +8,7 @@
     "export:web": "bash scripts/export-expo-web.sh",
     "start": "next start",
     "lint": "npm run typecheck",
-    "db:apply": "bash scripts/db-apply.sh",
+    "db:apply": "tsx scripts/db-migrate.ts",
     "sync:leumi": "tsx scripts/finance/sync-leumi.ts",
     "sync:max": "tsx scripts/finance/sync-max.ts",
     "sync:cal": "tsx scripts/finance/sync-visa-cal.ts",
