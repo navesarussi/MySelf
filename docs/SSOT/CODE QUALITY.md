@@ -34,3 +34,4 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 
 ## Notes
 - Never mutate cookies inside Server Components (layout). Flash toast is set in Server Actions and read/cleared on the client.
+- **iOS home widget:** WidgetKit extension target is added via `@bacons/apple-targets` (`mobile/targets/widget/`). Main app and widget share snapshot JSON through App Group `group.com.navesarussi.myself` (entitlements wired by `mobile/plugins/with-home-widget.js`). Auth tokens stay in Keychain for App Intents — never in the snapshot file.
