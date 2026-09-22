@@ -1,3 +1,5 @@
+require("./patch-homewidget-build-version");
+
 const { withEntitlementsPlist } = require("@expo/config-plugins");
 
 /** Shared Keychain access group — used for session token + widget snapshot JSON. */
