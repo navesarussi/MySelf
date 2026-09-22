@@ -4,6 +4,7 @@
 Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Actions + Supabase client with `db.schema: "myself"`.
 
 ## Constraints
+- **npm only.** `package-lock.json` is the single lockfile; there is no `yarn.lock` and no `packageManager` field. Adding a dependency without regenerating the lockfile in use is what broke all three finance syncs for a week (`pg` landed in `package.json`, `yarn.lock` was never regenerated, `yarn --frozen-lockfile` then failed every run).
 - Max ~200 lines per file; split UI sections when needed.
 - Prefer localized changes; no speculative abstractions.
 - Docs in English.
@@ -11,7 +12,6 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 
 ## [PENDING REFACTOR]
 - **Multi-tenancy** — see `docs/architecture/multi-tenancy.md`. 40 tables, 0 with `user_id`, 334 query sites, and 3 tables (`agent_settings`, `trading_settings`, `notification_preferences`) whose `id boolean PRIMARY KEY CHECK (id)` admits exactly one row. The session token is `hmac(secret, "authenticated-v1")` — a constant, so it carries no identity, no expiry and cannot be revoked per user. Identity has to land before any schema work.
-- **Two lockfiles** — `package-lock.json` (used by `npm ci` in verify / TestFlight) and `yarn.lock` (used by `yarn install --frozen-lockfile` in the finance-sync workflows) can resolve different trees for the same commit. Pick one.
 - `lib/supabase.ts` builds a single service-role client, which bypasses RLS. Request-path queries need a per-user client before any RLS policy means anything.
 - `dailyScreen` in `lib/trading/engine.ts` walks the universe serially: one market-data fetch and one UPDATE per symbol. Bounded-concurrency pools already exist in `intraday-data.ts` and `intraday-universe.ts` — reuse one here. Daily cron, so low urgency.
 - Introduce `/domain` + `/application` + `/infrastructure` layers when the surface area grows past current pages.

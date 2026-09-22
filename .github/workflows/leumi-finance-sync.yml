@@ -15,10 +15,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: yarn
+          cache: npm
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
 
       - name: Install Camoufox browser
         run: npx camoufox-js fetch
@@ -29,4 +29,4 @@ jobs:
           LEUMI_PASSWORD: ${{ secrets.LEUMI_PASSWORD }}
           MYSELF_API_URL: ${{ secrets.MYSELF_API_URL }}
           FINANCE_INGEST_TOKEN: ${{ secrets.FINANCE_INGEST_TOKEN }}
-        run: yarn sync:leumi
+        run: npm run sync:leumi
