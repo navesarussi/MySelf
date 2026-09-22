@@ -38,6 +38,16 @@ export type WidgetSnapshot = {
   nextEvent: WidgetNextEvent | null;
 };
 
+export function formatUrgentFinanceLabel(row: {
+  amount: number;
+  merchant: string | null;
+  description: string | null;
+}): string {
+  const name = (row.merchant || row.description || "תנועה").trim();
+  const amount = Math.round(row.amount);
+  return `₪${amount} · ${name}`;
+}
+
 export type WidgetHomeInput = {
   habits: Habit[];
   relationships: Pick<Relationship, "id" | "name" | "last_contact_date" | "reminder_days">[];

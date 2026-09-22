@@ -8,6 +8,7 @@ import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
 import { loadTradingSnapshot } from "@/lib/trading/account-equity";
 import { summarizeCashflow } from "@/lib/finance/cashflow";
+import { formatUrgentFinanceLabel } from "@/lib/widget-snapshot";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
 
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
     doneTasksCountRes,
     doneTasksTimingRes,
     financeUncategorizedRes,
+    urgentFinanceRes,
     financeMonthRes,
     tradingRes,
   ] = await Promise.all([
@@ -127,6 +129,13 @@ export async function GET(req: NextRequest) {
       .eq("needs_categorization", true),
     supabase
       .from("finance_transactions")
+      .select("id, amount, merchant, description")
+      .eq("needs_categorization", true)
+      .order("txn_date", { ascending: true })
+      .order("created_at", { ascending: true })
+      .limit(1),
+    supabase
+      .from("finance_transactions")
       .select("txn_date, amount, kind, category, needs_categorization, is_internal")
       .gte("txn_date", `${month}-01`)
       .lte("txn_date", monthEnd),
@@ -148,6 +157,7 @@ export async function GET(req: NextRequest) {
     doneTasksCount: doneTasksCountRes,
     doneTasksTiming: doneTasksTimingRes,
     financeUncategorized: financeUncategorizedRes,
+    urgentFinance: urgentFinanceRes,
     financeMonth: financeMonthRes,
   });
   if (!tradingRes) degraded.push("trading");
@@ -170,6 +180,14 @@ export async function GET(req: NextRequest) {
       openTasks.length < ((tasksRes.data as unknown as TaskJoin[] | null)?.length ?? 0)
   );
 
+  const urgentFinanceRow = urgentFinanceRes.data?.[0];
+  const urgentFinance = urgentFinanceRow
+    ? {
+        id: urgentFinanceRow.id,
+        titleOrAmountLabel: formatUrgentFinanceLabel(urgentFinanceRow),
+      }
+    : null;
+
   return NextResponse.json({
     ...(degraded.length > 0 ? { degraded } : {}),
     habits,
@@ -187,6 +205,7 @@ export async function GET(req: NextRequest) {
     doneTasksCount: doneTasksCountRes.count || 0,
     avgTaskCloseDays: avgTaskCloseDays((doneTasksTimingRes.data ?? []) as Task[]),
     financeUncategorizedCount: financeUncategorizedRes.count || 0,
+    urgentFinance,
     finance: {
       month,
       net_actual: summarizeCashflow(financeMonthRes.data ?? [], month).net,

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildWidgetSnapshot } from "../widget-snapshot";
+import { buildWidgetSnapshot, formatUrgentFinanceLabel } from "../widget-snapshot";
 
 const baseHabit = {
   id: "h1",
@@ -17,6 +17,15 @@ const baseHabit = {
   archived: false,
   created_at: "2026-01-01T00:00:00Z",
 };
+
+describe("formatUrgentFinanceLabel", () => {
+  it("formats finance label", () => {
+    assert.equal(
+      formatUrgentFinanceLabel({ amount: 42.2, merchant: "קפה", description: null }),
+      "₪42 · קפה"
+    );
+  });
+});
 
 describe("buildWidgetSnapshot", () => {
   it("sets signedOut snapshot when not signed in", () => {

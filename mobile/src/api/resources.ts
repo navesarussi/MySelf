@@ -81,6 +81,7 @@ export type HomePayload = {
   doneTasksCount: number;
   avgTaskCloseDays: number | null;
   financeUncategorizedCount: number;
+  urgentFinance: { id: string; titleOrAmountLabel: string } | null;
   finance?: {
     month: string;
     net_actual: number;
