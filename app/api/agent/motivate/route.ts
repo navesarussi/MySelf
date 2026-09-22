@@ -5,6 +5,7 @@ import {
   recordMotivationDig,
   shouldSendMotivationDig,
 } from "@/lib/agent/whatsapp-dedup";
+import { mapAgentErrorCode } from "@/lib/agent/whatsapp-outbound";
 import { sendWhatsAppDig } from "@/lib/whatsapp/client";
 
 export const maxDuration = 60;
@@ -24,7 +25,10 @@ function jerusalemHour(now = new Date()): number {
   return Number(parts.find((p) => p.type === "hour")?.value ?? now.getUTCHours());
 }
 
-/** Vercel cron ticks often; dig only when Jerusalem hour ∈ dig_hours. */
+/**
+ * Vercel cron: `2 5,6,10,11,18,19 * * *` (6×/day) — covers default dig_hours [8,13,21]
+ * Jerusalem across IST/IDT. Dig only when Jerusalem hour ∈ dig_hours.
+ */
 export async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -61,7 +65,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await runMotivationMessage(kind);
-    if (!("text" in result)) return NextResponse.json(result);
+    if (!("text" in result)) {
+      return NextResponse.json(result);
+    }
+
+    if (!result.text.trim()) {
+      return NextResponse.json({ skipped: true, reason: "empty_dig", kind, hour });
+    }
 
     const sent = await sendWhatsAppDig(settings.whatsapp_phone, result.text);
     if (!sent.ok) {
@@ -82,8 +92,11 @@ export async function GET(req: NextRequest) {
       text: result.text,
     });
   } catch (err) {
-    const code = err instanceof Error ? err.message : "motivate_failed";
+    const code = mapAgentErrorCode(err);
     console.error("[agent-motivate]", code);
+    if (code === "gemini_credits_depleted") {
+      return NextResponse.json({ skipped: true, reason: code });
+    }
     return NextResponse.json({ error: code }, { status: 500 });
   }
 }

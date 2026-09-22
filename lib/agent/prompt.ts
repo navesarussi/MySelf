@@ -92,3 +92,31 @@ export function buildSystemPrompt(
     JSON.stringify(context, null, 0),
   ].join("\n");
 }
+
+/** Smaller system prompt for WhatsApp status / ack generateText paths. */
+export function buildCompactSystemPrompt(tone: AgentTone, context: unknown): string {
+  return [
+    'אתה "נווה" — מנטור קצר ב-WhatsApp. עברית, 2–3 משפטים. בלי markdown. אל תמציא נתונים.',
+    TONE_HINT[tone],
+    "הקשר (JSON):",
+    JSON.stringify(context, null, 0),
+  ].join("\n");
+}
+
+const DIG_SYSTEM_BASE = `אתה "נווה" — מנטור קשוח-אוהב. חפירת WhatsApp יומית.
+עברית קצרה. רק מה שבקונטקסט. בלי סלוגנים, בלי אימוג'ים.`;
+
+/** Minimal prompt for cron motivation digs (no tools). */
+export function buildDigSystemPrompt(
+  tone: AgentTone,
+  context: unknown,
+  customPrompt?: string | null
+): string {
+  const base = (customPrompt && customPrompt.trim()) || DIG_SYSTEM_BASE;
+  return [
+    base,
+    TONE_HINT[tone],
+    "הקשר (JSON):",
+    JSON.stringify(context, null, 0),
+  ].join("\n");
+}
