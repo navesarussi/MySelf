@@ -85,6 +85,10 @@
     {
       "path": "/api/push/dispatch",
       "schedule": "5 18 * * *"
+    },
+    {
+      "path": "/api/agent/health",
+      "schedule": "0 3 * * *"
     }
   ]
 }

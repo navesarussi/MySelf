@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { logAgentAction } from "@/lib/agent/log";
+import { agentBulkUpdateHabits } from "@/lib/agent/data-bulk";
 import {
   agentCreateEvent,
   agentCreateGoal,
@@ -62,6 +63,19 @@ export function createExtraAgentTools() {
             archived: input.archived,
           })
         ),
+    }),
+
+    bulk_update_habits: tool({
+      description:
+        "Update report_time for many habits in one call. Prefer over repeated update_habit.",
+      inputSchema: z.object({
+        updates: z
+          .array(z.object({ id: z.string().uuid(), report_time: z.string().nullable().optional() }))
+          .min(1)
+          .max(40),
+      }),
+      execute: async (input) =>
+        withLog("bulk_update_habits", input, () => agentBulkUpdateHabits(input.updates)),
     }),
 
     create_goal: tool({

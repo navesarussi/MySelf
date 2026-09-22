@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { userFacingAgentError, outboundRef } from "../agent/whatsapp-outbound";
 import { isAuthorizedWhatsAppSender } from "../whatsapp/phone-match";
 import {
   parseInboundWhatsAppMessage,
@@ -97,6 +98,35 @@ describe("isAuthorizedWhatsAppSender", () => {
   it("matches normalized israeli numbers", () => {
     assert.equal(isAuthorizedWhatsAppSender("972501234567", "0501234567"), true);
     assert.equal(isAuthorizedWhatsAppSender("972501234567", null), false);
+  });
+});
+
+describe("userFacingAgentError", () => {
+  it("maps whatsapp_not_configured to Hebrew", () => {
+    assert.match(userFacingAgentError("whatsapp_not_configured"), /WhatsApp/);
+  });
+  it("never returns empty", () => {
+    assert.ok(userFacingAgentError("agent_timeout").length > 5);
+  });
+});
+
+describe("normalizeAudioMime", () => {
+  it("strips codec suffix from ogg", async () => {
+    const { normalizeAudioMime } = await import("../whatsapp/transcribe");
+    assert.equal(normalizeAudioMime("audio/ogg; codecs=opus"), "audio/ogg");
+  });
+});
+
+describe("buildInboundLogContent", () => {
+  it("prefixes voice transcripts", async () => {
+    const { buildInboundLogContent } = await import("../agent/whatsapp-process");
+    assert.equal(buildInboundLogContent("audio", "שלום"), "[voice] שלום");
+  });
+});
+
+describe("outboundRef", () => {
+  it("prefixes inbound wamid", () => {
+    assert.equal(outboundRef("wamid.abc"), "out:wamid.abc");
   });
 });
 

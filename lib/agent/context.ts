@@ -4,14 +4,15 @@ import { dedupeHabits, effectiveStreak, isReportDue } from "@/lib/habit-stats";
 import { filterDueRelationships } from "@/lib/relationships-due";
 import { getGmailConnectionStatus } from "@/lib/integrations/gmail/status";
 import { buildGmailDigest } from "@/lib/agent/gmail";
+import { effectiveTaskPriority, rankUrgentTasks } from "@/lib/agent/task-urgency";
 import type { Habit, Task } from "@/lib/types";
-
-const PRIORITY_RANK = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 /** Compact snapshot for the motivation agent system prompt. */
 export type AgentContextOptions = {
   /** Pre-fetch unread Gmail for morning digs. */
   gmailDigest?: boolean;
+  /** Smaller JSON for WhatsApp latency. */
+  compact?: boolean;
 };
 
 export async function buildAgentContext(now = new Date(), opts: AgentContextOptions = {}) {
@@ -46,9 +47,8 @@ export async function buildAgentContext(now = new Date(), opts: AgentContextOpti
 
   const habits = dedupeHabits(habitsRes.data || []);
   const goals = dedupeGoals(goalsRes.data || []);
-  const tasks = dedupeTasks((tasksRes.data as Task[]) || []).sort(
-    (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
-  );
+  const tasks = dedupeTasks((tasksRes.data as Task[]) || []);
+  const urgentTasks = rankUrgentTasks(tasks, now);
   const dueRels = filterDueRelationships(relRes.data || [], now);
   const rawEvents = eventsRes.data || [];
 
@@ -62,20 +62,23 @@ export async function buildAgentContext(now = new Date(), opts: AgentContextOpti
     gmail_working: gmailStatus.working,
     ...(gmailStatus.error ? { gmail_error: gmailStatus.error } : {}),
     ...(gmail_digest ? { gmail_digest } : {}),
-    habits: {
-      total: habits.length,
-      pending_report: habitsPending.map((h) => ({
-        id: h.id,
-        name: h.name,
-        streak: effectiveStreak(h, today),
-        best_streak: h.best_streak,
-      })),
-    },
+    habits: opts.compact
+      ? { total: habits.length, pending_report_count: habitsPending.length }
+      : {
+          total: habits.length,
+          pending_report: habitsPending.map((h) => ({
+            id: h.id,
+            name: h.name,
+            streak: effectiveStreak(h, today),
+            best_streak: h.best_streak,
+          })),
+        },
     goals: goals.map((g) => ({ id: g.id, title: g.title, category: g.category })),
-    top_tasks: tasks.slice(0, 8).map((t) => ({
+    top_urgent_tasks: urgentTasks.map((t) => ({
       id: t.id,
       title: t.title,
       priority: t.priority,
+      effective_priority: effectiveTaskPriority(t, now),
       status: t.status,
       due_date: t.due_date,
       source: t.source,

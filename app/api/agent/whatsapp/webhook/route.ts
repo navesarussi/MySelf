@@ -1,19 +1,11 @@
+import { after } from "next/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getAgentSettings, isAuthorizedWhatsAppSender } from "@/lib/agent/settings";
-import { handleCodingTaskRequest } from "@/lib/agent/coding/bridge";
-import { runAgentChat } from "@/lib/agent/run";
+import { processWhatsAppInbound } from "@/lib/agent/whatsapp-process";
+import { claimWhatsAppInbound } from "@/lib/agent/whatsapp-dedup";
+import { sendWhatsAppReplyOnce, userFacingAgentError } from "@/lib/agent/whatsapp-outbound";
 import { scheduleAgentWhatsAppDedupSchema } from "@/lib/db-admin";
-import {
-  claimWhatsAppInbound,
-  finalizeWhatsAppInbound,
-} from "@/lib/agent/whatsapp-dedup";
-import {
-  downloadWhatsAppMedia,
-  parseInboundWhatsAppMessage,
-  sendWhatsAppText,
-  verifyWhatsAppWebhook,
-} from "@/lib/whatsapp/client";
-import { transcribeWhatsAppAudio } from "@/lib/whatsapp/transcribe";
+import { parseInboundWhatsAppMessage, verifyWhatsAppWebhook } from "@/lib/whatsapp/client";
 
 export const maxDuration = 60;
 
@@ -63,79 +55,19 @@ export async function POST(req: NextRequest) {
     return webhookOk({ ok: true, skipped: "claim_error" });
   }
 
-  try {
-    let userText = inbound.text || "";
-
-    if (inbound.kind === "audio" && inbound.audioMediaId) {
-      try {
-        const media = await downloadWhatsAppMedia(inbound.audioMediaId);
-        userText = await transcribeWhatsAppAudio({
-          bytes: media.bytes,
-          mimeType: inbound.audioMimeType || media.mimeType,
-        });
-      } catch (err) {
-        const code = err instanceof Error ? err.message : "transcribe_failed";
-        console.error("[whatsapp-webhook] audio", code);
-        await sendWhatsAppText(
-          inbound.from,
-          "קיבלתי את ההקלטה אבל לא הצלחתי לתמלל. תשלח שוב בקול ברור יותר, או כתוב בטקסט."
-        );
-        await finalizeWhatsAppInbound(inbound.messageId, `[voice transcribe_failed]`);
-        return webhookOk({ ok: true, skipped: "transcribe_failed" });
-      }
+  after(async () => {
+    try {
+      await processWhatsAppInbound(inbound);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "agent_error";
+      console.error("[whatsapp-webhook-after]", code, inbound.messageId);
+      await sendWhatsAppReplyOnce(
+        inbound.from,
+        inbound.messageId,
+        userFacingAgentError(code)
+      );
     }
+  });
 
-    if (!userText.trim()) {
-      await finalizeWhatsAppInbound(inbound.messageId, "[empty]");
-      return webhookOk({ ok: true, skipped: "empty_text" });
-    }
-
-    const logContent =
-      inbound.kind === "audio" ? `[voice] ${userText}` : userText;
-
-    await finalizeWhatsAppInbound(inbound.messageId, logContent);
-
-    const coding = await handleCodingTaskRequest({
-      message: userText,
-      channel: "whatsapp",
-      logInbound: false,
-      external_id: inbound.messageId,
-      inboundLogContent: logContent,
-    });
-    if (coding.handled) {
-      const sent = await sendWhatsAppText(inbound.from, coding.text);
-      if (!sent.ok) console.error("[whatsapp-webhook] send_failed", sent.error);
-      return webhookOk({
-        ok: sent.ok,
-        messageId: sent.ok ? sent.messageId : undefined,
-        via: inbound.kind,
-        coding: true,
-        ...(sent.ok ? {} : { send_error: sent.error }),
-      });
-    }
-
-    const { text } = await runAgentChat({
-      message: userText,
-      channel: "whatsapp",
-      logInbound: false,
-    });
-
-    if (!text.trim()) {
-      console.warn("[whatsapp-webhook] empty_agent_reply", inbound.messageId);
-      return webhookOk({ ok: true, skipped: "empty_reply" });
-    }
-
-    const sent = await sendWhatsAppText(inbound.from, text);
-    if (!sent.ok) console.error("[whatsapp-webhook] send_failed", sent.error);
-    return webhookOk({
-      ok: sent.ok,
-      messageId: sent.ok ? sent.messageId : undefined,
-      via: inbound.kind,
-      ...(sent.ok ? {} : { send_error: sent.error }),
-    });
-  } catch (err) {
-    const code = err instanceof Error ? err.message : "agent_error";
-    console.error("[whatsapp-webhook]", code);
-    return webhookOk({ ok: true, skipped: "error", error: code });
-  }
+  return webhookOk({ ok: true, queued: true, messageId: inbound.messageId });
 }

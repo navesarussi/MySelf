@@ -110,6 +110,12 @@ Bidirectional WhatsApp via Meta Cloud API webhook (`/api/agent/whatsapp/webhook`
 ### FR-AI-WA-02
 Scheduled motivation digs when Jerusalem wall-clock hour is in `dig_hours` (1–6 slots). Cron ticks multiple daily UTC times; only matching hours send.
 
+### FR-AI-WA-03
+WhatsApp inbound processing MUST be idempotent: at most one outbound reply per Meta `wamid` (inbound `external_id`). Webhook returns HTTP 200 before async processing. On failure, user receives a Hebrew error message (never silent drop).
+
+### FR-AI-AGENT-04
+Agent context exposes `top_urgent_tasks` (max 5). Tasks with `due_date` more than 30 days in the future are not treated as urgent unless explicitly requested.
+
 ### FR-AI-GMAIL-01
 User connects Gmail via the unified Google OAuth login (`gmail.readonly` scope together with calendar + tasks) from mobile Settings. Tokens stored in `integration_tokens` (`google_gmail` provider). The motivation agent has read-only tools `list_emails` and `read_email` to search and read message bodies when Gmail is connected.
 

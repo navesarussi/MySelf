@@ -6,8 +6,13 @@ import { getAgentSettings } from "@/lib/agent/settings";
 import { createAgentTools } from "@/lib/agent/tools";
 import type { AgentChannel, MotivationKind } from "@/lib/agent/types";
 import { logAgentMessage } from "@/lib/agent/log";
+import { sanitizeAgentReply } from "@/lib/agent/reply";
 
 const MODEL_ID = "gemini-3-flash-preview";
+
+export function isSimpleStatusQuery(message: string): boolean {
+  return /מה (ה)?מצב|מה (ה)?לוז|סטטוס|מה יש לי|מה דחוף/i.test(message.trim());
+}
 
 export type AgentImageInput = {
   mimeType: string;
@@ -29,8 +34,12 @@ export async function runAgentChat(input: {
 }) {
   requireGeminiKey();
   const settings = await getAgentSettings();
-  const context = await buildAgentContext(new Date(), input.contextOptions ?? {});
+  const context = await buildAgentContext(new Date(), {
+    ...input.contextOptions,
+    compact: input.channel === "whatsapp",
+  });
   const tools = createAgentTools();
+  const simple = isSimpleStatusQuery(input.message) && !(input.images?.length);
 
   const inboundSummary =
     input.images?.length
@@ -49,7 +58,7 @@ export async function runAgentChat(input: {
     model: google(MODEL_ID),
     instructions: buildSystemPrompt(settings.tone, context, settings.system_prompt),
     tools,
-    stopWhen: stepCountIs(12),
+    stopWhen: stepCountIs(simple ? 4 : 12),
   });
 
   const textPrompt =
@@ -81,6 +90,8 @@ export async function runAgentChat(input: {
     text = retry.text?.trim() || "";
     result = retry;
   }
+
+  text = sanitizeAgentReply(text);
 
   if (!text && input.channel !== "whatsapp") {
     text = "לא הצלחתי לענות כרגע. נסה שוב.";

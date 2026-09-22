@@ -20,6 +20,7 @@ import {
   agentUpdateRelationship,
   agentUpdateTask,
 } from "@/lib/agent/data";
+import { agentBulkCreateRelationships } from "@/lib/agent/data-bulk";
 import { buildAgentContext } from "@/lib/agent/context";
 import { createExtraAgentTools } from "@/lib/agent/tools-extra";
 import { createFinanceAgentTools } from "@/lib/agent/tools-finance";
@@ -192,6 +193,18 @@ export function createAgentTools() {
         group_name: z.string().nullable().optional(),
       }),
       execute: async (input) => withLog("create_relationship", input, () => agentCreateRelationship(input)),
+    }),
+
+    bulk_create_relationships: tool({
+      description:
+        "Create multiple relationship/contact cards at once (שמירת קשר). Use when user lists people to stay in touch with.",
+      inputSchema: z.object({
+        names: z.array(z.string().min(1)).min(1).max(30),
+        project_id: z.string().uuid(),
+        reminder_days: z.number().int().min(1).max(365).optional(),
+      }),
+      execute: async (input) =>
+        withLog("bulk_create_relationships", input, () => agentBulkCreateRelationships(input)),
     }),
 
     update_relationship: tool({
