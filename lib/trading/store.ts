@@ -36,7 +36,17 @@ export type TradingSettings = {
   updated_at: string;
 };
 
-const num = (v: unknown, d = 0) => (v === null || v === undefined || v === "" ? d : Number(v));
+/**
+ * Numeric settings column. Falls back to the default for anything non-finite,
+ * not just for null — Postgres `numeric` accepts NaN, and a NaN `peak_equity`
+ * makes every drawdown read as zero, which silently disables the kill switch.
+ * Reading defensively means a row that was poisoned once recovers by itself.
+ */
+const num = (v: unknown, d = 0) => {
+  if (v === null || v === undefined || v === "") return d;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
 const numOrNull = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
 export async function getSettings(): Promise<TradingSettings> {

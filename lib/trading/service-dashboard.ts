@@ -5,7 +5,7 @@ import { computePhaseGate, type PhaseGateView } from "./service-gates";
 import { createBarCache } from "./market-data";
 import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
 import { openRiskR } from "./position";
-import { equityFromTrades } from "./account-equity";
+import { brokerEquity, equityFromTrades } from "./account-equity";
 import { drawdownFromPeak, haltStatus, weekStartIso } from "./risk-envelope";
 import { getActiveV2Params, getClosedTrades, getOpenTrades, getSettings, getUniverse, isAccountTrade, type TradeRow, type TradingSettings, type UniverseRow } from "./store";
 import { round } from "./round";
@@ -121,7 +121,19 @@ export async function getBrokerStatus(venue: "SIM" | "ALPACA_PAPER"): Promise<Br
   if (!isAlpacaConfigured()) return { configured: false, venue, connected: false, equity: null, cash: null, error: null };
   try {
     const a = await alpaca.account();
-    return { configured: true, venue, connected: !a.trading_blocked && !a.account_blocked, equity: Number(a.equity), cash: Number(a.cash), error: a.trading_blocked ? "trading_blocked" : null };
+    // null rather than NaN when the figure is unusable: `advance_phase` copies
+    // this into starting_equity and peak_equity, and a NaN peak reads as zero
+    // drawdown forever (see brokerEquity).
+    const equity = brokerEquity(a.equity);
+    const cash = Number(a.cash);
+    return {
+      configured: true,
+      venue,
+      connected: !a.trading_blocked && !a.account_blocked,
+      equity: equity.ok ? equity.equity : null,
+      cash: Number.isFinite(cash) ? cash : null,
+      error: a.trading_blocked ? "trading_blocked" : equity.ok ? null : equity.reason,
+    };
   } catch (err) {
     return { configured: true, venue, connected: false, equity: null, cash: null, error: err instanceof Error ? err.message.slice(0, 160) : "error" };
   }

@@ -7,6 +7,7 @@ import { loadIntradayFrames, type IntradaySymbol, type LoadedFrames } from "./in
 import { getIntradayUniverse, providerSymbolFor, refreshIntradayUniverse, type IntradayUniverseRow } from "./intraday-universe";
 import { applyExternalFill, newPendingPosition, openRiskR, stepPosition, type SimPosition } from "./position";
 import { EXECUTION_RULES } from "./config";
+import { brokerEquity } from "./account-equity";
 import { checkNewEntry, type EnvelopeBlock } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
 import { closedIdx } from "./strategy/series";
@@ -83,7 +84,10 @@ export async function loadIntradayAccount(settings: TradingSettings, lastPrices:
   if (useBroker) {
     try {
       const acct = await alpaca.account();
-      account.equity = Number(acct.equity);
+      // See brokerEquity: an unusable figure must not reach peak_equity.
+      const broker = brokerEquity(acct.equity);
+      if (broker.ok) account.equity = broker.equity;
+      else errors.push(broker.reason);
       const crypto = Number(acct.non_marginable_buying_power ?? acct.cash);
       const stock = Number(acct.buying_power);
       buyingPower.crypto = Number.isFinite(crypto) ? crypto : null;

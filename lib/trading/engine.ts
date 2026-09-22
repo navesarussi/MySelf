@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import { D1, createFrameCache, iso, loadAccount, type TickSummary } from "./tick-context";
+import { brokerEquity } from "./account-equity";
 import { createBarCache, fetchEarningsSymbols } from "./market-data";
 import { forceClose, openRiskR, realizedR, type PositionEvent } from "./position";
 import { alpaca, flattenAtBroker, isAlpacaConfigured } from "./broker/alpaca";
@@ -86,7 +87,12 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
     try {
       const acct = await alpaca.account();
       if (acct.trading_blocked || acct.account_blocked) summary.errors.push("alpaca_account_blocked");
-      account.equity = Number(acct.equity);
+      // Only a real figure is adopted: a NaN here reaches peak_equity, which is
+      // persisted, and a NaN peak reads as zero drawdown forever — the master
+      // kill switch would never trip again.
+      const broker = brokerEquity(acct.equity);
+      if (broker.ok) account.equity = broker.equity;
+      else summary.errors.push(broker.reason);
     } catch (err) {
       summary.errors.push(`alpaca_account: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
     }
