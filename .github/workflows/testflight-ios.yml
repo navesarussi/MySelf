@@ -87,11 +87,6 @@ jobs:
             --local \
             --non-interactive \
             --output ./build-myself.ipa
-          eas submit \
-            --platform ios \
-            --profile production \
-            --path ./build-myself.ipa \
-            --non-interactive \
-            --wait
+          bash scripts/eas-submit-testflight.sh ./build-myself.ipa
           EXPECTED="$(npx eas-cli build:version:get -p ios 2>/dev/null | grep -oE '[0-9]+$' || echo 54)"
           node scripts/asc-poll-build.mjs "$EXPECTED"

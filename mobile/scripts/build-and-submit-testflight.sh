@@ -35,12 +35,7 @@ npx eas-cli build \
   --non-interactive \
   --output ./build-myself.ipa
 
-npx eas-cli submit \
-  --platform ios \
-  --profile production \
-  --path ./build-myself.ipa \
-  --non-interactive \
-  --wait
+bash scripts/eas-submit-testflight.sh ./build-myself.ipa
 
 echo "Verifying build appeared in App Store Connect (>= ${EXPECTED_BUILD})..."
 node scripts/asc-poll-build.mjs "${EXPECTED_BUILD}"

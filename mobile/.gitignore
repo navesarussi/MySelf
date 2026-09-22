@@ -3,6 +3,8 @@ node_modules/
 dist/
 web-build/
 build/
+!.eas/build/
+!.eas/build/**
 *.log
 .env*.local
 ios/

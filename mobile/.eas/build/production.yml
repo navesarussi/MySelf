@@ -1,0 +1,32 @@
+# Extends the default eas/build iOS credentials workflow with a post-version step
+# so HomeWidget CURRENT_PROJECT_VERSION matches MeAndMySelf after configure_ios_version.
+build:
+  name: iOS production (HomeWidget build sync)
+  steps:
+    - eas/checkout
+    - eas/use_npm_token
+    - eas/install_node_modules
+    - eas/resolve_build_config
+    - eas/resolve_apple_team_id_from_credentials:
+        id: resolve_apple_team_id_from_credentials
+    - eas/prebuild:
+        inputs:
+          apple_team_id: ${ steps.resolve_apple_team_id_from_credentials.apple_team_id }
+    - eas/install_pods:
+        working_directory: ./ios
+    - eas/configure_eas_update:
+        inputs:
+          throw_if_not_configured: false
+    - eas/configure_ios_credentials:
+        id: configure_ios_credentials
+    - eas/configure_ios_version:
+        inputs:
+          target_names: ${ steps.configure_ios_credentials.outputs.target_names }
+    - run:
+        name: Sync HomeWidget build number with parent app
+        command: node scripts/sync-homewidget-ios-build-number.mjs
+    - eas/generate_gymfile_from_template:
+        inputs:
+          credentials: ${ eas.job.secrets.buildCredentials }
+    - eas/run_fastlane
+    - eas/find_and_upload_build_artifacts

@@ -55,9 +55,4 @@ jobs:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
         run: |
-          eas submit \
-            --platform ios \
-            --profile production \
-            --path "./${{ inputs.asset_name }}" \
-            --non-interactive \
-            --wait
+          bash scripts/eas-submit-testflight.sh "./${{ inputs.asset_name }}"
