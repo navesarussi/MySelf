@@ -161,6 +161,7 @@ export async function getBrokerStatus(venue: "SIM" | "ALPACA_PAPER"): Promise<Br
 async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
   const cache = createBarCache();
   const out = new Map<string, number>();
+  const { livePrice } = await import("./intraday-data");
   await Promise.all(
     [...new Set(trades.map((t) => t.symbol))].map(async (symbol) => {
       const u = universe.find((x) => x.symbol === symbol);
@@ -168,10 +169,15 @@ async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
       try {
         const bars = await cache.get(u, "1h", 6);
         const last = bars.at(-1);
-        if (last) out.set(symbol, last.c);
+        if (last) {
+          out.set(symbol, last.c);
+          return;
+        }
       } catch {
-        /* price unavailable — shown as null */
+        /* fall through to live quote */
       }
+      const px = await livePrice({ symbol: u.symbol, asset_class: u.asset_class, provider_symbol: u.provider_symbol });
+      if (px) out.set(symbol, px);
     })
   );
   return out;

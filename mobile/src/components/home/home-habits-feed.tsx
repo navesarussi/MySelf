@@ -16,7 +16,6 @@ export function HomeHabitsFeed({
   onCheckIn,
   onReportFall,
   onReset,
-  onBackfill,
 }: {
   uniqueCount: number;
   pending: Habit[];
@@ -25,7 +24,6 @@ export function HomeHabitsFeed({
   onCheckIn: (habit: Habit) => void | Promise<void>;
   onReportFall: (habit: Habit) => void | Promise<void>;
   onReset: (habit: Habit) => void | Promise<void>;
-  onBackfill?: (habit: Habit, date: string, type: "check_in" | "fall") => void | Promise<void>;
 }) {
   const { t } = useI18n();
   const c = useColors();
@@ -52,7 +50,6 @@ export function HomeHabitsFeed({
             onCheckIn={() => onCheckIn(h)}
             onReportFall={() => onReportFall(h)}
             onReset={() => onReset(h)}
-            onBackfill={onBackfill}
           />
         ))
       )}

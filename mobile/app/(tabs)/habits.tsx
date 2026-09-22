@@ -265,10 +265,9 @@ export default function HabitsScreen() {
         onReset={handleReset}
         onCheckIn={handleCheckIn}
         onReportFall={handleReportFall}
-        onBackfill={handleBackfill}
       />
     ),
-    [isPending, handleReset, handleCheckIn, handleReportFall, handleBackfill]
+    [isPending, handleReset, handleCheckIn, handleReportFall]
   );
 
   const keyExtractor = useCallback((item: Habit) => item.id, []);
