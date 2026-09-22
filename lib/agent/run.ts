@@ -1,18 +1,25 @@
-import { ToolLoopAgent, stepCountIs } from "ai";
+import { generateText, ToolLoopAgent, stepCountIs } from "ai";
 import { google } from "@ai-sdk/google";
+import {
+  buildAckReply,
+  classifyAgentIntent,
+  isSimpleStatusQuery,
+  maxStepsForRun,
+  toolModeForIntent,
+  usesTools,
+} from "@/lib/agent/budget";
 import { buildAgentContext, type AgentContextOptions } from "@/lib/agent/context";
-import { buildSystemPrompt } from "@/lib/agent/prompt";
+import { GEMINI_CREDITS_DEPLETED, mapGeminiError } from "@/lib/agent/gemini-errors";
+import { buildCompactSystemPrompt, buildDigSystemPrompt, buildSystemPrompt } from "@/lib/agent/prompt";
 import { getAgentSettings } from "@/lib/agent/settings";
-import { createAgentTools } from "@/lib/agent/tools";
+import { createAgentTools, type AgentTools } from "@/lib/agent/tools";
 import type { AgentChannel, MotivationKind } from "@/lib/agent/types";
 import { logAgentMessage } from "@/lib/agent/log";
 import { sanitizeAgentReply } from "@/lib/agent/reply";
 
 const MODEL_ID = "gemini-3-flash-preview";
 
-export function isSimpleStatusQuery(message: string): boolean {
-  return /מה (ה)?מצב|מה (ה)?לוז|סטטוס|מה יש לי|מה דחוף/i.test(message.trim());
-}
+export { isSimpleStatusQuery };
 
 export type AgentImageInput = {
   mimeType: string;
@@ -25,6 +32,39 @@ function requireGeminiKey() {
   return key;
 }
 
+async function generateOnce(input: {
+  system: string;
+  prompt: string;
+  tools?: AgentTools;
+  maxSteps?: number;
+  messages?: Parameters<ToolLoopAgent<AgentTools>["generate"]>[0]["messages"];
+}) {
+  try {
+    if (input.tools && input.maxSteps) {
+      const agent = new ToolLoopAgent({
+        model: google(MODEL_ID),
+        instructions: input.system,
+        tools: input.tools,
+        stopWhen: stepCountIs(input.maxSteps),
+      });
+      if (input.messages) {
+        return await agent.generate({ messages: input.messages });
+      }
+      return await agent.generate({ prompt: input.prompt });
+    }
+
+    const { text } = await generateText({
+      model: google(MODEL_ID),
+      system: input.system,
+      prompt: input.prompt,
+      maxOutputTokens: 256,
+    });
+    return { text: text ?? "", steps: [] as unknown[] };
+  } catch (err) {
+    throw mapGeminiError(err);
+  }
+}
+
 export async function runAgentChat(input: {
   message: string;
   images?: AgentImageInput[];
@@ -34,17 +74,19 @@ export async function runAgentChat(input: {
 }) {
   requireGeminiKey();
   const settings = await getAgentSettings();
+  const hasImages = Boolean(input.images?.length);
   const context = await buildAgentContext(new Date(), {
     ...input.contextOptions,
     compact: input.channel === "whatsapp",
   });
-  const tools = createAgentTools();
-  const simple = isSimpleStatusQuery(input.message) && !(input.images?.length);
 
-  const inboundSummary =
-    input.images?.length
-      ? `${input.message}\n[${input.images.length} image(s) attached]`
-      : input.message;
+  const intent =
+    input.channel === "whatsapp" ? classifyAgentIntent(input.message, hasImages) : "full";
+  const simpleOnApp = input.channel === "app" && isSimpleStatusQuery(input.message) && !hasImages;
+
+  const inboundSummary = hasImages
+    ? `${input.message}\n[${input.images!.length} image(s) attached]`
+    : input.message;
 
   if (input.logInbound) {
     await logAgentMessage({
@@ -54,38 +96,65 @@ export async function runAgentChat(input: {
     });
   }
 
-  const agent = new ToolLoopAgent({
-    model: google(MODEL_ID),
-    instructions: buildSystemPrompt(settings.tone, context, settings.system_prompt),
-    tools,
-    stopWhen: stepCountIs(simple ? 4 : 12),
-  });
+  // WhatsApp ack: template reply — zero Gemini tokens.
+  if (input.channel === "whatsapp" && intent === "ack" && !hasImages) {
+    const text = buildAckReply(context);
+    await logAgentMessage({ direction: "outbound", channel: input.channel, content: text });
+    return { text, steps: 0 };
+  }
 
   const textPrompt =
     input.message.trim() ||
     "נתח את התמונה/המסמך שהמשתמש שלח ועדכן את האפליקציה עם הכלים המתאימים (במיוחד upsert_wealth_item / import_wealth_text).";
 
-  const userContent: Array<{ type: "text"; text: string } | { type: "image"; image: string; mimeType?: string }> = [
-    { type: "text", text: textPrompt },
-  ];
+  const useToolLoop = usesTools(intent, input.channel) || hasImages;
+  const toolMode = toolModeForIntent(intent, input.channel);
+  const maxSteps = maxStepsForRun(intent, input.channel, simpleOnApp);
 
-  for (const img of input.images ?? []) {
-    const dataUrl = img.data.startsWith("data:")
-      ? img.data
-      : `data:${img.mimeType};base64,${img.data}`;
-    userContent.push({ type: "image", image: dataUrl, mimeType: img.mimeType });
+  let result: { text?: string; steps?: unknown[] };
+
+  if (!useToolLoop) {
+    result = await generateOnce({
+      system: buildCompactSystemPrompt(settings.tone, context),
+      prompt: textPrompt,
+    });
+  } else {
+    const tools = createAgentTools({ mode: toolMode });
+    const system =
+      intent === "status" && input.channel === "whatsapp"
+        ? buildCompactSystemPrompt(settings.tone, context)
+        : buildSystemPrompt(settings.tone, context, settings.system_prompt);
+
+    const userContent: Array<
+      { type: "text"; text: string } | { type: "image"; image: string; mimeType?: string }
+    > = [{ type: "text", text: textPrompt }];
+
+    for (const img of input.images ?? []) {
+      const dataUrl = img.data.startsWith("data:")
+        ? img.data
+        : `data:${img.mimeType};base64,${img.data}`;
+      userContent.push({ type: "image", image: dataUrl, mimeType: img.mimeType });
+    }
+
+    result = await generateOnce({
+      system,
+      prompt: textPrompt,
+      tools,
+      maxSteps,
+      messages: hasImages ? [{ role: "user", content: userContent }] : undefined,
+    });
   }
 
-  let result =
-    input.images?.length
-      ? await agent.generate({ messages: [{ role: "user", content: userContent }] })
-      : await agent.generate({ prompt: textPrompt });
-
   let text = result.text?.trim() || "";
-  if (!text) {
-    const retry = await agent.generate({
+
+  // Empty-text retry: app only — WhatsApp uses outbound fallback (saves a full generate).
+  if (!text && input.channel === "app") {
+    const retry = await generateOnce({
+      system: buildSystemPrompt(settings.tone, context, settings.system_prompt),
       prompt:
         "סכם למשתמש בעברית ב-2–3 משפטים מה עשית עכשיו לפי הכלים שקראת. אל תכתוב שגיאות או 'נסה שוב'.",
+      tools: createAgentTools({ mode: "full" }),
+      maxSteps: 2,
     });
     text = retry.text?.trim() || "";
     result = retry;
@@ -115,6 +184,26 @@ const DIG_PROMPTS: Record<MotivationKind, string> = {
     "חפירת ערב כמנטור קשוח-אוהב: מה לא נסגר היום (הרגל/התחייבות/משימה) + דרישה לסגור לולאה אחת. אם נראה התחמקות — תגיד ישר. עד 30 מילים.",
 };
 
+/** Proactive motivation dig — single generateText, no tools. */
+async function runMotivationGenerate(
+  kind: MotivationKind
+): Promise<{ text: string; steps: number }> {
+  requireGeminiKey();
+  const settings = await getAgentSettings();
+  const context = await buildAgentContext(new Date(), {
+    gmailDigest: kind === "morning",
+    compact: true,
+  });
+
+  const result = await generateOnce({
+    system: buildDigSystemPrompt(settings.tone, context, settings.system_prompt),
+    prompt: DIG_PROMPTS[kind],
+  });
+
+  const text = sanitizeAgentReply(result.text?.trim() || "");
+  return { text, steps: 1 };
+}
+
 /** Proactive motivation dig (cron / manual trigger). */
 export async function runMotivationMessage(
   kind: MotivationKind
@@ -122,12 +211,15 @@ export async function runMotivationMessage(
   const settings = await getAgentSettings();
   if (!settings.enabled) return { skipped: true, reason: "disabled" };
 
-  return runAgentChat({
-    message: DIG_PROMPTS[kind],
-    channel: "whatsapp",
-    logInbound: false,
-    contextOptions: { gmailDigest: kind === "morning" },
-  });
+  try {
+    return await runMotivationGenerate(kind);
+  } catch (err) {
+    const mapped = mapGeminiError(err);
+    if (mapped.message === GEMINI_CREDITS_DEPLETED) {
+      return { skipped: true, reason: GEMINI_CREDITS_DEPLETED };
+    }
+    throw mapped;
+  }
 }
 
 export type { MotivationKind };

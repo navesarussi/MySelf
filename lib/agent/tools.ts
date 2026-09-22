@@ -15,8 +15,27 @@ import { createTaskAgentTools } from "@/lib/agent/tools-tasks";
  * few lines. Extra/finance/Gmail were already split out this way; the rest now
  * follow the same shape.
  */
-export function createAgentTools() {
-  return {
+const READ_ONLY_TOOL_NAMES = new Set([
+  "get_dashboard",
+  "list_tasks",
+  "list_projects",
+  "list_habits",
+  "list_goals",
+  "list_commitments",
+  "list_relationships",
+  "list_events",
+  "list_library",
+  "list_periods",
+  "list_emails",
+  "read_email",
+  "list_wealth",
+  "get_dig_schedule",
+]);
+
+export type AgentToolsMode = "read" | "full";
+
+export function createAgentTools(opts?: { mode?: AgentToolsMode }) {
+  const all = {
     ...createExtraAgentTools(),
     ...createFinanceAgentTools(),
     ...createGmailAgentTools(),
@@ -26,6 +45,12 @@ export function createAgentTools() {
     ...createRelationshipAgentTools(),
     ...createScheduleAgentTools(),
   };
+
+  if (opts?.mode !== "read") return all;
+
+  return Object.fromEntries(
+    Object.entries(all).filter(([name]) => READ_ONLY_TOOL_NAMES.has(name))
+  ) as typeof all;
 }
 
 export type AgentTools = ReturnType<typeof createAgentTools>;
