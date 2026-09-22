@@ -1,16 +1,11 @@
 import { getSupabase } from "@/lib/supabase";
 import type { FinanceSource } from "@/lib/finance/external-key";
 
-export type FinanceSourceSummary = {
-  source: FinanceSource;
-  count: number;
-  latest_txn_date: string | null;
-  last_activity_at: string | null;
-};
-
-export type FinanceSourcesStatusResponse = {
-  sources: FinanceSourceSummary[];
-};
+export type {
+  FinanceSourceSummary,
+  FinanceSourcesStatusResponse,
+} from "@/lib/finance/types-client";
+import type { FinanceSourceSummary, FinanceSourcesStatusResponse } from "@/lib/finance/types-client";
 
 const TRACKED_SOURCES: FinanceSource[] = ["leumi", "apple_pay", "max", "visa_cal"];
 

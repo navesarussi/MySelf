@@ -4,7 +4,7 @@ import type { ApiConfig } from "../../api/client";
 import { queryClient, queryKeys, decFinanceUncategorizedInHome } from "../../query";
 import type { ExpenseTypeValue } from "./categorize-controls";
 import type { FinanceTransaction } from "@/lib/finance/types";
-import { expenseTypeForCategory } from "@/lib/finance/suggest-txn";
+import { expenseTypeForCategory } from "@/lib/finance/categorize-client";
 
 export type UncategorizedTxn = FinanceTransaction & {
   suggested_category?: string | null;

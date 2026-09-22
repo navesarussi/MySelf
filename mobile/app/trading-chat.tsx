@@ -6,7 +6,7 @@ import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/query";
 import { Badge, Btn, Screen } from "../src/components/ui";
-import type { ChatMessageRow } from "@/lib/trading/chat";
+import type { ChatMessageRow } from "@/lib/trading/types-client";
 
 export default function TradingChatScreen() {
   const { t } = useI18n();

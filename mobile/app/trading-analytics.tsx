@@ -8,7 +8,7 @@ import { Badge, Card, Chip, Loading, Row, Screen, SectionTitle } from "../src/co
 import { GroupBars, KpiGrid, RHistogram, SeriesChart } from "../src/components/trading/charts";
 import { TradingText } from "../src/components/trading/blocks";
 import { fmtPct, fmtR, fmtUsd } from "@/lib/trading/format";
-import type { GroupStat } from "@/lib/trading/metrics";
+import type { GroupStat } from "@/lib/trading/types-client";
 
 const toBars = (groups: GroupStat[], max = 12) =>
   groups.slice(0, max).map((g) => ({ key: g.key, value: g.stats.expectancy_r, sub: `${g.stats.trades}` }));

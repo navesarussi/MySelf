@@ -7,15 +7,8 @@ import {
   type MerchantRule,
 } from "@/lib/finance/merchant-rules";
 
-export type RecurringSuggestion = {
-  merchant_key: string;
-  display_name: string;
-  category: string | null;
-  suggested_amount: number;
-  occurrences: number;
-  months: string[];
-  amounts: number[];
-};
+export type { RecurringSuggestion } from "@/lib/finance/types-client";
+import type { RecurringSuggestion } from "@/lib/finance/types-client";
 
 export function getRecentMonths(targetMonth: string, count = 3): string[] {
   const [y, m] = targetMonth.split("-").map(Number);

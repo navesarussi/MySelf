@@ -7,7 +7,7 @@ import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../../query";
 import { fmtAmount0 } from "@/lib/finance/format";
-import type { RecurringSuggestion } from "@/lib/finance/recurring";
+import type { RecurringSuggestion } from "@/lib/finance/types-client";
 
 export function RecurringSuggestionsCard({
   month,

@@ -5,7 +5,7 @@ import { useI18n } from "../src/i18n";
 import { queryKeys, useApiQuery } from "../src/query";
 import { Chip, EmptyState, Row, ScreenList } from "../src/components/ui";
 import { TradeRowCard } from "../src/components/trading/blocks";
-import type { TradeListItem } from "@/lib/trading/service";
+import type { TradeListItem } from "@/lib/trading/types-client";
 
 type StateFilter = "all" | "open" | "closed";
 type OutcomeFilter = "" | "win" | "loss";
