@@ -62,7 +62,7 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
 
     // This response mints the session, so the cookie is not on the request yet —
     // hand the deep link the same token applySessionCookie is about to set.
-    const sessionToken = await makeSessionToken(secret);
+    const sessionToken = await makeSessionToken(secret, email);
     const res = redirectToAppOrNext({
       jar,
       origin: url.origin,
@@ -70,7 +70,7 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
       appRedirectCookie: APP_REDIRECT_COOKIE,
       sessionToken,
     });
-    await applySessionCookie(res, secret);
+    await applySessionCookie(res, secret, email);
 
     if (isPrimary) {
       setFlashCookie(jar, "Google מחובר — יומן, משימות ומייל");

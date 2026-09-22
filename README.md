@@ -28,6 +28,7 @@ npm run dev
 | `MONDAY_CLIENT_SECRET` | OAuth client secret של Monday |
 | `MONDAY_REDIRECT_URI` | Callback ל-Monday, בפרודקשן: `https://myselfapp.xyz/api/integrations/monday/callback` |
 | `CRON_SECRET` | מחרוזת סודית לאימות סנכרון שבועי (Vercel Cron) |
+| `SESSION_REJECT_LEGACY` | `1` מפסיק לקבל את טוקן הסשן הישן (הקבוע, בלי זהות ובלי תפוגה). להפעיל אחרי שכל המכשירים עברו לגרסה שמנפיקה טוקן v2 — זה ינתק כל התקנה שעדיין מחזיקה טוקן ישן |
 
 ## Google Sign-In + יומן
 

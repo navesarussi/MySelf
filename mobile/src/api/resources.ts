@@ -191,6 +191,10 @@ export const api = {
       grid: import("@/lib/habit-history").HabitHistoryDay[];
     }>(c, `/habits/${id}/history?days=${days}`),
 
+  /** Five-minute token for an OAuth start URL — never put the session token in a URL. */
+  oauthStartToken: (c: ApiConfig) =>
+    apiFetch<{ token: string }>(c, "/auth/oauth-token", { method: "POST" }),
+
   goals: (c: ApiConfig) => apiFetch<Goal[]>(c, "/goals"),
   createGoal: (c: ApiConfig, body: Partial<Goal>) =>
     apiFetch<Goal>(c, "/goals", { method: "POST", body }),

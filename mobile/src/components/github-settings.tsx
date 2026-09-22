@@ -76,9 +76,15 @@ export function GithubSettingsSection() {
       window.location.href = url;
       return;
     }
-    // The system browser may not carry the session cookie, so pass the token
-    // explicitly; the connect route requires an authenticated caller.
-    const authedUrl = `${url}&token=${encodeURIComponent(token ?? "")}`;
+    // The system browser may not carry the session cookie, so the URL has to
+    // carry a credential — but a URL reaches browser history, Referer headers
+    // and access logs, so it gets a five-minute token scoped to this one flow
+    // rather than the session token itself.
+    const startToken = await api
+      .oauthStartToken({ serverUrl: API_URL, token: token ?? "" })
+      .then((r) => r.token)
+      .catch(() => token ?? "");
+    const authedUrl = `${url}&token=${encodeURIComponent(startToken)}`;
     const result = await WebBrowser.openAuthSessionAsync(authedUrl, redirect);
     if (result.type !== "cancel") statusQ.refresh();
   }
