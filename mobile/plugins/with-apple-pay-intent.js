@@ -14,6 +14,8 @@ const SOURCE_FILES = [
   "LogApplePayExpenseIntent.swift",
   "MySelfAppShortcuts.swift",
   "FinanceIngestBridge.m",
+  "WidgetSnapshotBridge.swift",
+  "WidgetSnapshotBridge.m",
 ];
 
 function withApplePayIntent(config) {

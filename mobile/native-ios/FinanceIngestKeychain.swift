@@ -3,6 +3,8 @@ import Security
 
 enum FinanceIngestKeychain {
   static let service = "com.navesarussi.myself.finance-ingest"
+  /// Matches entitlements `$(AppIdentifierPrefix)com.navesarussi.myself` (Team ID HVW3H3DLRB).
+  static let accessGroup = "HVW3H3DLRB.com.navesarussi.myself"
   static let ingestTokenKey = "FINANCE_INGEST_TOKEN"
   static let sessionTokenKey = "myself.session_token"
 
@@ -12,6 +14,7 @@ enum FinanceIngestKeychain {
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
       kSecAttrAccount as String: key,
+      kSecAttrAccessGroup as String: accessGroup,
     ]
     SecItemDelete(query as CFDictionary)
 
@@ -32,6 +35,7 @@ enum FinanceIngestKeychain {
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
       kSecAttrAccount as String: key,
+      kSecAttrAccessGroup as String: accessGroup,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
