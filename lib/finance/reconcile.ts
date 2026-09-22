@@ -48,33 +48,32 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Card issuer named by a Leumi settlement line, when it names one at all. */
+function batchProvider(batch: FinanceTransaction): "max" | "visa_cal" | null {
+  if (batch.description.includes("מקס")) return "max";
+  if (batch.description.includes("כאל") || batch.description.includes("ויזה")) return "visa_cal";
+  return null;
+}
+
 function matchCardSum(
   batch: FinanceTransaction,
   cardTxns: FinanceTransaction[]
 ): { matched: boolean; sum: number } {
-  const isMax = batch.description.includes("מקס");
-  const isCal = batch.description.includes("כאל") || batch.description.includes("ויזה");
+  // Every candidate set stays inside the issuer the batch names. Widening the
+  // fallbacks to all card transactions let a Max settlement "match" a total made
+  // up of Cal spending whenever two issuers settled in the same month.
+  const provider = batchProvider(batch);
+  const scope = provider ? cardTxns.filter((c) => c.source === provider) : cardTxns;
 
-  const providerTxns = cardTxns.filter((c) => {
-    if (isMax) return c.source === "max";
-    if (isCal) return c.source === "visa_cal";
-    return true;
-  });
+  const candidateSets = [
+    scope,
+    scope.filter((c) => daysDiff(c.txn_date, batch.txn_date) <= 3),
+  ];
 
-  const sumProvider = round2(providerTxns.reduce((acc, c) => acc + c.amount, 0));
-  if (Math.abs(sumProvider - batch.amount) <= 0.05 && providerTxns.length > 0) {
-    return { matched: true, sum: sumProvider };
-  }
-
-  const closeTxns = cardTxns.filter((c) => daysDiff(c.txn_date, batch.txn_date) <= 3);
-  const sumClose = round2(closeTxns.reduce((acc, c) => acc + c.amount, 0));
-  if (Math.abs(sumClose - batch.amount) <= 0.05 && closeTxns.length > 0) {
-    return { matched: true, sum: sumClose };
-  }
-
-  const sumAll = round2(cardTxns.reduce((acc, c) => acc + c.amount, 0));
-  if (Math.abs(sumAll - batch.amount) <= 0.05 && cardTxns.length > 0) {
-    return { matched: true, sum: sumAll };
+  for (const set of candidateSets) {
+    if (set.length === 0) continue;
+    const sum = round2(set.reduce((acc, c) => acc + c.amount, 0));
+    if (Math.abs(sum - batch.amount) <= 0.05) return { matched: true, sum };
   }
 
   return { matched: false, sum: 0 };

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { bearerToken, isTradingCronAuthorized } from "@/lib/api/cron-auth";
 import { getSupabase } from "@/lib/supabase";
 import { runIntradayTick } from "@/lib/trading/intraday-engine";
 
@@ -9,12 +10,9 @@ export const maxDuration = 120;
  * The DB token exists because the scheduler is Supabase pg_cron (Vercel Hobby crons are daily-only).
  */
 async function isSchedulerAuthorized(req: NextRequest): Promise<boolean> {
-  const auth = req.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) return false;
-  const secrets = [process.env.TRADING_CRON_SECRET, process.env.CRON_SECRET].filter((s): s is string => Boolean(s));
-  if (secrets.includes(token)) return true;
-  if (token.length < 32) return false;
+  if (isTradingCronAuthorized(req)) return true;
+  const token = bearerToken(req.headers.get("authorization"));
+  if (!token || token.length < 32) return false;
   const { data } = await getSupabase().from("trading_cron_tokens").select("token").eq("token", token).maybeSingle();
   return Boolean(data);
 }

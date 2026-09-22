@@ -41,19 +41,27 @@ export function HabitMissedReports({
       <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
         {t("habits.missedReportsHint")}
       </Text>
-      {missed.map((day) => (
-        <Row key={day} wrap style={{ justifyContent: "space-between", gap: 8 }}>
+      {/* Oldest first, and only the oldest is actionable: the streak is derived
+          from the gap to the last reported day, so filling a later day first
+          would strand the earlier ones. */}
+      {missed.map((day, i) => (
+        <Row key={day} wrap style={{ justifyContent: "space-between", gap: 8, opacity: i === 0 ? 1 : 0.45 }}>
           <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "600", textAlign: textStart, writingDirection }}>
             {formatLocaleDate(locale, day)}
           </Text>
           <Row style={{ gap: 6 }}>
-            <Btn small label={t("habits.backfillSuccess")} onPress={() => onBackfill(habit, day, "check_in")} disabled={busy} />
+            <Btn
+              small
+              label={t("habits.backfillSuccess")}
+              onPress={() => onBackfill(habit, day, "check_in")}
+              disabled={busy || i > 0}
+            />
             <Btn
               small
               variant="warn"
               label={t("habits.backfillFall")}
               onPress={() => onBackfill(habit, day, "fall")}
-              disabled={busy}
+              disabled={busy || i > 0}
             />
           </Row>
         </Row>

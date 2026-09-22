@@ -6,14 +6,9 @@ import {
   dispatchTimeline,
 } from "@/lib/push/dispatch";
 import { jerusalemParts } from "@/lib/push/time";
+import { isCronAuthorized } from "@/lib/api/cron-auth";
 
 export const maxDuration = 60;
-
-function isCronAuthorized(req: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
-}
 
 /**
  * Push dispatch cron (Hobby: a few daily slots, not hourly).

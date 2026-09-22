@@ -125,7 +125,21 @@ export async function getActiveV2Params(): Promise<{ params: StrategyV2Params; l
   const row = data as { id: string; version: string; params: Record<string, unknown>; locked_until: string | null } | null;
   if (!row || row.params.strategy !== "v2") return { params: DEFAULT_V2_PARAMS, locked_until: row?.locked_until ?? null, id: null };
   const { strategy: _s, ...rest } = row.params;
-  return { params: { ...DEFAULT_V2_PARAMS, ...(rest as object), version: row.version }, locked_until: row.locked_until, id: row.id };
+  const params: StrategyV2Params = { ...DEFAULT_V2_PARAMS, ...(rest as object), version: row.version };
+  // A partial exit cannot be mirrored to the broker (see brokerSupportsExitPlan):
+  // the broker would keep the full size behind a full-size stop while the journal
+  // reported a reduced position. Backtests may explore PARTIAL_50_AT_1R, but a
+  // variant carrying one must not become the live plan by being approved.
+  if (params.partial_fraction !== 0) {
+    void logEvent({
+      kind: "PARAMS_REJECTED",
+      severity: "critical",
+      message: `ערכת פרמטרים ${row.version} מבקשת יציאה חלקית (${params.partial_fraction}) — לא נתמך מול הברוקר, נטען ברירת המחדל`,
+      data: { param_set_id: row.id },
+    }).catch(() => undefined);
+    return { params: DEFAULT_V2_PARAMS, locked_until: row.locked_until, id: null };
+  }
+  return { params, locked_until: row.locked_until, id: row.id };
 }
 
 export async function getCalendar(fromIso: string): Promise<(CalendarEvent & { id: string; note: string | null; source: string })[]> {

@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runDataIntegrityMaintenance } from "@/lib/db-maintenance";
-
-function isCronRequest(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
-}
+import { isCronAuthorized as isCronRequest } from "@/lib/api/cron-auth";
 
 /** Cron/manual cleanup for duplicate rows (complements migration 0015 constraints). */
 export async function GET(req: NextRequest) {

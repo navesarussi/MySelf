@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAgentSettings } from "@/lib/agent/settings";
 import { isWhatsAppConfigured, sendWhatsAppText } from "@/lib/whatsapp/client";
-
-function isCronAuthorized(req: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
-}
+import { isCronAuthorized } from "@/lib/api/cron-auth";
 
 /** Daily probe: Gemini key + WhatsApp send path. */
 export async function GET(req: NextRequest) {

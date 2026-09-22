@@ -1,7 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { dedupeTasks } from "@/lib/data-integrity";
-import { computeCheckIn, computeFall, habitReportDay } from "@/lib/habit-stats";
-import type { Habit, Task, TaskPriority, TaskStatus } from "@/lib/types";
+import { applyHabitReport, loadHabit } from "@/lib/habit-report-service";
+import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 
 const PRIORITIES: TaskPriority[] = ["urgent", "high", "medium", "low"];
 const STATUSES: TaskStatus[] = ["open", "in_progress", "stuck", "review", "done"];
@@ -66,32 +66,12 @@ export async function agentListHabits() {
 }
 
 export async function agentReportHabit(id: string, type: "check_in" | "fall") {
-  const { data: habit, error: fetchErr } = await getSupabase()
-    .from("habits")
-    .select("*")
-    .eq("id", id)
-    .single<Habit>();
-  if (fetchErr || !habit) throw new Error("habit_not_found");
+  const habit = await loadHabit(id);
+  if (!habit) throw new Error("habit_not_found");
 
-  const today = habitReportDay(habit.report_time);
-  if (habit.last_checked_on === today) return habit;
-
-  const result = type === "check_in" ? computeCheckIn(habit, today) : computeFall(habit, today);
-  const { data, error } = await getSupabase()
-    .from("habits")
-    .update({
-      streak_count: result.streak,
-      best_streak: result.bestStreak,
-      total_success_days: result.totalSuccessDays,
-      failure_count: result.failureCount,
-      last_checked_on: today,
-      last_reported_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw new Error("habit_report_failed");
-  return data;
+  const result = await applyHabitReport({ habit, outcome: type });
+  if (!result.ok) throw new Error("habit_report_failed");
+  return result.habit;
 }
 
 export async function agentListGoals(status: "active" | "done" = "active") {

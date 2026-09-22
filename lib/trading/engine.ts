@@ -7,7 +7,7 @@ import { createBarCache, fetchBidAskSpreadPct, fetchBtcDominance, fetchEarningsS
 import { computeStats } from "./metrics";
 import { applyExternalExit, applyExternalFill, forceClose, newPendingPosition, openRiskR, realizedR, stepPosition, type PositionEvent, type SimPosition } from "./position";
 import { alpaca, flattenAtBroker, isAlpacaConfigured, sellableQty } from "./broker/alpaca";
-import { bracketLegs, brokerExit, pendingDecision, protectiveAdjustments } from "./broker/sync";
+import { bracketLegs, brokerExit, brokerSupportsExitPlan, pendingDecision, protectiveAdjustments } from "./broker/sync";
 import { checkNewEntry, drawdownFromPeak, shouldTripKillSwitch, weekStartIso } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
 import { LIVE_DAILY_TREND_PARAMS, buildDailyAsset, donchianExitBreached, scanDailyTrendCandidates, scoreDailyCandidate, type DailyAsset, type DailyCandidate } from "./strategy/daily-trend";
@@ -382,6 +382,20 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
 /** Make the broker match the strategy: adopt broker exits, close on strategy exits, move protective orders. */
 export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: TradeRow["events"], lastPrice: number | null, now: number): Promise<Record<string, unknown>> {
   const patch: Record<string, unknown> = {};
+  // A partial the broker was never told about means it still holds the full
+  // size behind a full-size stop, while the journal reports a reduced position.
+  // Nothing should be able to reach this (see brokerSupportsExitPlan) — if it
+  // does, say so loudly instead of trading a position we cannot keep in sync.
+  if (p.partial_exit_price !== null && p.state !== "CLOSED" && !brokerSupportsExitPlan(p)) {
+    await logEvent({
+      kind: "BROKER_DESYNC",
+      symbol: trade.symbol,
+      severity: "critical",
+      message: `${trade.symbol}: יציאה חלקית לא שוקפה לברוקר — הפוזיציה אצל הברוקר גדולה מהיומן`,
+      data: { trade_id: trade.id },
+      push: true,
+    });
+  }
   const stopId = (trade.broker_stop_order_id as string | null) ?? null;
   const targetId = (trade.broker_target_order_id as string | null) ?? null;
   const [stopOrder, targetOrder] = await Promise.all([stopId ? alpaca.getOrder(stopId) : null, targetId ? alpaca.getOrder(targetId) : null]);
@@ -425,10 +439,21 @@ export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: Tr
   return patch;
 }
 
-/** Replace a simulated exit price with the broker's actual fill. */
+/**
+ * Replace a simulated exit price with the broker's actual fill.
+ *
+ * Only the closing fill is repriced, so the adjustment must use the size that
+ * fill actually sold. `exit_size` is recorded by `close()`; the fallback
+ * reconstruction is for rows persisted before that field existed and is only
+ * correct for the structural plans every live strategy uses (v1's `use_partial`
+ * sells half, which `partial_fraction` does not describe).
+ */
 function repriceExit(p: SimPosition, price: number) {
   if (p.exit_price === null) return;
-  const qty = p.initial_size - (p.partial_exit_price !== null ? p.initial_size * (p.partial_fraction ?? 0) : 0);
+  const qty =
+    p.exit_size ??
+    p.initial_size - (p.partial_exit_price !== null ? p.initial_size * (p.partial_fraction ?? (p.use_partial ? 0.5 : 0)) : 0);
+  if (!(qty > 0)) return;
   p.cash_flow += (price - p.exit_price) * qty;
   p.exit_price = price;
 }

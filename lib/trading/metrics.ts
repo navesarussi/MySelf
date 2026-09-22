@@ -1,3 +1,5 @@
+import { RISK_ENVELOPE } from "./config";
+
 /** Performance statistics over closed trades expressed in R. Pure; shared by backtest, journal and gates. */
 
 export type RTrade = {
@@ -131,6 +133,7 @@ export type MonteCarloResult = {
   final_r_p50: number;
   /** DD as % of equity at the given per-trade risk fraction (compounding ignored). */
   max_dd_pct_p95: number;
+  /** Share of runs that breach RISK_ENVELOPE.MASTER_KILL_SWITCH_DD — the drawdown the live system halts on. */
   prob_kill_switch: number;
 };
 
@@ -157,7 +160,7 @@ export function monteCarlo(rs: number[], riskPerTrade: number, runs = 1000, seed
       dd = Math.max(dd, peak - cum);
       equity *= 1 + r * riskPerTrade;
       peakEq = Math.max(peakEq, equity);
-      if (1 - equity / peakEq >= 0.15) killed = true;
+      if (1 - equity / peakEq >= RISK_ENVELOPE.MASTER_KILL_SWITCH_DD) killed = true;
     }
     if (killed) kills += 1;
     dds.push(dd);

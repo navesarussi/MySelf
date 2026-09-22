@@ -7,14 +7,9 @@ import {
 } from "@/lib/agent/whatsapp-dedup";
 import { mapAgentErrorCode } from "@/lib/agent/whatsapp-outbound";
 import { sendWhatsAppDig } from "@/lib/whatsapp/client";
+import { isCronAuthorized } from "@/lib/api/cron-auth";
 
 export const maxDuration = 60;
-
-function isCronAuthorized(req: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
-}
 
 function jerusalemHour(now = new Date()): number {
   const parts = new Intl.DateTimeFormat("en-GB", {

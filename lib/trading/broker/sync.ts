@@ -64,3 +64,20 @@ export function protectiveAdjustments(input: { assetClass: AssetClass; simStop: 
   }
   return out;
 }
+
+/**
+ * A partial exit taken by the simulator is NOT mirrored: the broker holds the
+ * full quantity and the protective stop still covers it, so sim and broker
+ * diverge silently and the position ends up carrying more risk than the journal
+ * shows. Mirroring one needs a broker-side partial sell plus a re-sized stop
+ * (and a column to make it idempotent), which nothing needs yet — every live
+ * plan sets `partial_fraction: 0`.
+ *
+ * Until that exists this is an invariant, not a feature gap: a broker-backed
+ * plan that would take a partial is a configuration error, and the caller must
+ * refuse to place it rather than run a position it cannot keep in sync.
+ */
+export function brokerSupportsExitPlan(plan: { partial_fraction?: number; use_partial?: boolean; exit_plan?: string | null }): boolean {
+  if (plan.exit_plan === "STRUCTURAL") return (plan.partial_fraction ?? 0) === 0;
+  return plan.use_partial === false;
+}
