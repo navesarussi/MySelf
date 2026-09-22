@@ -1,8 +1,9 @@
 import AppIntents
+import WidgetKit
 
-/// Task 6: wire API call + snapshot patch + timeline reload.
 struct TaskAdvanceIntent: AppIntent {
   static var title: LocalizedStringResource = "קידום משימה"
+  static var openAppWhenRun: Bool = false
 
   @Parameter(title: "Task ID")
   var taskId: String
@@ -21,6 +22,20 @@ struct TaskAdvanceIntent: AppIntent {
   }
 
   func perform() async throws -> some IntentResult {
+    let next = nextTaskStatus(status)
+    try await WidgetApiClient.authorizedRequest(
+      path: "tasks/\(taskId)",
+      method: "PATCH",
+      json: ["status": next]
+    )
+    if var snap = WidgetSnapshotStore.load() {
+      if snap.urgentTask?.id == taskId { snap.urgentTask = nil }
+      snap.kpis.tasksDueSoon = max(0, snap.kpis.tasksDueSoon - 1)
+      snap.heroCount = max(0, snap.heroCount - 1)
+      snap.updatedAt = ISO8601DateFormatter().string(from: Date())
+      WidgetSnapshotStore.save(snap)
+    }
+    WidgetCenter.shared.reloadTimelines(ofKind: "HomeWidget")
     return .result()
   }
 }
