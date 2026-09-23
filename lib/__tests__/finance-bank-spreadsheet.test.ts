@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parseCalXlsx, parseLeumiXls, parseMaxXlsx } from "../finance/import/parse-bank-spreadsheet";
-import { extractPdfText } from "../finance/import/pdf-text";
+import { extractPdfText, resetPdfTextRuntimeForTests } from "../finance/import/pdf-text";
 import { parseCalStatementPdf } from "../finance/import/parse-cal-pdf";
 import { excelSerialToISO, parseDateCell } from "../finance/import/spreadsheet-utils";
 
@@ -32,6 +32,23 @@ describe("parseCalXlsx", () => {
     assert.equal(result.transactions[0].merchant, "חנות א");
     assert.equal(result.transactions[0].kind, "expense");
     assert.ok(result.transactions.every((t) => t.source_ref.startsWith("cal:xlsx:")));
+  });
+
+  it("falls back to USD amount column when ILS cell is empty", async () => {
+    const XLSX = await import("xlsx");
+    const rows = [
+      ["פירוט עסקאות"],
+      ["תאריך\r\nעסקה", "שם בית עסק", 'סכום\r\nבש"ח', "סכום\r\nבדולר", "מועד\r\nחיוב", "סוג\r\nעסקה"],
+      [46286, "FOREIGN SHOP", "", 20, 46297, "רגילה"],
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Sheet1");
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+
+    const result = await parseCalXlsx(buffer);
+    assert.equal(result.transactions.length, 1);
+    assert.equal(result.transactions[0].currency, "USD");
+    assert.equal(result.transactions[0].amount, 20);
   });
 });
 
@@ -83,17 +100,22 @@ describe("parseLeumiXls", () => {
   });
 });
 
-describe("pdf-text DOMMatrix polyfill", () => {
-  it("extractPdfText does not throw when DOMMatrix is missing", async () => {
-    const saved = (globalThis as { DOMMatrix?: unknown }).DOMMatrix;
+describe("pdf-text serverless smoke", () => {
+  it("extractPdfText does not throw without DOMMatrix or pdfjs worker globals", async () => {
+    const savedDom = (globalThis as { DOMMatrix?: unknown }).DOMMatrix;
     delete (globalThis as { DOMMatrix?: unknown }).DOMMatrix;
+    resetPdfTextRuntimeForTests();
+
+    const minimalPdf = Buffer.from(
+      "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\nxref\n0 1\ntrailer<</Root 1 0 R>>\nstartxref\n0\n%%EOF"
+    );
+
     try {
-      const minimalPdf = Buffer.from(
-        "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\nxref\n0 1\ntrailer<</Root 1 0 R>>\nstartxref\n0\n%%EOF"
-      );
-      await assert.doesNotReject(async () => extractPdfText(minimalPdf));
+      const text = await extractPdfText(minimalPdf);
+      assert.equal(typeof text, "string");
+      assert.ok((globalThis as { pdfjsWorker?: { WorkerMessageHandler?: unknown } }).pdfjsWorker?.WorkerMessageHandler);
     } finally {
-      if (saved) (globalThis as { DOMMatrix?: unknown }).DOMMatrix = saved;
+      if (savedDom) (globalThis as { DOMMatrix?: unknown }).DOMMatrix = savedDom;
     }
   });
 });

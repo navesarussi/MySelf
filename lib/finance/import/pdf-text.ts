@@ -65,9 +65,40 @@ function ensureDomMatrixPolyfill(): void {
   globalThis.DOMMatrix = DOMMatrixPolyfill as unknown as typeof DOMMatrix;
 }
 
+type PdfJsWorkerGlobal = {
+  pdfjsWorker?: { WorkerMessageHandler?: unknown };
+};
+
+let workerReady: Promise<void> | null = null;
+
+/**
+ * pdfjs-dist on Node disables real workers and uses a "fake worker" that dynamic-imports
+ * `./pdf.worker.mjs`. Next/Vercel bundles break that relative path — preload the handler
+ * so fake-worker setup never tries to import a missing chunk file.
+ */
+async function ensurePdfWorkerHandler(): Promise<void> {
+  const g = globalThis as PdfJsWorkerGlobal;
+  if (g.pdfjsWorker?.WorkerMessageHandler) return;
+  if (workerReady) return workerReady;
+
+  workerReady = (async () => {
+    const { WorkerMessageHandler } = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+    g.pdfjsWorker = { WorkerMessageHandler };
+  })();
+
+  return workerReady;
+}
+
+/** Reset worker bootstrap (tests only). */
+export function resetPdfTextRuntimeForTests(): void {
+  workerReady = null;
+  delete (globalThis as PdfJsWorkerGlobal).pdfjsWorker;
+}
+
 /** Extract plain text from a PDF buffer (Node-only). */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   ensureDomMatrixPolyfill();
+  await ensurePdfWorkerHandler();
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   const result = await parser.getText();
