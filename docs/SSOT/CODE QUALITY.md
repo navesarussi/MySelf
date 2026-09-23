@@ -39,7 +39,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 ## Shared primitives (one home each)
 - `lib/concurrency.ts` — `mapWithConcurrency`. The bounded pool for anything fan-out; there were three copies plus serial loops that wanted one. Used by `dailyScreen`, intraday data/universe loading, finance ingest notifications.
 - `lib/finance/money.ts` — `round2` / `sumAmounts`. Every shekel amount rounds here; nine copies of `round2` lived across the finance modules.
-- `lib/trading/round.ts` — `round` / `roundMoney` for stored trading numbers (six copies).
+- `lib/trading/round.ts` — `round` / `roundMoney` for stored trading numbers. It replaced eight copies; two of them grew back after the first sweep (`committee/hard-risk.ts`, `position-display.ts`), so check here before writing another.
 - `lib/trading/account-equity.ts` — `equityFromTrades` is the only account-equity formula. The tick and the dashboard both call it; each used to have its own.
 - `lib/ai-model.ts` — `GEMINI_MODEL_ID`. The model id was written out in the chat agent, the trading agent and the transcriber.
 - `lib/api/cron-auth.ts` — scheduler auth. Eight routes each compared the secret with `===`.
