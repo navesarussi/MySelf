@@ -1,6 +1,10 @@
 import { getSupabase } from "@/lib/supabase";
+import { fetchAllRows } from "@/lib/db/paginate";
 import { dedupeGoals, goalFingerprint, habitNameKey } from "@/lib/data-integrity";
 import type { Goal, Habit, Task } from "@/lib/types";
+
+/** The columns the external-task dedupe reads — the query selects only these. */
+export type TaskDedupeRow = Pick<Task, "id" | "source" | "external_id" | "created_at" | "synced_at">;
 
 type MaintenanceResult = {
   goalsRemoved: number;
@@ -8,12 +12,12 @@ type MaintenanceResult = {
   tasksRemoved: number;
 };
 
-function duplicateGoalIds(goals: Goal[]): string[] {
+export function duplicateGoalIds(goals: Goal[]): string[] {
   const keep = new Set(dedupeGoals(goals).map((goal) => goal.id));
   return goals.filter((goal) => !keep.has(goal.id)).map((goal) => goal.id);
 }
 
-function duplicateHabitIds(habits: Habit[]): string[] {
+export function duplicateHabitIds(habits: Habit[]): string[] {
   const byName = new Map<string, Habit>();
   for (const habit of habits) {
     const key = habitNameKey(habit.name);
@@ -35,8 +39,8 @@ function duplicateHabitIds(habits: Habit[]): string[] {
   return habits.filter((habit) => !keep.has(habit.id)).map((habit) => habit.id);
 }
 
-function duplicateExternalTaskIds(tasks: Task[]): string[] {
-  const byKey = new Map<string, Task>();
+export function duplicateExternalTaskIds(tasks: TaskDedupeRow[]): string[] {
+  const byKey = new Map<string, TaskDedupeRow>();
   for (const task of tasks) {
     if (!task.external_id) continue;
     const key = `${task.source}:${task.external_id}`;
@@ -53,40 +57,62 @@ function duplicateExternalTaskIds(tasks: Task[]): string[] {
   return tasks.filter((task) => task.external_id && !keep.has(task.id)).map((task) => task.id);
 }
 
-/** Application-level cleanup when SQL migration cannot run yet. */
+/**
+ * Application-level cleanup when SQL migration cannot run yet.
+ *
+ * Every read is paged and ordered. Unbounded, these stopped at PostgREST's row
+ * cap, and because they were unordered the prefix varied per run: the job might
+ * see both copies of a duplicate one day and only one the next, so the cleanup
+ * was not merely incomplete but non-deterministic. The dedupe helpers only
+ * return rows they saw a survivor for, so a truncated read could never delete
+ * a last copy — but it could quietly stop cleaning.
+ */
 export async function runDataIntegrityMaintenance(): Promise<MaintenanceResult> {
   const supabase = getSupabase();
   let goalsRemoved = 0;
   let habitsRemoved = 0;
   let tasksRemoved = 0;
 
-  const { data: goals, error: goalsError } = await supabase.from("goals").select("*");
-  if (goalsError) throw new Error(`maintenance_goals_fetch:${goalsError.message}`);
-  const goalIds = duplicateGoalIds((goals as Goal[]) ?? []);
+  const goals = await fetchAllRows<Goal>(async (from, to) => {
+    const { data, error } = await supabase.from("goals").select("*").order("id").range(from, to);
+    return { data, error: error ? { message: `maintenance_goals_fetch:${error.message}` } : null };
+  });
+  const goalIds = duplicateGoalIds(goals);
   if (goalIds.length) {
     const { error } = await supabase.from("goals").delete().in("id", goalIds);
     if (error) throw new Error(`maintenance_goals_delete:${error.message}`);
     goalsRemoved = goalIds.length;
   }
 
-  const { data: habits, error: habitsError } = await supabase
-    .from("habits")
-    .select("*")
-    .eq("archived", false);
-  if (habitsError) throw new Error(`maintenance_habits_fetch:${habitsError.message}`);
-  const habitIds = duplicateHabitIds((habits as Habit[]) ?? []);
+  const habits = await fetchAllRows<Habit>(async (from, to) => {
+    const { data, error } = await supabase
+      .from("habits")
+      .select("*")
+      .eq("archived", false)
+      .order("id")
+      .range(from, to);
+    return { data, error: error ? { message: `maintenance_habits_fetch:${error.message}` } : null };
+  });
+  const habitIds = duplicateHabitIds(habits);
   if (habitIds.length) {
     const { error } = await supabase.from("habits").delete().in("id", habitIds);
     if (error) throw new Error(`maintenance_habits_delete:${error.message}`);
     habitsRemoved = habitIds.length;
   }
 
-  const { data: tasks, error: tasksError } = await supabase
-    .from("tasks")
-    .select("id, source, external_id, created_at, synced_at")
-    .not("external_id", "is", null);
-  if (tasksError) throw new Error(`maintenance_tasks_fetch:${tasksError.message}`);
-  const taskIds = duplicateExternalTaskIds((tasks as Task[]) ?? []);
+  const tasks = await fetchAllRows<TaskDedupeRow>(async (from, to) => {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("id, source, external_id, created_at, synced_at")
+      .not("external_id", "is", null)
+      .order("id")
+      .range(from, to);
+    return {
+      data: data as TaskDedupeRow[] | null,
+      error: error ? { message: `maintenance_tasks_fetch:${error.message}` } : null,
+    };
+  });
+  const taskIds = duplicateExternalTaskIds(tasks);
   if (taskIds.length) {
     const { error } = await supabase.from("tasks").delete().in("id", taskIds);
     if (error) throw new Error(`maintenance_tasks_delete:${error.message}`);
