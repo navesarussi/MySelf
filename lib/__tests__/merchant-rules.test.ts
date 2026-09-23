@@ -12,6 +12,13 @@ describe("normalizeMerchantKey", () => {
     assert.equal(normalizeMerchantKey("   Netflix   IL  "), "netflix il");
   });
 
+  it("normalizes glued Hebrew before keying", () => {
+    assert.equal(
+      normalizeMerchantKey("לאהוראתקבעברכבות"),
+      normalizeMerchantKey("לא הוראת קבע ברכבות")
+    );
+  });
+
   it("handles null or empty", () => {
     assert.equal(normalizeMerchantKey(null), "");
     assert.equal(normalizeMerchantKey("   "), "");

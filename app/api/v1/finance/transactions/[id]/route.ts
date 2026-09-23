@@ -20,6 +20,8 @@ import {
   upsertMerchantRule,
   type ExpenseType,
 } from "@/lib/finance/merchant-rules";
+import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
+import { round2 } from "@/lib/finance/money";
 import { parseTxnTime } from "@/lib/finance/txn-datetime";
 import { getSupabase } from "@/lib/supabase";
 import { rowToTxn } from "@/lib/finance/ingest";
@@ -141,9 +143,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
   }
 
+  let amount = current.amount;
+  if (body.amount !== undefined) {
+    const parsed = Number(body.amount);
+    if (!Number.isFinite(parsed) || parsed <= 0) return badRequest("invalid_amount");
+    amount = round2(parsed);
+  }
+
+  let merchant = current.merchant;
+  if (body.merchant !== undefined) {
+    const raw = optStr(body.merchant);
+    merchant = raw ? formatMerchantLabel(raw) : null;
+  }
+
   const remember_rule = body.remember_rule === true;
   if (remember_rule) {
-    const merchantKey = current.merchant || current.description;
+    const merchantKey = merchant || current.description;
     if (merchantKey) {
       await upsertMerchantRule({
         merchant_key: merchantKey,
@@ -161,6 +176,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     expense_type,
     txn_date,
     txn_time,
+    amount,
+    merchant,
     needs_categorization: false,
     categorized_at: current.categorized_at || now,
     updated_at: now,

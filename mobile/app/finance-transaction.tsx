@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { lineTypeForCategory } from "@/lib/finance/expense-type";
 import { fmtAmount2 } from "@/lib/finance/format";
+import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
 import type { FinanceTransaction } from "@/lib/finance/types";
 import { api, type HomePayload } from "../src/api/resources";
 import { useSession } from "../src/session";
@@ -50,6 +51,8 @@ export default function FinanceTransactionScreen() {
   const [expenseType, setExpenseType] = useState<ExpenseTypeValue>("variable");
   const [rememberRule, setRememberRule] = useState(true);
   const [note, setNote] = useState("");
+  const [amount, setAmount] = useState("");
+  const [merchant, setMerchant] = useState("");
   const [txnDate, setTxnDate] = useState("");
   const [txnTime, setTxnTime] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +68,8 @@ export default function FinanceTransactionScreen() {
         setCategories(cats.categories);
         setCategory(row.category ?? null);
         setNote(row.purpose_note || row.default_note || "");
+        setAmount(String(row.amount));
+        setMerchant(formatMerchantLabel(row.merchant || row.description || ""));
         setTxnDate(row.txn_date);
         setTxnTime(row.txn_time ?? "");
         if (row.expense_type) setExpenseType(row.expense_type);
@@ -101,6 +106,8 @@ export default function FinanceTransactionScreen() {
           purpose_note: note || null,
           expense_type: txn?.kind === "expense" ? expenseType : null,
           remember_rule: rememberRule,
+          amount: Number(amount),
+          merchant: merchant.trim() || null,
           txn_date: txnDate,
           txn_time: txnTime.trim() || null,
         }),
@@ -132,7 +139,7 @@ export default function FinanceTransactionScreen() {
 
   if (!txn && !error) return <Loading />;
 
-  const label = txn?.merchant || txn?.description || "";
+  const label = formatMerchantLabel(txn?.merchant || txn?.description || "");
   const isExpense = txn?.kind === "expense";
   const busy = isPending();
   const sourceLabel = txn && SOURCE_KEYS[txn.source] ? t(SOURCE_KEYS[txn.source]) : txn?.source || "";
@@ -153,6 +160,20 @@ export default function FinanceTransactionScreen() {
         </Card>
       ) : null}
 
+      <View style={{ marginTop: 14, gap: 10 }}>
+        <View>
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>
+            {t("finance.editMerchant")}
+          </Text>
+          <Input value={merchant} onChangeText={setMerchant} placeholder={t("finance.editMerchant")} />
+        </View>
+        <View>
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>
+            {t("finance.editAmount")}
+          </Text>
+          <Input value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0" />
+        </View>
+      </View>
       <View style={{ marginTop: 14 }}>
         <TxnDateTimeFields txnDate={txnDate} txnTime={txnTime} onDateChange={setTxnDate} onTimeChange={setTxnTime} />
       </View>

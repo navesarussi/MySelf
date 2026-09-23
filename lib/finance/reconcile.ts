@@ -119,9 +119,13 @@ export function findReconcilableBatchTransactions(
   return { reconciledIds, matches };
 }
 
-export async function reconcileMonthTransactions(month: string): Promise<ReconcileResult> {
+export async function reconcileMonthTransactions(
+  month: string,
+  prefetched?: FinanceTransaction[]
+): Promise<ReconcileResult> {
   const supabase = getSupabase();
-  const txns = (await fetchTransactionsInRange(monthBounds(month))).map(rowToTxn);
+  const txns =
+    prefetched ?? (await fetchTransactionsInRange(monthBounds(month))).map(rowToTxn);
 
   const result = findReconcilableBatchTransactions(txns);
   const idsToUpdate = txns

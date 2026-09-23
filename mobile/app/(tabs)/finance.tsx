@@ -61,7 +61,8 @@ export default function FinanceScreen() {
 
   const { data: plan, loading: planLoading, error: planError, refresh: refreshPlan } = useApiQuery(
     queryKeys.financePlan(month),
-    (cfg) => api.financePlan(cfg, month)
+    (cfg) => api.financePlan(cfg, month),
+    { staleTime: 60_000 }
   );
   const { data: txns, loading: txLoading, refresh: refreshTx } = useApiQuery(
     queryKeys.financeTransactions(month),
