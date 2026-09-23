@@ -145,3 +145,46 @@ describe("committee hard-risk gate", () => {
     }
   });
 });
+
+/**
+ * Invariant 4 in docs/trading/committee.md: "Certificate expiry — `issued_at`
+ * on every certificate; gate rejects stale certs."
+ *
+ * `issued_at` is `.optional()` in the schema, and the gate only compared the
+ * age when it could compute one — so a certificate without a timestamp, or
+ * with an unparseable one, skipped the expiry check entirely and stayed valid
+ * forever. That is fail-open in the one function the whole layer describes as
+ * "irrevocable", and it is reachable by any certificate that did not come
+ * straight out of `issueRiskCertificate` — a row read back from the audit
+ * table, or a future producer that forgets the field.
+ */
+describe("certificate expiry is fail-closed", () => {
+  it("refuses a certificate with no issued_at", () => {
+    const cert = approvedCert();
+    delete (cert as { issued_at?: string }).issued_at;
+    const gate = assertCertificateAllowsExecution(cert, { ticket: makeTicket() });
+    assert.equal(gate.ok, false);
+    if (!gate.ok) assert.equal(gate.reason, "CERTIFICATE_NO_ISSUED_AT");
+  });
+
+  it("refuses a certificate whose issued_at cannot be read", () => {
+    const gate = assertCertificateAllowsExecution(approvedCert({ issued_at: "not-a-date" }), {
+      ticket: makeTicket(),
+    });
+    assert.equal(gate.ok, false);
+    if (!gate.ok) assert.equal(gate.reason, "CERTIFICATE_NO_ISSUED_AT");
+  });
+
+  it("refuses a certificate issued in the future beyond tolerance", () => {
+    const cert = approvedCert({ issued_at: new Date(Date.now() + 600_000).toISOString() });
+    const gate = assertCertificateAllowsExecution(cert, { ticket: makeTicket() });
+    assert.equal(gate.ok, false);
+    if (!gate.ok) assert.equal(gate.reason, "CERTIFICATE_NOT_YET_VALID");
+  });
+
+  it("still accepts a fresh certificate, including small clock skew", () => {
+    assert.equal(assertCertificateAllowsExecution(approvedCert(), { ticket: makeTicket() }).ok, true);
+    const skewed = approvedCert({ issued_at: new Date(Date.now() + 2_000).toISOString() });
+    assert.equal(assertCertificateAllowsExecution(skewed, { ticket: makeTicket() }).ok, true);
+  });
+});
