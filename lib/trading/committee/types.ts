@@ -120,7 +120,11 @@ export const riskCertificateSchema = z.object({
   final_entry: z.number().positive(),
   final_stop: z.number().positive(),
   final_target: z.number().positive(),
+  /** The candidate's contribution to open heat, in R — 1 when a plan exists. */
   risk_r: z.number().nonnegative(),
+  /** Share of the per-trade risk budget the plan used. Optional: rows written before this field existed have none. */
+  risk_budget_fraction: z.number().nonnegative().optional(),
+  /** Open heat including this candidate, in R — comparable to MAX_TOTAL_OPEN_RISK_R. */
   portfolio_heat_after: z.number().nonnegative(),
   market_state: marketStateSchema,
   /** ISO timestamp when the certificate was issued — used for expiry checks at execution. */

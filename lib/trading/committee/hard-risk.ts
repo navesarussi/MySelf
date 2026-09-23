@@ -74,10 +74,22 @@ export function issueRiskCertificate(input: HardRiskInput): ParseResult<RiskCert
     blocks.push("BUYING_POWER");
   }
 
+  // Heat is counted in R, the same unit the envelope uses. `openRiskR` returns
+  // 1 per at-risk open position — a position carries exactly one of its own R —
+  // which is why `checkNewEntry` budgets a candidate as `openRisk + 1`. Adding
+  // a *fraction of the per-trade cap* here instead made the two disagree
+  // whenever the plan was shrunk: the certificate reported 0.5 for a half-scale
+  // trade that reports 1 the moment it opens, so portfolio_heat_after was not
+  // comparable to MAX_TOTAL_OPEN_RISK_R, which is the only reason to read it.
   const openHeat = input.envelope.positions.reduce((s, p) => s + p.open_risk_r, 0);
+  const risk_r = plan ? 1 : 0;
+  const portfolio_heat_after = openHeat + risk_r;
+
+  // How much of the per-trade risk budget the plan actually used — the figure
+  // the old risk_r held. Useful (it shows the plan was shrunk) but not a heat
+  // unit, so it travels under its own name.
   const maxRisk = RISK_ENVELOPE.MAX_RISK_PER_TRADE[input.assetClass] * input.equity;
-  const risk_r = plan && maxRisk > 0 ? plan.risk_amount / maxRisk : 0;
-  const portfolio_heat_after = openHeat + (plan ? risk_r : 0);
+  const risk_budget_fraction = plan && maxRisk > 0 ? round(plan.risk_amount / maxRisk, 4) : 0;
 
   const envelopeClear = input.envelopeBlocks.length === 0 && input.vetoes.length === 0;
   const softClear = input.softRisk.allow && input.softRisk.risk_multiplier > 0;
@@ -91,7 +103,8 @@ export function issueRiskCertificate(input: HardRiskInput): ParseResult<RiskCert
     final_entry: entry,
     final_stop: stop,
     final_target: target,
-    risk_r: plan ? round(risk_r, 4) : 0,
+    risk_r,
+    risk_budget_fraction,
     portfolio_heat_after: round(portfolio_heat_after, 4),
     market_state,
     issued_at: new Date().toISOString(),
