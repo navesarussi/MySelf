@@ -70,7 +70,6 @@ export default function SettingsScreen() {
     router.replace("/login");
   }
 
-  if (ready && !token) return <Redirect href="/login" />;
 
   useEffect(() => {
     setSelectedListIds(savedListIds);
@@ -98,6 +97,13 @@ export default function SettingsScreen() {
       setSelectedListIds([]);
     }
   }, [googleTasksQ.data?.connected, loadGoogleTasksLists]);
+
+  // Below every hook on purpose. React requires the same hooks in the same
+  // order on every render of a component instance; returning above the three
+  // hooks that follow meant that the render where the session cleared — on
+  // logout, or on any 401 that calls signOut — ran fewer hooks than the one
+  // before it, which React rejects with "Rendered fewer hooks than expected".
+  if (ready && !token) return <Redirect href="/login" />;
 
   async function connectGoogleUnified() {
     const appRedirect =
