@@ -2,6 +2,7 @@ import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { AGENT_MODEL_ID } from "../config";
+import { COMMITTEE_PROMPT_VERSIONS, getCommitteeConfig } from "./config";
 
 export type LlmCallResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -28,6 +29,82 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
       },
     );
   });
+}
+
+function dryRunScoreFromPrompt(prompt: string): number {
+  const m = prompt.match(/"score"\s*:\s*(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 70;
+}
+
+function dryRunSymbolFromPrompt(prompt: string): string {
+  return prompt.match(/"symbol"\s*:\s*"([^"]+)"/)?.[1] ?? "STUB";
+}
+
+/** Deterministic stub — no API key or credits required; for smoke tests in prod. */
+export function createDryRunCommitteeLlm(): CommitteeLlmClient {
+  let stage = 0;
+  return {
+    async generateObject<T>({ schema, prompt }: { system: string; prompt: string; schema: z.ZodType<T>; timeoutMs: number }) {
+      const score = dryRunScoreFromPrompt(prompt);
+      const symbol = dryRunSymbolFromPrompt(prompt);
+      const enter = score >= 75;
+      const queue: unknown[] = [
+        {
+          role: "TECHNICAL",
+          symbol,
+          stance: score >= 70 ? "BULLISH" : "NEUTRAL",
+          confidence: score >= 80 ? 4 : 3,
+          key_points: ["dry_run_stub"],
+          evidence: [{ source: "dry_run", ref: `score=${score}` }],
+          risks: [],
+          horizon: "SWING",
+          model: "committee-dry-run",
+          prompt_version: COMMITTEE_PROMPT_VERSIONS.technical,
+        },
+        {
+          role: "FUNDAMENTAL_NEWS",
+          symbol,
+          stance: "NEUTRAL",
+          confidence: 2,
+          key_points: ["DRY_RUN — no live news"],
+          evidence: [],
+          risks: ["dry_run_mode"],
+          horizon: "SWING",
+          model: "committee-dry-run",
+          prompt_version: COMMITTEE_PROMPT_VERSIONS.fundamental,
+        },
+        { points: ["dry_run_bull"] },
+        { points: ["dry_run_bear"] },
+        {
+          winner: enter ? "BULL" : "BEAR",
+          conviction: enter ? 4 : 2,
+          bull_case: ["dry_run_bull"],
+          bear_case: ["dry_run_bear"],
+          unresolved: [],
+          recommended_action: enter ? "ENTER" : "SKIP",
+        },
+        {
+          allow: enter,
+          risk_multiplier: enter ? 1 : 0,
+          stop_policy: "KEEP",
+          reasons: ["dry_run_stub"],
+          red_flags: [],
+        },
+      ];
+      const data = queue[stage++];
+      if (!data) return { ok: false, error: "dry_run_unexpected_call" };
+      const parsed = schema.safeParse(data);
+      if (!parsed.success) return { ok: false, error: "dry_run_schema_mismatch" };
+      return { ok: true, data: parsed.data };
+    },
+  };
+}
+
+/** Select live Gemini or dry-run stub based on env (default: live when key present). */
+export function createCommitteeLlm(): CommitteeLlmClient {
+  const cfg = getCommitteeConfig();
+  if (cfg.dryRunLlm) return createDryRunCommitteeLlm();
+  return createGeminiCommitteeLlm();
 }
 
 /** Default Gemini client — inject a mock in tests. */
