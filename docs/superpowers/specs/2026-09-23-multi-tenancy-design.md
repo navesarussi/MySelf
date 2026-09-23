@@ -28,7 +28,7 @@ covering account-scoped data access; it modifies the data-access contract of eve
 |---|---|
 | Who this is for | Two real accounts today (you + lianbh2004), designed as true multi-user, not just hardening |
 | Data model | Mixed: personal / shared-household / system-single-owner, classified per table (below) — not "isolate everything" |
-| Identity table | Extend `allowed_google_emails` in place with a `uuid` primary key rather than adding a parallel `users` table |
+| Identity table | `allowed_google_emails` is the users table; `user_id text` = the account email, FK to its existing `email` primary key (revised during planning — see Identity model) |
 | Backfill | All existing rows in personal tables currently belong to you; assign them your id, no split needed |
 | Trading | Stays one shared engine tied to your single Alpaca account — access-controlled to the primary account only, not row-partitioned |
 | Finance | Stays a shared household pool, visible to both allowlisted accounts, not row-partitioned |
@@ -75,13 +75,27 @@ exists.
 
 ## Identity model
 
-Add `id uuid primary key default gen_random_uuid()` to `myself.allowed_google_emails` in place, rather
-than introducing a separate `users` table. It already carries `email` (unique) and `is_primary`, which is
-exactly what's needed: `is_primary = true` is the account trading/system routes restrict to. Every new
-`user_id` column is `references myself.allowed_google_emails (id)`.
+`myself.allowed_google_emails` is the users table. Its primary key is already `email`, and it carries
+`is_primary` — the account trading/system routes restrict to. Every new column is
+`user_id text not null references myself.allowed_google_emails (email) on update cascade`.
 
-Request-time resolution: `sessionIdentity(req)` (`lib/api/auth.ts`) already returns `{ sub: email, ... }
-| null`. A new helper resolves `email → id` (cached per request) to get the `user_id` a route needs.
+*Revised during planning:* the first draft added a `uuid` id. Migration 0040 (finance import, merged
+after this spec was written) already established `user_id text` holding the session email, and the session
+token's `sub` is that same email — so keying on email needs no new column, no per-request email→id
+lookup, and matches the existing convention. `on update cascade` covers an email change.
+
+Request-time resolution: `sessionIdentity(req)` (`lib/api/auth.ts`) returns `{ sub: email, ... } | null`;
+`sub` *is* the `user_id`. Since the allowlist can also come from the `ALLOWED_GOOGLE_EMAIL` env var, a
+successful login upserts the email into `allowed_google_emails` so the FK target always exists.
+
+**Request-scoped user context.** ~230 call sites touch personal tables, many deep inside call chains
+(agent tools → data helpers, push dispatch, sync). Rather than threading `userId` through every signature,
+entry points run their work inside `runAsUser(email, fn)` (Node `AsyncLocalStorage`), and personal tables
+are reached only through `userDb().from(table)`, which reads the current user and **throws when there is
+none** (fail-closed). `getSupabase().from("<personal table>")` becomes a compile-time error and a runtime
+throw, so the typechecker enumerates every unscoped call site. The raw unscoped client survives only as
+`getUnscopedSupabase()`, allowed in an explicit, test-enforced list of files (cross-user lookups: the
+WhatsApp phone → user resolution).
 
 **Legacy tokens:** `lib/auth.ts` still accepts pre-identity "legacy" tokens (one constant string,
 anonymous, still valid unless `SESSION_REJECT_LEGACY=1`) — `sessionIdentity()` already returns `null` for
@@ -110,14 +124,13 @@ application-code correctness problem, not a missing database permission.
 The fix: a small helper each personal-table call site must go through, e.g.
 
 ```ts
-scopedTable(userId, "tasks")   // returns a query builder pre-filtered to .eq("user_id", userId)
-                                 // and auto-stamps user_id on insert
+userDb().from("tasks")   // select/update/delete get .eq("user_id", <current user>);
+                          // insert/upsert/update have user_id stamped (overriding any caller value)
 ```
 
-so a route cannot select/update/delete a personal table without supplying the caller's `user_id` — the
-helper, not each route author's memory, is what makes the filter mandatory. Refactoring the ~89 call
-sites onto this helper (or the plain client, for shared/system tables) is the bulk of implementation
-work.
+so a route cannot select/update/delete a personal table without the caller's `user_id` — the helper,
+not each route author's memory, makes the filter mandatory. Moving the ~230 personal-table call sites onto
+it is the bulk of implementation work.
 
 Paired with `enable row level security` + a default-deny policy on all 18 personal tables anyway, purely
 as insurance: it does nothing against the service-role client used today, but means if anything else
@@ -138,20 +151,47 @@ that bypasses the Next.js server (direct mobile-to-Supabase, Realtime subscripti
 - **Finance:** unchanged access model — any allowlisted, identified account may read/write; no per-row
   split.
 
-## Rollout sequencing
+## Session-less entry points (added during planning)
 
-1. Migration: add `id` to `allowed_google_emails`; add nullable `user_id` to the 18 personal tables;
-   backfill to the primary account's id; set `not null`; add indexes.
-2. Fix structural schema gaps on `agent_settings` / `notification_preferences` (drop the singleton-row
-   pattern, one row per account) and `push_tokens` / `integration_tokens` (add account scope to their
-   uniqueness constraints).
-3. Build the `scopedTable` helper and the request-time `user_id` resolver.
-4. Refactor personal-table call sites (~89 total across all domains; personal-table subset) onto the
-   helper, one API domain at a time (timeline, habits/goals/commitments, tasks/projects, relationships,
-   agent, notifications/push, integrations).
-5. Add the primary-account gate to all `trading_*` routes.
-6. Enable RLS + default-deny policies on the 18 personal tables.
-7. Confirm `SESSION_REJECT_LEGACY` cutover readiness (separate, smaller follow-up).
+Not every request carries a session. Each of these must pick the user explicitly:
 
-Each domain in step 4 can ship as its own reviewable slice; the migration and helper in steps 1–3 are the
-shared foundation everything else depends on.
+| Entry point | User |
+|---|---|
+| Crons: agent motivate, agent health, push dispatch, Google sync, task-sources sync, data-integrity | Fan out: run once per allowlisted account (`forEachUser`), each inside its own `runAsUser` |
+| WhatsApp webhook | The account whose `agent_settings.whatsapp_phone` matches the sender (enabled only); unknown sender → ignored as today |
+| Trading event pushes (`lib/trading/store.ts`) | Primary account only — today they go to *every* registered device, including the second account's |
+| Google login callback | The Google email that just authenticated. Token saving stays primary-only, exactly as today (letting the second account connect her own Google is a later product decision) |
+| GitHub / Monday OAuth callbacks | The OAuth `state` becomes a 10-minute signed scoped token carrying the connecting account's email |
+| `after()` callbacks | Re-enter `runAsUser` explicitly inside the callback; context propagation into `after()` is not relied on |
+| Legacy `/legacy` pages and server actions | Primary account only |
+
+Unique constraints on personal tables that are global today gain a leading `user_id` (a second account
+would otherwise collide with the first's rows — e.g. the same Google event id when both are invited, the
+same habit name, the same daily notification slot): `timeline_events (google_event_id)`, `tasks (source,
+external_id)`, `goals_identity_uidx`, `habits_name_active_uidx`, `habit_reports (habit_id, report_date)`,
+`notification_log (notif_type, ref_id, day_key)`, `integration_tokens` PK `(provider, account_key)`.
+Left global on purpose: `push_tokens.expo_push_token` (a device that switches accounts is reassigned) and
+the WhatsApp `external_id` indexes (Meta message ids are globally unique).
+
+Routes that accept a parent id (a habit id for a report, event ids for a link, a project id on a task)
+verify the parent through `userDb()` before writing, so a foreign id can't attach rows to — or expose
+through an embedded select — another account's data.
+
+## Rollout sequencing (expand → deploy → contract)
+
+The currently deployed code inserts rows without `user_id` and upserts against the old global unique
+keys, so the schema change is split so that each step is safe for the code running at that moment:
+
+1. **Migration 0042 (expand)** — safe for old code: add `user_id` with `default
+   myself.primary_user_email()`, backfill, `not null`, FK, index; add the per-user unique indexes
+   *alongside* the old ones; move the singleton tables' primary key to `user_id` (their old `id` column
+   stays, nullable, so old code's `.eq("id", true)` still finds the primary row).
+2. **Deploy the new code** — every write stamps `user_id`; every upsert targets the per-user keys.
+3. **Migration 0043 (contract)** — drop the old global constraints, the `user_id` defaults and the
+   singleton `id` columns; `enable row level security` on the 18 personal tables (no policies = deny for
+   `anon`/`authenticated`; the service role is unaffected).
+4. Confirm `SESSION_REJECT_LEGACY` cutover readiness (separate, smaller follow-up). Data routes already
+   reject identity-less legacy tokens.
+
+Between steps 1 and 3 the second account can't reuse a habit name or notification slot the first already
+holds — the old global constraints are still there. Acceptable for a window of minutes.
