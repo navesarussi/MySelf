@@ -1,3 +1,4 @@
+import { pickPreferredMerchantLabel } from "@/lib/finance/cal-duplicate";
 import { formatMerchantLabel, normalizeMerchantKey } from "@/lib/finance/merchant-rules-client";
 import type { RecurringSuggestion } from "@/lib/finance/types-client";
 
@@ -27,10 +28,7 @@ export function dedupeRecurringSuggestions(suggestions: RecurringSuggestion[]): 
       continue;
     }
 
-    const display =
-      (s.display_name?.length ?? 0) >= (existing.display_name?.length ?? 0)
-        ? s.display_name
-        : existing.display_name;
+    const display = pickPreferredMerchantLabel(s.display_name, existing.display_name, s.merchant_key, existing.merchant_key);
 
     byKey.set(key, {
       merchant_key: existing.merchant_key,

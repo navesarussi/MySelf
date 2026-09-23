@@ -22,7 +22,10 @@ export async function POST(req: NextRequest) {
       planned_amount,
     });
     return NextResponse.json({ ok: true, rule });
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message === "variable_toll_not_fixed") {
+      return badRequest("variable_toll_not_fixed");
+    }
     return dbError();
   }
 }

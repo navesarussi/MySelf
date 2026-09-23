@@ -109,17 +109,90 @@ describe("findRecurringExpenseSuggestions", () => {
     assert.equal(suggestions.length, 0);
   });
 
-  it("merges variant merchant/description fields into one suggestion", () => {
-    const glued = "לאהוראתקבעברכבותחבורכביש";
+  it("merges Cal OCR clones with clean merchant and uses typical charge not sum", () => {
     const txns: FinanceTransaction[] = [
-      makeTxn({ id: "1", txn_date: "2026-08-01", amount: 141, kind: "expense", description: glued }),
-      makeTxn({ id: "2", txn_date: "2026-09-01", amount: 141, kind: "expense", merchant: glued, description: glued }),
+      makeTxn({
+        id: "1",
+        txn_date: "2026-07-21",
+        amount: 5,
+        kind: "expense",
+        merchant: "לובי 99",
+        description: "הוראת קבע",
+        category: "עמותות",
+      }),
+      makeTxn({
+        id: "2",
+        txn_date: "2026-07-21",
+        amount: 5,
+        kind: "expense",
+        merchant: "לאהוראתקבעעמותותותרלובי",
+        description: "לאהוראתקבעעמותותותרלובי",
+      }),
+      makeTxn({
+        id: "3",
+        txn_date: "2026-08-21",
+        amount: 5,
+        kind: "expense",
+        merchant: "לובי 99",
+        description: "הוראת קבע",
+      }),
+      makeTxn({
+        id: "4",
+        txn_date: "2026-08-21",
+        amount: 5,
+        kind: "expense",
+        merchant: "לא הוראתקבעעמותותותרלובי",
+        description: "לא הוראתקבעעמותותותרלובי",
+      }),
     ];
 
     const suggestions = findRecurringExpenseSuggestions(txns);
     assert.equal(suggestions.length, 1);
-    assert.equal(suggestions[0].suggested_amount, 141);
-    assert.match(suggestions[0].display_name, /הוראת קבע/);
+    assert.equal(suggestions[0].suggested_amount, 5);
+    assert.equal(suggestions[0].display_name, "לובי 99");
+    assert.equal(suggestions[0].occurrences, 2);
+  });
+
+  it("does not suggest variable highway toll merchants as fixed recurring", () => {
+    const txns: FinanceTransaction[] = [
+      makeTxn({
+        id: "1",
+        txn_date: "2026-07-21",
+        amount: 141.65,
+        kind: "expense",
+        merchant: "כביש 6",
+        description: "הוראת קבע",
+        category: "תחבורה",
+      }),
+      makeTxn({
+        id: "2",
+        txn_date: "2026-07-21",
+        amount: 141.65,
+        kind: "expense",
+        merchant: "לאהוראתקבערכבותחבורכביש",
+        description: "לאהוראתקבערכבותחבורכביש",
+      }),
+      makeTxn({
+        id: "3",
+        txn_date: "2026-08-20",
+        amount: 139.38,
+        kind: "expense",
+        merchant: "כביש 6",
+        description: "הוראת קבע",
+        category: "תחבורה",
+      }),
+      makeTxn({
+        id: "4",
+        txn_date: "2026-08-20",
+        amount: 139.38,
+        kind: "expense",
+        merchant: "לא הוראתקבערכבותחבורכביש",
+        description: "לא הוראתקבערכבותחבורכביש",
+      }),
+    ];
+
+    const suggestions = findRecurringExpenseSuggestions(txns);
+    assert.equal(suggestions.length, 0);
   });
 
   it("dedupeRecurringSuggestions collapses synthetic duplicate rows", () => {

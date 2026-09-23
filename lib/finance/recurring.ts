@@ -1,11 +1,18 @@
 import { rowToTxn, type FinanceTransaction } from "@/lib/finance/ingest";
 import {
+  dedupeSameDayAmountCharges,
+  isVariableTollMerchant,
+  mergeRecurringMerchantGroups,
+  pickPreferredMerchantLabel,
+  recurringMerchantGroupKey,
+  typicalChargeAmount,
+} from "@/lib/finance/cal-duplicate";
+import {
   fetchMerchantRulesMap,
   normalizeMerchantKey,
   upsertMerchantRule,
   type MerchantRule,
 } from "@/lib/finance/merchant-rules";
-import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
 import { round2 } from "@/lib/finance/money";
 import { dedupeRecurringSuggestions } from "@/lib/finance/recurring-client";
 import { fetchTransactionsInRange, monthsBounds } from "@/lib/finance/txn-range";
@@ -28,14 +35,6 @@ export function getRecentMonths(targetMonth: string, count = 3): string[] {
   return result;
 }
 
-
-function txnMerchantGroupingKey(t: FinanceTransaction): string {
-  const parts = [t.merchant, t.description]
-    .filter((v): v is string => Boolean(v?.trim()))
-    .map((v) => normalizeMerchantKey(v));
-  return parts.sort((a, b) => b.length - a.length)[0] ?? "";
-}
-
 function isAmountsSimilar(amounts: number[]): boolean {
   if (amounts.length === 0) return false;
   const min = Math.min(...amounts);
@@ -44,6 +43,48 @@ function isAmountsSimilar(amounts: number[]): boolean {
   if (avg <= 0) return false;
   const diff = max - min;
   return diff <= 1 || diff / avg <= 0.1;
+}
+
+function buildSuggestionForGroup(
+  key: string,
+  txns: FinanceTransaction[],
+  rulesMap: Map<string, MerchantRule>
+): RecurringSuggestion | null {
+  if (isVariableTollMerchant(key) || txns.some((t) => isVariableTollMerchant(t))) return null;
+
+  const existingRule = rulesMap.get(key) ?? rulesMap.get(normalizeMerchantKey(key));
+  if (existingRule?.expense_type === "fixed") return null;
+
+  const deduped = dedupeSameDayAmountCharges(txns);
+  if (deduped.every((t) => t.expense_type === "fixed")) return null;
+
+  const monthMap = new Map<string, number>();
+  let latestCategory: string | null = null;
+
+  for (const t of deduped) {
+    const m = t.txn_date.slice(0, 7);
+    monthMap.set(m, round2(t.amount));
+    if (t.category) latestCategory = t.category;
+  }
+
+  const months = [...monthMap.keys()].sort();
+  if (months.length < 2) return null;
+
+  const amounts = months.map((m) => monthMap.get(m) ?? 0);
+  if (!isAmountsSimilar(amounts)) return null;
+
+  const display_name = pickPreferredMerchantLabel(...deduped.flatMap((t) => [t.merchant, t.description]));
+  const suggested_amount = typicalChargeAmount(amounts);
+
+  return {
+    merchant_key: key,
+    display_name: display_name || key,
+    category: latestCategory,
+    suggested_amount,
+    occurrences: months.length,
+    months,
+    amounts,
+  };
 }
 
 export function findRecurringExpenseSuggestions(
@@ -58,55 +99,19 @@ export function findRecurringExpenseSuggestions(
   const byMerchant = new Map<string, FinanceTransaction[]>();
   for (const t of transactions) {
     if (t.kind !== "expense" || t.is_internal) continue;
-    const key = txnMerchantGroupingKey(t);
+    const key = recurringMerchantGroupKey(t);
     if (!key) continue;
     const list = byMerchant.get(key) ?? [];
     list.push(t);
     byMerchant.set(key, list);
   }
 
+  const mergedGroups = mergeRecurringMerchantGroups(byMerchant);
+
   const suggestions: RecurringSuggestion[] = [];
-
-  for (const [key, txns] of byMerchant.entries()) {
-    const existingRule = rulesMap.get(key);
-    if (existingRule?.expense_type === "fixed") continue;
-
-    const allFixed = txns.every((t) => t.expense_type === "fixed");
-    if (allFixed) continue;
-
-    const monthMap = new Map<string, number>();
-    let latestCategory: string | null = null;
-    let latestName = formatMerchantLabel(key);
-
-    const sortedTxns = [...txns].sort((a, b) => a.txn_date.localeCompare(b.txn_date));
-    for (const t of sortedTxns) {
-      const m = t.txn_date.slice(0, 7);
-      monthMap.set(m, (monthMap.get(m) ?? 0) + t.amount);
-      if (t.category) latestCategory = t.category;
-      for (const field of [t.merchant, t.description]) {
-        if (!field?.trim()) continue;
-        const candidate = formatMerchantLabel(field.trim());
-        if (candidate.length > latestName.length) latestName = candidate;
-      }
-    }
-
-    const months = [...monthMap.keys()].sort();
-    if (months.length < 2) continue;
-
-    const amounts = months.map((m) => round2(monthMap.get(m) ?? 0));
-    if (!isAmountsSimilar(amounts)) continue;
-
-    const avg = round2(amounts.reduce((a, b) => a + b, 0) / amounts.length);
-
-    suggestions.push({
-      merchant_key: key,
-      display_name: latestName,
-      category: latestCategory,
-      suggested_amount: avg,
-      occurrences: months.length,
-      months,
-      amounts,
-    });
+  for (const [key, txns] of mergedGroups.entries()) {
+    const suggestion = buildSuggestionForGroup(key, txns, rulesMap);
+    if (suggestion) suggestions.push(suggestion);
   }
 
   return dedupeRecurringSuggestions(suggestions);
@@ -131,6 +136,9 @@ export async function applyRecurringSuggestion(input: {
   category?: string | null;
   planned_amount?: number;
 }): Promise<MerchantRule | null> {
+  if (isVariableTollMerchant(input.merchant_key)) {
+    throw new Error("variable_toll_not_fixed");
+  }
   return upsertMerchantRule({
     merchant_key: input.merchant_key,
     category: input.category ?? null,

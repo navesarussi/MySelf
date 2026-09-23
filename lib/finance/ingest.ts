@@ -1,6 +1,13 @@
 import { getSupabase } from "@/lib/supabase";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { notifyUser } from "@/lib/push/notify";
+import {
+  calDuplicateDayAmountKey,
+  calDuplicateKeysCompatible,
+  isCalOcrGarbageMerchant,
+  shouldSkipCalGarbageDuplicate,
+  txnRowQualityScore,
+} from "@/lib/finance/cal-duplicate";
 import { financeExternalKey, type FinanceSource } from "@/lib/finance/external-key";
 import { inferTxnKind, inferredCategory, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
 import { loadCategoryHistory, suggestCategoryFromHistory, type MerchantCategoryRow } from "@/lib/finance/merchant-category";
@@ -180,14 +187,37 @@ export type PreparedBatch = {
 export function prepareIngestRows(
   inputs: FinanceIngestInput[],
   rulesMap: Map<string, MerchantRule>,
-  history: MerchantCategoryRow[]
+  history: MerchantCategoryRow[],
+  existingCleanKeys: Set<string> = new Set()
 ): PreparedBatch {
   const prepared: PreparedRow[] = [];
   const seenKeys = new Set<string>();
+  const batchCleanKeys = new Set<string>();
   let duplicatesInBatch = 0;
 
   for (const raw of inputs) {
     const input = applyRules(normalizeInput(raw), rulesMap, history);
+
+    if (
+      shouldSkipCalGarbageDuplicate({
+        merchant: input.merchant,
+        description: input.description,
+        txn_date: input.txn_date,
+        amount: input.amount,
+        source: input.source,
+        existingCleanKeys,
+        batchCleanKeys,
+      })
+    ) {
+      duplicatesInBatch += 1;
+      continue;
+    }
+
+    const dayAmountKey = calDuplicateDayAmountKey(input);
+    const isGarbage = isCalOcrGarbageMerchant(input.merchant ?? input.description ?? "");
+    if (!isGarbage && input.source === "visa_cal") {
+      batchCleanKeys.add(dayAmountKey);
+    }
     const now = new Date().toISOString();
     const row = {
       source: input.source,
@@ -236,12 +266,113 @@ export function prepareIngestRows(
     });
   }
 
-  return { prepared, duplicatesInBatch };
+  return { prepared: collapseCalBatchDuplicates(prepared), duplicatesInBatch };
+}
+
+function preparedRowQuality(row: Record<string, unknown>): number {
+  return txnRowQualityScore({
+    merchant: row.merchant != null ? String(row.merchant) : null,
+    description: String(row.description ?? ""),
+  });
+}
+
+/** Keep the cleanest Cal row per day+amount+merchant core within one ingest batch. */
+function collapseCalBatchDuplicates(prepared: PreparedRow[]): PreparedRow[] {
+  const passthrough: PreparedRow[] = [];
+  const calByDayAmount: PreparedRow[] = [];
+
+  for (const item of prepared) {
+    if (item.row.source !== "visa_cal") {
+      passthrough.push(item);
+      continue;
+    }
+    calByDayAmount.push(item);
+  }
+
+  const kept: PreparedRow[] = [];
+  for (const item of calByDayAmount) {
+    const key = calDuplicateDayAmountKey({
+      txn_date: String(item.row.txn_date),
+      amount: Number(item.row.amount),
+      source: String(item.row.source),
+      merchant: item.row.merchant != null ? String(item.row.merchant) : null,
+      description: String(item.row.description ?? ""),
+    });
+    const existingIdx = kept.findIndex((k) =>
+      calDuplicateDayAmountKey({
+        txn_date: String(k.row.txn_date),
+        amount: Number(k.row.amount),
+        source: String(k.row.source),
+        merchant: k.row.merchant != null ? String(k.row.merchant) : null,
+        description: String(k.row.description ?? ""),
+      }).startsWith(key.split("|").slice(0, 3).join("|"))
+        ? calDuplicateKeysCompatible(
+            calDuplicateDayAmountKey({
+              txn_date: String(k.row.txn_date),
+              amount: Number(k.row.amount),
+              source: String(k.row.source),
+              merchant: k.row.merchant != null ? String(k.row.merchant) : null,
+              description: String(k.row.description ?? ""),
+            }),
+            key
+          )
+        : false
+    );
+    if (existingIdx < 0) {
+      kept.push(item);
+      continue;
+    }
+    if (preparedRowQuality(item.row) > preparedRowQuality(kept[existingIdx].row)) {
+      kept[existingIdx] = item;
+    }
+  }
+
+  return [...passthrough, ...kept];
+}
+
+async function loadExistingCalCleanKeys(inputs: FinanceIngestInput[]): Promise<Set<string>> {
+  const calDates = [
+    ...new Set(
+      inputs
+        .filter((i) => i.source === "visa_cal")
+        .map((i) => i.txn_date?.trim())
+        .filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d)))
+    ),
+  ];
+  if (!calDates.length) return new Set();
+
+  const { data, error } = await getSupabase()
+    .from("finance_transactions")
+    .select("txn_date, amount, source, merchant, description")
+    .eq("source", "visa_cal")
+    .in("txn_date", calDates);
+  if (error) throw new Error(error.message);
+
+  const keys = new Set<string>();
+  for (const row of data ?? []) {
+    const merchant = row.merchant != null ? String(row.merchant) : null;
+    const description = String(row.description ?? "");
+    if (isCalOcrGarbageMerchant(merchant ?? description)) continue;
+    keys.add(
+      calDuplicateDayAmountKey({
+        txn_date: String(row.txn_date),
+        amount: Number(row.amount),
+        source: String(row.source),
+        merchant,
+        description,
+      })
+    );
+  }
+  return keys;
 }
 
 export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): Promise<IngestResult> {
-  const [history, rulesMap] = await Promise.all([loadCategoryHistory(), fetchMerchantRulesMap()]);
-  const { prepared, duplicatesInBatch } = prepareIngestRows(inputs, rulesMap, history);
+  const [history, rulesMap, existingCleanKeys] = await Promise.all([
+    loadCategoryHistory(),
+    fetchMerchantRulesMap(),
+    loadExistingCalCleanKeys(inputs),
+  ]);
+  const { prepared, duplicatesInBatch } = prepareIngestRows(inputs, rulesMap, history, existingCleanKeys);
 
   let skipped = duplicatesInBatch;
   const created: FinanceTransaction[] = [];
