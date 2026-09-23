@@ -5,7 +5,9 @@ import {
   upsertMerchantRule,
   type MerchantRule,
 } from "@/lib/finance/merchant-rules";
+import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
 import { round2 } from "@/lib/finance/money";
+import { dedupeRecurringSuggestions } from "@/lib/finance/recurring-client";
 import { fetchTransactionsInRange, monthsBounds } from "@/lib/finance/txn-range";
 
 export type { RecurringSuggestion } from "@/lib/finance/types-client";
@@ -26,6 +28,13 @@ export function getRecentMonths(targetMonth: string, count = 3): string[] {
   return result;
 }
 
+
+function txnMerchantGroupingKey(t: FinanceTransaction): string {
+  const parts = [t.merchant, t.description]
+    .filter((v): v is string => Boolean(v?.trim()))
+    .map((v) => normalizeMerchantKey(v));
+  return parts.sort((a, b) => b.length - a.length)[0] ?? "";
+}
 
 function isAmountsSimilar(amounts: number[]): boolean {
   if (amounts.length === 0) return false;
@@ -49,7 +58,7 @@ export function findRecurringExpenseSuggestions(
   const byMerchant = new Map<string, FinanceTransaction[]>();
   for (const t of transactions) {
     if (t.kind !== "expense" || t.is_internal) continue;
-    const key = normalizeMerchantKey(t.merchant || t.description);
+    const key = txnMerchantGroupingKey(t);
     if (!key) continue;
     const list = byMerchant.get(key) ?? [];
     list.push(t);
@@ -67,14 +76,18 @@ export function findRecurringExpenseSuggestions(
 
     const monthMap = new Map<string, number>();
     let latestCategory: string | null = null;
-    let latestName = key;
+    let latestName = formatMerchantLabel(key);
 
     const sortedTxns = [...txns].sort((a, b) => a.txn_date.localeCompare(b.txn_date));
     for (const t of sortedTxns) {
       const m = t.txn_date.slice(0, 7);
       monthMap.set(m, (monthMap.get(m) ?? 0) + t.amount);
       if (t.category) latestCategory = t.category;
-      if (t.merchant || t.description) latestName = (t.merchant || t.description).trim();
+      for (const field of [t.merchant, t.description]) {
+        if (!field?.trim()) continue;
+        const candidate = formatMerchantLabel(field.trim());
+        if (candidate.length > latestName.length) latestName = candidate;
+      }
     }
 
     const months = [...monthMap.keys()].sort();
@@ -96,7 +109,7 @@ export function findRecurringExpenseSuggestions(
     });
   }
 
-  return suggestions.sort((a, b) => b.suggested_amount - a.suggested_amount);
+  return dedupeRecurringSuggestions(suggestions);
 }
 
 export async function getRecurringSuggestions(

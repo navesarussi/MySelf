@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../api/resources";
@@ -7,6 +7,7 @@ import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../../query";
 import { fmtAmount0 } from "@/lib/finance/format";
+import { dedupeRecurringSuggestions } from "@/lib/finance/recurring-client";
 import type { RecurringSuggestion } from "@/lib/finance/types-client";
 
 export function RecurringSuggestionsCard({
@@ -30,7 +31,10 @@ export function RecurringSuggestionsCard({
   );
 
   const rawSuggestions: RecurringSuggestion[] = data?.suggestions ?? [];
-  const visible = rawSuggestions.filter((s) => !dismissed[s.merchant_key]);
+  const visible = useMemo(
+    () => dedupeRecurringSuggestions(rawSuggestions).filter((s) => !dismissed[s.merchant_key]),
+    [rawSuggestions, dismissed]
+  );
 
   if (visible.length === 0) return null;
 

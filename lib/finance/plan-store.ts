@@ -18,9 +18,13 @@ async function fetchTransactions(month: string): Promise<FinanceTransaction[]> {
   return (await fetchTransactionsInRange(monthBounds(month))).map(rowToTxn);
 }
 
-async function autoClassifyObvious(month: string): Promise<void> {
-  const txns = await fetchTransactions(month);
+async function autoClassifyObvious(
+  month: string,
+  prefetched?: FinanceTransaction[]
+): Promise<boolean> {
+  const txns = prefetched ?? (await fetchTransactions(month));
   const now = new Date().toISOString();
+  let changed = false;
   await Promise.all(
     txns.map(async (t) => {
       const kind = inferTxnKind({ description: t.description, merchant: t.merchant });
@@ -29,6 +33,7 @@ async function autoClassifyObvious(month: string): Promise<void> {
       const markDone = skip && t.needs_categorization;
       const applyCat = Boolean(category) && t.needs_categorization && !t.category;
       if (kind === t.kind && !markDone && !applyCat) return;
+      changed = true;
       await getSupabase().from("finance_transactions").update({
         kind,
         category: applyCat ? category : t.category,
@@ -38,6 +43,7 @@ async function autoClassifyObvious(month: string): Promise<void> {
       }).eq("id", t.id);
     })
   );
+  return changed;
 }
 
 const rowToLine = (r: Record<string, unknown>): PlanLineRow => ({
@@ -83,8 +89,14 @@ async function fetchPlanMeta(month: string): Promise<PlanMeta | null> {
 }
 
 export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView> {
-  await reconcileMonthTransactions(month).catch(() => null);
-  await autoClassifyObvious(month).catch(() => null);
+  let txns = await fetchTransactions(month);
+  const reconcileResult = await reconcileMonthTransactions(month, txns).catch(() => null);
+  if (reconcileResult && reconcileResult.reconciledIds.length > 0) {
+    txns = await fetchTransactions(month);
+  }
+  const classified = await autoClassifyObvious(month, txns).catch(() => false);
+  if (classified) txns = await fetchTransactions(month);
+
   const supabase = getSupabase();
   const existing = await fetchPlanMeta(month);
 
@@ -101,12 +113,8 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
       prevLines = (lines ?? []).map((r) => rowToLine(r as Record<string, unknown>));
     }
 
-    const [prevTxns, currentTxns, rulesMap] = await Promise.all([
-      fetchTransactions(prev),
-      fetchTransactions(month),
-      fetchMerchantRulesMap(),
-    ]);
-    const seeds = seedPlanLines(month, prevLines.length ? prevLines : null, prevTxns, currentTxns, rulesMap);
+    const [prevTxns, rulesMap] = await Promise.all([fetchTransactions(prev), fetchMerchantRulesMap()]);
+    const seeds = seedPlanLines(month, prevLines.length ? prevLines : null, prevTxns, txns, rulesMap);
 
     const { data: created, error } = await supabase.from("finance_month_plans").insert({ month }).select("id").single();
     if (error) {
@@ -133,7 +141,7 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
   let lines = (lineRows ?? []).map((r) => rowToLine(r as Record<string, unknown>));
   lines = await ensureTemplateLines(planId!, lines);
 
-  const [txns, rulesMap] = await Promise.all([fetchTransactions(month), fetchMerchantRulesMap()]);
+  const rulesMap = await fetchMerchantRulesMap();
   return buildMonthPlanView(month, planId!, lines, txns, rulesMap, weeklyOverride);
 }
 

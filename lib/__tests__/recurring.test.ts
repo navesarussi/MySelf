@@ -4,6 +4,8 @@ import {
   getRecentMonths,
   findRecurringExpenseSuggestions,
 } from "../finance/recurring";
+import { dedupeRecurringSuggestions } from "../finance/recurring-client";
+import type { RecurringSuggestion } from "../finance/types-client";
 import type { FinanceTransaction } from "../finance/types";
 import type { MerchantRule } from "../finance/merchant-rules";
 
@@ -105,6 +107,47 @@ describe("findRecurringExpenseSuggestions", () => {
 
     const suggestions = findRecurringExpenseSuggestions(txns, existingRules);
     assert.equal(suggestions.length, 0);
+  });
+
+  it("merges variant merchant/description fields into one suggestion", () => {
+    const glued = "לאהוראתקבעברכבותחבורכביש";
+    const txns: FinanceTransaction[] = [
+      makeTxn({ id: "1", txn_date: "2026-08-01", amount: 141, kind: "expense", description: glued }),
+      makeTxn({ id: "2", txn_date: "2026-09-01", amount: 141, kind: "expense", merchant: glued, description: glued }),
+    ];
+
+    const suggestions = findRecurringExpenseSuggestions(txns);
+    assert.equal(suggestions.length, 1);
+    assert.equal(suggestions[0].suggested_amount, 141);
+    assert.match(suggestions[0].display_name, /הוראת קבע/);
+  });
+
+  it("dedupeRecurringSuggestions collapses synthetic duplicate rows", () => {
+    const dupes: RecurringSuggestion[] = [
+      {
+        merchant_key: "לאהוראתקבעברכבותחבורכביש",
+        display_name: "לאהוראתקבעברכבותחבורכביש",
+        category: "תחבורה",
+        suggested_amount: 141,
+        occurrences: 2,
+        months: ["2026-08", "2026-09"],
+        amounts: [141, 141],
+      },
+      {
+        merchant_key: "לא הוראת קבע ברכבות חבור כביש",
+        display_name: "לאהוראתקבעברכבותחבורכביש",
+        category: "תחבורה",
+        suggested_amount: 141,
+        occurrences: 2,
+        months: ["2026-08", "2026-09"],
+        amounts: [141, 141],
+      },
+    ];
+
+    const merged = dedupeRecurringSuggestions(dupes);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].suggested_amount, 141);
+    assert.match(merged[0].display_name, /הוראת קבע/);
   });
 
   it("skips internal transactions and income transactions", () => {

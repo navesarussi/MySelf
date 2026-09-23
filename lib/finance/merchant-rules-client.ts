@@ -1,4 +1,5 @@
 import { lineTypeForCategory, type PlanLineType } from "@/lib/finance/expense-type";
+import { normalizeHebrewDescription } from "@/lib/finance/hebrew-merchant";
 
 export type ExpenseType = "fixed" | "variable" | "savings";
 export type MerchantRuleKind = "income" | "expense";
@@ -14,9 +15,17 @@ export type MerchantRule = {
   updated_at?: string;
 };
 
+/** Readable merchant label for UI (Hebrew spacing preserved). */
+export function formatMerchantLabel(value: string | null | undefined): string {
+  const raw = (value ?? "").trim();
+  if (!raw) return "";
+  return normalizeHebrewDescription(raw);
+}
+
 /** Normalize merchant/description for consistent lookup and rule keys. */
 export function normalizeMerchantKey(value: string | null | undefined): string {
-  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  const spaced = formatMerchantLabel(value);
+  return spaced.toLowerCase().replace(/\s+/g, " ");
 }
 
 /** Find a matching rule for a given merchant/description. */

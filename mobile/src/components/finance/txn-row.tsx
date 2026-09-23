@@ -4,6 +4,7 @@ import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
 import { fmtAmount2 } from "@/lib/finance/format";
+import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
 import type { FinanceTransaction } from "@/lib/finance/types";
 
 export const FinanceTxnRow = memo(function FinanceTxnRow({
@@ -17,7 +18,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
   const { t } = useI18n();
   const { textStart, writingDirection, row } = useLayoutDir();
   const income = txn.kind === "income";
-  const label = txn.merchant || txn.description;
+  const label = formatMerchantLabel(txn.merchant || txn.description);
   const when = txn.txn_time ? `${txn.txn_date} ${txn.txn_time}` : txn.txn_date;
   const typeLabel =
     txn.expense_type === "fixed"

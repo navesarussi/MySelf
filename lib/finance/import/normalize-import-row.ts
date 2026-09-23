@@ -1,33 +1,14 @@
 import { formatInstallmentLabel } from "@/lib/finance/import/installment-label";
+import {
+  isHebrewLocationNoise,
+  normalizeHebrewDescription,
+} from "@/lib/finance/hebrew-merchant";
+
+export { normalizeHebrewDescription } from "@/lib/finance/hebrew-merchant";
 
 const SUMMARY_KEYWORDS =
   /(?:^|[\s|])סה"כ|(?:^|[\s|])סה״כ|(?:^|[\s|])סה''כ|סך\s*ה\s*כל|^\s*(?:total|summary|subtotal|סיכום)\b/i;
 
-const HEBREW_LOCATION_NOISE =
-  /^(?:לא\s+)?(?:אירלנד|ארה"ב|ארצות\s*הברית|בריטניה|אירופה|חו"ל|ישראל|תל\s*אביב|ירושלים|חיפה)$/u;
-
-/** Common Hebrew tokens glued together in Cal PDF extraction (longest first). */
-const HEBREW_VOCAB = [
-  "ארצות הברית",
-  "מוצרי און",
-  "סופר פאר",
-  "סופר-פאר",
-  "לא אירלנד",
-  "תל אביב",
-  "בית עסק",
-  "אירלנד",
-  "מוצרי",
-  "תשלומים",
-  "ירושלים",
-  "ישראל",
-  "חיפה",
-  "סופר",
-  "פאר",
-  "דלק",
-  "און",
-  "לא",
-  "שק",
-].sort((a, b) => b.length - a.length);
 
 export function isSummaryImportText(text: string): boolean {
   const t = text.trim();
@@ -42,51 +23,6 @@ export function isCalDateTotalLine(line: string, hasPendingMerchant: boolean): b
   if (isSummaryImportText(line)) return true;
   if (/^-?[\d,.]+\s+\d{4}\/\d{2}\/\d{2,3}$/.test(line.trim()) && !hasPendingMerchant) return true;
   return false;
-}
-
-function segmentGluedHebrew(text: string): string {
-  let rest = text.replace(/\s+/g, "");
-  if (!rest) return text.trim();
-  const parts: string[] = [];
-  while (rest.length > 0) {
-    let matched = "";
-    for (const word of HEBREW_VOCAB) {
-      const compact = word.replace(/\s+/g, "");
-      if (rest.startsWith(compact)) {
-        matched = word;
-        rest = rest.slice(compact.length);
-        break;
-      }
-    }
-    if (!matched) {
-      const m = rest.match(/^[\u0590-\u05FF]+/u);
-      if (!m) break;
-      parts.push(m[0]);
-      rest = rest.slice(m[0].length);
-      continue;
-    }
-    parts.push(matched);
-  }
-  return parts.join(" ").replace(/\s+/g, " ").trim();
-}
-
-/** Insert readable spaces in RTL Hebrew merchant/description text. */
-export function normalizeHebrewDescription(text: string): string {
-  let out = text
-    .replace(/([^\s|])(\|)([^\s|])/g, "$1 $3")
-    .replace(/([\u0590-\u05FF])([A-Za-z0-9])/g, "$1 $2")
-    .replace(/([A-Za-z0-9])([\u0590-\u05FF])/g, "$1 $2")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const hebrewRuns = out.match(/[\u0590-\u05FF"']+/gu) ?? [];
-  for (const run of hebrewRuns) {
-    if (run.length >= 8 && !/\s/.test(run)) {
-      const segmented = segmentGluedHebrew(run);
-      if (segmented.includes(" ")) out = out.replace(run, segmented);
-    }
-  }
-  return out.replace(/\s+/g, " ").trim();
 }
 
 function reverseLatinToken(raw: string): string {
@@ -111,7 +47,7 @@ function stripTerminalPrefix(label: string): string {
 function pickHebrewMerchant(chunks: string[]): string | null {
   const normalized = chunks
     .map((c) => normalizeHebrewDescription(c.trim()))
-    .filter((c) => c.length >= 3 && !HEBREW_LOCATION_NOISE.test(c));
+    .filter((c) => c.length >= 3 && !isHebrewLocationNoise(c));
 
   const withSpaces = normalized.filter((c) => /\s/.test(c));
   if (withSpaces.length) return withSpaces.sort((a, b) => b.length - a.length)[0] ?? null;
