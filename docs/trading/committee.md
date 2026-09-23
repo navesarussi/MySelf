@@ -69,9 +69,49 @@ Intraday tick (`intraday-engine.ts`) uses the same underlying setups as trade-fi
 
 Ticket ids are deterministic: `opportunityTicketId(symbol, strategy, bar_time)` (16-char SHA-256 prefix). Adapters call `parseOpportunityTicket` so geometry and id invariants are enforced before any downstream stage.
 
+## Phase C (shadow runner + audit — `lib/trading/committee/`)
+
+Shadow-only by default: the committee runs the full pipeline, persists audits, and records `would_have_executed` — **no broker orders** from the committee path.
+
+| Module | Purpose |
+|--------|---------|
+| `config.ts` | Env feature flags |
+| `llm.ts` | Injectable Gemini client with per-stage timeout |
+| `agents.ts` | Technical, fundamental/news, bull/bear/facilitator, soft risk |
+| `hard-risk.ts` | `issueRiskCertificate` — code-only final gate |
+| `execution.ts` | `buildExecutionIntent` from approved certificate |
+| `runner.ts` | `runCommitteeShadow` orchestration |
+| `store.ts` | Persist to `trading_committee_runs` |
+| `hook.ts` | `runCommitteeShadowBatch` — isolated scanner hook |
+
+### Feature flags (env)
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `COMMITTEE_ENABLED` | `false` | Master switch — when off, hook is a no-op; baseline tick unchanged |
+| `COMMITTEE_SHADOW` | `true` | Shadow mode — persist audits; do not submit committee orders to broker |
+| `COMMITTEE_MAX_PER_TICK` | `3` | Top-K tickets per tick (by score) |
+| `COMMITTEE_TIMEOUT_MS` | `120000` | Total budget; per-stage timeout ≈ budget / 5 → fail-closed SKIP |
+
+### Shadow behavior
+
+1. Scanners build `OpportunityTicket` via Phase B adapters (unchanged baseline entry/fill).
+2. When `COMMITTEE_ENABLED=true`, `runCommitteeShadowBatch` runs top-K tickets through `runCommitteeShadow`.
+3. Each run upserts one row in `trading_committee_runs` (ticket, reports, debate, soft risk, certificate, intent, latency, model/prompt versions, `shadow=true`).
+4. `would_have_executed=true` when hard risk certificate permits execution and intent validates — logged only; **no Alpaca call** from committee code in Phase C.
+5. LLM timeout or schema error → fail-closed (`status=FAILED` or `TIMEOUT`, `outcome=ERROR`, no execution intent).
+
+### Persistence (`trading_committee_runs`)
+
+Migration: `supabase/migrations/0037_trading_committee_runs.sql`. Unique on `ticket_id` for idempotent upsert per opportunity.
+
+### Scanner hook (light wire)
+
+`scan-daily-trend.ts` and `scan-v2.ts` collect tickets during trigger upsert and call `runCommitteeShadowBatch` **after** the main loop. Baseline agent judge + paper fill paths are untouched when committee is off.
+
 ## Not in scope yet
 
-Agent prompts, shadow runner, DB migrations, feature flags, tick wiring, or broker paths.
+Live/paper order submission from committee path, dual-track dashboard, Phase D intraday slim committee, live ramp gates.
 
 Full phased plan: architecture handoff doc (v1, 2026-09-23).
 
