@@ -7,6 +7,7 @@ import { parseCalStatementPdf } from "../finance/import/parse-cal-pdf";
 import { parseLeumiIdentityPdf } from "../finance/import/parse-leumi-pdf";
 import { parseCsvText } from "../finance/import/parse-tabular";
 import { importSourceToTxnSource } from "../finance/import/source-map";
+import { formatInstallmentLabel, parseInstallmentLabel } from "../finance/import/installment-label";
 
 describe("unreverseRtlDateToken", () => {
   it("reverses Cal PDF date tokens", () => {
@@ -20,6 +21,13 @@ describe("detectImportSource", () => {
     assert.equal(detectImportSource("דף חיוב חודשי\nCal", "stmt.pdf"), "cal");
     assert.equal(detectImportSource("תעודת הזהות הבנקאית", "id.pdf"), "leumi");
     assert.equal(detectImportSource("date,amount", "export.csv"), "excel");
+  });
+});
+
+describe("installment helpers", () => {
+  it("formats and parses Hebrew installment labels", () => {
+    assert.equal(formatInstallmentLabel(2, 7), "2 מתוך 7");
+    assert.deepEqual(parseInstallmentLabel("1 מתוך 6"), { index: 1, total: 6 });
   });
 });
 
@@ -37,6 +45,21 @@ EU 16.20סה"כ לתאריך
     assert.ok(result.transactions.length >= 1);
     assert.ok(result.transactions.every((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.booked_at)));
     assert.ok(result.transactions.every((t) => t.amount > 0));
+  });
+
+  it("extracts merchant, currency, and installments from tab-style ILS rows", () => {
+    const text = `
+דף חיוב חודשי
+₪ 49.90 ₪ 49.90 לא אירלנד מוצרי און LLIB/MOC.ELPPA 6|2|0|2/1|0/7|2
+₪ 823.00 ₪ 4,118.00 לא סופר-פאר 5|2|0|2/1|1/6|2
+`;
+    const result = parseCalStatementPdf(text);
+    const apple = result.transactions.find((t) => (t.merchant ?? "").includes("APPLE"));
+    assert.ok(apple, "expected Apple merchant");
+    assert.equal(apple?.currency, "ILS");
+    assert.equal(apple?.installment_index, 2);
+    assert.equal(apple?.installment_total, 7);
+    assert.equal(apple?.installment_label, "2 מתוך 7");
   });
 
   it("parses a redacted real Cal PDF fixture when present", async () => {

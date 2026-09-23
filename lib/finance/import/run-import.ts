@@ -135,6 +135,9 @@ export async function runFinanceImport(input: {
     merchant: t.merchant ?? null,
     external_key: t.source_ref,
     category: null,
+    installment_index: t.installment_index ?? null,
+    installment_total: t.installment_total ?? null,
+    installment_label: t.installment_label ?? null,
   }));
 
   let imported = 0;
@@ -149,6 +152,7 @@ export async function runFinanceImport(input: {
 
       const now = new Date().toISOString();
       for (const txn of result.created) {
+        const parsedTxn = parsed.transactions.find((p) => p.source_ref === txn.external_key);
         await sb
           .from("finance_transactions")
           .update({
@@ -156,7 +160,12 @@ export async function runFinanceImport(input: {
             account_id: accountId,
             import_batch_id: batchId,
             source_ref: txn.external_key,
-            raw: parsed.transactions.find((p) => p.source_ref === txn.external_key)?.raw ?? null,
+            merchant: parsedTxn?.merchant ?? txn.merchant,
+            currency: parsedTxn?.currency ?? txn.currency,
+            installment_index: parsedTxn?.installment_index ?? null,
+            installment_total: parsedTxn?.installment_total ?? null,
+            installment_label: parsedTxn?.installment_label ?? null,
+            raw: parsedTxn?.raw ?? null,
             updated_at: now,
           })
           .eq("id", txn.id);
@@ -207,7 +216,9 @@ export async function listRecentImportTransactions(userId: string, limit = 30) {
   if (await isFinanceImportLayerMissing()) return [];
   const { data, error } = await getSupabase()
     .from("finance_transactions")
-    .select("id, txn_date, amount, kind, description, merchant, currency, source, import_batch_id, created_at")
+    .select(
+      "id, txn_date, amount, kind, description, merchant, currency, installment_index, installment_total, installment_label, source, import_batch_id, created_at"
+    )
     .eq("user_id", userId)
     .not("import_batch_id", "is", null)
     .order("created_at", { ascending: false })

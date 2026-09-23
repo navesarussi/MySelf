@@ -44,8 +44,13 @@ export type ParsedImportTransaction = {
   amount: number;
   kind: "income" | "expense";
   description: string;
+  /** בית עסק — normalized merchant / payee name. */
   merchant?: string | null;
+  /** Per-row currency (Cal FX rows may be USD/EUR). Default ILS. */
   currency?: string;
+  installment_index?: number | null;
+  installment_total?: number | null;
+  installment_label?: string | null;
   source_ref: string;
   raw?: Record<string, unknown>;
 };

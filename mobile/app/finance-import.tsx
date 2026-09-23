@@ -206,6 +206,8 @@ export default function FinanceImportScreen() {
           </View>
           <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
             {txn.txn_date}
+            {txn.installment_label ? ` · ${txn.installment_label}` : ""}
+            {txn.currency && txn.currency !== "ILS" ? ` · ${txn.currency}` : ""}
           </Text>
         </Pressable>
       ))}
