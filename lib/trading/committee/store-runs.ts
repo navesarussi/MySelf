@@ -1,0 +1,224 @@
+import { getSupabase } from "@/lib/supabase";
+import { chunk, fetchAllRows } from "@/lib/db/paginate";
+import { pickBaselineTrade, type BaselineTradeOutcome } from "./block-attribution";
+import { COMMITTEE_MODEL_STAGE_KEYS, COMMITTEE_PROMPT_VERSIONS } from "./config";
+import { buildDualTrackReport, type DualTrackMetricsRow } from "./dual-track";
+import type { CommitteeMetricsRow } from "./metrics";
+import type { CommitteeRunResult } from "./runner";
+
+/** Committee shadow runs: the audit row per opportunity, and the dual-track join. */
+
+function normalizePromptVersions(v: Record<string, string>): Record<string, string> {
+  return { ...COMMITTEE_PROMPT_VERSIONS, ...v };
+}
+
+function normalizeModelVersions(v: Record<string, string>): Record<string, string> {
+  const out = { ...v };
+  for (const stage of COMMITTEE_MODEL_STAGE_KEYS) {
+    if (!out[stage]) out[stage] = "not_run";
+  }
+  return out;
+}
+
+export type CommitteeRunRow = {
+  id: string;
+  ticket_id: string;
+  symbol: string;
+  strategy: string;
+  bar_time: string;
+  trigger_id: string | null;
+  shadow: boolean;
+  status: CommitteeRunResult["status"];
+  outcome: CommitteeRunResult["outcome"];
+  ticket: unknown;
+  technical_report: unknown | null;
+  fundamental_report: unknown | null;
+  debate: unknown | null;
+  soft_risk: unknown | null;
+  certificate: unknown | null;
+  execution_intent: unknown | null;
+  would_have_executed: boolean;
+  blocks: string[];
+  errors: string[];
+  injection_flags: string[];
+  latency_ms: number;
+  model_versions: Record<string, string>;
+  prompt_versions: Record<string, string>;
+  created_at: string;
+};
+
+export async function insertCommitteeRunSafe(result: CommitteeRunResult): Promise<boolean> {
+  try {
+    await insertCommitteeRun(result);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function insertCommitteeRun(result: CommitteeRunResult): Promise<string> {
+  const row = {
+    id: result.runId,
+    ticket_id: result.ticket.id,
+    symbol: result.ticket.symbol,
+    strategy: result.ticket.strategy,
+    bar_time: result.ticket.bar_time,
+    trigger_id: result.triggerId ?? null,
+    shadow: result.shadow,
+    status: result.status,
+    outcome: result.outcome,
+    ticket: result.ticket,
+    technical_report: result.technical,
+    fundamental_report: result.fundamental,
+    debate: result.debate,
+    soft_risk: result.softRisk,
+    certificate: result.certificate,
+    execution_intent: result.executionIntent,
+    would_have_executed: result.wouldHaveExecuted,
+    blocks: result.blocks,
+    errors: result.errors,
+    injection_flags: result.injectionFlags,
+    latency_ms: result.latencyMs,
+    model_versions: normalizeModelVersions(result.modelVersions),
+    prompt_versions: normalizePromptVersions(result.promptVersions),
+  };
+  const { data, error } = await getSupabase()
+    .from("trading_committee_runs")
+    .upsert(row, { onConflict: "ticket_id", ignoreDuplicates: false })
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(`trading_committee_runs: ${error.message}`);
+  return String((data as { id: string } | null)?.id ?? result.runId);
+}
+
+export async function getCommitteeRunByTicketId(ticketId: string): Promise<CommitteeRunRow | null> {
+  const { data, error } = await getSupabase().from("trading_committee_runs").select("*").eq("ticket_id", ticketId).maybeSingle();
+  if (error) throw new Error(`trading_committee_runs read: ${error.message}`);
+  return (data as CommitteeRunRow | null) ?? null;
+}
+
+type TriggerBaselineRow = {
+  id: string;
+  baseline_enter: boolean | null;
+  agent_decision: string | null;
+};
+
+/** Map persisted committee run + optional trigger baseline flags and trade outcome to metrics row shape. */
+export function committeeRunRowToMetricsRow(
+  row: CommitteeRunRow,
+  trigger?: TriggerBaselineRow | null,
+  trade?: BaselineTradeOutcome | null,
+): DualTrackMetricsRow {
+  const soft = row.soft_risk as CommitteeMetricsRow["soft_risk"];
+  const cert = row.certificate as CommitteeMetricsRow["certificate"];
+  const baselineEnter = trigger?.baseline_enter ?? null;
+  const agentEnter = trigger?.agent_decision === "ENTER" ? true : trigger?.agent_decision === "SKIP" ? false : null;
+  return {
+    ticket_id: row.ticket_id,
+    symbol: row.symbol,
+    strategy: row.strategy,
+    bar_time: row.bar_time,
+    would_have_executed: row.would_have_executed,
+    outcome: row.outcome,
+    status: row.status,
+    blocks: row.blocks ?? [],
+    latency_ms: row.latency_ms,
+    soft_risk: soft,
+    certificate: cert,
+    baseline_would_enter: baselineEnter,
+    baseline_agent_enter: agentEnter,
+    baseline_trade: trade ?? null,
+  };
+}
+
+export async function listCommitteeRunsSince(sinceIso?: string, limit = 500): Promise<CommitteeRunRow[]> {
+  let q = getSupabase().from("trading_committee_runs").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (sinceIso) q = q.gte("created_at", sinceIso);
+  const { data, error } = await q;
+  if (error) throw new Error(`trading_committee_runs list: ${error.message}`);
+  return (data as CommitteeRunRow[]) ?? [];
+}
+
+async function fetchTriggerBaselines(triggerIds: string[]): Promise<Map<string, TriggerBaselineRow>> {
+  const map = new Map<string, TriggerBaselineRow>();
+  if (!triggerIds.length) return map;
+  const { data, error } = await getSupabase()
+    .from("trading_triggers")
+    .select("id, baseline_enter, agent_decision")
+    .in("id", triggerIds);
+  if (error) throw new Error(`trading_triggers baseline read: ${error.message}`);
+  for (const row of (data as TriggerBaselineRow[]) ?? []) map.set(row.id, row);
+  return map;
+}
+
+type TradeOutcomeDbRow = {
+  trigger_id: string | null;
+  track: string | null;
+  state: string | null;
+  realized_r: number | null;
+  realized_pnl: number | null;
+  closed_at: string | null;
+};
+
+/**
+ * Trigger ids per request. One trigger can carry both a deterministic and an
+ * agent trade, so `.in()` over the full 500-run window would return up to 1000
+ * rows — exactly PostgREST's cap — and silently drop the rest. A dropped trade
+ * reads as UNRESOLVED, which biases the very attribution the promotion gate
+ * judges on, so each request is kept well clear of the cap.
+ */
+const TRIGGER_IDS_PER_QUERY = 200;
+
+/**
+ * The trade the baseline actually took for each trigger — what a committee block
+ * can be judged against once it closed. One trigger can carry both a
+ * deterministic and an agent trade; `pickBaselineTrade` chooses.
+ */
+async function fetchBaselineTradeOutcomes(triggerIds: string[]): Promise<Map<string, BaselineTradeOutcome>> {
+  const picked = new Map<string, BaselineTradeOutcome>();
+  if (!triggerIds.length) return picked;
+
+  const rows: TradeOutcomeDbRow[] = [];
+  for (const batch of chunk(triggerIds, TRIGGER_IDS_PER_QUERY)) {
+    const page = await fetchAllRows<TradeOutcomeDbRow>(async (from, to) => {
+      const { data, error } = await getSupabase()
+        .from("trading_trades")
+        .select("trigger_id, track, state, realized_r, realized_pnl, closed_at")
+        .in("trigger_id", batch)
+        .order("id")
+        .range(from, to);
+      return { data, error: error ? { message: `trading_trades outcome read: ${error.message}` } : null };
+    });
+    rows.push(...page);
+  }
+
+  const byTrigger = new Map<string, BaselineTradeOutcome[]>();
+  for (const t of rows) {
+    if (!t.trigger_id) continue;
+    const list = byTrigger.get(t.trigger_id) ?? [];
+    list.push({
+      track: t.track,
+      state: t.state,
+      realized_r: t.realized_r == null ? null : Number(t.realized_r),
+      realized_pnl: t.realized_pnl == null ? null : Number(t.realized_pnl),
+      closed_at: t.closed_at,
+    });
+    byTrigger.set(t.trigger_id, list);
+  }
+  for (const [triggerId, trades] of byTrigger) {
+    const pick = pickBaselineTrade(trades);
+    if (pick) picked.set(triggerId, pick);
+  }
+  return picked;
+}
+
+/** Cron-safe dual-track summary from DB rows joined to trigger baselines and closed trades when linked. */
+export async function getCommitteeDualTrackSummary(opts?: { sinceIso?: string; limit?: number }) {
+  const rows = await listCommitteeRunsSince(opts?.sinceIso, opts?.limit ?? 500);
+  const triggerIds = [...new Set(rows.map((r) => r.trigger_id).filter(Boolean))] as string[];
+  const [baselines, trades] = await Promise.all([fetchTriggerBaselines(triggerIds), fetchBaselineTradeOutcomes(triggerIds)]);
+  const metricsRows = rows.map((r) =>
+    committeeRunRowToMetricsRow(r, r.trigger_id ? baselines.get(r.trigger_id) : null, r.trigger_id ? trades.get(r.trigger_id) : null),
+  );
+  return buildDualTrackReport(metricsRows);
+}

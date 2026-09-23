@@ -1,6 +1,6 @@
 {
   "name": "myself-dashboard",
-  "version": "1.32.14",
+  "version": "1.32.15",
   "private": true,
   "scripts": {
     "dev": "next dev",
