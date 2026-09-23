@@ -15,3 +15,5 @@ export * from "./store";
 export * from "./hook";
 export * from "./metrics";
 export * from "./dual-track";
+export * from "./promotion-gates";
+export * from "./reflection";

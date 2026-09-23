@@ -7,7 +7,7 @@ import type { TradingSettings } from "../store";
 import { COMMITTEE_PROMPT_VERSIONS, getCommitteeConfig } from "./config";
 import { envelopeFromAccount } from "./hard-risk";
 import { createCommitteeLlm, type CommitteeLlmClient } from "./llm";
-import { insertCommitteeRunSafe } from "./store";
+import { insertCommitteeRunSafe, maybeRecordReflection } from "./store";
 import { runCommitteeShadow, type CommitteeRunInput, type CommitteeRunResult } from "./runner";
 import type { OpportunityTicket } from "./types";
 
@@ -84,9 +84,14 @@ async function persistHookResult(
   const ok = await insertRun(result);
   if (!ok) {
     ctx.summary?.errors.push(`committee_persist ${item.ticket.symbol}: audit write failed`);
+    return false;
   }
   if (ctx.summary && result.errors.length) {
     ctx.summary.errors.push(...result.errors.map((e) => `committee:${item.ticket.symbol}:${e}`).slice(0, 2));
+  }
+  const reflectionOk = await maybeRecordReflection(result);
+  if (!reflectionOk && getCommitteeConfig().reflection) {
+    ctx.summary?.errors.push(`committee_reflection ${item.ticket.symbol}: note write failed`);
   }
   return ok;
 }

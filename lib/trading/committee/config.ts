@@ -9,6 +9,8 @@ export type CommitteeConfig = {
   certMaxAgeMs: number;
   /** Skip live Gemini calls; use deterministic stub opinions (smoke tests without token spend). */
   dryRunLlm: boolean;
+  /** Persist deterministic reflection notes after shadow runs (offline playbook hooks). */
+  reflection: boolean;
 };
 
 const DEFAULT_MAX_PER_TICK = 3;
@@ -37,6 +39,7 @@ export function getCommitteeConfig(): CommitteeConfig {
     timeoutMs,
     certMaxAgeMs,
     dryRunLlm: envBool("COMMITTEE_DRY_RUN_LLM", false),
+    reflection: envBool("COMMITTEE_REFLECTION", false),
   };
 }
 
