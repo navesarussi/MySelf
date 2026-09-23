@@ -92,6 +92,7 @@ Shadow-only by default: the committee runs the full pipeline, persists audits, a
 | `COMMITTEE_MAX_PER_TICK` | `3` | Top-K tickets per tick (by score) |
 | `COMMITTEE_TIMEOUT_MS` | `120000` | Total budget; per-stage timeout ≈ budget / 5 → fail-closed SKIP |
 | `COMMITTEE_CERT_MAX_AGE_MS` | same as timeout | Certificate TTL at execution gate |
+| `COMMITTEE_DRY_RUN_LLM` | `false` | Stub LLM — deterministic opinions, no Gemini calls |
 
 ### Shadow behavior
 
@@ -144,12 +145,56 @@ Unit-tested with fixture rows; query DB rows into `CommitteeMetricsRow` shape wh
 
 Every persisted row merges full `COMMITTEE_PROMPT_VERSIONS` and fills missing model stages with `"not_run"` so prompt/model metadata is always complete.
 
+## Phase E (dual-track measurement + safe enablement)
+
+| Module | Purpose |
+|--------|---------|
+| `dual-track.ts` | `compareDualTrack`, `committeeOnlyBlocks`, `baselineOnlyEntries`, `hardBlockAttribution`, `buildDualTrackReport` |
+| `store.ts` | `getCommitteeDualTrackSummary` — joins `trading_committee_runs` to trigger baselines via `trigger_id` |
+| `hook.ts` | Fail-closed resilience — never throws; persists ERROR/SKIP audits on LLM/persist failures |
+| `llm.ts` | `createCommitteeLlm` — selects Gemini or `COMMITTEE_DRY_RUN_LLM` stub |
+| `app/api/v1/trading/committee-metrics/route.ts` | Read-only JSON summary (same auth as other trading admin routes) |
+
+### Dual-track comparison
+
+Given committee run rows plus baseline trigger/agent flags (when linked):
+
+- **Agree / disagree** — both would enter or both would skip (`baselineAgreement` + case lists).
+- **Committee-only blocks** — baseline would enter, committee would not (`committeeOnlyBlocks`).
+- **Baseline-only entries** — baseline would skip, committee would execute (`baselineOnlyEntries`).
+- **Hard-block attribution** — histogram of certificate / envelope block codes (`hardBlockAttribution`).
+
+Use `compareDualTrack(rows)` or `getCommitteeDualTrackSummary({ sinceIso, limit })` for cron/reporting. Reuses Phase D `summarizeCommitteeRuns` helpers.
+
+### Additional env flags
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `COMMITTEE_DRY_RUN_LLM` | `false` | Deterministic stub opinions — smoke tests without Gemini token spend |
+
+### Hook resilience
+
+- Per-ticket and batch-level try/catch — scanner tick never crashes on committee failures.
+- LLM unavailable (missing API key, credits, timeout) → `outcome=ERROR`, `would_have_executed=false`, audit persisted via `insertCommitteeRunSafe`.
+- `buildCommitteeErrorRun` produces minimal fail-closed rows when the pipeline throws.
+
+### Enablement checklist (ops — manual, ordered)
+
+1. **Apply migration** — run `0037_trading_committee_runs.sql` (`npm run db:apply` or Supabase migrate).
+2. **Keep defaults** — `COMMITTEE_ENABLED=false`, `COMMITTEE_SHADOW=true` until deliberately enabling shadow measurement.
+3. **Enable shadow** — set `COMMITTEE_ENABLED=true` on Vercel; **leave `COMMITTEE_SHADOW=true`** (never flip shadow false without proof gates).
+4. **Start small** — `COMMITTEE_MAX_PER_TICK=1` (or 2–3) for the first live ticks; raise only after audits look sane.
+5. **Verify audits** — confirm rows appear in `trading_committee_runs` with `shadow=true`, prompt/model version stamps, and sensible `outcome` / `blocks`.
+6. **Gemini dependency** — ensure `GOOGLE_GENERATIVE_AI_API_KEY` is set with credits; missing key or quota → fail-closed ERROR/SKIP (baseline paper path unchanged).
+7. **Optional smoke** — `COMMITTEE_DRY_RUN_LLM=true` runs the full pipeline with stub LLM (no tokens); disable before real shadow measurement.
+8. **Dual-track review** — GET `/api/v1/trading/committee-metrics?days=7` or call `getCommitteeDualTrackSummary` from a cron; review `committee_only_blocks` vs `baseline_only_entries` before any non-shadow gate.
+9. **Never** set `COMMITTEE_SHADOW=false` or submit broker orders from committee until explicit live ramp (out of scope).
+
 ## Not in scope yet
 
 - Turning `COMMITTEE_SHADOW=false` or live Alpaca submission from committee path
 - Dual-track UI dashboard
 - Live ramp gates (G2–G3)
-- Production migration apply / Vercel env (enable `COMMITTEE_ENABLED` manually when ready)
 
 Full phased plan: architecture handoff doc (v1, 2026-09-23).
 

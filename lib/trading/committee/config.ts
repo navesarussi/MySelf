@@ -7,6 +7,8 @@ export type CommitteeConfig = {
   timeoutMs: number;
   /** Max age of a RiskCertificate before execution gate rejects it (defaults to timeout budget). */
   certMaxAgeMs: number;
+  /** Skip live Gemini calls; use deterministic stub opinions (smoke tests without token spend). */
+  dryRunLlm: boolean;
 };
 
 const DEFAULT_MAX_PER_TICK = 3;
@@ -34,6 +36,7 @@ export function getCommitteeConfig(): CommitteeConfig {
     maxPerTick: envInt("COMMITTEE_MAX_PER_TICK", DEFAULT_MAX_PER_TICK),
     timeoutMs,
     certMaxAgeMs,
+    dryRunLlm: envBool("COMMITTEE_DRY_RUN_LLM", false),
   };
 }
 

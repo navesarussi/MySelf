@@ -1,5 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { COMMITTEE_MODEL_STAGE_KEYS, COMMITTEE_PROMPT_VERSIONS } from "./config";
+import { buildDualTrackReport, type DualTrackMetricsRow } from "./dual-track";
+import type { CommitteeMetricsRow } from "./metrics";
 import type { CommitteeRunResult } from "./runner";
 
 function normalizePromptVersions(v: Record<string, string>): Record<string, string> {
@@ -41,6 +43,15 @@ export type CommitteeRunRow = {
   created_at: string;
 };
 
+export async function insertCommitteeRunSafe(result: CommitteeRunResult): Promise<boolean> {
+  try {
+    await insertCommitteeRun(result);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function insertCommitteeRun(result: CommitteeRunResult): Promise<string> {
   const row = {
     id: result.runId,
@@ -80,4 +91,62 @@ export async function getCommitteeRunByTicketId(ticketId: string): Promise<Commi
   const { data, error } = await getSupabase().from("trading_committee_runs").select("*").eq("ticket_id", ticketId).maybeSingle();
   if (error) throw new Error(`trading_committee_runs read: ${error.message}`);
   return (data as CommitteeRunRow | null) ?? null;
+}
+
+type TriggerBaselineRow = {
+  id: string;
+  baseline_enter: boolean | null;
+  agent_decision: string | null;
+};
+
+/** Map persisted committee run + optional trigger baseline flags to metrics row shape. */
+export function committeeRunRowToMetricsRow(row: CommitteeRunRow, trigger?: TriggerBaselineRow | null): DualTrackMetricsRow {
+  const soft = row.soft_risk as CommitteeMetricsRow["soft_risk"];
+  const cert = row.certificate as CommitteeMetricsRow["certificate"];
+  const baselineEnter = trigger?.baseline_enter ?? null;
+  const agentEnter = trigger?.agent_decision === "ENTER" ? true : trigger?.agent_decision === "SKIP" ? false : null;
+  return {
+    ticket_id: row.ticket_id,
+    symbol: row.symbol,
+    strategy: row.strategy,
+    bar_time: row.bar_time,
+    would_have_executed: row.would_have_executed,
+    outcome: row.outcome,
+    status: row.status,
+    blocks: row.blocks ?? [],
+    latency_ms: row.latency_ms,
+    soft_risk: soft,
+    certificate: cert,
+    baseline_would_enter: baselineEnter,
+    baseline_agent_enter: agentEnter,
+  };
+}
+
+export async function listCommitteeRunsSince(sinceIso?: string, limit = 500): Promise<CommitteeRunRow[]> {
+  let q = getSupabase().from("trading_committee_runs").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (sinceIso) q = q.gte("created_at", sinceIso);
+  const { data, error } = await q;
+  if (error) throw new Error(`trading_committee_runs list: ${error.message}`);
+  return (data as CommitteeRunRow[]) ?? [];
+}
+
+async function fetchTriggerBaselines(triggerIds: string[]): Promise<Map<string, TriggerBaselineRow>> {
+  const map = new Map<string, TriggerBaselineRow>();
+  if (!triggerIds.length) return map;
+  const { data, error } = await getSupabase()
+    .from("trading_triggers")
+    .select("id, baseline_enter, agent_decision")
+    .in("id", triggerIds);
+  if (error) throw new Error(`trading_triggers baseline read: ${error.message}`);
+  for (const row of (data as TriggerBaselineRow[]) ?? []) map.set(row.id, row);
+  return map;
+}
+
+/** Cron-safe dual-track summary from DB rows joined to trigger baselines when linked. */
+export async function getCommitteeDualTrackSummary(opts?: { sinceIso?: string; limit?: number }) {
+  const rows = await listCommitteeRunsSince(opts?.sinceIso, opts?.limit ?? 500);
+  const triggerIds = [...new Set(rows.map((r) => r.trigger_id).filter(Boolean))] as string[];
+  const baselines = await fetchTriggerBaselines(triggerIds);
+  const metricsRows = rows.map((r) => committeeRunRowToMetricsRow(r, r.trigger_id ? baselines.get(r.trigger_id) : null));
+  return buildDualTrackReport(metricsRows);
 }
