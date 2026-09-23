@@ -55,9 +55,23 @@ Use `certificatePermitsExecution(cert)` before any future execution helper — i
 
 See `COMMITTEE_FEATURE_KEYS` in `features.ts` (RSI, MACD hist/signal, EMAs, ATR, ADX, volume z, etc.).
 
+## Phase B (scanner adapters — `lib/trading/committee/adapters/`)
+
+Deterministic scanners map to `OpportunityTicket` via pure adapters. Features are computed in code (`committeeFeaturesFromSeries` + `macd` in `indicators.ts`); LLMs never invent indicator values.
+
+| Scanner module | `CommitteeStrategy` | Adapter | `bar_time` source (matches `trading_triggers`) |
+|----------------|---------------------|---------|-----------------------------------------------|
+| `lib/trading/scan-v2.ts` → `strategy/candidates.ts` | `V2_SWING` | `adapters/v2-swing.ts` → `v2SwingToOpportunityTicket` | ISO of 4h setup bar open (`iso(candidate.t - H4)`) |
+| `lib/trading/scan-daily-trend.ts` → `strategy/daily-trend.ts` | `DAILY_TREND` | `adapters/daily-trend.ts` → `dailyTrendToOpportunityTicket` | ISO of daily bar open (`iso(candidate.t)`) |
+| `lib/trading/trade-finder.ts` → `strategy/intraday.ts` | `MANUAL_FINDER` | `adapters/trade-finder.ts` → `tradeFinderToOpportunityTicket` | ISO of 15m setup bar open (`iso(setup_bar_time)`) |
+
+Intraday tick (`intraday-engine.ts`) uses the same underlying setups as trade-finder; a dedicated `INTRADAY` adapter can reuse `committeeFeaturesFromSeries` on `s15` when Phase D wires the committee runner.
+
+Ticket ids are deterministic: `opportunityTicketId(symbol, strategy, bar_time)` (16-char SHA-256 prefix). Adapters call `parseOpportunityTicket` so geometry and id invariants are enforced before any downstream stage.
+
 ## Not in scope yet
 
-Scanner adapters, agent prompts, shadow runner, DB migrations, feature flags, tick wiring, or broker paths.
+Agent prompts, shadow runner, DB migrations, feature flags, tick wiring, or broker paths.
 
 Full phased plan: architecture handoff doc (v1, 2026-09-23).
 
