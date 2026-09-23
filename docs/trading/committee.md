@@ -119,6 +119,18 @@ Migration: `supabase/migrations/0037_trading_committee_runs.sql`. Unique on `tic
 | `metrics.ts` | Pure aggregators for shadow dual-track comparison |
 | `adapters/intraday.ts` | Intraday tick → `OpportunityTicket` |
 
+### Risk units
+
+`portfolio_heat_after` and `risk_r` are in **R**, the unit the envelope uses:
+`openRiskR` returns 1 per at-risk open position — a position carries exactly one
+of its own R — which is why `checkNewEntry` budgets a candidate as
+`openRisk + 1` against `MAX_TOTAL_OPEN_RISK_R`. A certificate's
+`portfolio_heat_after` is therefore directly comparable to that limit.
+
+`risk_budget_fraction` is the separate question of how much of the per-trade
+budget the plan used (below 1 when soft risk shrank it, or when the exposure cap
+bound). It is not a heat unit and must not be summed with one.
+
 ### Hard-risk gate invariants
 
 1. **No certificate → no intent** — `buildExecutionIntent` calls `assertCertificateAllowsExecution` before and after intent construction.
