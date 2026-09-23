@@ -150,7 +150,7 @@ Every persisted row merges full `COMMITTEE_PROMPT_VERSIONS` and fills missing mo
 | Module | Purpose |
 |--------|---------|
 | `dual-track.ts` | `compareDualTrack`, `committeeOnlyBlocks`, `baselineOnlyEntries`, `hardBlockAttribution`, `buildDualTrackReport` |
-| `store.ts` | `getCommitteeDualTrackSummary` — joins `trading_committee_runs` to trigger baselines via `trigger_id` |
+| `store.ts` | `getCommitteeDualTrackSummary` — joins `trading_committee_runs` to trigger baselines and closed trades via `trigger_id` |
 | `hook.ts` | Fail-closed resilience — never throws; persists ERROR/SKIP audits on LLM/persist failures |
 | `llm.ts` | `createCommitteeLlm` — selects Gemini or `COMMITTEE_DRY_RUN_LLM` stub |
 | `app/api/v1/trading/committee-metrics/route.ts` | Read-only JSON summary (same auth as other trading admin routes) |
@@ -195,6 +195,7 @@ Use `compareDualTrack(rows)` or `getCommitteeDualTrackSummary({ sinceIso, limit 
 | Module | Purpose |
 |--------|---------|
 | `promotion-gates.ts` | `CommitteePromotionCriteria` + `evaluatePromotionGates` — pure PASS/FAIL over dual-track summaries |
+| `block-attribution.ts` | `attributeCommitteeBlocks` — closed-trade PnL verdict per committee-only block (pure) |
 | `reflection.ts` | `buildReflectionNote(run)` — deterministic post-run note (block layer, soft vs hard, debate tilt) |
 | `store.ts` | `maybeRecordReflection` — optional DB insert when `COMMITTEE_REFLECTION=true` |
 | `0038_trading_committee_reflections.sql` | Append-only reflection notes keyed by `run_id` |
@@ -208,11 +209,30 @@ Pure evaluator over `DualTrackSummary` from `compareDualTrack` / `getCommitteeDu
 | `minSampleSize` | 100 | Minimum committee runs in window |
 | `minComparedBaselines` | 50 | Rows with baseline comparison flags |
 | `maxDisagreementRate` | 35% | `disagree / compared` dual-track disagreement |
-| `maxHardBlockFalsePositiveRate` | 25% | **Placeholder heuristic:** `committee_only_blocks / compared` until closed-trade PnL attribution exists |
+| `maxHardBlockFalsePositiveRate` | 25% | Share of hard blocks that skipped a winner — measured from closed-trade PnL, count heuristic as fallback |
+| `minResolvedBlocksForPnlBasis` | 20 | Blocks with a closed baseline trade required before the PnL basis is used |
+| `minNetRSavedPerBlock` | 0 R | Min average net R saved per resolved block (PnL basis only) |
 | `maxLatencyP95Ms` | 90_000 | Shadow run latency p95 budget (ms) |
 | `maxErrorRate` | 5% | ERROR outcomes / total runs |
 
 Use `evaluatePromotionGates(summary)` or pass custom `CommitteePromotionCriteria`. Defaults live in `DEFAULT_PROMOTION_CRITERIA`.
+
+#### Hard-block PnL attribution (closed trades)
+
+`maxHardBlockFalsePositiveRate` is measured from money, not counts. A shadow run that denied a ticket the baseline entered has a real answer waiting for it: the baseline opened that trade on the same `trigger_id`, and it has since closed with a `realized_r`.
+
+| Verdict | Meaning |
+|---------|---------|
+| `AVOIDED_LOSS` | Baseline trade closed red — the block saved `-realized_r`. **Good block.** |
+| `SKIPPED_WINNER` | Baseline trade closed green — the block cost `realized_r`. **False positive.** |
+| `SCRATCH` | Closed flat (abs(r) <= 1e-9) — resolved, but moves neither total. |
+| `UNRESOLVED` | No linked trade, still `OPEN`, or `CANCELLED` (never entered) — excluded from the rate, never counted against the committee. |
+
+`attributeCommitteeBlocks(rows)` (`block-attribution.ts`, pure) returns `blocks`, `resolved`, `skipped_winners`, `avoided_losses`, `false_positive_rate = skipped_winners / resolved`, plus `r_saved`, `r_missed`, `net_r_saved`, `net_r_per_block` and dollar totals. `compareDualTrack` exposes it at `summary.dual_track.block_attribution`; `getCommitteeDualTrackSummary` fills each row's `baseline_trade` by joining `trading_trades` on `trigger_id` (`pickBaselineTrade`: resolved over open, agent track over deterministic, then most recent close).
+
+**Basis and fallback.** The gate uses the PnL basis once `resolved >= minResolvedBlocksForPnlBasis` (default 20); below that it falls back to the Phase F count heuristic (`committee_only_blocks / compared`). The two are **not** the same scale — the heuristic asks how often the committee blocks, the PnL rate asks how often it was wrong to — so `metrics.hard_block_fp_basis` and `hard_block_fp_sample` always state which number was judged, and the FAIL reason is named `hard_block_fp_pnl` or `hard_block_fp_heuristic`. The old heuristic value stays in `metrics.hard_block_false_positive_heuristic` so stored gate-eval history remains comparable.
+
+**Why net R as well.** A rate alone flatters a committee that blocks nine small losers and one large winner: 10% false positives, and net −3.5R. `minNetRSavedPerBlock` (default 0) requires the blocks to be net positive in R, and is checked only on the PnL basis.
 
 **Ops rule:** `COMMITTEE_SHADOW` may be set to `false` only after these gates **PASS for N consecutive calendar days** (duration tracked outside the evaluator — e.g. cron logging daily verdict). Even then, paper dual-track must show committee net edge before any live ramp (G2–G3).
 

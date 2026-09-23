@@ -33,6 +33,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - [PENDING REFACTOR]: Lift per-card modals from `HabitCard` to screen-level `FormModal` (implemented during instant UX infrastructure).
 - [PENDING REFACTOR]: TimelineCanvas clustering still runs on the JS thread (out of NFR-UX-04/05 pass).
 - [PENDING REFACTOR]: Split `lib/finance/plan-store.ts` (222) under 200 lines. `plan.ts` is already at 147.
+- [PENDING REFACTOR]: Split `lib/trading/committee/store.ts` (322) under 200 lines — committee runs, reflections, gate evals and the dual-track joins are four concerns in one file; `service-*.ts` is the pattern to follow.
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/finance.tsx` (211) under 200 lines.
 
 ## Shared primitives (one home each)

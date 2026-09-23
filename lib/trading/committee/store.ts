@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { pickBaselineTrade, type BaselineTradeOutcome } from "./block-attribution";
 import { COMMITTEE_MODEL_STAGE_KEYS, COMMITTEE_PROMPT_VERSIONS, getCommitteeConfig } from "./config";
 import { buildDualTrackReport, type DualTrackMetricsRow } from "./dual-track";
 import type { CommitteeMetricsRow } from "./metrics";
@@ -100,8 +101,12 @@ type TriggerBaselineRow = {
   agent_decision: string | null;
 };
 
-/** Map persisted committee run + optional trigger baseline flags to metrics row shape. */
-export function committeeRunRowToMetricsRow(row: CommitteeRunRow, trigger?: TriggerBaselineRow | null): DualTrackMetricsRow {
+/** Map persisted committee run + optional trigger baseline flags and trade outcome to metrics row shape. */
+export function committeeRunRowToMetricsRow(
+  row: CommitteeRunRow,
+  trigger?: TriggerBaselineRow | null,
+  trade?: BaselineTradeOutcome | null,
+): DualTrackMetricsRow {
   const soft = row.soft_risk as CommitteeMetricsRow["soft_risk"];
   const cert = row.certificate as CommitteeMetricsRow["certificate"];
   const baselineEnter = trigger?.baseline_enter ?? null;
@@ -120,6 +125,7 @@ export function committeeRunRowToMetricsRow(row: CommitteeRunRow, trigger?: Trig
     certificate: cert,
     baseline_would_enter: baselineEnter,
     baseline_agent_enter: agentEnter,
+    baseline_trade: trade ?? null,
   };
 }
 
@@ -143,12 +149,57 @@ async function fetchTriggerBaselines(triggerIds: string[]): Promise<Map<string, 
   return map;
 }
 
-/** Cron-safe dual-track summary from DB rows joined to trigger baselines when linked. */
+type TradeOutcomeDbRow = {
+  trigger_id: string | null;
+  track: string | null;
+  state: string | null;
+  realized_r: number | null;
+  realized_pnl: number | null;
+  closed_at: string | null;
+};
+
+/**
+ * The trade the baseline actually took for each trigger — what a committee block
+ * can be judged against once it closed. One trigger can carry both a
+ * deterministic and an agent trade; `pickBaselineTrade` chooses.
+ */
+async function fetchBaselineTradeOutcomes(triggerIds: string[]): Promise<Map<string, BaselineTradeOutcome>> {
+  const picked = new Map<string, BaselineTradeOutcome>();
+  if (!triggerIds.length) return picked;
+  const { data, error } = await getSupabase()
+    .from("trading_trades")
+    .select("trigger_id, track, state, realized_r, realized_pnl, closed_at")
+    .in("trigger_id", triggerIds);
+  if (error) throw new Error(`trading_trades outcome read: ${error.message}`);
+
+  const byTrigger = new Map<string, BaselineTradeOutcome[]>();
+  for (const t of (data as TradeOutcomeDbRow[]) ?? []) {
+    if (!t.trigger_id) continue;
+    const list = byTrigger.get(t.trigger_id) ?? [];
+    list.push({
+      track: t.track,
+      state: t.state,
+      realized_r: t.realized_r == null ? null : Number(t.realized_r),
+      realized_pnl: t.realized_pnl == null ? null : Number(t.realized_pnl),
+      closed_at: t.closed_at,
+    });
+    byTrigger.set(t.trigger_id, list);
+  }
+  for (const [triggerId, trades] of byTrigger) {
+    const pick = pickBaselineTrade(trades);
+    if (pick) picked.set(triggerId, pick);
+  }
+  return picked;
+}
+
+/** Cron-safe dual-track summary from DB rows joined to trigger baselines and closed trades when linked. */
 export async function getCommitteeDualTrackSummary(opts?: { sinceIso?: string; limit?: number }) {
   const rows = await listCommitteeRunsSince(opts?.sinceIso, opts?.limit ?? 500);
   const triggerIds = [...new Set(rows.map((r) => r.trigger_id).filter(Boolean))] as string[];
-  const baselines = await fetchTriggerBaselines(triggerIds);
-  const metricsRows = rows.map((r) => committeeRunRowToMetricsRow(r, r.trigger_id ? baselines.get(r.trigger_id) : null));
+  const [baselines, trades] = await Promise.all([fetchTriggerBaselines(triggerIds), fetchBaselineTradeOutcomes(triggerIds)]);
+  const metricsRows = rows.map((r) =>
+    committeeRunRowToMetricsRow(r, r.trigger_id ? baselines.get(r.trigger_id) : null, r.trigger_id ? trades.get(r.trigger_id) : null),
+  );
   return buildDualTrackReport(metricsRows);
 }
 

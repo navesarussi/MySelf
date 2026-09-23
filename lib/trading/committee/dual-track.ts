@@ -1,6 +1,13 @@
 import type { CommitteeRunResult } from "./runner";
 import {
+  attributeCommitteeBlocks,
+  isCommitteeOnlyBlock,
+  type BlockAttributionSummary,
+  type BlockOutcomeRow,
+} from "./block-attribution";
+import {
   baselineAgreement,
+  baselineWouldEnter,
   hardBlockRate,
   latencyPercentiles,
   skipReasonHistogram,
@@ -9,13 +16,10 @@ import {
   type CommitteeRunSummary,
 } from "./metrics";
 
-/** Row with optional identity fields for dual-track case lists. */
-export type DualTrackMetricsRow = CommitteeMetricsRow & {
-  ticket_id?: string;
-  symbol?: string;
-  strategy?: string;
-  bar_time?: string;
-};
+export { baselineWouldEnter };
+
+/** Row with optional identity fields for case lists, plus the baseline trade outcome. */
+export type DualTrackMetricsRow = BlockOutcomeRow;
 
 export type DualTrackCase = {
   ticket_id?: string;
@@ -45,18 +49,13 @@ export type DualTrackBreakdown = {
   committee_only_cases: DualTrackCase[];
   baseline_only_cases: DualTrackCase[];
   hard_block_attribution: HardBlockAttribution[];
+  /** Closed-trade PnL attribution over the committee-only blocks. */
+  block_attribution: BlockAttributionSummary;
 };
 
 export type DualTrackSummary = CommitteeRunSummary & {
   dual_track: DualTrackBreakdown;
 };
-
-/** Baseline enter when agent verdict exists, else deterministic trigger flag. */
-export function baselineWouldEnter(row: CommitteeMetricsRow): boolean | null {
-  if (row.baseline_agent_enter != null) return row.baseline_agent_enter;
-  if (row.baseline_would_enter != null) return row.baseline_would_enter;
-  return null;
-}
 
 function toCase(row: DualTrackMetricsRow): DualTrackCase {
   const blocks = row.blocks ?? [];
@@ -75,12 +74,7 @@ function toCase(row: DualTrackMetricsRow): DualTrackCase {
 
 /** Rows where baseline would enter but committee would not execute. */
 export function committeeOnlyBlocks(rows: DualTrackMetricsRow[]): DualTrackCase[] {
-  return rows
-    .filter((row) => {
-      const baseline = baselineWouldEnter(row);
-      return baseline === true && !row.would_have_executed;
-    })
-    .map(toCase);
+  return rows.filter(isCommitteeOnlyBlock).map(toCase);
 }
 
 /** Rows where baseline would skip but committee would execute. */
@@ -147,6 +141,7 @@ export function compareDualTrack(rows: DualTrackMetricsRow[]): DualTrackSummary 
       committee_only_cases: committeeBlocks,
       baseline_only_cases: baselineEntries,
       hard_block_attribution: hardBlockAttribution(rows),
+      block_attribution: attributeCommitteeBlocks(rows),
     },
   };
 }

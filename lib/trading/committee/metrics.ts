@@ -17,6 +17,15 @@ export type CommitteeMetricsRow = {
 
 export type SkipReasonCount = { reason: string; count: number };
 
+/** Did the baseline enter? The agent verdict when present, else the deterministic trigger flag. */
+export function baselineWouldEnter(
+  row: Pick<CommitteeMetricsRow, "baseline_would_enter" | "baseline_agent_enter">,
+): boolean | null {
+  if (row.baseline_agent_enter != null) return row.baseline_agent_enter;
+  if (row.baseline_would_enter != null) return row.baseline_would_enter;
+  return null;
+}
+
 export type CommitteeRunSummary = {
   total: number;
   would_execute: number;
@@ -85,9 +94,7 @@ export function baselineAgreement(rows: CommitteeMetricsRow[]): CommitteeRunSumm
   if (!compared.length) return undefined;
   let agree = 0;
   for (const row of compared) {
-    const baselineEnter = row.baseline_agent_enter ?? row.baseline_would_enter ?? false;
-    const committeeEnter = row.would_have_executed;
-    if (baselineEnter === committeeEnter) agree += 1;
+    if ((baselineWouldEnter(row) ?? false) === row.would_have_executed) agree += 1;
   }
   return {
     compared: compared.length,
