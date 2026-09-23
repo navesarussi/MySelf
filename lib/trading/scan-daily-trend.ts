@@ -15,6 +15,8 @@ import { fetchBtcDominance, fetchEarningsSymbols, fetchFundingRate, fetchVix, ty
 import { CHART_BARS_BEFORE, D1, MAX_AGENT_CALLS_PER_TICK, TICK_TIME_BUDGET_MS, barsFor, iso, toSym, type Account, type TickSummary } from "./tick-context";
 import { round } from "./round";
 import type { UniverseSymbol } from "./types";
+import { dailyTrendToOpportunityTicket } from "./committee/adapters";
+import { runCommitteeShadowBatch, type CommitteeHookItem } from "./committee/hook";
 
 /**
  * Stage 4b — the daily-trend strategy: breakout scan on daily closes over the
@@ -89,6 +91,7 @@ export async function scanDailyTrend(input: {
   const earnings = found.some((c) => c.a.asset_class === "STOCK") ? await fetchEarningsSymbols(nextTradingDays(isoDateInZone(new Date(now), "America/New_York"), 4)) : new Set<string>();
   const [vix, dominance] = await Promise.all([fetchVix(), fetchBtcDominance()]);
   const calendar = await getCalendar(new Date(now - 2 * D1).toISOString().slice(0, 10));
+  const committeeBatch: CommitteeHookItem[] = [];
 
   for (const c of found) {
     if (Date.now() - input.started > TICK_TIME_BUDGET_MS) {
@@ -158,6 +161,18 @@ export async function scanDailyTrend(input: {
       if (trigErr) throw new Error(trigErr.message);
       if (!trig) continue; // already processed by an earlier tick
       const triggerId = String((trig as { id: string }).id);
+      const ticketR = dailyTrendToOpportunityTicket({ candidate: c, score });
+      if (ticketR.ok) {
+        committeeBatch.push({
+          ticket: ticketR.data,
+          assetClass: sym.asset_class,
+          vetoes,
+          envelopeBlocks: blocks,
+          triggerId,
+          headlines: [],
+          earningsWindow: earnings?.has(sym.symbol) ?? false,
+        });
+      }
       if (vetoes.length || !basePlan) {
         summary.vetoed += vetoes.length ? 1 : 0;
         continue;
@@ -260,5 +275,11 @@ export async function scanDailyTrend(input: {
     } catch (err) {
       summary.errors.push(`scan-daily-trend ${c.symbol}: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  try {
+    await runCommitteeShadowBatch(committeeBatch, { settings, account: input.account, vix, btc_dominance_pct: dominance, summary });
+  } catch (err) {
+    summary.errors.push(`committee_shadow: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

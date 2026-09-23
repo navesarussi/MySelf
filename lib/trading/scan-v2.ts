@@ -15,6 +15,8 @@ import { DISCRETION_POOL_PARAMS, analystBrief, evaluateCandidates, isBaselineCan
 import { closedIdx } from "./strategy/series";
 import { evaluateVetoes, isoDateInZone, nextTradingDays, type CalendarEvent } from "./veto";
 import { CHART_BARS_BEFORE, H4, MAX_AGENT_CALLS_PER_TICK, TICK_TIME_BUDGET_MS, barsFor, iso, toSym, type Account, type FrameCache, type TickSummary } from "./tick-context";
+import { v2SwingToOpportunityTicket } from "./committee/adapters";
+import { runCommitteeShadowBatch, type CommitteeHookItem } from "./committee/hook";
 
 /**
  * Stage 4 — strategy v2: setups on 4h closes, entry timing and management on
@@ -79,6 +81,7 @@ export async function scan(input: {
   const closed = await getClosedTrades();
   const earnings = found.some((c) => c.asset_class === "STOCK") ? await fetchEarningsSymbols(nextTradingDays(isoDateInZone(new Date(now), "America/New_York"), 4)) : new Set<string>();
   const [vix, dominance] = await Promise.all([fetchVix(), fetchBtcDominance()]);
+  const committeeBatch: CommitteeHookItem[] = [];
 
   for (const c of found) {
     if (Date.now() - input.started > TICK_TIME_BUDGET_MS) {
@@ -152,6 +155,23 @@ export async function scan(input: {
       if (trigErr) throw new Error(trigErr.message);
       if (!trig) continue; // already processed by an earlier tick
       const triggerId = String((trig as { id: string }).id);
+      const uctx = c.asset_class === "STOCK" ? ctxStock : ctxCrypto;
+      const ticketR = v2SwingToOpportunityTicket({
+        candidate: c,
+        frames: f,
+        market: { reference_ok: referenceOkBySymbol.get(c.symbol) ?? null, rs_rank: uctx.rank.get(c.symbol) ?? null, breadth: uctx.breadth },
+      });
+      if (ticketR.ok) {
+        committeeBatch.push({
+          ticket: ticketR.data,
+          assetClass: sym.asset_class,
+          vetoes,
+          envelopeBlocks: blocks,
+          triggerId,
+          headlines: [],
+          earningsWindow: earnings?.has(sym.symbol) ?? false,
+        });
+      }
       if (vetoes.length || !basePlan || !brief) {
         summary.vetoed += vetoes.length ? 1 : 0;
         continue;
@@ -258,5 +278,11 @@ export async function scan(input: {
     } catch (err) {
       summary.errors.push(`scan ${c.symbol}: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  try {
+    await runCommitteeShadowBatch(committeeBatch, { settings, account: input.account, vix, btc_dominance_pct: dominance, funding_rate: null, summary });
+  } catch (err) {
+    summary.errors.push(`committee_shadow: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
