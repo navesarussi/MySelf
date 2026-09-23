@@ -1,8 +1,12 @@
-import { createHash } from "crypto";
 import { z } from "zod";
 import { RISK_ENVELOPE } from "../config";
 import { snapMultiplier } from "../agent-judge";
 import type { RiskMultiplier } from "../types";
+import {
+  checkExecutionIntentInvariants,
+  checkOpportunityTicketInvariants,
+  checkRiskCertificateInvariants,
+} from "./invariants";
 import {
   analystReportSchema,
   debateSynthesisSchema,
@@ -27,9 +31,15 @@ function formatZodError(err: z.ZodError): string {
   return err.issues.map((i) => `${i.path.map(String).join(".") || "root"}: ${i.message}`).join("; ");
 }
 
+function withInvariants<T>(data: T, inv: { ok: boolean; issues?: string[] }): ParseResult<T> {
+  if (!inv.ok) return { ok: false, error: inv.issues!.join("; ") };
+  return { ok: true, data };
+}
+
 export function parseOpportunityTicket(input: unknown): ParseResult<OpportunityTicket> {
   const r = opportunityTicketSchema.safeParse(input);
-  return r.success ? { ok: true, data: r.data } : { ok: false, error: formatZodError(r.error) };
+  if (!r.success) return { ok: false, error: formatZodError(r.error) };
+  return withInvariants(r.data, checkOpportunityTicketInvariants(r.data));
 }
 
 export function parseAnalystReport(input: unknown): ParseResult<AnalystReport> {
@@ -54,18 +64,14 @@ export function parseSoftRiskOpinion(input: unknown): ParseResult<SoftRiskOpinio
 
 export function parseRiskCertificate(input: unknown): ParseResult<RiskCertificate> {
   const r = riskCertificateSchema.safeParse(input);
-  return r.success ? { ok: true, data: r.data } : { ok: false, error: formatZodError(r.error) };
+  if (!r.success) return { ok: false, error: formatZodError(r.error) };
+  return withInvariants(r.data, checkRiskCertificateInvariants(r.data));
 }
 
 export function parseExecutionIntent(input: unknown): ParseResult<ExecutionIntent> {
   const r = executionIntentSchema.safeParse(input);
-  return r.success ? { ok: true, data: r.data } : { ok: false, error: formatZodError(r.error) };
-}
-
-/** Deterministic ticket id: symbol + strategy + bar close time (ISO). */
-export function opportunityTicketId(symbol: string, strategy: string, barTimeIso: string): string {
-  const raw = `${symbol.toUpperCase()}|${strategy}|${barTimeIso}`;
-  return createHash("sha256").update(raw).digest("hex").slice(0, 16);
+  if (!r.success) return { ok: false, error: formatZodError(r.error) };
+  return withInvariants(r.data, checkExecutionIntentInvariants(r.data));
 }
 
 /** Snap multiplier DOWN to the allowed committee set — never increases risk. */
@@ -163,6 +169,7 @@ export function enforceSoftRiskOpinion(
 
 /** Risk certificate is valid for execution only when ok=true and market is OPEN. */
 export function certificatePermitsExecution(cert: RiskCertificate): boolean {
+  if (!checkRiskCertificateInvariants(cert).ok) return false;
   return cert.ok && cert.market_state === "OPEN" && cert.final_qty > 0;
 }
 
