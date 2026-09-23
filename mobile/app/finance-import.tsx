@@ -161,7 +161,7 @@ export default function FinanceImportScreen() {
         </Card>
       ) : null}
 
-      <SectionTitle title={t("finance.importRecentBatches")} />
+      <SectionTitle>{t("finance.importRecentBatches")}</SectionTitle>
       {batchesLoading && batches.length === 0 ? <Loading /> : null}
       {batches.length === 0 && !batchesLoading ? (
         <Text style={{ color: c.muted, marginBottom: 12, textAlign: textStart, writingDirection }}>
@@ -184,7 +184,7 @@ export default function FinanceImportScreen() {
         ))
       )}
 
-      <SectionTitle title={t("finance.importRecentTxns")} />
+      <SectionTitle>{t("finance.importRecentTxns")}</SectionTitle>
       {recentLoading && recent.length === 0 ? <Loading /> : null}
       {recent.map((txn) => (
         <Pressable
@@ -212,7 +212,9 @@ export default function FinanceImportScreen() {
         </Pressable>
       ))}
 
-      <Btn label={t("common.close")} onPress={() => router.back()} style={{ marginTop: 16 }} />
+      <View style={{ marginTop: 16 }}>
+        <Btn label={t("common.close")} onPress={() => router.back()} />
+      </View>
     </Screen>
   );
 }
