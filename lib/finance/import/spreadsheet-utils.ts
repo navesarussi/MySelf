@@ -108,6 +108,31 @@ export function rowsToObjects(rows: unknown[][], headerRowIndex: number): Record
   return objects;
 }
 
+export function isSkippableSpreadsheetRow(row: Record<string, string | number>): boolean {
+  const joined = Object.values(row)
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+  if (!joined) return true;
+  if (/^(סה"כ|סך|סיכום|total\b|balance\b|יתרה)/i.test(joined)) return true;
+  if (/^(פירוט|דף|חשבון|כרטיס)/i.test(joined) && !/\d/.test(joined.slice(0, 20))) return true;
+  return false;
+}
+
+export function parseInstallmentFromText(text: string): { index: number | null; total: number | null } {
+  const hebrew = text.match(/(\d{1,2})\s*מתוך\s*(\d{1,2})/);
+  if (hebrew) return { index: Number(hebrew[1]), total: Number(hebrew[2]) };
+  const calStyle = text.match(/(\d{1,2})\s*מ[-–]\s*(\d{1,2})/);
+  if (calStyle) return { index: Number(calStyle[1]), total: Number(calStyle[2]) };
+  const slash = text.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+  if (slash) {
+    const index = Number(slash[1]);
+    const total = Number(slash[2]);
+    if (index >= 1 && total >= 1 && index <= total && total <= 36) return { index, total };
+  }
+  return { index: null, total: null };
+}
+
 export function mapTabularRows(input: {
   objects: Record<string, string | number>[];
   dateAliases: string[];
@@ -117,6 +142,8 @@ export function mapTabularRows(input: {
   refPrefix: string;
   defaultKind?: "expense";
   currencyCol?: string | null;
+  fallbackAmountAliases?: string[];
+  fallbackCurrency?: string;
   installmentCols?: { index?: string | null; total?: string | null };
 }): { transactions: ParsedImportTransaction[]; warnings: string[]; headers: string[] } {
   const warnings: string[] = [];
@@ -125,6 +152,7 @@ export function mapTabularRows(input: {
   const headers = Object.keys(input.objects[0] ?? {});
   const dateCol = pickColumn(headers, input.dateAliases);
   const amountCol = pickColumn(headers, input.amountAliases);
+  const fallbackAmountCol = pickColumn(headers, input.fallbackAmountAliases ?? []);
   const descCol = pickColumn(headers, input.descAliases);
   const merchantCol = pickColumn(headers, input.merchantAliases);
 
@@ -136,15 +164,27 @@ export function mapTabularRows(input: {
   let errors = 0;
 
   input.objects.forEach((row, idx) => {
+    if (isSkippableSpreadsheetRow(row)) return;
+
     const booked = parseDateCell(row[dateCol] ?? "");
-    const amt = parseAmountCell(row[amountCol] ?? "");
+    let amt = parseAmountCell(row[amountCol] ?? "");
+    let currency = input.currencyCol ? parseCurrencyCell(String(row[input.currencyCol] ?? "")) : "ILS";
+    if (!amt && fallbackAmountCol) {
+      amt = parseAmountCell(row[fallbackAmountCol] ?? "");
+      if (amt) {
+        const origCurrencyCol = pickColumn(headers, ["מטבע עסקה מקורי", "מטבע עסקה", "מטבע"]);
+        currency = origCurrencyCol
+          ? parseCurrencyCell(String(row[origCurrencyCol] ?? ""))
+          : (input.fallbackCurrency ?? "USD");
+      }
+    }
     if (!booked || !amt) {
       errors++;
       return;
     }
+
     const merchant = merchantCol ? String(row[merchantCol] ?? "").trim() || null : null;
     const description = (descCol ? String(row[descCol] ?? "").trim() : "") || merchant || "Import";
-    const currency = input.currencyCol ? parseCurrencyCell(String(row[input.currencyCol] ?? "")) : "ILS";
 
     let installment_index: number | null = null;
     let installment_total: number | null = null;
@@ -155,6 +195,11 @@ export function mapTabularRows(input: {
     if (input.installmentCols?.total) {
       const v = Number(String(row[input.installmentCols.total] ?? "").replace(/\D/g, ""));
       if (v >= 1) installment_total = v;
+    }
+    if (!installment_index) {
+      const fromText = parseInstallmentFromText(`${description} ${merchant ?? ""}`);
+      installment_index = fromText.index;
+      installment_total = fromText.total;
     }
 
     transactions.push({
