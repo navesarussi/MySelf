@@ -177,6 +177,41 @@ export function returnCorrelation(a: number[], b: number[], n = 60): number | nu
   return cov / Math.sqrt(va * vb);
 }
 
+export type MacdSeries = {
+  line: number[];
+  signal: number[];
+  hist: number[];
+};
+
+/** MACD(12, 26, 9) on closes — aligned arrays; NaN until warm-up completes. */
+export function macd(closes: number[], fastPeriod = 12, slowPeriod = 26, signalPeriod = 9): MacdSeries {
+  const n = closes.length;
+  const line = new Array<number>(n).fill(NaN);
+  const signal = new Array<number>(n).fill(NaN);
+  const hist = new Array<number>(n).fill(NaN);
+  const fast = ema(closes, fastPeriod);
+  const slow = ema(closes, slowPeriod);
+  const macdStart = slowPeriod - 1;
+  for (let i = macdStart; i < n; i++) {
+    if (Number.isFinite(fast[i]) && Number.isFinite(slow[i])) line[i] = fast[i] - slow[i];
+  }
+  const sigStart = macdStart + signalPeriod - 1;
+  if (sigStart >= n) return { line, signal, hist };
+  let sum = 0;
+  for (let i = macdStart; i < macdStart + signalPeriod; i++) sum += line[i];
+  let prevSig = sum / signalPeriod;
+  signal[sigStart] = prevSig;
+  if (Number.isFinite(line[sigStart])) hist[sigStart] = line[sigStart] - prevSig;
+  const k = 2 / (signalPeriod + 1);
+  for (let i = sigStart + 1; i < n; i++) {
+    if (!Number.isFinite(line[i])) continue;
+    prevSig = line[i] * k + prevSig * (1 - k);
+    signal[i] = prevSig;
+    hist[i] = line[i] - prevSig;
+  }
+  return { line, signal, hist };
+}
+
 /** Aggregate lower-timeframe bars into buckets of `ms` aligned to UTC epoch. */
 export function aggregateBars(bars: Bar[], ms: number): Bar[] {
   const out: Bar[] = [];
