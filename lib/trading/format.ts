@@ -46,3 +46,11 @@ export function rTone(r: number | null | undefined): Tone {
   if (r < -0.05) return "warn";
   return "default";
 }
+
+/** Holding time: minutes for a scalp, hours intraday, days for a swing. */
+export function fmtDuration(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined || !Number.isFinite(hours) || hours < 0) return "—";
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  if (hours < 48) return hours < 10 ? `${hours.toFixed(1)}h` : `${Math.round(hours)}h`;
+  return `${(hours / 24).toFixed(1)}d`;
+}

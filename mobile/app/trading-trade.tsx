@@ -9,7 +9,7 @@ import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/quer
 import { Badge, Btn, Card, Input, Loading, Screen, SectionTitle } from "../src/components/ui";
 import { CandleChart, KpiGrid, type ChartLevel, type ChartMarker } from "../src/components/trading/charts";
 import { TradingText } from "../src/components/trading/blocks";
-import { fmtDateTime, fmtPrice, fmtR, fmtSignedUsd, fmtUsd, rTone } from "@/lib/trading/format";
+import { fmtDateTime, fmtDuration, fmtPct, fmtPrice, fmtR, fmtSignedUsd, fmtUsd, rTone } from "@/lib/trading/format";
 
 type TfRead = { trend: string; structure: string; rsi: number | null; adx: number | null; volume_ratio: number | null; squeeze_pct: number | null; bearish_divergence: boolean };
 type TriggerSnapshot = {
@@ -61,7 +61,7 @@ export default function TradingTradeScreen() {
   }, [data, t]);
 
   if (!data) return <Screen>{loading ? <Loading /> : null}</Screen>;
-  const { trade, trigger, sibling, lesson } = data;
+  const { trade, trigger, sibling, lesson, quality } = data;
   const snap = (trigger?.snapshot ?? trade.trigger_snapshot ?? {}) as TriggerSnapshot;
   const menu = snap.candidate?.target_menu ?? [];
   const chosen = trigger?.agent_target_index ?? null;
@@ -90,11 +90,45 @@ export default function TradingTradeScreen() {
       <KpiGrid
         items={[
           { label: "R", value: trade.state === "CLOSED" ? fmtR(trade.realized_r) : "—", tone: tone === "good" ? "good" : tone === "warn" ? "warn" : "default" },
-          { label: "P&L", value: fmtSignedUsd(trade.realized_pnl), hint: `1R = ${fmtUsd(trade.risk_amount)}` },
+          { label: "P&L", value: fmtSignedUsd(trade.realized_pnl), hint: `1R = ${fmtUsd(quality.risk_usd ?? trade.risk_amount)}` },
           { label: "MFE / MAE", value: `${fmtR(trade.mfe_r, 1)} / ${fmtR(trade.mae_r, 1)}` },
           { label: t("trading.entry"), value: fmtPrice(trade.entry_price ?? trade.entry_limit), hint: trade.entry_slippage_bps !== null ? `${t("trading.slippage")} ${trade.entry_slippage_bps}bps` : undefined },
           { label: t("trading.stop"), value: fmtPrice(trade.initial_stop_price), hint: trade.stop_price !== trade.initial_stop_price ? `→ ${fmtPrice(trade.stop_price)}` : undefined },
-          { label: t("trading.fees"), value: fmtUsd(trade.fees_paid, 2), hint: `×${trade.agent_risk_multiplier ?? 1} · ${trade.position_size}` },
+          { label: t("trading.target"), value: fmtPrice(trade.target_price), hint: quality.r_to_target !== null ? `${quality.r_to_target}R` : undefined },
+          // The exit is the first thing you look for on a closed trade, and it
+          // was only ever drawn as a line on the chart.
+          {
+            label: t("trading.exit"),
+            value: trade.exit_price === null ? "—" : fmtPrice(trade.exit_price),
+            hint: trade.closed_at ? fmtDateTime(trade.closed_at) : trade.exit_reason ?? undefined,
+            tone: tone === "good" ? "good" : tone === "warn" ? "warn" : "default",
+          },
+          { label: t("trading.held"), value: fmtDuration(quality.hold_hours), hint: trade.opened_at ? fmtDateTime(trade.opened_at) : undefined },
+          {
+            label: t("trading.capture"),
+            value: quality.capture_efficiency === null ? "—" : fmtPct(quality.capture_efficiency, 0),
+            hint: t("trading.captureHint"),
+            tone:
+              quality.capture_efficiency === null
+                ? "default"
+                : quality.capture_efficiency >= 0.6
+                  ? "good"
+                  : quality.capture_efficiency < 0.3
+                    ? "warn"
+                    : "default",
+          },
+          {
+            label: t("trading.costR"),
+            value: quality.total_cost_r === null ? "—" : fmtR(quality.total_cost_r, 2),
+            hint: quality.gross_r !== null ? t("trading.grossR", { r: fmtR(quality.gross_r, 2) }) : undefined,
+            tone: quality.total_cost_r !== null && quality.total_cost_r > 0.15 ? "warn" : "default",
+          },
+          { label: t("trading.fees"), value: fmtUsd(trade.fees_paid, 2), hint: quality.fee_r === null ? undefined : fmtR(quality.fee_r, 3) },
+          {
+            label: t("trading.size"),
+            value: String(trade.position_size),
+            hint: quality.notional === null ? `×${trade.agent_risk_multiplier ?? 1}` : `${fmtUsd(quality.notional)} · ×${trade.agent_risk_multiplier ?? 1}`,
+          },
         ]}
       />
 

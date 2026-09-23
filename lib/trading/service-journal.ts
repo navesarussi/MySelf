@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { normalizeTrade, updateTrade, type TradeRow } from "./store";
 import type { TriggerRow } from "./service-dashboard";
+import { tradeQuality } from "./trade-quality";
 
 /** Trade journal: the list, one trade in full, and the notes/tags the user adds. */
 
@@ -55,7 +56,9 @@ export async function getTradeDetail(id: string) {
     const { data: l } = await sb.from("trading_lessons").select("*").eq("id", trade.lesson_id).maybeSingle();
     lesson = (l as import("./store").LessonRow) ?? null;
   }
-  return { trade, trigger, sibling, lesson };
+  // Execution quality: what the trade cost, how much of the move it kept, and
+  // how long it was held. Computed rather than stored so it follows the columns.
+  return { trade, trigger, sibling, lesson, quality: tradeQuality(trade) };
 }
 
 export async function patchTradeJournal(id: string, patch: { notes?: string | null; tags?: string[]; self_rating?: number | null }) {

@@ -7,11 +7,18 @@ import { queryKeys, useApiQuery } from "../src/query";
 import { Badge, Card, Chip, Loading, Row, Screen, SectionTitle } from "../src/components/ui";
 import { GroupBars, KpiGrid, RHistogram, SeriesChart } from "../src/components/trading/charts";
 import { TradingText } from "../src/components/trading/blocks";
-import { fmtPct, fmtR, fmtUsd } from "@/lib/trading/format";
-import type { GroupStat } from "@/lib/trading/types-client";
+import { fmtDuration, fmtPct, fmtR, fmtSignedUsd, fmtUsd } from "@/lib/trading/format";
+import type { GroupStat, QualityReport } from "@/lib/trading/types-client";
 
 const toBars = (groups: GroupStat[], max = 12) =>
   groups.slice(0, max).map((g) => ({ key: g.key, value: g.stats.expectancy_r, sub: `${g.stats.trades}` }));
+
+/**
+ * Holding losers longer than winners is the classic tell that exits are cutting
+ * the good trades early and sitting through the bad ones.
+ */
+const holdSkew = (q: QualityReport): "warn" | "default" =>
+  q.hold_hours_winners !== null && q.hold_hours_losers !== null && q.hold_hours_losers > q.hold_hours_winners ? "warn" : "default";
 
 export default function TradingAnalyticsScreen() {
   const { t } = useI18n();
@@ -23,6 +30,7 @@ export default function TradingAnalyticsScreen() {
   const { data, loading, refresh } = useApiQuery(queryKeys.tradingAnalytics(scope), (cfg) => api.tradingAnalytics(cfg, scope));
   const s = data?.stats;
   const av = data?.agent_value;
+  const q = data?.quality;
 
   return (
     <Screen title={t("trading.hubAnalytics")} subtitle={t("trading.analyticsSubtitle")} onRefresh={refresh} refreshing={loading}>
@@ -44,7 +52,7 @@ export default function TradingAnalyticsScreen() {
       </View>
 
       {!data ? <Loading /> : null}
-      {s ? (
+      {s && q ? (
         <>
           <KpiGrid
             items={[
@@ -119,11 +127,50 @@ export default function TradingAnalyticsScreen() {
             items={[
               { label: "avg MFE", value: fmtR(data.avg_mfe_r, 2), tone: "good" },
               { label: "avg MAE", value: fmtR(data.avg_mae_r, 2), tone: "warn" },
-              { label: "hold", value: `${data.avg_hold_hours}h` },
+              { label: "hold", value: fmtDuration(data.avg_hold_hours) },
               { label: t("trading.slippage"), value: data.avg_slippage_bps === null ? "—" : `${data.avg_slippage_bps}bps` },
               { label: t("trading.fees"), value: fmtUsd(data.total_fees) },
               { label: t("trading.gapped"), value: String(data.gaps_through_stop), tone: data.gaps_through_stop ? "warn" : "default" },
               { label: t("trading.extensions"), value: String(data.target_extensions) },
+            ]}
+          />
+
+          {/* What costs take out of the edge, and what the exits leave behind.
+              The backtest is positive gross and negative net, so this is the
+              number that decides whether the strategy is worth running. */}
+          <SectionTitle>{t("trading.costEdge")}</SectionTitle>
+          <KpiGrid
+            items={[
+              {
+                label: t("trading.netExpectancy"),
+                value: fmtR(q.expectancy_r, 3),
+                tone: q.expectancy_r >= 0 ? "good" : "warn",
+              },
+              {
+                label: t("trading.grossExpectancy"),
+                value: fmtR(q.gross_expectancy_r, 3),
+                hint: t("trading.costDrag", { r: fmtR(q.gross_expectancy_r - q.expectancy_r, 3) }),
+              },
+              { label: t("trading.realizedPnl"), value: fmtSignedUsd(q.total_pnl), tone: q.total_pnl >= 0 ? "good" : "warn" },
+              { label: t("trading.feesR"), value: fmtR(q.total_fees_r, 2), hint: fmtUsd(q.total_fees) },
+              { label: t("trading.slippageR"), value: fmtR(q.total_slippage_r, 2) },
+              {
+                label: t("trading.capture"),
+                value: q.avg_capture_efficiency === null ? "—" : fmtPct(q.avg_capture_efficiency, 0),
+                hint: t("trading.captureHint"),
+                tone: q.avg_capture_efficiency === null ? "default" : q.avg_capture_efficiency >= 0.5 ? "good" : "warn",
+              },
+            ]}
+          />
+          <KpiGrid
+            items={[
+              { label: t("trading.holdWinners"), value: fmtDuration(q.hold_hours_winners) },
+              { label: t("trading.holdLosers"), value: fmtDuration(q.hold_hours_losers), tone: holdSkew(q) },
+              {
+                label: t("trading.heatWinners"),
+                value: q.avg_mae_of_winners === null ? "—" : fmtR(q.avg_mae_of_winners, 2),
+                hint: q.worst_mae_of_winners === null ? undefined : t("trading.worstHeat", { r: fmtR(q.worst_mae_of_winners, 2) }),
+              },
             ]}
           />
 

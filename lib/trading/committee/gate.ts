@@ -16,12 +16,24 @@ export type CertificateGateResult = { ok: true } | { ok: false; reason: string }
 const QTY_EPS = 1e-9;
 const PRICE_EPS = 1e-6;
 
+/**
+ * Age of a certificate, or null when it has no readable timestamp.
+ *
+ * `issued_at` is optional in the schema, so a certificate can arrive without
+ * one — a row read back from the audit table, or a producer other than
+ * `issueRiskCertificate`. The gate treats that as a denial rather than as
+ * "no expiry to check": an unaged certificate that is allowed through is an
+ * immortal one, which is the opposite of the stated invariant.
+ */
 function certAgeMs(cert: RiskCertificate, nowMs: number): number | null {
   if (!cert.issued_at) return null;
   const issued = Date.parse(cert.issued_at);
   if (!Number.isFinite(issued)) return null;
   return nowMs - issued;
 }
+
+/** Clock difference tolerated between the issuing and verifying runtime. */
+const CLOCK_SKEW_MS = 30_000;
 
 function intentMatchesCertificate(ticket: OpportunityTicket, cert: RiskCertificate, intent: ExecutionIntent): string | null {
   const expectedCertId = certificateId(cert, ticket.id);
@@ -54,7 +66,10 @@ export function assertCertificateAllowsExecution(
   const nowMs = ctx.nowMs ?? Date.now();
   const maxAgeMs = ctx.maxAgeMs ?? getCommitteeConfig().certMaxAgeMs;
   const ageMs = certAgeMs(cert, nowMs);
-  if (ageMs !== null && ageMs > maxAgeMs) return { ok: false, reason: "CERTIFICATE_EXPIRED" };
+  if (ageMs === null) return { ok: false, reason: "CERTIFICATE_NO_ISSUED_AT" };
+  if (ageMs > maxAgeMs) return { ok: false, reason: "CERTIFICATE_EXPIRED" };
+  // A timestamp far in the future would otherwise buy unlimited extra life.
+  if (ageMs < -CLOCK_SKEW_MS) return { ok: false, reason: "CERTIFICATE_NOT_YET_VALID" };
 
   if (ctx.intent) {
     const mismatch = intentMatchesCertificate(ctx.ticket, cert, ctx.intent);
