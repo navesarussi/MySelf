@@ -17,3 +17,4 @@ export * from "./metrics";
 export * from "./dual-track";
 export * from "./promotion-gates";
 export * from "./reflection";
+export * from "./gate-eval";
