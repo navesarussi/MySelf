@@ -190,11 +190,48 @@ Use `compareDualTrack(rows)` or `getCommitteeDualTrackSummary({ sinceIso, limit 
 8. **Dual-track review** — GET `/api/v1/trading/committee-metrics?days=7` or call `getCommitteeDualTrackSummary` from a cron; review `committee_only_blocks` vs `baseline_only_entries` before any non-shadow gate.
 9. **Never** set `COMMITTEE_SHADOW=false` or submit broker orders from committee until explicit live ramp (out of scope).
 
+## Phase F (proof gates + reflection scaffolding — still shadow)
+
+| Module | Purpose |
+|--------|---------|
+| `promotion-gates.ts` | `CommitteePromotionCriteria` + `evaluatePromotionGates` — pure PASS/FAIL over dual-track summaries |
+| `reflection.ts` | `buildReflectionNote(run)` — deterministic post-run note (block layer, soft vs hard, debate tilt) |
+| `store.ts` | `maybeRecordReflection` — optional DB insert when `COMMITTEE_REFLECTION=true` |
+| `0038_trading_committee_reflections.sql` | Append-only reflection notes keyed by `run_id` |
+
+### Promotion proof gates (code only — does not flip env)
+
+Pure evaluator over `DualTrackSummary` from `compareDualTrack` / `getCommitteeDualTrackSummary`. Returns `PASS` or `FAIL` with reasons. **Does not read or mutate `COMMITTEE_SHADOW`.**
+
+| Criterion | Default | Meaning |
+|-----------|---------|---------|
+| `minSampleSize` | 100 | Minimum committee runs in window |
+| `minComparedBaselines` | 50 | Rows with baseline comparison flags |
+| `maxDisagreementRate` | 35% | `disagree / compared` dual-track disagreement |
+| `maxHardBlockFalsePositiveRate` | 25% | **Placeholder heuristic:** `committee_only_blocks / compared` until closed-trade PnL attribution exists |
+| `maxLatencyP95Ms` | 90_000 | Shadow run latency p95 budget (ms) |
+| `maxErrorRate` | 5% | ERROR outcomes / total runs |
+
+Use `evaluatePromotionGates(summary)` or pass custom `CommitteePromotionCriteria`. Defaults live in `DEFAULT_PROMOTION_CRITERIA`.
+
+**Ops rule:** `COMMITTEE_SHADOW` may be set to `false` only after these gates **PASS for N consecutive calendar days** (duration tracked outside the evaluator — e.g. cron logging daily verdict). Even then, paper dual-track must show committee net edge before any live ramp (G2–G3).
+
+### Reflection / playbook hooks (offline, optional)
+
+After a shadow run is persisted, `maybeRecordReflection` may append a deterministic `ReflectionNote` when `COMMITTEE_REFLECTION=true` (default **false**). No LLM in v1 — built from structured run fields (`block_layer`, `soft_vs_hard`, `debate_tilt`, block codes, tags).
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `COMMITTEE_REFLECTION` | `false` | Persist reflection notes to `trading_committee_reflections` after shadow audits |
+
+Migration `0038_trading_committee_reflections.sql` — apply via ops (`npm run db:apply`); not required for shadow measurement when reflection is off.
+
 ## Not in scope yet
 
-- Turning `COMMITTEE_SHADOW=false` or live Alpaca submission from committee path
+- Turning `COMMITTEE_SHADOW=false` or live Alpaca submission from committee path (requires proof gates + ops duration review)
 - Dual-track UI dashboard
 - Live ramp gates (G2–G3)
+- LLM-generated reflection / CVRF playbook merge (future)
 
 Full phased plan: architecture handoff doc (v1, 2026-09-23).
 

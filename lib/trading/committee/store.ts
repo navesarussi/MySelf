@@ -1,7 +1,8 @@
 import { getSupabase } from "@/lib/supabase";
-import { COMMITTEE_MODEL_STAGE_KEYS, COMMITTEE_PROMPT_VERSIONS } from "./config";
+import { COMMITTEE_MODEL_STAGE_KEYS, COMMITTEE_PROMPT_VERSIONS, getCommitteeConfig } from "./config";
 import { buildDualTrackReport, type DualTrackMetricsRow } from "./dual-track";
 import type { CommitteeMetricsRow } from "./metrics";
+import { buildReflectionNote, type ReflectionNote } from "./reflection";
 import type { CommitteeRunResult } from "./runner";
 
 function normalizePromptVersions(v: Record<string, string>): Record<string, string> {
@@ -149,4 +150,48 @@ export async function getCommitteeDualTrackSummary(opts?: { sinceIso?: string; l
   const baselines = await fetchTriggerBaselines(triggerIds);
   const metricsRows = rows.map((r) => committeeRunRowToMetricsRow(r, r.trigger_id ? baselines.get(r.trigger_id) : null));
   return buildDualTrackReport(metricsRows);
+}
+
+export type CommitteeReflectionRow = {
+  id: string;
+  run_id: string;
+  ticket_id: string;
+  symbol: string;
+  strategy: string;
+  note: ReflectionNote;
+  created_at: string;
+};
+
+export async function insertReflectionNote(note: ReflectionNote): Promise<string> {
+  const row = {
+    id: note.id,
+    run_id: note.run_id,
+    ticket_id: note.ticket_id,
+    symbol: note.symbol,
+    strategy: note.strategy,
+    note,
+  };
+  const { data, error } = await getSupabase()
+    .from("trading_committee_reflections")
+    .upsert(row, { onConflict: "run_id", ignoreDuplicates: false })
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(`trading_committee_reflections: ${error.message}`);
+  return String((data as { id: string } | null)?.id ?? note.id);
+}
+
+export async function insertReflectionNoteSafe(note: ReflectionNote): Promise<boolean> {
+  try {
+    await insertReflectionNote(note);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** When COMMITTEE_REFLECTION=true, append a deterministic note after a shadow run is persisted. */
+export async function maybeRecordReflection(result: CommitteeRunResult): Promise<boolean> {
+  if (!getCommitteeConfig().reflection) return false;
+  const note = buildReflectionNote(result);
+  return insertReflectionNoteSafe(note);
 }
