@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 
-export type FinanceSource = "leumi" | "apple_pay" | "manual" | "max" | "visa_cal";
+export type FinanceSource = "leumi" | "apple_pay" | "manual" | "max" | "visa_cal" | "excel";
 
 export function financeExternalKey(input: {
   source: FinanceSource;

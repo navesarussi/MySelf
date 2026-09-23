@@ -12,7 +12,8 @@ function parseTxn(raw: unknown): FinanceIngestInput | null {
     source !== "apple_pay" &&
     source !== "manual" &&
     source !== "max" &&
-    source !== "visa_cal"
+    source !== "visa_cal" &&
+    source !== "excel"
   ) {
     return null;
   }

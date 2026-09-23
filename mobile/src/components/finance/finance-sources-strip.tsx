@@ -15,6 +15,7 @@ const LABEL: Record<FinanceSource, string> = {
   apple_pay: "finance.sourceApplePay",
   max: "finance.sourceMax",
   visa_cal: "finance.sourceVisaCal",
+  excel: "finance.sourceExcel",
   manual: "finance.sourceManual",
 };
 

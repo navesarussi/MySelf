@@ -20,6 +20,9 @@ export type FinanceIngestInput = {
   purpose_note?: string | null;
   expense_type?: "fixed" | "variable" | "savings" | null;
   txn_time?: string | null;
+  installment_index?: number | null;
+  installment_total?: number | null;
+  installment_label?: string | null;
   is_internal?: boolean;
   needs_categorization?: boolean;
 };
@@ -41,6 +44,9 @@ export type FinanceTransaction = {
   purpose_note: string | null;
   expense_type: "fixed" | "variable" | "savings" | null;
   txn_time?: string | null;
+  installment_index: number | null;
+  installment_total: number | null;
+  installment_label: string | null;
   is_internal: boolean;
   needs_categorization: boolean;
   categorized_at: string | null;

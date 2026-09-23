@@ -514,6 +514,41 @@ export const api = {
       "/finance/wealth",
       { method: "POST", body }
     ),
+  financeImportBatches: (c: ApiConfig) =>
+    apiFetch<{ batches: import("@/lib/finance/import/types").FinanceImportBatchRow[]; available: boolean; soft?: boolean }>(
+      c,
+      "/finance/import/batches"
+    ),
+  financeImportRecent: (c: ApiConfig) =>
+    apiFetch<{ transactions: FinanceTransaction[]; available: boolean; soft?: boolean }>(
+      c,
+      "/finance/import/recent"
+    ),
+  financeImportUpload: async (
+    c: ApiConfig,
+    file: File | Blob,
+    filename: string,
+    source?: "leumi" | "cal" | "max" | "excel" | "manual"
+  ) => {
+    if (!c.serverUrl) throw new Error("no_server");
+    const form = new FormData();
+    form.append("file", file, filename);
+    if (source) form.append("source", source);
+    const res = await fetch(`${c.serverUrl}/api/v1/finance/import/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${c.token}` },
+      body: form,
+    });
+    const data = (await res.json()) as unknown;
+    if (!res.ok) {
+      const message =
+        data && typeof data === "object" && "error" in data
+          ? String((data as { error: unknown }).error)
+          : `http_${res.status}`;
+      throw new Error(message);
+    }
+    return data as import("@/lib/finance/import/types").ImportUploadSummary;
+  },
   tradingDashboard: (c: ApiConfig) => apiFetch<DashboardPayload>(c, "/trading/dashboard"),
   tradingTrades: (c: ApiConfig, filters: Record<string, string | undefined> = {}) => {
     const q = new URLSearchParams(Object.entries(filters).filter((e): e is [string, string] => Boolean(e[1]))).toString();

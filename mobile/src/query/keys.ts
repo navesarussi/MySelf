@@ -36,6 +36,8 @@ export const queryKeys = {
   financeForecast: (month: string) => ["financeForecast", month] as const,
   financeHistory: (months: number) => ["financeHistory", months] as const,
   financeWealth: ["financeWealth"] as const,
+  financeImportBatches: ["financeImportBatches"] as const,
+  financeImportRecent: ["financeImportRecent"] as const,
   tradingDashboard: ["trading", "dashboard"] as const,
   tradingTrades: (filters: Record<string, string | undefined>) => ["trading", "trades", filters] as const,
   tradingTrade: (id: string) => ["trading", "trade", id] as const,

@@ -23,12 +23,14 @@ const SOURCE_NAME_KEY: Record<
   | "finance.sourceApplePay"
   | "finance.sourceMax"
   | "finance.sourceVisaCal"
+  | "finance.sourceExcel"
   | "finance.sourceManual"
 > = {
   leumi: "finance.sourceLeumi",
   apple_pay: "finance.sourceApplePay",
   max: "finance.sourceMax",
   visa_cal: "finance.sourceVisaCal",
+  excel: "finance.sourceExcel",
   manual: "finance.sourceManual",
 };
 
