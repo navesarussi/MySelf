@@ -7,10 +7,11 @@ import { avgTaskCloseDays } from "@/lib/task-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
 import { loadTradingSnapshot } from "@/lib/trading/account-equity";
-import { summarizeCashflow } from "@/lib/finance/cashflow";
+import { summarizeCashflow, type CashflowRow } from "@/lib/finance/cashflow";
 import { formatUrgentFinanceLabel } from "@/lib/widget-snapshot";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
+import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
 
 /** Rows sampled for the average-close-days KPI. Ordered by updated_at so the
  *  sample is the most recent N and the number is stable between loads — an
@@ -47,7 +48,6 @@ export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const supabase = getSupabase();
   const month = currentMonthKey();
-  const monthEnd = `${month}-${String(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()).padStart(2, "0")}`;
 
   const [
     habitsRes,
@@ -134,11 +134,14 @@ export async function GET(req: NextRequest) {
       .order("txn_date", { ascending: true })
       .order("created_at", { ascending: true })
       .limit(1),
-    supabase
-      .from("finance_transactions")
-      .select("txn_date, amount, kind, category, needs_categorization, is_internal")
-      .gte("txn_date", `${month}-01`)
-      .lte("txn_date", monthEnd),
+    // Every money figure on the home screen comes from these rows, so the read
+    // is paged rather than capped — a truncated month is a wrong total.
+    // monthBounds is end-exclusive, which is the same span as the previous
+    // gte(first) / lte(last-day-of-month) pair.
+    fetchTransactionsInRange(
+      monthBounds(month),
+      "txn_date, amount, kind, category, needs_categorization, is_internal"
+    ).then((data) => ({ data, error: null })),
     loadTradingSnapshot().catch(() => null),
   ]);
 
@@ -208,7 +211,7 @@ export async function GET(req: NextRequest) {
     urgentFinance,
     finance: {
       month,
-      net_actual: summarizeCashflow(financeMonthRes.data ?? [], month).net,
+      net_actual: summarizeCashflow((financeMonthRes.data ?? []) as unknown as CashflowRow[], month).net,
       uncategorized_count: financeUncategorizedRes.count || 0,
     },
     trading: shapeTradingSnapshot(

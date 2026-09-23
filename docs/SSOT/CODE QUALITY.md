@@ -37,6 +37,8 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - [PENDING REFACTOR]: Split `mobile/app/(tabs)/finance.tsx` (211) under 200 lines.
 
 ## Shared primitives (one home each)
+- `lib/db/paginate.ts` — `fetchAllRows` / `chunk`. **Any full-table read goes through this.** A `select()` with no bound returns a prefix at PostgREST's row cap, silently: no error, just a wrong answer. It has bitten this repo four times (task sync, calendar sync, committee block attribution, five finance range reads). `range()` also needs an `ORDER BY` — it is not stable without one. Use `chunk` when an `.in(col, ids)` filter fans out to more than one row per id.
+- `lib/finance/txn-range.ts` — `monthBounds` / `monthsBounds` / `fetchTransactionsInRange`. Every read of transactions over a date range. Four modules each had their own copy of the December rollover.
 - `lib/concurrency.ts` — `mapWithConcurrency`. The bounded pool for anything fan-out; there were three copies plus serial loops that wanted one. Used by `dailyScreen`, intraday data/universe loading, finance ingest notifications.
 - `lib/finance/money.ts` — `round2` / `sumAmounts`. Every shekel amount rounds here; nine copies of `round2` lived across the finance modules.
 - `lib/trading/round.ts` — `round` / `roundMoney` for stored trading numbers. It replaced eight copies; two of them grew back after the first sweep (`committee/hard-risk.ts`, `position-display.ts`), so check here before writing another.

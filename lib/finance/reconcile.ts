@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { rowToTxn, type FinanceTransaction } from "@/lib/finance/ingest";
 import { round2 } from "@/lib/finance/money";
+import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
 
 export const BATCH_SETTLEMENT_KEYWORDS = [
   "מקס איט פיננ",
@@ -119,19 +120,8 @@ export function findReconcilableBatchTransactions(
 }
 
 export async function reconcileMonthTransactions(month: string): Promise<ReconcileResult> {
-  const [y, m] = month.split("-").map(Number);
-  const start = `${month}-01`;
-  const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
-
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("finance_transactions")
-    .select("*")
-    .gte("txn_date", start)
-    .lt("txn_date", next);
-
-  if (error) throw new Error(error.message);
-  const txns = (data ?? []).map((r) => rowToTxn(r as Record<string, unknown>));
+  const txns = (await fetchTransactionsInRange(monthBounds(month))).map(rowToTxn);
 
   const result = findReconcilableBatchTransactions(txns);
   const idsToUpdate = txns
