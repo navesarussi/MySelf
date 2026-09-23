@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { chunk, fetchAllRows } from "@/lib/db/paginate";
 import { pickBaselineTrade, type BaselineTradeOutcome } from "./block-attribution";
 import { COMMITTEE_MODEL_STAGE_KEYS, COMMITTEE_PROMPT_VERSIONS, getCommitteeConfig } from "./config";
 import { buildDualTrackReport, type DualTrackMetricsRow } from "./dual-track";
@@ -159,6 +160,15 @@ type TradeOutcomeDbRow = {
 };
 
 /**
+ * Trigger ids per request. One trigger can carry both a deterministic and an
+ * agent trade, so `.in()` over the full 500-run window would return up to 1000
+ * rows — exactly PostgREST's cap — and silently drop the rest. A dropped trade
+ * reads as UNRESOLVED, which biases the very attribution the promotion gate
+ * judges on, so each request is kept well clear of the cap.
+ */
+const TRIGGER_IDS_PER_QUERY = 200;
+
+/**
  * The trade the baseline actually took for each trigger — what a committee block
  * can be judged against once it closed. One trigger can carry both a
  * deterministic and an agent trade; `pickBaselineTrade` chooses.
@@ -166,14 +176,23 @@ type TradeOutcomeDbRow = {
 async function fetchBaselineTradeOutcomes(triggerIds: string[]): Promise<Map<string, BaselineTradeOutcome>> {
   const picked = new Map<string, BaselineTradeOutcome>();
   if (!triggerIds.length) return picked;
-  const { data, error } = await getSupabase()
-    .from("trading_trades")
-    .select("trigger_id, track, state, realized_r, realized_pnl, closed_at")
-    .in("trigger_id", triggerIds);
-  if (error) throw new Error(`trading_trades outcome read: ${error.message}`);
+
+  const rows: TradeOutcomeDbRow[] = [];
+  for (const batch of chunk(triggerIds, TRIGGER_IDS_PER_QUERY)) {
+    const page = await fetchAllRows<TradeOutcomeDbRow>(async (from, to) => {
+      const { data, error } = await getSupabase()
+        .from("trading_trades")
+        .select("trigger_id, track, state, realized_r, realized_pnl, closed_at")
+        .in("trigger_id", batch)
+        .order("id")
+        .range(from, to);
+      return { data, error: error ? { message: `trading_trades outcome read: ${error.message}` } : null };
+    });
+    rows.push(...page);
+  }
 
   const byTrigger = new Map<string, BaselineTradeOutcome[]>();
-  for (const t of (data as TradeOutcomeDbRow[]) ?? []) {
+  for (const t of rows) {
     if (!t.trigger_id) continue;
     const list = byTrigger.get(t.trigger_id) ?? [];
     list.push({
