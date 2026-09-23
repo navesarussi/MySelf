@@ -478,6 +478,8 @@ export const api = {
       expense_type?: "fixed" | "variable" | "savings" | null;
       remember_rule?: boolean;
       skip?: boolean;
+      amount?: number;
+      merchant?: string | null;
       txn_date?: string;
       txn_time?: string | null;
     }
