@@ -17,6 +17,8 @@ import { timeStopReason } from "./trend-ride";
 import { getOpenTrades, getSettings, logEvent, simColumns, updateSettings, updateTrade, type TradeRow, type TradingSettings } from "./store";
 import { usSessionMinutes } from "./veto";
 import type { AssetClass, TradePlan } from "./types";
+import { intradayToOpportunityTicket } from "./committee/adapters";
+import { runCommitteeShadowBatch, type CommitteeHookItem } from "./committee/hook";
 
 /**
  * מערכת המסחר — intraday tick, 1 minute after every 5m close (Supabase pg_cron "1-59/5 * * * *" → /api/trading/intraday-tick).
@@ -350,6 +352,7 @@ async function scanAndEnter(input: {
   summary: IntradaySummary;
 }) {
   const { settings, now, summary, ia } = input;
+  const committeeBatch: CommitteeHookItem[] = [];
   const found: { c: IntradayCandidate; u: IntradayUniverseRow; lf: LoadedFrames }[] = [];
   for (const u of input.universe) {
     if (u.asset_class === "STOCK" && !input.session.canEnter) continue;
@@ -410,6 +413,21 @@ async function scanAndEnter(input: {
       if (!trig) continue; // handled by an earlier tick
       summary.triggers += 1;
       const triggerId = String((trig as { id: string }).id);
+      const ticketR = intradayToOpportunityTicket({
+        candidate: c,
+        s15: lf.f.s15,
+        symbol: u.symbol,
+        assetClass: u.asset_class,
+      });
+      if (ticketR.ok) {
+        committeeBatch.push({
+          ticket: ticketR.data,
+          assetClass: u.asset_class,
+          vetoes: [],
+          envelopeBlocks: blocks,
+          triggerId,
+        });
+      }
       if (!plan || blocks.length) {
         summary.blocked += 1;
         continue;
@@ -437,6 +455,18 @@ async function scanAndEnter(input: {
     } catch (err) {
       summary.errors.push(`scan-intraday ${u.symbol}: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  try {
+    await runCommitteeShadowBatch(committeeBatch, {
+      settings,
+      account: ia.account,
+      vix: null,
+      btc_dominance_pct: null,
+      summary,
+    });
+  } catch (err) {
+    summary.errors.push(`committee_shadow: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

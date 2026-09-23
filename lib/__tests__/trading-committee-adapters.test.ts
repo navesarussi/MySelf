@@ -5,6 +5,7 @@ import { mulberry32 } from "../trading/metrics";
 import {
   COMMITTEE_FEATURE_KEYS,
   dailyTrendToOpportunityTicket,
+  intradayToOpportunityTicket,
   opportunityTicketId,
   tradeFinderToOpportunityTicket,
   v2SwingToOpportunityTicket,
@@ -12,7 +13,7 @@ import {
 import { buildDailyAsset, DEFAULT_DAILY_TREND, scanDailyTrendCandidates, scoreDailyCandidate } from "../trading/strategy/daily-trend";
 import { DEFAULT_V2_PARAMS, evaluateCandidates } from "../trading/strategy/candidates";
 import { framesFromBars } from "../trading/strategy/data-v2";
-import { buildIntradayFrames, INTRADAY_PARAMS, M15, M5 } from "../trading/strategy/intraday";
+import { buildIntradayFrames, INTRADAY_PARAMS, M15, M5, scanIntraday } from "../trading/strategy/intraday";
 import { evaluateSymbol } from "../trading/trade-finder";
 import type { Bar } from "../trading/types";
 
@@ -178,6 +179,27 @@ describe("daily trend adapter", () => {
     assert.equal(a.ok, true);
     assert.equal(b.ok, true);
     if (a.ok && b.ok) assert.equal(a.data.id, b.data.id);
+  });
+});
+
+describe("intraday adapter", () => {
+  const b15 = build15m();
+  const f = buildIntradayFrames(b15, split5m(b15));
+
+  it("maps scanIntraday candidate to INTRADAY ticket with setup bar_time", () => {
+    const armedAt = b15[SPRING_I].t + M15;
+    const now = armedAt + 2 * M5;
+    const sub = buildIntradayFrames(b15.filter((b) => b.t + M15 <= now), split5m(b15).filter((b) => b.t + M5 <= now));
+    const candidates = scanIntraday(sub, now, INTRADAY_PARAMS);
+    assert.ok(candidates.length);
+    const c = candidates[0]!;
+    const r = intradayToOpportunityTicket({ candidate: c, s15: sub.s15, symbol: "TEST", assetClass: "CRYPTO_ALT" });
+    assert.equal(r.ok, true, r.ok ? "" : r.error);
+    if (r.ok) {
+      assert.equal(r.data.strategy, "INTRADAY");
+      assert.equal(r.data.bar_time, new Date(c.setup_bar_time).toISOString());
+      assert.equal(r.data.id, opportunityTicketId("TEST", "INTRADAY", r.data.bar_time));
+    }
   });
 });
 

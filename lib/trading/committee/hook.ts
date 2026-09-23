@@ -1,7 +1,7 @@
 import { openRiskR } from "../position";
 import { drawdownFromPeak } from "../risk-envelope";
 import type { AssetClass } from "../types";
-import type { Account, TickSummary } from "../tick-context";
+import type { Account } from "../tick-context";
 import type { TradingSettings } from "../store";
 import { getCommitteeConfig } from "./config";
 import { envelopeFromAccount } from "./hard-risk";
@@ -26,7 +26,7 @@ export type CommitteeHookContext = {
   vix: number | null;
   btc_dominance_pct: number | null;
   funding_rate?: number | null;
-  summary?: TickSummary;
+  summary?: { errors: string[] };
 };
 
 /**

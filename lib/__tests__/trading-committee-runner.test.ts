@@ -12,6 +12,7 @@ import {
   type OpportunityTicket,
 } from "../trading/committee/types";
 import { enforceSoftRiskOpinion } from "../trading/committee/helpers";
+import { assertCertificateAllowsExecution } from "../trading/committee/gate";
 
 const BAR_TIME = "2026-09-23T16:00:00.000Z";
 
@@ -222,6 +223,28 @@ describe("committee shadow runner", () => {
     assert.equal(result.shadow, true);
     assert.ok(result.executionIntent);
     assert.ok(!("broker_order_id" in result));
+  });
+
+  it("never would_have_executed when certificate is expired at gate", async () => {
+    const llm = mockLlmQueue([
+      { ok: true, data: technical },
+      { ok: true, data: fundamental },
+      { ok: true, data: { points: ["bull"] } },
+      { ok: true, data: { points: ["bear"] } },
+      { ok: true, data: debate },
+      { ok: true, data: softAllow },
+    ]);
+    const result = await runCommitteeShadow(baseRunInput(llm));
+    assert.ok(result.certificate);
+    const stale = { ...result.certificate!, issued_at: new Date(Date.now() - 600_000).toISOString() };
+    const gate = assertCertificateAllowsExecution(stale, {
+      ticket: result.ticket,
+      intent: result.executionIntent ?? undefined,
+      nowMs: Date.now(),
+      maxAgeMs: 60_000,
+    });
+    assert.equal(gate.ok, false);
+    if (!gate.ok) assert.equal(gate.reason, "CERTIFICATE_EXPIRED");
   });
 
   it("hard risk blocks execution when soft risk denies", async () => {

@@ -1,5 +1,18 @@
 import { getSupabase } from "@/lib/supabase";
+import { COMMITTEE_MODEL_STAGE_KEYS, COMMITTEE_PROMPT_VERSIONS } from "./config";
 import type { CommitteeRunResult } from "./runner";
+
+function normalizePromptVersions(v: Record<string, string>): Record<string, string> {
+  return { ...COMMITTEE_PROMPT_VERSIONS, ...v };
+}
+
+function normalizeModelVersions(v: Record<string, string>): Record<string, string> {
+  const out = { ...v };
+  for (const stage of COMMITTEE_MODEL_STAGE_KEYS) {
+    if (!out[stage]) out[stage] = "not_run";
+  }
+  return out;
+}
 
 export type CommitteeRunRow = {
   id: string;
@@ -51,8 +64,8 @@ export async function insertCommitteeRun(result: CommitteeRunResult): Promise<st
     errors: result.errors,
     injection_flags: result.injectionFlags,
     latency_ms: result.latencyMs,
-    model_versions: result.modelVersions,
-    prompt_versions: result.promptVersions,
+    model_versions: normalizeModelVersions(result.modelVersions),
+    prompt_versions: normalizePromptVersions(result.promptVersions),
   };
   const { data, error } = await getSupabase()
     .from("trading_committee_runs")

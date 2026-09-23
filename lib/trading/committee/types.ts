@@ -123,6 +123,8 @@ export const riskCertificateSchema = z.object({
   risk_r: z.number().nonnegative(),
   portfolio_heat_after: z.number().nonnegative(),
   market_state: marketStateSchema,
+  /** ISO timestamp when the certificate was issued — used for expiry checks at execution. */
+  issued_at: z.string().datetime().optional(),
 });
 export type RiskCertificate = z.infer<typeof riskCertificateSchema>;
 
