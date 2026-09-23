@@ -53,6 +53,8 @@ describe("committee nightly gate eval", () => {
       minComparedBaselines: 50,
       maxDisagreementRate: 0.35,
       maxHardBlockFalsePositiveRate: 0.25,
+      minResolvedBlocksForPnlBasis: 20,
+      minNetRSavedPerBlock: 0,
       maxLatencyP95Ms: 90_000,
       maxErrorRate: 0.05,
     });

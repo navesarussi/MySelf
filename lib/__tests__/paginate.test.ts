@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { fetchAllRows, PAGE_SIZE } from "../db/paginate";
+import { chunk, fetchAllRows, PAGE_SIZE } from "../db/paginate";
 
 type Row = { id: string };
 
@@ -75,5 +75,31 @@ describe("fetchAllRows", () => {
       })),
       /too many pages/i
     );
+  });
+});
+
+describe("chunk", () => {
+  it("splits a list into batches of at most `size`", () => {
+    assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+    assert.deepEqual(chunk([1, 2, 3, 4], 2), [[1, 2], [3, 4]]);
+    assert.deepEqual(chunk([1, 2, 3], 10), [[1, 2, 3]]);
+  });
+
+  it("handles an empty list and a degenerate size", () => {
+    assert.deepEqual(chunk([], 5), []);
+    assert.deepEqual(chunk([1, 2], 0), [[1], [2]], "size 0 must not loop forever");
+    assert.deepEqual(chunk([1, 2], -3), [[1], [2]]);
+  });
+
+  /**
+   * Why this exists: an `.in(column, ids)` filter returns one row per match, so
+   * a list of N ids whose rows fan out K-wide silently truncates at PostgREST's
+   * row cap once N×K reaches it. Chunking keeps every request far below it.
+   */
+  it("keeps 500 ids fanning out 2-wide under the row cap", () => {
+    const ids = Array.from({ length: 500 }, (_, i) => i);
+    for (const batch of chunk(ids, 200)) {
+      assert.ok(batch.length * 2 < PAGE_SIZE, `${batch.length} ids × 2 rows must stay under ${PAGE_SIZE}`);
+    }
   });
 });

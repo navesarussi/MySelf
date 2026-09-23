@@ -34,3 +34,18 @@ export async function fetchAllRows<T>(
   }
   throw new Error(`paginate: too many pages (over ${MAX_PAGES * pageSize} rows) — is the query ordered?`);
 }
+
+/**
+ * Split a list of ids into batches for an `.in(column, ids)` filter.
+ *
+ * Such a filter returns one row per *match*, not per id, so a list whose rows
+ * fan out K-wide silently truncates at the row cap once ids × K reaches it —
+ * and the rows that survive are whichever the database returned first, which is
+ * not a random sample. Chunking keeps every request far below the cap.
+ */
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  const step = Math.max(1, Math.floor(size));
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += step) out.push(items.slice(i, i + step));
+  return out;
+}

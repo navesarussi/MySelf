@@ -1,3 +1,4 @@
+import type { BlockAttributionSummary } from "./block-attribution";
 import type { DualTrackSummary } from "./dual-track";
 
 /**
@@ -14,20 +15,40 @@ export type CommitteePromotionCriteria = {
   /** Max dual-track disagreement rate (disagree / compared). */
   maxDisagreementRate: number;
   /**
-   * Placeholder heuristic for hard-block false positives until closed-trade PnL
-   * attribution exists: committee-only blocks / compared (baseline enter, committee deny).
+   * Max share of hard blocks that skipped a winner — measured from the closed
+   * trade the baseline actually took (`block_attribution`), and falling back to
+   * the count heuristic (committee-only blocks / compared) while too few blocks
+   * have resolved.
    */
   maxHardBlockFalsePositiveRate: number;
+  /** Blocks with a resolved closed trade needed before the PnL basis is used at all. */
+  minResolvedBlocksForPnlBasis: number;
+  /** Min average net R saved per resolved block. Only checked on the PnL basis. */
+  minNetRSavedPerBlock: number;
   /** Latency p95 budget (ms) from shadow runs. */
   maxLatencyP95Ms: number;
   /** Max error rate (ERROR outcomes / total runs). */
   maxErrorRate: number;
 };
 
+/** Which measurement answered "was this block wrong?". */
+export type HardBlockFpBasis = "closed_trade_pnl" | "count_heuristic";
+
 export type PromotionGateMetrics = {
   sample_size: number;
   compared: number;
   disagreement_rate: number;
+  /** The rate the gate actually judged, on `hard_block_fp_basis`. */
+  hard_block_false_positive_rate: number;
+  hard_block_fp_basis: HardBlockFpBasis;
+  /** Resolved blocks on the PnL basis; compared rows on the fallback. */
+  hard_block_fp_sample: number;
+  hard_block_resolved: number;
+  hard_block_r_saved: number;
+  hard_block_r_missed: number;
+  hard_block_net_r_saved: number;
+  hard_block_net_r_per_block: number | null;
+  /** Phase F placeholder, kept so stored gate-eval history stays comparable. */
   hard_block_false_positive_heuristic: number;
   latency_p95_ms: number | null;
   error_rate: number;
@@ -48,6 +69,8 @@ export const DEFAULT_PROMOTION_CRITERIA: CommitteePromotionCriteria = {
   minComparedBaselines: 50,
   maxDisagreementRate: 0.35,
   maxHardBlockFalsePositiveRate: 0.25,
+  minResolvedBlocksForPnlBasis: 20,
+  minNetRSavedPerBlock: 0,
   maxLatencyP95Ms: 90_000,
   maxErrorRate: 0.05,
 };
@@ -55,6 +78,29 @@ export const DEFAULT_PROMOTION_CRITERIA: CommitteePromotionCriteria = {
 function safeRate(numerator: number, denominator: number): number {
   if (!denominator || denominator <= 0) return denominator === 0 ? 0 : NaN;
   return numerator / denominator;
+}
+
+const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+
+type HardBlockFp = { basis: HardBlockFpBasis; rate: number; sample: number };
+
+/**
+ * Prefer the money: false positives over the blocks whose baseline trade has
+ * actually closed. Fall back to the Phase F count heuristic while too few have
+ * resolved — that number answers a different question (how often the committee
+ * blocks, not how often it was wrong to), so the basis travels with the metric.
+ */
+function hardBlockFalsePositives(
+  attribution: BlockAttributionSummary,
+  heuristic: number,
+  compared: number,
+  criteria: CommitteePromotionCriteria,
+): HardBlockFp {
+  const rate = attribution.false_positive_rate;
+  if (rate != null && attribution.resolved >= criteria.minResolvedBlocksForPnlBasis) {
+    return { basis: "closed_trade_pnl", rate, sample: attribution.resolved };
+  }
+  return { basis: "count_heuristic", rate: heuristic, sample: compared };
 }
 
 /**
@@ -71,12 +117,23 @@ export function evaluatePromotionGates(
   const hardBlockFpHeuristic = safeRate(summary.dual_track.committee_only_blocks, compared);
   const errorRate = safeRate(summary.errors, summary.total);
   const latencyP95 = summary.latency_ms.p95;
+  const attribution = summary.dual_track.block_attribution;
+  const heuristic = Number.isFinite(hardBlockFpHeuristic) ? hardBlockFpHeuristic : 1;
+  const fp = hardBlockFalsePositives(attribution, heuristic, compared, criteria);
 
   const metrics: PromotionGateMetrics = {
     sample_size: summary.total,
     compared,
     disagreement_rate: Number.isFinite(disagreementRate) ? disagreementRate : 1,
-    hard_block_false_positive_heuristic: Number.isFinite(hardBlockFpHeuristic) ? hardBlockFpHeuristic : 1,
+    hard_block_false_positive_rate: fp.rate,
+    hard_block_fp_basis: fp.basis,
+    hard_block_fp_sample: fp.sample,
+    hard_block_resolved: attribution.resolved,
+    hard_block_r_saved: attribution.r_saved,
+    hard_block_r_missed: attribution.r_missed,
+    hard_block_net_r_saved: attribution.net_r_saved,
+    hard_block_net_r_per_block: attribution.net_r_per_block,
+    hard_block_false_positive_heuristic: heuristic,
     latency_p95_ms: latencyP95,
     error_rate: Number.isFinite(errorRate) ? errorRate : 1,
   };
@@ -90,13 +147,17 @@ export function evaluatePromotionGates(
     reasons.push(`compared_baselines ${compared} < min ${criteria.minComparedBaselines}`);
   }
   if (metrics.disagreement_rate > criteria.maxDisagreementRate) {
-    reasons.push(
-      `disagreement_rate ${(metrics.disagreement_rate * 100).toFixed(1)}% > max ${(criteria.maxDisagreementRate * 100).toFixed(1)}%`,
-    );
+    reasons.push(`disagreement_rate ${pct(metrics.disagreement_rate)} > max ${pct(criteria.maxDisagreementRate)}`);
   }
-  if (metrics.hard_block_false_positive_heuristic > criteria.maxHardBlockFalsePositiveRate) {
+  if (fp.rate > criteria.maxHardBlockFalsePositiveRate) {
+    const name = fp.basis === "closed_trade_pnl" ? "hard_block_fp_pnl" : "hard_block_fp_heuristic";
+    reasons.push(`${name} ${pct(fp.rate)} (n=${fp.sample}) > max ${pct(criteria.maxHardBlockFalsePositiveRate)}`);
+  }
+  // Counts can flatter a committee that blocks nine small losers and one large
+  // winner, so the blocks have to be net positive in R as well.
+  if (fp.basis === "closed_trade_pnl" && attribution.net_r_per_block != null && attribution.net_r_per_block < criteria.minNetRSavedPerBlock) {
     reasons.push(
-      `hard_block_fp_heuristic ${(metrics.hard_block_false_positive_heuristic * 100).toFixed(1)}% > max ${(criteria.maxHardBlockFalsePositiveRate * 100).toFixed(1)}%`,
+      `hard_block_net_r ${attribution.net_r_per_block.toFixed(3)}R per block (n=${attribution.resolved}) < min ${criteria.minNetRSavedPerBlock.toFixed(3)}R`,
     );
   }
   if (latencyP95 == null) {
@@ -105,7 +166,7 @@ export function evaluatePromotionGates(
     reasons.push(`latency_p95 ${latencyP95}ms > max ${criteria.maxLatencyP95Ms}ms`);
   }
   if (metrics.error_rate > criteria.maxErrorRate) {
-    reasons.push(`error_rate ${(metrics.error_rate * 100).toFixed(1)}% > max ${(criteria.maxErrorRate * 100).toFixed(1)}%`);
+    reasons.push(`error_rate ${pct(metrics.error_rate)} > max ${pct(criteria.maxErrorRate)}`);
   }
 
   return {

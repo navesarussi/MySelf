@@ -1,4 +1,5 @@
 import { RISK_ENVELOPE } from "../config";
+import { round } from "../round";
 import { openRiskR, type SimPosition } from "../position";
 import type { EnvelopeState } from "../risk-envelope";
 import { buildTradePlan } from "../sizing";
@@ -95,10 +96,6 @@ export function issueRiskCertificate(input: HardRiskInput): ParseResult<RiskCert
     market_state,
     issued_at: new Date().toISOString(),
   });
-}
-
-function round(x: number, d: number) {
-  return Math.round(x * 10 ** d) / 10 ** d;
 }
 
 /** Build envelope state from tick account snapshot. */

@@ -1,5 +1,7 @@
 /** Client/server helpers for live position price display (pure, no RN). */
 
+import { round } from "./round";
+
 export type PositionPriceInputs = {
   entry_price: number | null;
   stop_price: number;
@@ -13,11 +15,6 @@ export type PositionPriceView = {
   distanceToStopPct: number | null;
   progress: number | null;
 };
-
-function round(x: number, digits: number): number {
-  const f = 10 ** digits;
-  return Math.round(x * f) / f;
-}
 
 /** Merge a live tick with the dashboard snapshot and derive R / slider progress. */
 export function positionPriceView(p: PositionPriceInputs, livePrice: number | null | undefined): PositionPriceView {
