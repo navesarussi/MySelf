@@ -82,8 +82,17 @@ function extractInstallment(text: string): {
 function extractRtlDateToken(text: string): string | null {
   const direct = text.match(RTL_DATE);
   if (direct) return direct[1];
-  const compact = text.replace(/\|/g, "").match(/(\d{4}\/\d{2}\/\d{2,3})/);
+  // Cal PDFs split date digits with tabs/spaces (e.g. 6\t2\t0\t2/7\t0/1\t3).
+  const compact = text.replace(/[\|\t\s]/g, "").match(/(\d{4}\/\d{2}\/\d{2,3})/);
   return compact?.[1] ?? null;
+}
+
+function collapseSplitHebrew(text: string): string {
+  return text
+    .replace(/\t/g, "")
+    .replace(/([\u0590-\u05FF])\s+(?=[\u0590-\u05FF])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extractMerchantFromTail(tail: string): { merchant: string; bookedAt: string | null } {
@@ -91,12 +100,22 @@ function extractMerchantFromTail(tail: string): { merchant: string; bookedAt: st
   let bookedAt: string | null = dateToken ? unreverseRtlDateToken(dateToken) : null;
   let merchantPart = dateToken ? tail.replace(dateToken, " ").replace(/\|/g, " ").trim() : tail;
 
-  // Drop Hebrew location/category noise; keep Latin merchant tokens + Hebrew shop names.
-  const latinChunks = merchantPart.match(/[A-Za-z0-9*./\\-]{3,}/g) ?? [];
-  const hebrewChunks = merchantPart.match(/[\u0590-\u05FF][\u0590-\u05FF\s"']{2,}/g) ?? [];
+  merchantPart = collapseSplitHebrew(
+    merchantPart
+      .replace(/\d{1,2}\s*מתוך\s*\d{1,2}/g, " ")
+      .replace(/0\/\d{1,2}\|\d{1,2}/g, " ")
+      .replace(/\d{1,2}\/\d{1,2}/g, " ")
+      .replace(/[\d\s|/]+$/g, " ")
+  );
+
+  const latinChunks =
+    merchantPart.match(/[A-Za-z][A-Za-z0-9*./\\-]{2,}/g)?.filter((c) => !/^\d/.test(c) && !/\d\/\d/.test(c)) ?? [];
+  const hebrewChunks = merchantPart.match(/[\u0590-\u05FF][\u0590-\u05FF\s"'-]{2,}/g) ?? [];
+  const merchantLikeLatin = latinChunks.filter((c) => /[.*\\/-]|[A-Z]{4,}/i.test(c));
   const merchantRaw =
-    latinChunks.sort((a, b) => b.length - a.length)[0] ??
+    merchantLikeLatin.sort((a, b) => b.length - a.length)[0] ??
     hebrewChunks.sort((a, b) => b.length - a.length)[0] ??
+    latinChunks.sort((a, b) => b.length - a.length)[0] ??
     merchantPart.slice(0, 80);
 
   return { merchant: reverseMerchantLabel(merchantRaw), bookedAt };
@@ -162,7 +181,15 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
       const billing = parseAmount(ils[1]);
       const txnAmount = parseAmount(ils[2]);
       const amount = billing ?? txnAmount;
-      const { merchant, bookedAt } = extractMerchantFromTail(ils[3]);
+      let tail = ils[3];
+      // Multi-line row: date token may appear on the next line only.
+      if (!extractRtlDateToken(tail) && i + 1 < lines.length) {
+        const next = lines[i + 1];
+        if (/^[\d\s/|]+$/.test(next.replace(/\t/g, "")) || extractRtlDateToken(next)) {
+          tail = `${tail} ${next}`;
+        }
+      }
+      const { merchant, bookedAt } = extractMerchantFromTail(tail);
       const inst = installmentInLine.index ? installmentInLine : pendingInstallment;
       if (amount && bookedAt) {
         pushTxn(transactions, {
