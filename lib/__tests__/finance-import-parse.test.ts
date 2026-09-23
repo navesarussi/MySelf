@@ -8,6 +8,12 @@ import { parseLeumiIdentityPdf } from "../finance/import/parse-leumi-pdf";
 import { parseCsvText } from "../finance/import/parse-tabular";
 import { importSourceToTxnSource } from "../finance/import/source-map";
 import { formatInstallmentLabel, parseInstallmentLabel } from "../finance/import/installment-label";
+import {
+  extractCalInstallment,
+  extractCalMerchantFromTail,
+  isSummaryImportText,
+  normalizeHebrewDescription,
+} from "../finance/import/normalize-import-row";
 
 describe("unreverseRtlDateToken", () => {
   it("reverses Cal PDF date tokens", () => {
@@ -31,35 +37,91 @@ describe("installment helpers", () => {
   });
 });
 
+describe("normalize-import-row", () => {
+  it("detects summary/total rows", () => {
+    assert.equal(isSummaryImportText('סה"כ לתאריך 01/11/25'), true);
+    assert.equal(isSummaryImportText("344 5202/11/11"), false);
+    assert.equal(isSummaryImportText("סופר-פאר"), false);
+  });
+
+  it("normalizes glued Hebrew merchant text", () => {
+    assert.equal(normalizeHebrewDescription("לאאירלנדמוצריאון"), "לא אירלנד מוצרי און");
+    assert.equal(normalizeHebrewDescription("סופר-פאר"), "סופר-פאר");
+  });
+
+  it("prefers Hebrew merchant over terminal-prefixed Apple Pay Latin token", () => {
+    const { merchant } = extractCalMerchantFromTail("1234ApplePay לא אירלנד מוצרי און LLIB/MOC.ELPPA");
+    assert.match(merchant, /מוצרי און/);
+    assert.doesNotMatch(merchant, /1234/);
+    assert.doesNotMatch(merchant, /ApplePay/i);
+  });
+
+  it("sets installments only for explicit Cal markers", () => {
+    const real = extractCalInstallment("₪ 49.90 ₪ 49.90 2 מתוך 7");
+    assert.deepEqual(real, { index: 2, total: 7, label: "2 מתוך 7" });
+
+    const pipe = extractCalInstallment("LLIB/MOC.ELPPA 6|2|0|2/1|0/7|2");
+    assert.deepEqual(pipe, { index: 2, total: 7, label: "2 מתוך 7" });
+
+    const falsePositive = extractCalInstallment("5|2|0|2/1|1/6|2", { billingAmount: 120, txnAmount: 120 });
+    assert.deepEqual(falsePositive, { index: null, total: null, label: null });
+
+    const splitBilling = extractCalInstallment("5|2|0|2/1|1/6|2", { billingAmount: 823, txnAmount: 4118 });
+    assert.deepEqual(splitBilling, { index: 2, total: 6, label: "2 מתוך 6" });
+  });
+});
+
 describe("parseCalStatementPdf", () => {
-  it("parses synthetic Cal statement lines", () => {
+  it("parses split-line merchant + amount rows but skips date totals", () => {
     const text = `
 דף חיוב חודשי
 2853755000-966-01
 AMRAK ECAPSKROW*ELGOOG 6202/10/10
+120 6202/10/10
 EU 16.20סה"כ לתאריך
 344 5202/11/11
 `;
     const result = parseCalStatementPdf(text);
     assert.equal(result.source, "cal");
-    assert.ok(result.transactions.length >= 1);
+    assert.equal(result.transactions.length, 1);
+    assert.match(result.transactions[0].merchant ?? "", /GOOG/i);
+    assert.equal(result.transactions[0].amount, 120);
     assert.ok(result.transactions.every((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.booked_at)));
-    assert.ok(result.transactions.every((t) => t.amount > 0));
   });
 
-  it("extracts merchant, currency, and installments from tab-style ILS rows", () => {
+  it("extracts Hebrew merchant, currency, and installments from tab-style ILS rows", () => {
     const text = `
 דף חיוב חודשי
 ₪ 49.90 ₪ 49.90 לא אירלנד מוצרי און LLIB/MOC.ELPPA 6|2|0|2/1|0/7|2
+₪ 120.00 ₪ 120.00 סופר-פאר 5|2|0|2/1|1/6|2
 ₪ 823.00 ₪ 4,118.00 לא סופר-פאר 5|2|0|2/1|1/6|2
 `;
     const result = parseCalStatementPdf(text);
-    const apple = result.transactions.find((t) => (t.merchant ?? "").includes("APPLE"));
-    assert.ok(apple, "expected Apple merchant");
+    const apple = result.transactions.find((t) => (t.merchant ?? "").includes("מוצרי און"));
+    assert.ok(apple, "expected Hebrew Apple merchant");
     assert.equal(apple?.currency, "ILS");
     assert.equal(apple?.installment_index, 2);
     assert.equal(apple?.installment_total, 7);
     assert.equal(apple?.installment_label, "2 מתוך 7");
+
+    const regular = result.transactions.find((t) => (t.merchant ?? "").includes("סופר") && t.amount === 120);
+    assert.ok(regular, "expected regular super-pharm row");
+    assert.equal(regular?.installment_index, null);
+    assert.equal(regular?.installment_total, null);
+
+    const installment = result.transactions.find((t) => t.amount === 823);
+    assert.ok(installment, "expected split-billing installment row");
+    assert.equal(installment?.installment_index, 2);
+    assert.equal(installment?.installment_total, 6);
+  });
+
+  it("skips summary rows in tabular-style Cal lines", () => {
+    const text = `
+דף חיוב חודשי
+₪ 1,300.00 ₪ 1,300.00 סה"כ לתאריך 5202/11/10
+`;
+    const result = parseCalStatementPdf(text);
+    assert.equal(result.transactions.length, 0);
   });
 
   it("parses a redacted real Cal PDF fixture when present", async () => {
@@ -98,6 +160,13 @@ describe("parseCsvText", () => {
     assert.equal(result.transactions[0].booked_at, "2025-12-01");
     assert.equal(result.transactions[0].kind, "income");
     assert.equal(result.transactions[1].kind, "expense");
+  });
+
+  it("skips summary rows", () => {
+    const csv = "תאריך,סכום,תיאור\n01/12/2025,120.50,סופר\n02/12/2025,1300,סה\"כ\n";
+    const result = parseCsvText(csv);
+    assert.equal(result.transactions.length, 1);
+    assert.equal(result.transactions[0].description, "סופר");
   });
 });
 

@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { isSummaryImportText } from "@/lib/finance/import/normalize-import-row";
 import type { ParsedImportTransaction } from "@/lib/finance/import/types";
 
 export function normHeader(h: string): string {
@@ -185,6 +186,7 @@ export function mapTabularRows(input: {
 
     const merchant = merchantCol ? String(row[merchantCol] ?? "").trim() || null : null;
     const description = (descCol ? String(row[descCol] ?? "").trim() : "") || merchant || "Import";
+    if (isSummaryImportText(description) || (merchant && isSummaryImportText(merchant))) return;
 
     let installment_index: number | null = null;
     let installment_total: number | null = null;
