@@ -1,5 +1,11 @@
 import { createHash } from "crypto";
-import { formatInstallmentLabel } from "@/lib/finance/import/installment-label";
+import {
+  extractCalInstallment,
+  extractCalMerchantFromTail,
+  isCalDateTotalLine,
+  isSummaryImportText,
+  normalizeHebrewDescription,
+} from "@/lib/finance/import/normalize-import-row";
 import { unreverseRtlDateToken } from "@/lib/finance/import/rtl-date";
 import type { ParseFileResult, ParsedImportTransaction } from "@/lib/finance/import/types";
 
@@ -8,24 +14,13 @@ const ILS_ROW =
 const FX_ROW = /^(?:\$|USD)\s*(-?[\d,.]+)\s+(.+)$/i;
 const FX_TOTAL_DATE = /סה"כ לתאריך\s*(\d{2}\/\d{2}\/\d{2,4})/;
 const RTL_DATE = /\b(\d{4}\/\d{2}\/\d{2,3})\b/;
-const AMOUNT_INLINE = /^(-?[\d,.]+)\s+(\d{4}\/\d{2}\/\d{2})$/;
-const MERCHANT_DATE = /^(.+?)\s+(\d{4}\/\d{2}\/\d{2})$/;
+const AMOUNT_INLINE = /^(-?[\d,.]+)\s+(\d{4}\/\d{2}\/\d{2,3})$/;
+const MERCHANT_DATE = /^(.+?)\s+(\d{4}\/\d{2}\/\d{2,3})$/;
 
 function parseAmount(raw: string): number | null {
   const cleaned = raw.replace(/,/g, "").trim();
   const n = Number(cleaned);
   return Number.isFinite(n) && n !== 0 ? Math.abs(n) : null;
-}
-
-function reverseMerchantLabel(raw: string): string {
-  const trimmed = raw.trim();
-  if (/[\u0590-\u05FF]/.test(trimmed)) return trimmed.replace(/\s+/g, " ").trim();
-  return trimmed
-    .split(/\s+/)
-    .map((w) => (/^[A-Za-z0-9*./\\-]+$/.test(w) ? w.split("").reverse().join("") : w))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function parseIsoFromDdMmYy(raw: string): string | null {
@@ -34,49 +29,6 @@ function parseIsoFromDdMmYy(raw: string): string | null {
   let year = m[3];
   if (year.length === 2) year = `20${year}`;
   return `${year}-${m[2]}-${m[1]}`;
-}
-
-function extractInstallment(text: string): {
-  index: number | null;
-  total: number | null;
-  label: string | null;
-} {
-  const candidates: Array<{ index: number; total: number; score: number }> = [];
-
-  for (const m of text.matchAll(/(\d{1,2})\s*מתוך\s*(\d{1,2})/g)) {
-    const index = Number(m[1]);
-    const total = Number(m[2]);
-    if (index >= 1 && total >= 1 && index <= total && total <= 36) {
-      candidates.push({ index, total, score: 100 });
-    }
-  }
-
-  for (const m of text.matchAll(/(?:^|[\s|])(\d)\/(\d)(?:[\s|]|$)/g)) {
-    const index = Number(m[1]);
-    const total = Number(m[2]);
-    if (index >= 1 && total >= 1 && index <= total && total <= 36) {
-      candidates.push({ index, total, score: 80 });
-    }
-  }
-
-  // Cal PDF date cluster often ends with `0/{total}|{index}` before the RTL date token.
-  const pipeTail = text.match(/0\/(\d{1,2})\|(\d{1,2})\b/);
-  if (pipeTail) {
-    const total = Number(pipeTail[1]);
-    const index = Number(pipeTail[2]);
-    if (index >= 1 && total >= 1 && index <= total && total <= 36) {
-      candidates.push({ index, total, score: 90 });
-    }
-  }
-
-  if (candidates.length === 0) return { index: null, total: null, label: null };
-  candidates.sort((a, b) => b.score - a.score);
-  const best = candidates[0];
-  return {
-    index: best.index,
-    total: best.total,
-    label: formatInstallmentLabel(best.index, best.total),
-  };
 }
 
 function extractRtlDateToken(text: string): string | null {
@@ -97,8 +49,9 @@ function collapseSplitHebrew(text: string): string {
 
 function extractMerchantFromTail(tail: string): { merchant: string; bookedAt: string | null } {
   const dateToken = extractRtlDateToken(tail);
-  let bookedAt: string | null = dateToken ? unreverseRtlDateToken(dateToken) : null;
+  const bookedAt = dateToken ? unreverseRtlDateToken(dateToken) : null;
   let merchantPart = dateToken ? tail.replace(dateToken, " ").replace(/\|/g, " ").trim() : tail;
+  if (isSummaryImportText(merchantPart)) return { merchant: "", bookedAt };
 
   merchantPart = collapseSplitHebrew(
     merchantPart
@@ -108,17 +61,14 @@ function extractMerchantFromTail(tail: string): { merchant: string; bookedAt: st
       .replace(/[\d\s|/]+$/g, " ")
   );
 
-  const latinChunks =
-    merchantPart.match(/[A-Za-z][A-Za-z0-9*./\\-]{2,}/g)?.filter((c) => !/^\d/.test(c) && !/\d\/\d/.test(c)) ?? [];
-  const hebrewChunks = merchantPart.match(/[\u0590-\u05FF][\u0590-\u05FF\s"'-]{2,}/g) ?? [];
-  const merchantLikeLatin = latinChunks.filter((c) => /[.*\\/-]|[A-Z]{4,}/i.test(c));
-  const merchantRaw =
-    merchantLikeLatin.sort((a, b) => b.length - a.length)[0] ??
-    hebrewChunks.sort((a, b) => b.length - a.length)[0] ??
-    latinChunks.sort((a, b) => b.length - a.length)[0] ??
-    merchantPart.slice(0, 80);
+  const { merchant } = extractCalMerchantFromTail(merchantPart);
+  return { merchant, bookedAt };
+}
 
-  return { merchant: reverseMerchantLabel(merchantRaw), bookedAt };
+function reversePendingMerchant(raw: string): string {
+  const { merchant } = extractCalMerchantFromTail(collapseSplitHebrew(raw.trim()));
+  if (merchant) return merchant;
+  return normalizeHebrewDescription(raw.trim());
 }
 
 function makeSourceRef(parts: Record<string, string | number>): string {
@@ -168,13 +118,16 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
   let pendingFx: { amount: number; currency: string; tail: string; line: number } | null = null;
-  let pendingMerchant: string | null = null;
-  let pendingTxnDate: string | null = null;
-  let pendingInstallment: ReturnType<typeof extractInstallment> | null = null;
+  let pendingMerchant: { text: string; line: number } | null = null;
+  const MAX_MERCHANT_PENDING_GAP = 1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const installmentInLine = extractInstallment(line);
+
+    if (isSummaryImportText(line)) {
+      pendingMerchant = null;
+      continue;
+    }
 
     const ils = line.match(ILS_ROW);
     if (ils) {
@@ -182,6 +135,11 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
       const txnAmount = parseAmount(ils[2]);
       const amount = billing ?? txnAmount;
       let tail = ils[3];
+      if (isSummaryImportText(tail)) {
+        pendingMerchant = null;
+        continue;
+      }
+
       // Multi-line row: date token may appear on the next line only.
       if (!extractRtlDateToken(tail) && i + 1 < lines.length) {
         const next = lines[i + 1];
@@ -189,22 +147,23 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
           tail = `${tail} ${next}`;
         }
       }
+
       const { merchant, bookedAt } = extractMerchantFromTail(tail);
-      const inst = installmentInLine.index ? installmentInLine : pendingInstallment;
-      if (amount && bookedAt) {
+      const inst = extractCalInstallment(line, { billingAmount: billing, txnAmount });
+      if (amount && bookedAt && merchant) {
         pushTxn(transactions, {
           booked_at: bookedAt,
           amount,
           kind: ils[1].startsWith("-") || ils[2].startsWith("-") ? "income" : "expense",
-          description: merchant || "Cal",
-          merchant: merchant || null,
+          description: merchant,
+          merchant,
           currency: "ILS",
-          installment_index: inst?.index ?? null,
-          installment_total: inst?.total ?? null,
-          installment_label: inst?.label ?? null,
+          installment_index: inst.index,
+          installment_total: inst.total,
+          installment_label: inst.label,
           raw: { line: i + 1, pattern: "ils_row" },
         });
-        pendingInstallment = null;
+        pendingMerchant = null;
       }
       continue;
     }
@@ -212,7 +171,7 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
     const fx = line.match(FX_ROW);
     if (fx) {
       const amount = parseAmount(fx[1]);
-      if (amount) {
+      if (amount && !isSummaryImportText(fx[2])) {
         pendingFx = { amount, currency: "USD", tail: fx[2], line: i + 1 };
       }
       continue;
@@ -222,65 +181,72 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
     if (fxDate && pendingFx) {
       const bookedAt = parseIsoFromDdMmYy(fxDate[1]);
       const { merchant } = extractMerchantFromTail(pendingFx.tail);
-      if (bookedAt) {
+      const inst = extractCalInstallment(line);
+      if (bookedAt && merchant) {
         pushTxn(transactions, {
           booked_at: bookedAt,
           amount: pendingFx.amount,
           kind: pendingFx.amount < 0 ? "income" : "expense",
-          description: merchant || "Cal FX",
-          merchant: merchant || null,
+          description: merchant,
+          merchant,
           currency: pendingFx.currency,
-          installment_index: installmentInLine.index,
-          installment_total: installmentInLine.total,
-          installment_label: installmentInLine.label,
+          installment_index: inst.index,
+          installment_total: inst.total,
+          installment_label: inst.label,
           raw: { line: pendingFx.line, pattern: "fx_row" },
         });
       }
       pendingFx = null;
+      pendingMerchant = null;
       continue;
-    }
-
-    if (installmentInLine.index && !line.match(RTL_DATE)) {
-      pendingInstallment = installmentInLine;
     }
 
     const inline = line.match(AMOUNT_INLINE);
     if (inline) {
+      const merchantPending =
+        pendingMerchant && i - pendingMerchant.line <= MAX_MERCHANT_PENDING_GAP ? pendingMerchant : null;
+      if (isCalDateTotalLine(line, !!merchantPending)) {
+        pendingMerchant = null;
+        continue;
+      }
+
       const amt = parseAmount(inline[1]);
       const booked = unreverseRtlDateToken(inline[2]);
-      const inst = installmentInLine.index ? installmentInLine : pendingInstallment;
-      if (amt && booked) {
-        const merchant = pendingMerchant ? reverseMerchantLabel(pendingMerchant) : "Cal";
-        pushTxn(transactions, {
-          booked_at: booked,
-          amount: amt,
-          kind: inline[1].startsWith("-") ? "income" : "expense",
-          description: merchant,
-          merchant,
-          currency: "ILS",
-          installment_index: inst?.index ?? null,
-          installment_total: inst?.total ?? null,
-          installment_label: inst?.label ?? null,
-          raw: { line: i + 1, pattern: "inline" },
-        });
+      const inst = extractCalInstallment(line);
+      if (amt && booked && merchantPending) {
+        const merchant = reversePendingMerchant(merchantPending.text);
+        if (merchant && !isSummaryImportText(merchant)) {
+          pushTxn(transactions, {
+            booked_at: booked,
+            amount: amt,
+            kind: inline[1].startsWith("-") ? "income" : "expense",
+            description: merchant,
+            merchant,
+            currency: "ILS",
+            installment_index: inst.index,
+            installment_total: inst.total,
+            installment_label: inst.label,
+            raw: { line: i + 1, pattern: "inline" },
+          });
+        }
         pendingMerchant = null;
-        pendingTxnDate = null;
-        pendingInstallment = null;
+      } else if (!merchantPending) {
+        pendingMerchant = null;
       }
       continue;
     }
 
     const merchantDate = line.match(MERCHANT_DATE);
-    if (merchantDate && !/^(₪|EU|\$)/.test(merchantDate[1])) {
-      pendingMerchant = merchantDate[1].trim();
-      pendingTxnDate = unreverseRtlDateToken(merchantDate[2]);
+    if (merchantDate && !/^(₪|EU|\$)/.test(merchantDate[1]) && !isSummaryImportText(merchantDate[1])) {
+      pendingMerchant = { text: merchantDate[1].trim(), line: i };
       continue;
     }
 
     if (/^[A-Za-z0-9*.,\s/-]{4,}$/.test(line) && !/PRD-|ctovet|www\./i.test(line)) {
-      pendingMerchant = line;
+      pendingMerchant = { text: line, line: i };
+    } else if (pendingMerchant && i - pendingMerchant.line > MAX_MERCHANT_PENDING_GAP) {
+      pendingMerchant = null;
     }
-
   }
 
   const deduped = new Map<string, ParsedImportTransaction>();
