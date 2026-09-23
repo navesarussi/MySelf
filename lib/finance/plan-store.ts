@@ -12,22 +12,10 @@ import type { PlanLineType } from "@/lib/finance/expense-type";
 import { inferredCategory, inferTxnKind, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
 import { reconcileMonthTransactions } from "@/lib/finance/reconcile";
-
-function monthRange(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
-  return { start: `${month}-01`, end: next };
-}
+import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
 
 async function fetchTransactions(month: string): Promise<FinanceTransaction[]> {
-  const { start, end } = monthRange(month);
-  const { data, error } = await getSupabase()
-    .from("finance_transactions")
-    .select("*")
-    .gte("txn_date", start)
-    .lt("txn_date", end);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => rowToTxn(r as Record<string, unknown>));
+  return (await fetchTransactionsInRange(monthBounds(month))).map(rowToTxn);
 }
 
 async function autoClassifyObvious(month: string): Promise<void> {

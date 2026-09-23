@@ -9,6 +9,7 @@ import {
   type HistoryPlanSeed,
 } from "@/lib/finance/history";
 import { TXN_CASHFLOW_COLUMNS } from "@/lib/finance/txn-columns";
+import { fetchTransactionsInRange, monthsBounds } from "@/lib/finance/txn-range";
 
 function rowToCashflow(row: Record<string, unknown>): CashflowRow {
   return {
@@ -35,19 +36,16 @@ export async function GET(req: NextRequest) {
   if (!/^\d{4}-\d{2}$/.test(endMonth)) return badRequest("invalid_month");
 
   const keys = monthKeysEndingAt(endMonth, months);
-  const startMonth = keys[0]!;
-  const start = `${startMonth}-01`;
-  const [ey, em] = endMonth.split("-").map(Number);
-  const endExclusive =
-    em === 12 ? `${ey + 1}-01-01` : `${ey}-${String(em + 1).padStart(2, "0")}-01`;
 
   const supabase = getSupabase();
-  const { data: txnRows, error: txnErr } = await supabase
-    .from("finance_transactions")
-    .select(TXN_CASHFLOW_COLUMNS)
-    .gte("txn_date", start)
-    .lt("txn_date", endExclusive);
-  if (txnErr) return dbError();
+  // Up to 24 months of transactions — by far the most likely of these reads to
+  // pass the row cap, and every figure on the screen is derived from them.
+  let txnRows: Record<string, unknown>[];
+  try {
+    txnRows = await fetchTransactionsInRange(monthsBounds(keys), TXN_CASHFLOW_COLUMNS);
+  } catch {
+    return dbError();
+  }
 
   const { data: planRows, error: planErr } = await supabase
     .from("finance_month_plans")

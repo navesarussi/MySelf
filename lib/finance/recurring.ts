@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { rowToTxn, type FinanceTransaction } from "@/lib/finance/ingest";
 import {
   fetchMerchantRulesMap,
@@ -7,6 +6,7 @@ import {
   type MerchantRule,
 } from "@/lib/finance/merchant-rules";
 import { round2 } from "@/lib/finance/money";
+import { fetchTransactionsInRange, monthsBounds } from "@/lib/finance/txn-range";
 
 export type { RecurringSuggestion } from "@/lib/finance/types-client";
 import type { RecurringSuggestion } from "@/lib/finance/types-client";
@@ -104,22 +104,11 @@ export async function getRecurringSuggestions(
 ): Promise<RecurringSuggestion[]> {
   const month = targetMonth ?? new Date().toISOString().slice(0, 7);
   const recentMonths = getRecentMonths(month, 3);
-  const start = `${recentMonths[0]}-01`;
-  const [endY, endM] = recentMonths[recentMonths.length - 1].split("-").map(Number);
-  const next = endM === 12 ? `${endY + 1}-01-01` : `${endY}-${String(endM + 1).padStart(2, "0")}-01`;
-
-  const supabase = getSupabase();
-  const [{ data, error }, rulesMap] = await Promise.all([
-    supabase
-      .from("finance_transactions")
-      .select("*")
-      .gte("txn_date", start)
-      .lt("txn_date", next),
+  const [rows, rulesMap] = await Promise.all([
+    fetchTransactionsInRange(monthsBounds(recentMonths)),
     fetchMerchantRulesMap(),
   ]);
-
-  if (error) throw new Error(error.message);
-  const txns = (data ?? []).map((r) => rowToTxn(r as Record<string, unknown>));
+  const txns = rows.map(rowToTxn);
 
   return findRecurringExpenseSuggestions(txns, rulesMap);
 }
