@@ -1,4 +1,5 @@
 import { detectImportSource } from "@/lib/finance/import/detect-source";
+import { parseBankSpreadsheet } from "@/lib/finance/import/parse-bank-spreadsheet";
 import { parseCalStatementPdf } from "@/lib/finance/import/parse-cal-pdf";
 import { parseLeumiIdentityPdf } from "@/lib/finance/import/parse-leumi-pdf";
 import { parseCsvText, parseXlsxBuffer } from "@/lib/finance/import/parse-tabular";
@@ -24,7 +25,7 @@ export async function parseImportFile(input: {
     if (detected === "leumi" || /תעודת הזהות הבנקאית/.test(text)) {
       return parseLeumiIdentityPdf(text);
     }
-    if (detected === "cal" || /דף חיוב חודשי|cal-online|pay\s*box/i.test(text)) {
+    if (detected === "cal" || /דף חיוב חודשי|דף פירוט דיגיטלי|cal-online|pay\s*box/i.test(text)) {
       return parseCalStatementPdf(text);
     }
     return {
@@ -44,6 +45,13 @@ export async function parseImportFile(input: {
   }
 
   if (extension === "xlsx" || extension === "xls") {
+    const bankResult = await parseBankSpreadsheet({
+      buffer: input.buffer,
+      filename: input.filename,
+      sourceHint: input.sourceHint,
+    });
+    if (bankResult) return bankResult;
+
     const result = await parseXlsxBuffer(input.buffer);
     result.source = input.sourceHint ?? "excel";
     return result;
