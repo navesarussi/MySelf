@@ -28,9 +28,17 @@ import {
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
 import { HabitCard } from "../../src/components/habit-card";
+import { HabitsReportedSection } from "../../src/components/habits-reported-section";
 import { HabitDetailsModal } from "../../src/components/habit-details-modal";
 import { HabitEditModal, type HabitEditFields } from "../../src/components/habit-edit-modal";
-import { dedupeHabits, habitReportDay, sortHabitsByOldestReport } from "@/lib/habit-stats";
+import {
+  computeCheckIn,
+  computeFall,
+  dedupeHabits,
+  habitNeedsAction,
+  habitReportDay,
+  sortHabitsByOldestReport,
+} from "@/lib/habit-stats";
 
 type AddFormState = {
   name: string;
@@ -54,8 +62,9 @@ export default function HabitsScreen() {
   const { data, loading, error, refresh } = useApiQuery(queryKeys.habits, api.habits);
   const { run, busy, isPending } = useApiMutation();
   const [addForm, setAddForm] = useState<AddFormState | null>(null);
-  const [viewingHabit, setViewingHabit] = useState<Habit | null>(null);
+  const [viewingHabitId, setViewingHabitId] = useState<string | null>(null);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [reportedExpanded, setReportedExpanded] = useState(false);
 
   useEffect(() => {
     if (params.add === "habit" || params.add === "1") {
@@ -64,7 +73,22 @@ export default function HabitsScreen() {
     }
   }, [params.add, router]);
 
-  const habits = useMemo(() => sortHabitsByOldestReport(dedupeHabits(data ?? [])), [data]);
+  const allHabits = useMemo(() => sortHabitsByOldestReport(dedupeHabits(data ?? [])), [data]);
+
+  const { habitsPending, habitsReported } = useMemo(() => {
+    const pending: Habit[] = [];
+    const reported: Habit[] = [];
+    for (const habit of allHabits) {
+      if (habitNeedsAction(habit)) pending.push(habit);
+      else reported.push(habit);
+    }
+    return { habitsPending: pending, habitsReported: reported };
+  }, [allHabits]);
+
+  const viewingHabit = useMemo(
+    () => (viewingHabitId ? allHabits.find((h) => h.id === viewingHabitId) ?? null : null),
+    [allHabits, viewingHabitId]
+  );
 
   const handleCheckIn = useCallback(
     async (h: Habit) => {
@@ -135,6 +159,24 @@ export default function HabitsScreen() {
     async (h: Habit, date: string, type: "check_in" | "fall") => {
       const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
       const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+
+      const result = type === "check_in" ? computeCheckIn(h, date) : computeFall(h, date);
+      const optimisticPatch = {
+        streak_count: result.streak,
+        best_streak: result.bestStreak,
+        total_success_days: result.totalSuccessDays,
+        failure_count: result.failureCount,
+        last_checked_on: date,
+        last_reported_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
+        patchItemInList(old, h.id, optimisticPatch)
+      );
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+        patchHabitInHome(old, h.id, optimisticPatch)
+      );
+
       await run((config) => api.reportHabit(config, h.id, type, { for_date: date }), {
         itemId: h.id,
         flash: { success: type === "check_in" ? "flash.checkInRecorded" : "flash.fallRecorded" },
@@ -219,7 +261,7 @@ export default function HabitsScreen() {
     if (!editingHabit) return;
     const h = editingHabit;
     setEditingHabit(null);
-    setViewingHabit(null);
+    setViewingHabitId(null);
     const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
     const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
     queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => removeItemFromList(old, h.id));
@@ -260,7 +302,7 @@ export default function HabitsScreen() {
       <HabitCard
         habit={item}
         busy={isPending(item.id)}
-        onPress={setViewingHabit}
+        onPress={(h) => setViewingHabitId(h.id)}
         onEdit={setEditingHabit}
         onReset={handleReset}
         onCheckIn={handleCheckIn}
@@ -291,18 +333,35 @@ export default function HabitsScreen() {
         onRefresh={refresh}
         headerRight={<Btn small label={t("habits.addNew")} onPress={() => setAddForm(emptyForm)} />}
         headerExtra={headerExtra}
-        data={habits}
+        data={habitsPending}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        ListEmptyComponent={data && habits.length === 0 ? <EmptyState text={t("home.noHabits")} /> : null}
+        ListEmptyComponent={
+          data && allHabits.length === 0 ? <EmptyState text={t("home.noHabits")} /> : null
+        }
+        ListFooterComponent={
+          habitsReported.length > 0 ? (
+            <HabitsReportedSection
+              habits={habitsReported}
+              expanded={reportedExpanded}
+              onToggle={() => setReportedExpanded((v) => !v)}
+              isPending={isPending}
+              onPress={(h) => setViewingHabitId(h.id)}
+              onEdit={setEditingHabit}
+              onReset={handleReset}
+              onCheckIn={handleCheckIn}
+              onReportFall={handleReportFall}
+            />
+          ) : null
+        }
       />
 
       <HabitDetailsModal
         habit={viewingHabit}
         visible={viewingHabit !== null}
-        onClose={() => setViewingHabit(null)}
+        onClose={() => setViewingHabitId(null)}
         onEdit={(h) => {
-          setViewingHabit(null);
+          setViewingHabitId(null);
           setEditingHabit(h);
         }}
         onCheckIn={handleCheckIn}

@@ -62,6 +62,21 @@ export function isAwaitingReport(habit: Habit, now = new Date()): boolean {
   return habit.last_checked_on !== day;
 }
 
+/** True when closed reporting days still need chronological backfill. */
+export function hasPendingBackfill(habit: Habit, now = new Date()): boolean {
+  return missedReportDays(habit, now).length > 0;
+}
+
+/** Needs today's report and/or oldest-first backfill before the habit is "done". */
+export function habitNeedsAction(habit: Habit, now = new Date()): boolean {
+  return isAwaitingReport(habit, now) || hasPendingBackfill(habit, now);
+}
+
+/** Reported for the active day with no missed backfill windows. */
+export function isFullyReportedForToday(habit: Habit, now = new Date()): boolean {
+  return !habitNeedsAction(habit, now);
+}
+
 /**
  * Closed reporting days with no check-in, oldest first (chronological backfill order).
  * A day is eligible once its full window has ended.

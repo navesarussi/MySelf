@@ -5,7 +5,9 @@ import {
   computeFall,
   dedupeHabits,
   effectiveStreak,
+  habitNeedsAction,
   habitReportDay,
+  isFullyReportedForToday,
   isReportDue,
   missedReportDays,
   normalizeReportTime,
@@ -165,6 +167,34 @@ describe("isReportDue", () => {
   it("is false when already checked for the active day", () => {
     const habit = { ...base, last_checked_on: "2026-07-13", report_time: "18:00" };
     assert.equal(isReportDue(habit, new Date("2026-07-13T19:00:00Z")), false);
+  });
+});
+
+describe("habitNeedsAction / isFullyReportedForToday", () => {
+  const now = new Date("2026-07-13T12:00:00Z");
+
+  it("needs action when today's report is missing", () => {
+    const habit = { ...base, last_checked_on: "2026-07-12", report_time: "00:00" };
+    assert.equal(habitNeedsAction(habit, now), true);
+    assert.equal(isFullyReportedForToday(habit, now), false);
+  });
+
+  it("needs action when backfill is pending", () => {
+    const habit = {
+      ...base,
+      created_at: "2026-06-01T00:00:00Z",
+      last_checked_on: "2026-07-10",
+      report_time: "00:00",
+    };
+    assert.equal(missedReportDays(habit, now).length > 0, true);
+    assert.equal(habitNeedsAction(habit, now), true);
+    assert.equal(isFullyReportedForToday(habit, now), false);
+  });
+
+  it("is fully reported when checked today with no backfill", () => {
+    const habit = { ...base, last_checked_on: "2026-07-13", report_time: "00:00" };
+    assert.equal(habitNeedsAction(habit, now), false);
+    assert.equal(isFullyReportedForToday(habit, now), true);
   });
 });
 
