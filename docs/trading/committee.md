@@ -226,6 +226,74 @@ After a shadow run is persisted, `maybeRecordReflection` may append a determinis
 
 Migration `0038_trading_committee_reflections.sql` — apply via ops (`npm run db:apply`); not required for shadow measurement when reflection is off.
 
+## Phase G (nightly proof-gate evaluation — log only)
+
+| Module | Purpose |
+|--------|---------|
+| `gate-eval.ts` | `runNightlyPromotionGateEval` — load dual-track summary, evaluate, persist verdict |
+| `store.ts` | `insertGateEval`, `listGateEvalsSinceDay` — append-only daily rows in `trading_committee_gate_evals` |
+| `app/api/v1/trading/committee-gate-eval/route.ts` | Cron-safe GET/POST (Bearer `CRON_SECRET`) — **never** flips env flags |
+
+Migration: `supabase/migrations/0039_trading_committee_gate_evals.sql` — apply via ops (`npm run db:apply`); not required for the evaluator to run (persist fails closed to `persisted: false` until migration is applied).
+
+### Nightly job flow
+
+1. Load recent shadow runs via `getCommitteeDualTrackSummary({ sinceIso, limit })` (default **30 days**, limit **500**).
+2. Run `evaluatePromotionGates` (Phase F pure evaluator).
+3. Upsert one row per UTC calendar day into `trading_committee_gate_evals` (`eval_day` unique).
+4. Return JSON with `verdict`, `reasons`, `metrics`, and `consecutive_pass_days`.
+
+Query params (optional): `?days=30&limit=500`.
+
+### Scheduler (manual ops — not in `vercel.json` by default)
+
+Vercel Hobby allows only **two** daily cron jobs; this repo already schedules more than that (Pro / external schedulers). **Do not add** a Vercel cron entry until ops confirms plan headroom.
+
+Trigger nightly eval manually or from GitHub Actions / pg_cron:
+
+```bash
+curl -X POST "https://myselfapp.xyz/api/v1/trading/committee-gate-eval?days=30" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+When a daily Vercel slot is available, add to `vercel.json`:
+
+```json
+{ "path": "/api/v1/trading/committee-gate-eval", "schedule": "45 6 * * *" }
+```
+
+### Reading consecutive PASS days
+
+Response field `consecutive_pass_days` counts **UTC calendar days** ending at `eval_day` where the stored verdict is `PASS`, walking backward one day at a time. A `FAIL` or a **missing day** breaks the streak.
+
+Example: need **7 consecutive PASS days** before ops even *consider* setting `COMMITTEE_SHADOW=false` (still manual; this job does not do it):
+
+| eval_day | verdict | consecutive_pass_days (that day) |
+|----------|---------|----------------------------------|
+| Mon | FAIL | 0 |
+| Tue | PASS | 1 |
+| Wed | PASS | 2 |
+| Thu | PASS | 3 |
+| Fri | (no run) | — streak broken if Sat evaluated |
+| Sat | PASS | 1 |
+
+Query history:
+
+```sql
+SELECT eval_day, verdict, reasons, metrics
+FROM myself.trading_committee_gate_evals
+ORDER BY eval_day DESC
+LIMIT 14;
+```
+
+`consecutive_pass_days` is computed at job time in the API response (not stored as a column). Recompute from rows with `countConsecutivePassDays` in code if needed.
+
+### Still manual (non-negotiable)
+
+- **`COMMITTEE_ENABLED`** / **`COMMITTEE_SHADOW`** — never mutated by Phase G.
+- **`COMMITTEE_SHADOW=false`** — ops-only after sustained PASS streak + dual-track edge review (G2–G3).
+- **Broker orders** — committee path still does not submit in Phase G.
+
 ## Not in scope yet
 
 - Turning `COMMITTEE_SHADOW=false` or live Alpaca submission from committee path (requires proof gates + ops duration review)
