@@ -96,6 +96,24 @@ export async function logEvent(input: { kind: string; message: string; severity?
   }
 }
 
+/**
+ * Symbols already reported for `kind` on the given UTC day.
+ *
+ * Lets a caller report a standing condition once a day instead of on every
+ * tick — see `orphansToReport`.
+ */
+export async function symbolsLoggedOn(kind: string, day: string): Promise<string[]> {
+  const { data, error } = await getSupabase()
+    .from("trading_events")
+    .select("symbol")
+    .eq("kind", kind)
+    .gte("created_at", `${day}T00:00:00.000Z`)
+    .not("symbol", "is", null)
+    .limit(500);
+  if (error) return [];
+  return [...new Set((data ?? []).map((r) => String((r as { symbol: string }).symbol)))];
+}
+
 export async function ensureSeeded() {
   const sb = getSupabase();
   await sb.from("trading_universe").upsert(
