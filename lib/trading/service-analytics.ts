@@ -2,6 +2,7 @@ import { computeStats, equityCurveR, groupStats, rDistribution, ratingValue, typ
 import { getClosedTrades, toJournalTrade } from "./store";
 import { agentValueReport, bucketStats, type AgentValueReport } from "./learning";
 import { round } from "./round";
+import { qualityReport, type QualityReport } from "./trade-quality";
 
 /** Performance analytics over closed trades. */
 
@@ -33,6 +34,8 @@ export type AnalyticsPayload = {
   gaps_through_stop: number;
   agent_value: AgentValueReport;
   buckets: ReturnType<typeof bucketStats>;
+  /** Cost drag, capture efficiency, hold-time split, and the heat winners took. */
+  quality: QualityReport;
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -75,5 +78,6 @@ export async function getAnalytics(scope: { execution?: string; track?: string; 
     gaps_through_stop: list.filter((t) => t.gapped_through_stop).length,
     agent_value: agentValueReport(all.map(toJournalTrade)),
     buckets: bucketStats(all.map(toJournalTrade)),
+    quality: qualityReport(list),
   };
 }

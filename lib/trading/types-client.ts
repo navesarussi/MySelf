@@ -5,12 +5,14 @@
 import type { EXECUTION_RULES, RISK_ENVELOPE } from "./config";
 import type { GateCheck } from "./gates";
 import type { GroupStat, PerformanceStats, RatingValue } from "./metrics";
+import type { QualityReport, TradeQuality } from "./trade-quality";
 import type { PositionEvent, SimPosition } from "./position";
 import type { StrategyV2Params } from "./strategy/candidates";
 import type { AssetClass, Bar, ExitPlan, TradingMode, TradingPhase } from "./types";
 
 export type { GateCheck } from "./gates";
 export type { GroupStat, PerformanceStats } from "./metrics";
+export type { QualityReport, TradeQuality } from "./trade-quality";
 export type { Bar } from "./types";
 
 export type TradingSettings = {
@@ -309,6 +311,7 @@ export type AnalyticsPayload = {
   gaps_through_stop: number;
   agent_value: AgentValueReport;
   buckets: { bucket_id: string; trades: number; expectancy_r: number; win_rate: number }[];
+  quality: QualityReport;
 };
 
 export type BacktestGateInput = {
@@ -469,6 +472,7 @@ export type TradingTradeDetail = {
   trigger: TriggerRow | null;
   sibling: TradeListItem | null;
   lesson: LessonRow | null;
+  quality: TradeQuality;
 };
 
 export type TradingBacktestSummary = {
