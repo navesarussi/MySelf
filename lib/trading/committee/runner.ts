@@ -10,7 +10,8 @@ import {
   type SoftRiskContext,
 } from "./agents";
 import { getCommitteeConfig, COMMITTEE_PROMPT_VERSIONS } from "./config";
-import { certificatePermitsExecution, enforceSoftRiskOpinion, type EnforcedSoftRisk } from "./helpers";
+import { assertCertificateAllowsExecution } from "./gate";
+import { enforceSoftRiskOpinion, type EnforcedSoftRisk } from "./helpers";
 import { buildExecutionIntent } from "./execution";
 import { issueRiskCertificate } from "./hard-risk";
 import type { CommitteeLlmClient } from "./llm";
@@ -190,20 +191,30 @@ export async function runCommitteeShadow(input: CommitteeRunInput): Promise<Comm
   const blocks = certificate.blocks;
   let executionIntent: ExecutionIntent | null = null;
   let wouldHaveExecuted = false;
+  const gateNowMs = Date.now();
 
-  if (certificatePermitsExecution(certificate)) {
-    const intentR = buildExecutionIntent({
+  const intentR = buildExecutionIntent({
+    ticket: input.ticket,
+    certificate,
+    auditRef: runId,
+    broker: input.broker ?? "ALPACA_PAPER",
+    nowMs: gateNowMs,
+  });
+  if (intentR.ok) {
+    const gate = assertCertificateAllowsExecution(certificate, {
       ticket: input.ticket,
-      certificate,
-      auditRef: runId,
-      broker: input.broker ?? "ALPACA_PAPER",
+      intent: intentR.data,
+      nowMs: gateNowMs,
+      maxAgeMs: cfg.certMaxAgeMs,
     });
-    if (intentR.ok) {
+    if (gate.ok) {
       executionIntent = intentR.data;
       wouldHaveExecuted = true;
     } else {
-      errors.push(intentR.error);
+      errors.push(gate.reason);
     }
+  } else if (certificate.ok) {
+    errors.push(intentR.error);
   }
 
   const outcome = wouldHaveExecuted ? "WOULD_EXECUTE" : blocks.length ? "BLOCKED" : "SKIPPED";

@@ -93,6 +93,7 @@ export function issueRiskCertificate(input: HardRiskInput): ParseResult<RiskCert
     risk_r: plan ? round(risk_r, 4) : 0,
     portfolio_heat_after: round(portfolio_heat_after, 4),
     market_state,
+    issued_at: new Date().toISOString(),
   });
 }
 
