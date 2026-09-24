@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, dbError, readJson, str, denyUnlessPrimary } from "@/lib/api/auth";
 import { decideCalibration, listParamSets, proposeCalibration, type BacktestPreset } from "@/lib/trading/service";
 
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   try {
     return NextResponse.json(await listParamSets());
   } catch {
@@ -15,7 +16,8 @@ export async function GET(req: NextRequest) {
 
 /** { action: "propose", preset, years } | { action: "approve" | "reject", id, confirm: true } */
 export async function POST(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const body = await readJson(req);
   try {
     if (body.action === "propose") {

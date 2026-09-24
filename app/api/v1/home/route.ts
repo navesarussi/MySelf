@@ -8,6 +8,7 @@ import { avgTaskCloseDays } from "@/lib/task-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
 import { loadTradingSnapshot } from "@/lib/trading/account-equity";
+import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
 import { formatUrgentFinanceLabel } from "@/lib/widget-snapshot";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
@@ -49,6 +50,8 @@ export async function GET(req: NextRequest) {
   const supabase = getSupabase();
   const db = await userDb();
   const month = currentMonthKey();
+  // Trading is the primary account's alone; other accounts' home has no trading card.
+  const showTrading = await isPrimaryGoogleEmail(db.userId);
 
   const [
     habitsRes,
@@ -139,7 +142,7 @@ export async function GET(req: NextRequest) {
       (net) => ({ data: net, error: null }),
       (err: Error) => ({ data: null, error: { message: err.message } })
     ),
-    loadTradingSnapshot().catch(() => null),
+    showTrading ? loadTradingSnapshot().catch(() => null) : null,
   ]);
 
   const degraded = collectFailures({
@@ -160,8 +163,8 @@ export async function GET(req: NextRequest) {
     urgentFinance: urgentFinanceRes,
     financeNet: financeNetRes,
   });
-  if (!tradingRes) degraded.push("trading");
-  else if (tradingRes.equityFailed) degraded.push("trading.equity");
+  if (showTrading && !tradingRes) degraded.push("trading");
+  else if (tradingRes?.equityFailed) degraded.push("trading.equity");
 
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, isApiAuthorized, readJson, unauthorized } from "@/lib/api/auth";
+import { badRequest, readJson, denyUnlessPrimary } from "@/lib/api/auth";
 import { EnterError, enterProposal, type EnterRequest } from "@/lib/trading/trade-finder";
 
 export const maxDuration = 60;
@@ -10,7 +10,8 @@ const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : u
 
 /** "Enter now": open the proposal's trade (optionally with user-edited order type / entry / stop / target) in the paper account. */
 export async function POST(req: NextRequest, ctx: Ctx) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const { id } = await ctx.params;
   const body = (await readJson(req)) as Record<string, unknown>;
   const orderType = body.order_type === "MARKET" || body.order_type === "LIMIT" ? body.order_type : undefined;

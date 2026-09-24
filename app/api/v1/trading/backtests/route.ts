@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, dbError, isApiAuthorized, readJson, unauthorized } from "@/lib/api/auth";
+import { badRequest, dbError, readJson, denyUnlessPrimary } from "@/lib/api/auth";
 import { listBacktests, runAndStoreBacktest, type BacktestPreset } from "@/lib/trading/service";
 
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   try {
     return NextResponse.json(await listBacktests());
   } catch {
@@ -14,7 +15,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const body = await readJson(req);
   const preset = (["CRYPTO", "STOCKS", "ALL"].includes(String(body.preset)) ? body.preset : "CRYPTO") as BacktestPreset;
   const years = Number(body.years ?? 3);

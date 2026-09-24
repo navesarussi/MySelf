@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, isApiAuthorized, readJson, unauthorized } from "@/lib/api/auth";
+import { badRequest, readJson, denyUnlessPrimary } from "@/lib/api/auth";
 import { executeCommand, parseCommand } from "@/lib/trading/service";
 
 export const maxDuration = 60;
 
 /** Live controls. Every destructive action requires `confirm: true` from the client. */
 export async function POST(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const body = await readJson(req);
   const cmd = parseCommand(body);
   if (!cmd) return badRequest("invalid_command");
