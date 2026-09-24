@@ -49,6 +49,36 @@ create unique index if not exists notification_log_user_slot_uidx
 create unique index if not exists integration_tokens_user_provider_account_uidx
   on myself.integration_tokens (user_id, provider, account_key);
 
+-- A child row belongs to its parent's account. Each parent reference now
+-- includes user_id, so no code path can attach a task to another account's
+-- project, a report to another account's habit, and so on — and an embedded
+-- select through the reference can't reach another account's row.
+create unique index if not exists projects_id_user_uidx on myself.projects (id, user_id);
+create unique index if not exists habits_id_user_uidx on myself.habits (id, user_id);
+create unique index if not exists timeline_events_id_user_uidx on myself.timeline_events (id, user_id);
+create unique index if not exists life_periods_id_user_uidx on myself.life_periods (id, user_id);
+
+alter table myself.tasks drop constraint if exists tasks_project_id_fkey;
+alter table myself.tasks add constraint tasks_project_owner_fkey
+  foreign key (project_id, user_id) references myself.projects (id, user_id);
+
+alter table myself.relationships drop constraint if exists relationships_project_id_fkey;
+alter table myself.relationships add constraint relationships_project_owner_fkey
+  foreign key (project_id, user_id) references myself.projects (id, user_id);
+
+alter table myself.habit_reports drop constraint if exists habit_reports_habit_id_fkey;
+alter table myself.habit_reports add constraint habit_reports_habit_owner_fkey
+  foreign key (habit_id, user_id) references myself.habits (id, user_id) on delete cascade;
+
+alter table myself.timeline_event_links drop constraint if exists timeline_event_links_event_id_fkey;
+alter table myself.timeline_event_links add constraint timeline_event_links_event_owner_fkey
+  foreign key (event_id, user_id) references myself.timeline_events (id, user_id) on delete cascade;
+
+alter table myself.life_periods drop constraint if exists life_periods_parent_id_fkey;
+alter table myself.life_periods add constraint life_periods_parent_owner_fkey
+  foreign key (parent_id, user_id) references myself.life_periods (id, user_id)
+  on delete set null (parent_id);
+
 -- One settings row per account instead of one row total. The old `id = true`
 -- row stays so the deployed code's `.eq("id", true)` keeps finding it; rows for
 -- other accounts get a null id. 0044 drops the column.
