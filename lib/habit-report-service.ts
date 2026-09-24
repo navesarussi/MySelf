@@ -1,6 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
-import { computeCheckIn, computeFall, resolveHabitReportDay } from "@/lib/habit-stats";
-import { upsertHabitReport } from "@/lib/habit-reports-store";
+import { recomputeHabitStatsFromReports, resolveHabitReportDay } from "@/lib/habit-stats";
+import { loadAllHabitReports, loadHabitReportForDate, upsertHabitReport } from "@/lib/habit-reports-store";
 import type { HabitReportOutcome } from "@/lib/habit-history";
 import type { Habit } from "@/lib/types";
 
@@ -37,26 +37,30 @@ export async function applyHabitReport(input: {
   }
 
   const day = target.day;
-  const result = outcome === "check_in" ? computeCheckIn(habit, day) : computeFall(habit, day);
+
+  const existing = await loadHabitReportForDate(habit.id, day);
+  if (existing) return { ok: true, habit, day, noop: true };
+
+  await upsertHabitReport(habit.id, day, outcome);
+
+  const reports = await loadAllHabitReports(habit.id);
+  const reportsMap = new Map(reports.map((row) => [row.report_date, row.outcome]));
+  const stats = recomputeHabitStatsFromReports(habit, reportsMap, input.now ?? new Date());
 
   const { data, error } = await getSupabase()
     .from("habits")
     .update({
-      streak_count: result.streak,
-      best_streak: result.bestStreak,
-      total_success_days: result.totalSuccessDays,
-      failure_count: result.failureCount,
-      last_checked_on: day,
+      streak_count: stats.streak_count,
+      best_streak: stats.best_streak,
+      total_success_days: stats.total_success_days,
+      failure_count: stats.failure_count,
+      last_checked_on: stats.last_checked_on,
       last_reported_at: new Date().toISOString(),
     })
     .eq("id", habit.id)
     .select()
     .single();
   if (error || !data) return { ok: false, reason: "db_error" };
-
-  // History row second: a habits row without its report row degrades the grid,
-  // a report row without the habits row would claim a streak that never moved.
-  await upsertHabitReport(habit.id, day, outcome);
 
   return { ok: true, habit: data as Habit, day, noop: false };
 }

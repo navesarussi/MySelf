@@ -1,4 +1,5 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
+import type { HabitReportOutcome } from "@/lib/habit-history";
 import type { Habit } from "@/lib/types";
 
 const MAX_MISSED_REPORT_DAYS = 14;
@@ -110,13 +111,9 @@ export type HabitReportTarget =
 /**
  * Which reporting day a report request may be written to.
  *
- * Reports must move forward in time. `computeCheckIn` derives the streak from
- * the calendar gap to `last_checked_on`, and the caller then stores the
- * reported day as the new `last_checked_on` — so accepting a day at or before
- * the last report produces a negative gap, which resets the streak to 1, adds a
- * spurious failure, and rewinds `last_checked_on`. A backfill is therefore only
- * valid for a closed window strictly after the last report and strictly before
- * the active day, which is exactly the set `missedReportDays` offers.
+ * Backfill accepts any closed day from habit creation through yesterday
+ * (strictly before the active reporting day). Duplicate days are rejected
+ * later when the existing `habit_reports` row is checked.
  */
 export function resolveHabitReportDay(
   habit: Habit,
@@ -133,15 +130,135 @@ export function resolveHabitReportDay(
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(requested)) return { ok: false, reason: "invalid_for_date" };
   if (requested >= activeDay) return { ok: false, reason: "invalid_for_date" };
-  if (habit.last_checked_on && requested <= habit.last_checked_on) {
-    return { ok: false, reason: "invalid_for_date" };
-  }
   const createdDay = habit.created_at?.slice(0, 10);
   if (createdDay && requested < createdDay) return { ok: false, reason: "invalid_for_date" };
   if (now.getTime() < reportWindowEndOn(requested, habit.report_time).getTime()) {
     return { ok: false, reason: "invalid_for_date" };
   }
   return { ok: true, day: requested, isBackfill: true };
+}
+
+export type RecomputedHabitStats = {
+  streak_count: number;
+  best_streak: number;
+  total_success_days: number;
+  failure_count: number;
+  last_checked_on: string | null;
+};
+
+/** Recompute aggregate habit stats from the full set of per-day reports. */
+export function recomputeHabitStatsFromReports(
+  habit: Habit,
+  reports: Map<string, HabitReportOutcome>,
+  now: Date = new Date(),
+): RecomputedHabitStats {
+  const activeDay = habitReportDay(habit.report_time, now);
+  const createdDay = habit.created_at?.slice(0, 10) ?? activeDay;
+
+  let totalSuccessDays = 0;
+  let failureCount = 0;
+  let lastCheckedOn: string | null = null;
+  let lastCheckInDay: string | null = null;
+
+  const sortedDates = [...reports.keys()].sort();
+  for (const day of sortedDates) {
+    const outcome = reports.get(day)!;
+    if (outcome === "check_in") {
+      if (lastCheckInDay) {
+        const gap = differenceInCalendarDays(
+          parseISO(`${day}T00:00:00.000Z`),
+          parseISO(`${lastCheckInDay}T00:00:00.000Z`),
+        );
+        if (gap > 1) failureCount += 1;
+      }
+      totalSuccessDays += 1;
+      lastCheckInDay = day;
+      lastCheckedOn = day;
+    } else {
+      failureCount += 1;
+      lastCheckedOn = day;
+    }
+  }
+
+  const bestStreak = computeBestStreakFromReports(reports, createdDay, activeDay, habit, now);
+  const streakCount = computeCurrentStreakFromReports(reports, activeDay, createdDay, habit, now);
+
+  return {
+    streak_count: streakCount,
+    best_streak: Math.max(bestStreak, streakCount),
+    total_success_days: totalSuccessDays,
+    failure_count: failureCount,
+    last_checked_on: lastCheckedOn,
+  };
+}
+
+function computeBestStreakFromReports(
+  reports: Map<string, HabitReportOutcome>,
+  createdDay: string,
+  activeDay: string,
+  habit: Habit,
+  now: Date,
+): number {
+  let best = 0;
+  let running = 0;
+  let cursor = parseISO(`${createdDay}T00:00:00.000Z`);
+  const end = parseISO(`${activeDay}T00:00:00.000Z`);
+
+  while (cursor <= end) {
+    const day = format(cursor, "yyyy-MM-dd");
+    const outcome = reports.get(day);
+    if (outcome === "check_in") {
+      running += 1;
+      best = Math.max(best, running);
+    } else if (outcome === "fall") {
+      running = 0;
+    } else if (
+      day !== activeDay &&
+      now.getTime() >= reportWindowEndOn(day, habit.report_time).getTime()
+    ) {
+      running = 0;
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  return best;
+}
+
+function computeCurrentStreakFromReports(
+  reports: Map<string, HabitReportOutcome>,
+  activeDay: string,
+  createdDay: string,
+  habit: Habit,
+  now: Date,
+): number {
+  const checkIns = [...reports.entries()]
+    .filter(([, outcome]) => outcome === "check_in")
+    .map(([day]) => day)
+    .sort();
+  if (checkIns.length === 0) return 0;
+
+  const lastCheckIn = checkIns[checkIns.length - 1]!;
+  const gap = differenceInCalendarDays(
+    parseISO(`${activeDay}T00:00:00.000Z`),
+    parseISO(`${lastCheckIn}T00:00:00.000Z`),
+  );
+  if (gap > 1) return 0;
+
+  let streak = 0;
+  let cursor = parseISO(`${lastCheckIn}T00:00:00.000Z`);
+  const created = parseISO(`${createdDay}T00:00:00.000Z`);
+
+  while (cursor >= created) {
+    const day = format(cursor, "yyyy-MM-dd");
+    if (reports.get(day) === "check_in") {
+      streak += 1;
+      cursor = addDays(cursor, -1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
 }
 
 /** Current streak — 0 if the habit was not checked in today or yesterday. */

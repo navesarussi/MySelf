@@ -16,7 +16,6 @@ import { useLayoutDir } from "../layout-dir";
 import { Badge, Btn, Row } from "./ui";
 import { StatTile } from "./habit-stat-tile";
 import { effectiveStreak, habitReportDay, isReportDue, normalizeReportTime } from "@/lib/habit-stats";
-import { HabitMissedReports } from "./habit-missed-reports";
 import { HabitHistoryTable } from "./habit-history-table";
 import { formatLocaleDate } from "@/lib/i18n/core";
 import type { HabitHistoryDay } from "@/lib/habit-history";
@@ -40,7 +39,7 @@ export function HabitDetailsModal({
   onEdit: (habit: Habit) => void;
   onCheckIn: (habit: Habit) => void;
   onReportFall: (habit: Habit) => void;
-  onBackfill?: (habit: Habit, date: string, type: "check_in" | "fall") => void | Promise<void>;
+  onBackfill?: (habit: Habit, date: string, type: "check_in" | "fall") => boolean | Promise<boolean>;
   busy?: boolean;
 }) {
   const c = useColors();
@@ -83,6 +82,19 @@ export function HabitDetailsModal({
   const streakPct =
     habit.best_streak > 0 ? Math.min(100, Math.round((streak / habit.best_streak) * 100)) : 0;
   const sheetMaxHeight = Math.min(windowHeight * 0.88, 640);
+
+  const handleHistoryBackfill = async (date: string, type: "check_in" | "fall") => {
+    const previous = historyDays;
+    setHistoryDays((prev) =>
+      prev.map((day) =>
+        day.date === date ? { ...day, status: type === "check_in" ? "success" : "fall" } : day,
+      ),
+    );
+    if (onBackfill) {
+      const ok = await onBackfill(habit, date, type);
+      if (!ok) setHistoryDays(previous);
+    }
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -146,13 +158,15 @@ export function HabitDetailsModal({
               ) : null}
             </View>
 
-            {onBackfill ? <HabitMissedReports habit={habit} busy={busy} onBackfill={onBackfill} /> : null}
-
             <View style={{ marginTop: 18 }}>
               <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>
                 {t("habits.historyTitle")}
               </Text>
-              <HabitHistoryTable days={historyDays} />
+              <HabitHistoryTable
+                days={historyDays}
+                busy={busy}
+                onBackfill={onBackfill ? handleHistoryBackfill : undefined}
+              />
             </View>
 
             {habit.best_streak > 0 ? (

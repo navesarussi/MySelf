@@ -37,17 +37,16 @@ describe("resolveHabitReportDay", () => {
     assert.deepEqual(r, { ok: true, day: "2026-07-19", isBackfill: true });
   });
 
-  // The bug: backfilling a day at or before last_checked_on rewinds the habit.
-  // computeCheckIn then sees a negative gap, resets the streak to 1, adds a
-  // failure, and last_checked_on moves backwards in time.
-  it("rejects a for_date at or before the last report so the streak cannot rewind", () => {
+  it("accepts retroactive backfill for a day at or before the last report", () => {
     assert.deepEqual(resolveHabitReportDay(base, "2026-07-18", now), {
-      ok: false,
-      reason: "invalid_for_date",
+      ok: true,
+      day: "2026-07-18",
+      isBackfill: true,
     });
     assert.deepEqual(resolveHabitReportDay(base, "2026-07-17", now), {
-      ok: false,
-      reason: "invalid_for_date",
+      ok: true,
+      day: "2026-07-17",
+      isBackfill: true,
     });
   });
 
@@ -92,8 +91,6 @@ describe("resolveHabitReportDay", () => {
   });
 
   it("rejects a day whose report window has not closed yet", () => {
-    // report_time 20:00 → the window for 2026-07-21 runs to 2026-07-22T20:00Z,
-    // which is still open at 12:00Z, and the active day is still 2026-07-21.
     const habit = { ...base, report_time: "20:00", last_checked_on: "2026-07-18" };
     assert.deepEqual(resolveHabitReportDay(habit, "2026-07-21", now), {
       ok: false,
@@ -106,19 +103,16 @@ describe("resolveHabitReportDay", () => {
     });
   });
 
-  it("keeps in-order backfill consistent with missedReportDays", () => {
-    // Walking the offered missed days oldest-first must be accepted at each step.
-    let habit: Habit = { ...base, last_checked_on: "2026-07-18", streak_count: 3 };
-    for (const day of ["2026-07-19", "2026-07-20", "2026-07-21"]) {
-      const r = resolveHabitReportDay(habit, day, now);
-      assert.deepEqual(r, { ok: true, day, isBackfill: true });
-      habit = { ...habit, last_checked_on: day };
-    }
-    // And the active day closes the sequence.
-    assert.deepEqual(resolveHabitReportDay(habit, null, now), {
+  it("allows out-of-order backfill for any closed missed day", () => {
+    assert.deepEqual(resolveHabitReportDay(base, "2026-07-21", now), {
       ok: true,
-      day: "2026-07-22",
-      isBackfill: false,
+      day: "2026-07-21",
+      isBackfill: true,
+    });
+    assert.deepEqual(resolveHabitReportDay(base, "2026-07-19", now), {
+      ok: true,
+      day: "2026-07-19",
+      isBackfill: true,
     });
   });
 });

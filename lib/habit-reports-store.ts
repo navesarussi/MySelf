@@ -20,6 +20,39 @@ export async function upsertHabitReport(
   if (error) throw new Error(error.message);
 }
 
+export async function loadHabitReportForDate(
+  habitId: string,
+  reportDate: string,
+): Promise<HabitReportRow | null> {
+  const { data, error } = await getSupabase()
+    .from("habit_reports")
+    .select("report_date, outcome, reported_at")
+    .eq("habit_id", habitId)
+    .eq("report_date", reportDate)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    report_date: String(data.report_date),
+    outcome: data.outcome as HabitReportOutcome,
+    reported_at: String(data.reported_at),
+  };
+}
+
+export async function loadAllHabitReports(habitId: string): Promise<HabitReportRow[]> {
+  const { data, error } = await getSupabase()
+    .from("habit_reports")
+    .select("report_date, outcome, reported_at")
+    .eq("habit_id", habitId)
+    .order("report_date", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    report_date: String(row.report_date),
+    outcome: row.outcome as HabitReportOutcome,
+    reported_at: String(row.reported_at),
+  }));
+}
+
 export async function loadHabitReports(habitId: string, days = 60): Promise<HabitReportRow[]> {
   const since = new Date();
   since.setUTCDate(since.getUTCDate() - days);

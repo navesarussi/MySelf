@@ -156,19 +156,29 @@ export default function HabitsScreen() {
   );
 
   const handleBackfill = useCallback(
-    async (h: Habit, date: string, type: "check_in" | "fall") => {
+    async (h: Habit, date: string, type: "check_in" | "fall"): Promise<boolean> => {
       const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
       const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
 
-      const result = type === "check_in" ? computeCheckIn(h, date) : computeFall(h, date);
-      const optimisticPatch = {
-        streak_count: result.streak,
-        best_streak: result.bestStreak,
-        total_success_days: result.totalSuccessDays,
-        failure_count: result.failureCount,
-        last_checked_on: date,
-        last_reported_at: new Date().toISOString(),
-      };
+      const isSequential = !h.last_checked_on || date > h.last_checked_on;
+      const optimisticPatch = isSequential
+        ? (() => {
+            const result = type === "check_in" ? computeCheckIn(h, date) : computeFall(h, date);
+            return {
+              streak_count: result.streak,
+              best_streak: result.bestStreak,
+              total_success_days: result.totalSuccessDays,
+              failure_count: result.failureCount,
+              last_checked_on: date,
+              last_reported_at: new Date().toISOString(),
+            };
+          })()
+        : {
+            total_success_days:
+              type === "check_in" ? (h.total_success_days ?? 0) + 1 : h.total_success_days,
+            failure_count: type === "fall" ? (h.failure_count ?? 0) + 1 : h.failure_count,
+            last_reported_at: new Date().toISOString(),
+          };
 
       queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
         patchItemInList(old, h.id, optimisticPatch)
@@ -177,22 +187,23 @@ export default function HabitsScreen() {
         patchHabitInHome(old, h.id, optimisticPatch)
       );
 
-      await run((config) => api.reportHabit(config, h.id, type, { for_date: date }), {
+      const updated = await run((config) => api.reportHabit(config, h.id, type, { for_date: date }), {
         itemId: h.id,
         flash: { success: type === "check_in" ? "flash.checkInRecorded" : "flash.fallRecorded" },
         onError: () => {
           if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
           if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
         },
-        onSuccess: (updated) => {
-          if (updated) {
-            queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => patchItemInList(old, h.id, updated));
-            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => patchHabitInHome(old, h.id, updated));
+        onSuccess: (serverHabit) => {
+          if (serverHabit) {
+            queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => patchItemInList(old, h.id, serverHabit));
+            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => patchHabitInHome(old, h.id, serverHabit));
           }
           queryClient.invalidateQueries({ queryKey: queryKeys.habits });
           queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
+      return updated !== null;
     },
     [run]
   );
