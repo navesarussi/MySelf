@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
 import { SESSION_COOKIE, readSessionToken } from "@/lib/auth";
 import { explicitUserId, NoUserContextError } from "@/lib/db/user-context";
 
@@ -13,8 +14,11 @@ async function requestSessionUser(): Promise<string | null> {
     const auth = (await headers()).get("authorization");
     bearer = auth?.startsWith("Bearer ") ? auth.slice(7).trim() || undefined : undefined;
     cookie = (await cookies()).get(SESSION_COOKIE)?.value;
-  } catch {
-    // Not inside a request (a script, a test, a detached callback).
+  } catch (err) {
+    // Next signals "this render is dynamic" by throwing from headers()/cookies();
+    // swallowing that would let a page holding one account's data be cached.
+    unstable_rethrow(err);
+    // Not inside a request (a script, a detached callback).
     return null;
   }
 

@@ -8,7 +8,8 @@ import type { Habit, Goal, Commitment, Relationship, TimelineEvent, Task, Projec
 import { HomeDashboard } from "@/app/legacy/home/dashboard";
 import { Compass } from "lucide-react";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 type TaskRow = Task & { projects: { name: string } | null };
 

@@ -7,7 +7,8 @@ import type { Project, Relationship, Task } from "@/lib/types";
 import { ProjectBoard } from "./project-board";
 import { isAddTarget } from "@/lib/add-menu";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 type TaskRow = Task & { projects: { name: string } | null };
 type RelRow = Relationship & { projects: { name: string } | null };

@@ -8,7 +8,8 @@ import { TasksPanel } from "./task-board";
 import { isAddTarget } from "@/lib/add-menu";
 import { getLastProject } from "@/lib/last-project";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 const statuses: Array<TaskStatus | typeof ALL_FILTER> = [
   ALL_FILTER,

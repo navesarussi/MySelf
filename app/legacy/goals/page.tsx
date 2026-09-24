@@ -8,7 +8,8 @@ import { GoalsSection } from "./goals-section";
 import { CommitmentsSection } from "./commitments-section";
 import { isAddTarget } from "@/lib/add-menu";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 export default async function GoalsPage({
   searchParams,

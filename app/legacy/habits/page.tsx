@@ -7,7 +7,8 @@ import { HabitsSection } from "./habits-section";
 import { getTranslations } from "@/lib/i18n";
 import { isAddTarget } from "@/lib/add-menu";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 export default async function HabitsPage({
   searchParams,

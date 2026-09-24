@@ -9,7 +9,8 @@ import type { ContentEntry } from "@/lib/types";
 import { addContentEntry, updateContentEntry, deleteContentEntry } from "./actions";
 import { Trash2 } from "lucide-react";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 export default async function LibraryPage({
   searchParams,
