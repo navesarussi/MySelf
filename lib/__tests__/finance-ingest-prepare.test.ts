@@ -71,4 +71,30 @@ describe("prepareIngestRows", () => {
     assert.deepEqual(prepared, []);
     assert.equal(duplicatesInBatch, 0);
   });
+
+  it("collapses Cal OCR garbage duplicates and keeps the clean merchant row", () => {
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({
+          source: "visa_cal",
+          txn_date: "2026-08-21",
+          amount: 5,
+          merchant: "לאהוראתקבעעמותותותרלובי",
+          description: "לאהוראתקבעעמותותותרלובי",
+        }),
+        txn({
+          source: "visa_cal",
+          txn_date: "2026-08-21",
+          amount: 5,
+          merchant: "לובי 99",
+          description: "הוראת קבע",
+        }),
+      ],
+      noRules,
+      []
+    );
+    assert.equal(prepared.length, 1);
+    assert.equal(prepared[0].row.merchant, "לובי 99");
+    assert.equal(duplicatesInBatch, 0);
+  });
 });
