@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { applyExternalStatusChange } from "@/lib/integrations/task-sources/writeback";
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   if (!id) return badRequest("id_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("tasks")
     .select(TASK_SELECT)
     .eq("id", id)
@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const body = await readJson(req);
   if (!id) return badRequest("id_required");
 
-  const { data: existingTask, error: fetchError } = await getSupabase()
+  const { data: existingTask, error: fetchError } = await (await userDb())
     .from("tasks")
     .select("*")
     .eq("id", id)
@@ -95,7 +95,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
   }
 
-  const { data, error } = await getSupabase().from("tasks").update(patch).eq("id", id).select().single();
+  const { data, error } = await (await userDb()).from("tasks").update(patch).eq("id", id).select().single();
   if (error) return dbError();
   revalidateTaskPaths();
   return NextResponse.json(data);
@@ -106,7 +106,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   if (!id) return badRequest("id_required");
 
-  const { data: existingTask, error: fetchError } = await getSupabase()
+  const { data: existingTask, error: fetchError } = await (await userDb())
     .from("tasks")
     .select("*")
     .eq("id", id)
@@ -123,7 +123,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     }
 
     const now = new Date().toISOString();
-    const { error } = await getSupabase()
+    const { error } = await (await userDb())
       .from("tasks")
       .update({ status: "done", synced_at: now, updated_at: now })
       .eq("id", id);
@@ -132,7 +132,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true, completed: true });
   }
 
-  const { error } = await getSupabase().from("tasks").delete().eq("id", id);
+  const { error } = await (await userDb()).from("tasks").delete().eq("id", id);
   if (error) return dbError();
   revalidateTaskPaths();
   return NextResponse.json({ ok: true });

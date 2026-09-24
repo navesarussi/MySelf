@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { applyHabitReport, loadHabit } from "@/lib/habit-report-service";
 import { badRequest, dbError, isApiAuthorized, notFound, readJson, str, unauthorized } from "@/lib/api/auth";
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (type === "reset") {
     const hadStreak = habit.streak_count > 0;
-    const { data, error } = await getSupabase()
+    const { data, error } = await (await userDb())
       .from("habits")
       .update({
         streak_count: 0,

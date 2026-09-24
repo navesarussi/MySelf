@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader, EmptyState, Badge, SubmitButton, inputClass, FilterBar, FilterChips, SearchInput, type ChipOption } from "@/components/ui";
@@ -30,10 +31,12 @@ export default async function LibraryPage({
   }
 
   const supabase = getSupabase();
+
+  const db = await userDb();
   const q = (resolvedSearchParams.q || "").trim();
   const category = resolvedSearchParams.category || "";
 
-  let query = supabase
+  let query = db
     .from("content_entries")
     .select("id, title, category, body, tags, created_at, updated_at")
     .order("updated_at", { ascending: false });
@@ -47,7 +50,7 @@ export default async function LibraryPage({
   const { data } = await query;
   const filtered = (data as ContentEntry[]) || [];
 
-  const { data: categoryRows } = await supabase.from("content_entries").select("category");
+  const { data: categoryRows } = await db.from("content_entries").select("category");
   const categories = Array.from(new Set((categoryRows || []).map((e) => e.category))).sort();
 
   const categoryOptions: ChipOption[] = [

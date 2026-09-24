@@ -5,6 +5,7 @@ import {
   readGmailMessage,
 } from "@/lib/integrations/gmail/client";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import type { TaskPriority } from "@/lib/types";
 
 export async function agentListEmails(input: { q?: string; limit?: number }) {
@@ -55,8 +56,9 @@ export async function agentCreateTaskFromEmail(input: {
 }) {
   const email = await agentReadEmail(input.email_id);
   const supabase = getSupabase();
+  const db = await userDb();
 
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from("tasks")
     .select("id, title, status")
     .eq("source", "gmail")
@@ -65,7 +67,7 @@ export async function agentCreateTaskFromEmail(input: {
   if (existing) return { already_exists: true, task: existing };
 
   const title = taskTitleFromEmail(email.subject, email.from, input.title);
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("tasks")
     .insert({
       title,

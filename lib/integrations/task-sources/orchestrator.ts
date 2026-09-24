@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { fetchAllRows } from "@/lib/db/paginate";
 import type { TaskPriority, TaskStatus } from "@/lib/types";
 import type { TaskSourceId } from "./types";
@@ -31,9 +32,10 @@ async function fetchExistingExternalTaskIds(
   accountKeyPrefix?: string
 ) {
   const supabase = getSupabase();
+  const db = await userDb();
   const rows = await fetchAllRows<{ id: string; external_id: string | null; status: string; priority: string }>(
     async (from, to) => {
-      let query = supabase
+      let query = db
         .from("tasks")
         .select("id, external_id, status, priority")
         .eq("source", providerId)
@@ -94,6 +96,8 @@ async function syncSingleAccount(
     );
 
     const supabase = getSupabase();
+
+    const db = await userDb();
     const existingByExternalId = await fetchExistingExternalTaskIds(
       providerId,
       providerId === MONDAY_PROVIDER ? accountKey : undefined
@@ -120,9 +124,9 @@ async function syncSingleAccount(
         );
       });
 
-      const { error } = await supabase
+      const { error } = await db
         .from("tasks")
-        .upsert(rows, { onConflict: "source,external_id" });
+        .upsert(rows, { onConflict: "user_id,source,external_id" });
       if (error) throw new Error(`sync_upsert_failed:${error.message}`);
 
       imported += chunk.length;
@@ -153,7 +157,7 @@ async function syncSingleAccount(
     // stops at PostgREST's row cap, so every open task past it was invisible
     // here and never got closed when the provider dropped it.
     const localOpenRows = await fetchAllRows<{ external_id: string | null }>(async (from, to) => {
-      let localQuery = supabase
+      let localQuery = db
         .from("tasks")
         .select("external_id")
         .eq("source", providerId)
@@ -179,7 +183,7 @@ async function syncSingleAccount(
     const toMarkDone = idsToMarkDone(localOpenExternalIds, fetchedIds);
     let markedDone = 0;
     if (toMarkDone.length > 0) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from("tasks")
         .update({ status: "done", updated_at: now })
         .eq("source", providerId)
@@ -264,7 +268,8 @@ export async function syncAllTaskSources(): Promise<
   Record<TaskSourceId, { imported: number; markedDone: number; error?: string }>
 > {
   const supabase = getSupabase();
-  const { data: tokens } = await supabase
+  const db = await userDb();
+  const { data: tokens } = await db
     .from("integration_tokens")
     .select("provider")
     .in("provider", ["google_tasks", "monday", "github"]);

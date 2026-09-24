@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dedupeTasks } from "@/lib/data-integrity";
 import { applyHabitReport, loadHabit } from "@/lib/habit-report-service";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
@@ -11,7 +11,7 @@ export async function agentListTasks(filters?: {
   priority?: TaskPriority;
   limit?: number;
 }) {
-  let query = getSupabase()
+  let query = (await userDb())
     .from("tasks")
     .select("id, title, priority, status, due_date, source, notes, project_id");
   if (filters?.status) query = query.eq("status", filters.status);
@@ -32,7 +32,7 @@ export async function agentUpdateTask(
   if (patch.title) body.title = patch.title.trim();
   if (patch.notes !== undefined) body.notes = patch.notes;
 
-  const { data, error } = await getSupabase().from("tasks").update(body).eq("id", id).select().single();
+  const { data, error } = await (await userDb()).from("tasks").update(body).eq("id", id).select().single();
   if (error) throw new Error("task_update_failed");
   return data;
 }
@@ -43,7 +43,7 @@ export async function agentCreateTask(input: {
   priority?: TaskPriority;
   due_date?: string | null;
 }) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("tasks")
     .insert({
       title: input.title.trim(),
@@ -60,7 +60,7 @@ export async function agentCreateTask(input: {
 }
 
 export async function agentListHabits() {
-  const { data, error } = await getSupabase().from("habits").select("*").eq("archived", false);
+  const { data, error } = await (await userDb()).from("habits").select("*").eq("archived", false);
   if (error) throw new Error("habits_list_failed");
   return data || [];
 }
@@ -75,7 +75,7 @@ export async function agentReportHabit(id: string, type: "check_in" | "fall") {
 }
 
 export async function agentListGoals(status: "active" | "done" = "active") {
-  const { data, error } = await getSupabase().from("goals").select("*").eq("status", status);
+  const { data, error } = await (await userDb()).from("goals").select("*").eq("status", status);
   if (error) throw new Error("goals_list_failed");
   return data || [];
 }
@@ -89,13 +89,13 @@ export async function agentUpdateGoal(
   if (patch.title) body.title = patch.title.trim();
   if (patch.first_step !== undefined) body.first_step = patch.first_step;
 
-  const { data, error } = await getSupabase().from("goals").update(body).eq("id", id).select().single();
+  const { data, error } = await (await userDb()).from("goals").update(body).eq("id", id).select().single();
   if (error) throw new Error("goal_update_failed");
   return data;
 }
 
 export async function agentListCommitments(date?: string) {
-  let query = getSupabase().from("commitments").select("*");
+  let query = (await userDb()).from("commitments").select("*");
   if (date) query = query.eq("commitment_date", date);
   const { data, error } = await query.order("commitment_date", { ascending: false });
   if (error) throw new Error("commitments_list_failed");
@@ -103,7 +103,7 @@ export async function agentListCommitments(date?: string) {
 }
 
 export async function agentCreateCommitment(text: string, date: string) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("commitments")
     .insert({ text: text.trim(), commitment_date: date, status: "pending" })
     .select()
@@ -113,7 +113,7 @@ export async function agentCreateCommitment(text: string, date: string) {
 }
 
 export async function agentUpdateCommitment(id: string, status: "pending" | "done" | "missed") {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("commitments")
     .update({ status })
     .eq("id", id)
@@ -124,7 +124,7 @@ export async function agentUpdateCommitment(id: string, status: "pending" | "don
 }
 
 export async function agentListRelationships() {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("relationships")
     .select("id, name, last_contact_date, reminder_days, notes, project_id, phone, email");
   if (error) throw new Error("relationships_list_failed");
@@ -142,7 +142,7 @@ export async function agentCreateRelationship(input: {
 }) {
   const reminder =
     input.reminder_days && input.reminder_days > 0 ? Math.floor(input.reminder_days) : 7;
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("relationships")
     .insert({
       name: input.name.trim(),
@@ -176,7 +176,7 @@ export async function agentUpdateRelationship(
   if (patch.last_contact_date !== undefined) body.last_contact_date = patch.last_contact_date;
   if (patch.phone !== undefined) body.phone = patch.phone;
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("relationships")
     .update(body)
     .eq("id", id)
@@ -187,7 +187,7 @@ export async function agentUpdateRelationship(
 }
 
 export async function agentTouchRelationship(id: string, date: string) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("relationships")
     .update({ last_contact_date: date })
     .eq("id", id)
@@ -198,7 +198,7 @@ export async function agentTouchRelationship(id: string, date: string) {
 }
 
 export async function agentListProjects() {
-  const { data, error } = await getSupabase().from("projects").select("id, name").order("sort_order");
+  const { data, error } = await (await userDb()).from("projects").select("id, name").order("sort_order");
   if (error) throw new Error("projects_list_failed");
   return data || [];
 }

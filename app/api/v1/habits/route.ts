@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { normalizeReportTime } from "@/lib/habit-stats";
 import { badRequest, conflict, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import { dedupeHabits } from "@/lib/habit-stats";
@@ -14,7 +14,7 @@ function revalidateHabitPaths() {
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("habits")
     .select(
       "id, name, kind, target_note, streak_count, best_streak, total_success_days, failure_count, last_checked_on, report_time, last_reported_at, archived, created_at"
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   if (!name) return badRequest("name_required");
   const kind = str(body.kind) === "quit" ? "quit" : "build";
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("habits")
     .insert({
       name,

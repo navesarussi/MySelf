@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import type { AgentChannel } from "@/lib/agent/types";
 import { notifyAgentActionWrite } from "@/lib/agent/action-push";
 
@@ -8,7 +8,7 @@ export async function logAgentMessage(input: {
   content: string;
   external_id?: string | null;
 }) {
-  await getSupabase().from("agent_messages").insert({
+  await (await userDb()).from("agent_messages").insert({
     direction: input.direction,
     channel: input.channel,
     content: input.content,
@@ -21,7 +21,7 @@ export async function logAgentAction(input: {
   tool_input: unknown;
   tool_result: unknown;
 }) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("agent_actions")
     .insert({
       tool_name: input.tool_name,

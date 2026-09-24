@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { canDeleteProject } from "@/lib/projects/delete-guard";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 
@@ -18,7 +19,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!id || !name) return badRequest("name_required");
 
   const supabase = getSupabase();
-  const { data: dupe } = await supabase
+
+  const db = await userDb();
+  const { data: dupe } = await db
     .from("projects")
     .select("id")
     .eq("name", name)
@@ -26,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .maybeSingle();
   if (dupe) return badRequest("project_exists");
 
-  const { data, error } = await supabase.from("projects").update({ name }).eq("id", id).select().single();
+  const { data, error } = await db.from("projects").update({ name }).eq("id", id).select().single();
   if (error) return dbError();
   revalidateProjectPaths();
   return NextResponse.json(data);
@@ -38,16 +41,18 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!id) return badRequest("id_required");
 
   const supabase = getSupabase();
+
+  const db = await userDb();
   const [{ count: taskCount }, { count: relCount }] = await Promise.all([
-    supabase.from("tasks").select("*", { count: "exact", head: true }).eq("project_id", id),
-    supabase.from("relationships").select("*", { count: "exact", head: true }).eq("project_id", id),
+    db.from("tasks").select("*", { count: "exact", head: true }).eq("project_id", id),
+    db.from("relationships").select("*", { count: "exact", head: true }).eq("project_id", id),
   ]);
 
   if (canDeleteProject(taskCount ?? 0, relCount ?? 0) === "blocked") {
     return badRequest("project_delete_blocked");
   }
 
-  const { error } = await supabase.from("projects").delete().eq("id", id);
+  const { error } = await db.from("projects").delete().eq("id", id);
   if (error) return dbError();
   revalidateProjectPaths();
   return NextResponse.json({ ok: true });

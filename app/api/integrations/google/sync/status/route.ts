@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken } from "@/lib/integrations/tokens";
 
@@ -10,7 +11,9 @@ export async function GET() {
   }
 
   const supabase = getSupabase();
-  const { count } = await supabase
+
+  const db = await userDb();
+  const { count } = await db
     .from("timeline_events")
     .select("id", { count: "exact", head: true })
     .eq("source", "google_calendar");

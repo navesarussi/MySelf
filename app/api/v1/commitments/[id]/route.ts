@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 
 type Params = { params: Promise<{ id: string }> };
@@ -20,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!id) return badRequest("id_required");
   if (!STATUSES.includes(status)) return badRequest("invalid_status");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("commitments")
     .update({ status })
     .eq("id", id)
@@ -35,7 +35,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
-  const { error } = await getSupabase().from("commitments").delete().eq("id", id);
+  const { error } = await (await userDb()).from("commitments").delete().eq("id", id);
   if (error) return dbError();
   revalidateCommitmentPaths();
   return NextResponse.json({ ok: true });

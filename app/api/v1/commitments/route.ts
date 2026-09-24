@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { todayISO } from "@/lib/habit-stats";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 
@@ -11,7 +11,7 @@ function revalidateCommitmentPaths() {
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("commitments")
     .select("id, commitment_date, text, status, created_at")
     .order("commitment_date", { ascending: false });
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const text = str(body.text);
   if (!text) return badRequest("text_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("commitments")
     .insert({ text, commitment_date: str(body.commitment_date) || todayISO() })
     .select()

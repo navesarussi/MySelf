@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
@@ -31,9 +32,11 @@ export default async function RelationshipsPage({
   }
 
   const supabase = getSupabase();
+
+  const db = await userDb();
   const [{ data: projects }, { data }, lastProject] = await Promise.all([
-    supabase.from("projects").select("*").order("sort_order"),
-    supabase.from("relationships").select("*, projects(name)").order("name"),
+    db.from("projects").select("*").order("sort_order"),
+    db.from("relationships").select("*, projects(name)").order("name"),
     getLastProject("contact"),
   ]);
 

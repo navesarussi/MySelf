@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { normalizePhone } from "@/lib/integrations/phone";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { Relationship } from "@/lib/types";
@@ -15,7 +16,7 @@ function revalidateRelationshipPaths() {
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("relationships")
     .select("*, projects(name)")
     .order("name");
@@ -53,12 +54,14 @@ export async function POST(req: NextRequest) {
   };
 
   const supabase = getSupabase();
-  let { data, error } = await supabase.from("relationships").insert(row).select().single();
+
+  const db = await userDb();
+  let { data, error } = await db.from("relationships").insert(row).select().single();
 
   // Older DBs may lack the email column — retry without it.
   if (error && /email/i.test(error.message || "")) {
     const { email: _email, ...withoutEmail } = row;
-    ({ data, error } = await supabase.from("relationships").insert(withoutEmail).select().single());
+    ({ data, error } = await db.from("relationships").insert(withoutEmail).select().single());
   }
 
   if (error) {

@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { fetchAllRows } from "@/lib/db/paginate";
 import { dedupeGoals, goalFingerprint, habitNameKey } from "@/lib/data-integrity";
 import type { Goal, Habit, Task } from "@/lib/types";
@@ -69,23 +70,24 @@ export function duplicateExternalTaskIds(tasks: TaskDedupeRow[]): string[] {
  */
 export async function runDataIntegrityMaintenance(): Promise<MaintenanceResult> {
   const supabase = getSupabase();
+  const db = await userDb();
   let goalsRemoved = 0;
   let habitsRemoved = 0;
   let tasksRemoved = 0;
 
   const goals = await fetchAllRows<Goal>(async (from, to) => {
-    const { data, error } = await supabase.from("goals").select("*").order("id").range(from, to);
+    const { data, error } = await db.from("goals").select("*").order("id").range(from, to);
     return { data, error: error ? { message: `maintenance_goals_fetch:${error.message}` } : null };
   });
   const goalIds = duplicateGoalIds(goals);
   if (goalIds.length) {
-    const { error } = await supabase.from("goals").delete().in("id", goalIds);
+    const { error } = await db.from("goals").delete().in("id", goalIds);
     if (error) throw new Error(`maintenance_goals_delete:${error.message}`);
     goalsRemoved = goalIds.length;
   }
 
   const habits = await fetchAllRows<Habit>(async (from, to) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("habits")
       .select("*")
       .eq("archived", false)
@@ -95,13 +97,13 @@ export async function runDataIntegrityMaintenance(): Promise<MaintenanceResult> 
   });
   const habitIds = duplicateHabitIds(habits);
   if (habitIds.length) {
-    const { error } = await supabase.from("habits").delete().in("id", habitIds);
+    const { error } = await db.from("habits").delete().in("id", habitIds);
     if (error) throw new Error(`maintenance_habits_delete:${error.message}`);
     habitsRemoved = habitIds.length;
   }
 
   const tasks = await fetchAllRows<TaskDedupeRow>(async (from, to) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("tasks")
       .select("id, source, external_id, created_at, synced_at")
       .not("external_id", "is", null)
@@ -114,7 +116,7 @@ export async function runDataIntegrityMaintenance(): Promise<MaintenanceResult> 
   });
   const taskIds = duplicateExternalTaskIds(tasks);
   if (taskIds.length) {
-    const { error } = await supabase.from("tasks").delete().in("id", taskIds);
+    const { error } = await db.from("tasks").delete().in("id", taskIds);
     if (error) throw new Error(`maintenance_tasks_delete:${error.message}`);
     tasksRemoved = taskIds.length;
   }

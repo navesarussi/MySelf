@@ -1,5 +1,6 @@
 import { differenceInCalendarDays } from "date-fns";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { dedupeHabits, effectiveStreak, habitReportDay, selectHomeHabits, todayISO } from "@/lib/habit-stats";
@@ -42,6 +43,7 @@ export default async function HomePage() {
 
   if (configured) {
     const supabase = getSupabase();
+    const db = await userDb();
     const [
       habitsRes,
       goalsRes,
@@ -56,29 +58,29 @@ export default async function HomePage() {
       openTaskCountsRes,
       relCountsRes,
     ] = await Promise.all([
-      supabase.from("habits").select("*").eq("archived", false),
-      supabase.from("goals").select("*").eq("status", "active"),
-      supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "done"),
-      supabase
+      db.from("habits").select("*").eq("archived", false),
+      db.from("goals").select("*").eq("status", "active"),
+      db.from("goals").select("id", { count: "exact", head: true }).eq("status", "done"),
+      db
         .from("commitments")
         .select("id, text, commitment_date")
         .eq("status", "pending")
         .order("commitment_date", { ascending: false }),
-      supabase.from("relationships").select("id, name, last_contact_date, reminder_days, phone").order("name"),
-      supabase.from("timeline_events").select("*").order("event_date", { ascending: false }),
-      supabase
+      db.from("relationships").select("id, name, last_contact_date, reminder_days, phone").order("name"),
+      db.from("timeline_events").select("*").order("event_date", { ascending: false }),
+      db
         .from("tasks")
         .select("*, projects(name)")
         .in("status", ["open", "in_progress"])
         .order("created_at", { ascending: false }),
-      supabase.from("projects").select("*").order("sort_order"),
-      supabase
+      db.from("projects").select("*").order("sort_order"),
+      db
         .from("content_entries")
         .select("id, title, category, body, tags, created_at, updated_at")
         .order("updated_at", { ascending: false }),
-      supabase.from("tasks").select("id, status"),
-      supabase.from("tasks").select("project_id").neq("status", "done"),
-      supabase.from("relationships").select("project_id"),
+      db.from("tasks").select("id, status"),
+      db.from("tasks").select("project_id").neq("status", "done"),
+      db.from("relationships").select("project_id"),
     ]);
 
     habits = (habitsRes.data as Habit[]) || [];

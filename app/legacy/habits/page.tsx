@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
@@ -28,7 +29,9 @@ export default async function HabitsPage({
   }
 
   const supabase = getSupabase();
-  const { data: habits } = await supabase
+
+  const db = await userDb();
+  const { data: habits } = await db
     .from("habits")
     .select("*")
     .eq("archived", false)

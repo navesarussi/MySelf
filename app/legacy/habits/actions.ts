@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { normalizeReportTime } from "@/lib/habit-stats";
 import { applyHabitReport, loadHabit } from "@/lib/habit-report-service";
@@ -14,7 +15,9 @@ export async function addHabit(formData: FormData) {
   if (!name) return;
 
   const supabase = getSupabase();
-  await supabase
+
+  const db = await userDb();
+  await db
     .from("habits")
     .insert({ name, kind, target_note: target_note || null, report_time });
   await setFlash("flash.habitAdded");
@@ -52,11 +55,12 @@ export async function resetHabit(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
   const supabase = getSupabase();
+  const db = await userDb();
 
-  const { data: habit } = await supabase.from("habits").select("streak_count, failure_count").eq("id", id).single();
+  const { data: habit } = await db.from("habits").select("streak_count, failure_count").eq("id", id).single();
   const hadStreak = (habit?.streak_count ?? 0) > 0;
 
-  await supabase
+  await db
     .from("habits")
     .update({
       streak_count: 0,
@@ -87,7 +91,9 @@ export async function updateHabit(formData: FormData) {
   if (!name) return;
 
   const supabase = getSupabase();
-  await supabase
+
+  const db = await userDb();
+  await db
     .from("habits")
     .update({
       name,
@@ -111,7 +117,8 @@ export async function deleteHabit(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
   const supabase = getSupabase();
-  await supabase.from("habits").delete().eq("id", id);
+  const db = await userDb();
+  await db.from("habits").delete().eq("id", id);
   await setFlash("flash.habitDeleted");
   revalidatePath("/legacy/habits");
   revalidatePath("/legacy");

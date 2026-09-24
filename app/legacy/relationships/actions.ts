@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { normalizePhone } from "@/lib/integrations/phone";
 import { rememberLastProject } from "@/lib/last-project";
@@ -29,7 +30,9 @@ export async function addRelationship(formData: FormData) {
   }
 
   const supabase = getSupabase();
-  await supabase.from("relationships").insert({
+
+  const db = await userDb();
+  await db.from("relationships").insert({
     name,
     group_name: group_name || null,
     reminder_days: reminder_days ? Number(reminder_days) : null,
@@ -46,7 +49,8 @@ export async function markContactedToday(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
   const supabase = getSupabase();
-  await supabase.from("relationships").update({ last_contact_date: todayISO() }).eq("id", id);
+  const db = await userDb();
+  await db.from("relationships").update({ last_contact_date: todayISO() }).eq("id", id);
   await setFlash("flash.contactUpdated");
   revalidateRelationshipPaths();
 }
@@ -68,7 +72,9 @@ export async function updateRelationship(formData: FormData) {
   }
 
   const supabase = getSupabase();
-  await supabase
+
+  const db = await userDb();
+  await db
     .from("relationships")
     .update({
       name,
@@ -88,7 +94,8 @@ export async function updateRelationshipNotes(formData: FormData) {
   const notes = String(formData.get("notes") || "").trim();
   if (!id) return;
   const supabase = getSupabase();
-  await supabase.from("relationships").update({ notes: notes || null }).eq("id", id);
+  const db = await userDb();
+  await db.from("relationships").update({ notes: notes || null }).eq("id", id);
   await setFlash("flash.notesUpdated");
   revalidateRelationshipPaths();
 }
@@ -97,7 +104,8 @@ export async function deleteRelationship(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
   const supabase = getSupabase();
-  await supabase.from("relationships").delete().eq("id", id);
+  const db = await userDb();
+  await db.from("relationships").delete().eq("id", id);
   await setFlash("flash.relationshipDeleted");
   revalidateRelationshipPaths();
 }

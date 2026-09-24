@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, notFound, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 
 type Params = { params: Promise<{ id: string }> };
@@ -17,11 +18,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const body = await readJson(req);
   if (!id) return badRequest("id_required");
   const supabase = getSupabase();
+  const db = await userDb();
 
   if (body.toggle_status === true) {
-    const { data: goal } = await supabase.from("goals").select("status").eq("id", id).maybeSingle();
+    const { data: goal } = await db.from("goals").select("status").eq("id", id).maybeSingle();
     if (!goal) return notFound();
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("goals")
       .update({ status: goal.status === "active" ? "done" : "active" })
       .eq("id", id)
@@ -34,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const title = str(body.title);
   if (!title) return badRequest("title_required");
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("goals")
     .update({
       title,
@@ -55,7 +57,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
-  const { error } = await getSupabase().from("goals").delete().eq("id", id);
+  const { error } = await (await userDb()).from("goals").delete().eq("id", id);
   if (error) return dbError();
   revalidateGoalPaths();
   return NextResponse.json({ ok: true });

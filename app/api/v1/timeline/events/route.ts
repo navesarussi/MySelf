@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { parseMinZoom } from "@/lib/timeline-zoom";
 import { isEventHidden } from "@/lib/timeline-display";
 import { leanTimelineEventForList } from "@/lib/timeline-preview";
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const cursor = cursorRaw ? parseTimelineCursor(cursorRaw) : null;
   if (cursorRaw && !cursor) return badRequest("invalid_cursor");
 
-  let query = getSupabase()
+  let query = (await userDb())
     .from("timeline_events")
     .select(
       "id, event_date, event_time, title, description, category, min_zoom, source, google_event_id, title_override, description_override, hidden_at, synced_at, created_at"
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   const title = str(body.title);
   if (!event_date || !title) return badRequest("date_and_title_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("timeline_events")
     .insert({
       event_date,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { parseMinZoom } from "@/lib/timeline-zoom";
 import { badRequest, dbError, isApiAuthorized, notFound, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { TimelineEvent } from "@/lib/types";
@@ -12,7 +13,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
   if (!id) return badRequest("id_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("timeline_events")
     .select(
       "id, event_date, event_time, title, description, category, min_zoom, source, google_event_id, title_override, description_override, hidden_at, synced_at, created_at"
@@ -40,7 +41,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!id || !event_date || !title) return badRequest("date_and_title_required");
 
   const supabase = getSupabase();
-  const { data: existing } = await supabase.from("timeline_events").select("*").eq("id", id).maybeSingle();
+
+  const db = await userDb();
+  const { data: existing } = await db.from("timeline_events").select("*").eq("id", id).maybeSingle();
   if (!existing) return notFound();
 
   const event_time = optStr(body.event_time);
@@ -66,7 +69,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           min_zoom,
         };
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("timeline_events")
     .update(patch)
     .eq("id", id)
@@ -84,7 +87,9 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!id) return badRequest("id_required");
 
   const supabase = getSupabase();
-  const { data: existing } = await supabase
+
+  const db = await userDb();
+  const { data: existing } = await db
     .from("timeline_events")
     .select("source")
     .eq("id", id)
@@ -92,11 +97,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   const { error } =
     existing?.source === "google_calendar"
-      ? await supabase
+      ? await db
           .from("timeline_events")
           .update({ hidden_at: new Date().toISOString() })
           .eq("id", id)
-      : await supabase.from("timeline_events").delete().eq("id", id);
+      : await db.from("timeline_events").delete().eq("id", id);
   if (error) return dbError();
   revalidateTimelinePaths();
   return NextResponse.json({ ok: true, hidden: existing?.source === "google_calendar" });

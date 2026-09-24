@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { normalizeReportTime } from "@/lib/habit-stats";
 import { parseMinZoom } from "@/lib/timeline-zoom";
 
@@ -8,7 +8,7 @@ export async function agentCreateHabit(input: {
   target_note?: string | null;
   report_time?: string | null;
 }) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("habits")
     .insert({
       name: input.name.trim(),
@@ -38,7 +38,7 @@ export async function agentUpdateHabit(
   if (patch.target_note !== undefined) body.target_note = patch.target_note;
   if (patch.report_time !== undefined) body.report_time = normalizeReportTime(patch.report_time);
   if (patch.archived !== undefined) body.archived = patch.archived;
-  const { data, error } = await getSupabase().from("habits").update(body).eq("id", id).select().single();
+  const { data, error } = await (await userDb()).from("habits").update(body).eq("id", id).select().single();
   if (error) throw new Error("habit_update_failed");
   return data;
 }
@@ -50,7 +50,7 @@ export async function agentCreateGoal(input: {
   first_step?: string | null;
   definition_of_done?: string | null;
 }) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("goals")
     .insert({
       title: input.title.trim(),
@@ -66,7 +66,7 @@ export async function agentCreateGoal(input: {
 }
 
 export async function agentListLibrary(filters?: { q?: string; category?: string; limit?: number }) {
-  let query = getSupabase()
+  let query = (await userDb())
     .from("content_entries")
     .select("id, title, category, body, tags, updated_at")
     .order("updated_at", { ascending: false });
@@ -86,7 +86,7 @@ export async function agentCreateLibraryEntry(input: {
   category?: string;
   tags?: string[];
 }) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("content_entries")
     .insert({
       title: input.title.trim(),
@@ -109,7 +109,7 @@ export async function agentUpdateLibraryEntry(
   if (patch.body) body.body = patch.body.trim();
   if (patch.category) body.category = patch.category.trim();
   if (patch.tags) body.tags = patch.tags;
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("content_entries")
     .update(body)
     .eq("id", id)
@@ -120,7 +120,7 @@ export async function agentUpdateLibraryEntry(
 }
 
 export async function agentListEvents(filters?: { from?: string; to?: string; limit?: number }) {
-  let query = getSupabase()
+  let query = (await userDb())
     .from("timeline_events")
     .select("id, title, event_date, event_time, description, category, source")
     .is("hidden_at", null)
@@ -139,7 +139,7 @@ export async function agentCreateEvent(input: {
   description?: string | null;
   category?: string | null;
 }) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("timeline_events")
     .insert({
       title: input.title.trim(),
@@ -166,7 +166,7 @@ export async function agentUpdateEvent(
     category?: string | null;
   }
 ) {
-  const { data: existing, error: fetchErr } = await getSupabase()
+  const { data: existing, error: fetchErr } = await (await userDb())
     .from("timeline_events")
     .select("*")
     .eq("id", id)
@@ -195,7 +195,7 @@ export async function agentUpdateEvent(
           category: patch.category !== undefined ? patch.category : existing.category,
         };
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("timeline_events")
     .update(body)
     .eq("id", id)
@@ -206,7 +206,7 @@ export async function agentUpdateEvent(
 }
 
 export async function agentListPeriods() {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("life_periods")
     .select("id, title, start_date, end_date, color, kind, sort_order")
     .order("sort_order");
@@ -221,7 +221,7 @@ export async function agentCreatePeriod(input: {
   color?: string;
   kind?: string;
 }) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("life_periods")
     .insert({
       title: input.title.trim(),
@@ -253,7 +253,7 @@ export async function agentUpdatePeriod(
   if (patch.end_date !== undefined) body.end_date = patch.end_date;
   if (patch.color) body.color = patch.color;
   if (patch.kind) body.kind = patch.kind;
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("life_periods")
     .update(body)
     .eq("id", id)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 
 function revalidateProjectPaths() {
@@ -9,7 +10,7 @@ function revalidateProjectPaths() {
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("projects")
     .select("id, name, sort_order, created_at")
     .order("sort_order");
@@ -24,10 +25,12 @@ export async function POST(req: NextRequest) {
   if (!name) return badRequest("name_required");
 
   const supabase = getSupabase();
-  const { data: existing } = await supabase.from("projects").select("id").eq("name", name).maybeSingle();
+
+  const db = await userDb();
+  const { data: existing } = await db.from("projects").select("id").eq("name", name).maybeSingle();
   if (existing) return badRequest("project_exists");
 
-  const { data: maxRow } = await supabase
+  const { data: maxRow } = await db
     .from("projects")
     .select("sort_order")
     .order("sort_order", { ascending: false })
@@ -35,7 +38,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   const sort_order = (maxRow?.sort_order ?? 0) + 10;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("projects")
     .insert({ name, sort_order })
     .select()

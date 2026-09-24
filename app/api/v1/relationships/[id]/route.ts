@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { normalizePhone } from "@/lib/integrations/phone";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 
@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if ("last_contact_date" in body) patch.last_contact_date = optStr(body.last_contact_date);
   if (Object.keys(patch).length === 0) return badRequest("empty_patch");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("relationships")
     .update(patch)
     .eq("id", id)
@@ -60,7 +60,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
-  const { error } = await getSupabase().from("relationships").delete().eq("id", id);
+  const { error } = await (await userDb()).from("relationships").delete().eq("id", id);
   if (error) return dbError();
   revalidateRelationshipPaths();
   return NextResponse.json({ ok: true });

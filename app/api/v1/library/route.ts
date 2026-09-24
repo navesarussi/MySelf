@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 import { previewContentBody } from "@/lib/content-preview";
 
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const q = (sp.get("q") || "").trim();
   const category = (sp.get("category") || "").trim();
 
-  let query = getSupabase()
+  let query = (await userDb())
     .from("content_entries")
     .select("id, title, category, body, tags, created_at, updated_at")
     .order("updated_at", { ascending: false });
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   const text = str(body.body);
   if (!title || !text) return badRequest("title_and_body_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("content_entries")
     .insert({
       title,

@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import type { NotificationPreferences, NotificationType } from "@/lib/push/types";
 
 const DEFAULTS: NotificationPreferences = {
@@ -30,10 +30,9 @@ function rowToPrefs(row: Record<string, unknown>): NotificationPreferences {
 }
 
 export async function getNotificationPreferences(): Promise<NotificationPreferences> {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("notification_preferences")
     .select("*")
-    .eq("id", true)
     .maybeSingle();
   if (error || !data) return DEFAULTS;
   return rowToPrefs(data as Record<string, unknown>);
@@ -69,10 +68,10 @@ export async function updateNotificationPreferences(
     body.quiet_end_hour = h;
   }
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("notification_preferences")
-    .update(body)
-    .eq("id", true)
+    // Upsert: an account that never saved settings has no row yet.
+    .upsert(body, { onConflict: "user_id" })
     .select("*")
     .single();
   if (error || !data) throw new Error("preferences_update_failed");

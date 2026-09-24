@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized, dbError } from "@/lib/api/auth";
 import { GOOGLE_TASKS_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken, getTokenSettings } from "@/lib/integrations/tokens";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     }
 
     const settings = await getTokenSettings<{ selected_list_ids?: string[] }>(GOOGLE_TASKS_PROVIDER);
-    const { count } = await getSupabase()
+    const { count } = await (await userDb())
       .from("tasks")
       .select("*", { count: "exact", head: true })
       .eq("source", "google_tasks");

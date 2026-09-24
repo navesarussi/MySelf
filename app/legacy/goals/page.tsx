@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
@@ -29,9 +30,11 @@ export default async function GoalsPage({
   }
 
   const supabase = getSupabase();
+
+  const db = await userDb();
   const [{ data: goals }, { data: commitments }] = await Promise.all([
-    supabase.from("goals").select("*").order("sort_order"),
-    supabase.from("commitments").select("*").order("commitment_date", { ascending: false }),
+    db.from("goals").select("*").order("sort_order"),
+    db.from("commitments").select("*").order("commitment_date", { ascending: false }),
   ]);
 
   return (
