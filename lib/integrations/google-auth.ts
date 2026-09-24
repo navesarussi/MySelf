@@ -42,10 +42,30 @@ export async function isAllowedGoogleEmail(email: string) {
  * their own account. The DB's `is_primary` flag wins; otherwise the first
  * email in ALLOWED_GOOGLE_EMAIL is treated as primary.
  */
-export async function isPrimaryGoogleEmail(email: string) {
-  const envAllowed = parseEnvAllowedEmails();
+export async function primaryGoogleEmail(): Promise<string | null> {
   const { primary: dbPrimary } = await getDbAllowlist();
-  const primary = dbPrimary ?? envAllowed[0] ?? null;
+  return dbPrimary ?? parseEnvAllowedEmails()[0] ?? null;
+}
+
+export async function isPrimaryGoogleEmail(email: string) {
+  const primary = await primaryGoogleEmail();
   if (!primary) return true;
   return primary === email.trim().toLowerCase();
+}
+
+/** Every allowlisted account that can own data — the FK target of `user_id`. */
+export async function listAccountEmails(): Promise<string[]> {
+  const { emails } = await getDbAllowlist();
+  return emails;
+}
+
+/**
+ * Accounts allowed through ALLOWED_GOOGLE_EMAIL have no row until they sign in;
+ * their data needs one, since every per-account `user_id` references it.
+ */
+export async function ensureAccountRow(email: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from("allowed_google_emails")
+    .upsert({ email: email.trim().toLowerCase() }, { onConflict: "email", ignoreDuplicates: true });
+  if (error) throw new Error("account_row_failed");
 }
