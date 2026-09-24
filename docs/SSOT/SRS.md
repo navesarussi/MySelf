@@ -16,6 +16,18 @@ Site access via Google Sign-In (openid, email, profile, calendar.readonly). Only
 ### FR-AUTH-GOOGLE-02
 After sign-in, calendar sync runs in the background without blocking the redirect.
 
+### FR-TENANCY-01
+Each allowlisted account (`allowed_google_emails`) owns its own timeline, periods, habits and reports, goals, commitments, relationships, content library, tasks, projects, agent settings and history, notification preferences and log, push devices, and integration connections. One account never sees or changes another account's rows (`user_id` = the account email, enforced by `userDb()` in code and by composite parent keys in the database).
+
+### FR-TENANCY-02
+Finance is one household pool shared by every allowlisted account. Finance categorize prompts reach every account, each under its own notification preferences.
+
+### FR-TENANCY-03
+Trading belongs to the primary account (`is_primary`): other accounts get 403 on trading routes, no trading card on home, and no trading push alerts.
+
+### FR-TENANCY-04
+Data routes require a session token that names an account; a pre-identity legacy token gets 401 (the session probe answers it with `legacy: true` so the app signs in again). Background work — crons, the WhatsApp webhook (account found by the sender's registered number), OAuth callbacks — runs once per account or for the account it names.
+
 ### FR-NAV-01
 Navigation includes: בית, ציר זמן, משימות, פרויקטים, הרגלים, מטרות וחלומות, קשרים, ספריית תוכן, כסף, מסחר, הגדרות.
 On mobile, the Home tab sits on the visual right of the bottom bar (without reversing the rest of the RTL layout).
