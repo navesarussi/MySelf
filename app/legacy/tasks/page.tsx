@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
@@ -30,14 +29,12 @@ const priorities: Array<TaskPriority | typeof ALL_FILTER> = [
 type TaskRow = Task & { projects: { name: string } | null };
 
 async function getProjects(): Promise<Project[]> {
-  const supabase = getSupabase();
   const db = await userDb();
   const { data } = await db.from("projects").select("*").order("sort_order");
   return (data || []) as Project[];
 }
 
 async function getTasks(projectId?: string, statuses?: TaskStatus[], priority?: string): Promise<Task[]> {
-  const supabase = getSupabase();
   const db = await userDb();
   let q = db
     .from("tasks")

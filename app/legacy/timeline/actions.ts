@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { parseMinZoom } from "@/lib/timeline-zoom";
@@ -19,7 +18,6 @@ export async function addTimelineEvent(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { error } = await db.from("timeline_events").insert({
@@ -51,7 +49,6 @@ export async function updateTimelineEvent(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { data: existing } = await db.from("timeline_events").select("*").eq("id", id).maybeSingle();
@@ -95,7 +92,6 @@ export async function updateTimelineEvent(formData: FormData) {
 export async function deleteTimelineEvent(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
   const db = await userDb();
   const { data: existing } = await db.from("timeline_events").select("source").eq("id", id).maybeSingle();
 
@@ -124,7 +120,6 @@ export async function addLifePeriod(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { error } = await db.from("life_periods").insert({
@@ -157,7 +152,6 @@ export async function updateLifePeriod(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { error } = await db
@@ -173,7 +167,6 @@ export async function deleteLifePeriod(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { error } = await db.from("life_periods").delete().eq("id", id);

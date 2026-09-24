@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { normalizeReportTime } from "@/lib/habit-stats";
@@ -14,7 +13,6 @@ export async function addHabit(formData: FormData) {
   const report_time = normalizeReportTime(String(formData.get("report_time") || ""));
   if (!name) return;
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   await db
@@ -54,7 +52,6 @@ export async function reportHabitFall(formData: FormData) {
 export async function resetHabit(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
   const db = await userDb();
 
   const { data: habit } = await db.from("habits").select("streak_count, failure_count").eq("id", id).single();
@@ -90,7 +87,6 @@ export async function updateHabit(formData: FormData) {
 
   if (!name) return;
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   await db
@@ -116,7 +112,6 @@ export async function updateHabit(formData: FormData) {
 export async function deleteHabit(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
   const db = await userDb();
   await db.from("habits").delete().eq("id", id);
   await setFlash("flash.habitDeleted");

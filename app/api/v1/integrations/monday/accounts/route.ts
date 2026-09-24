@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized, dbError } from "@/lib/api/auth";
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import { listIntegrationTokens } from "@/lib/integrations/tokens";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 
 export async function GET(req: NextRequest) {
@@ -10,7 +9,6 @@ export async function GET(req: NextRequest) {
 
   try {
     const rows = await listIntegrationTokens(MONDAY_PROVIDER);
-    const supabase = getSupabase();
     const db = await userDb();
 
     const accounts = await Promise.all(

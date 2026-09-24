@@ -4,6 +4,7 @@ import { getIntegrationToken, listIntegrationTokens } from "@/lib/integrations/t
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import type { TaskSourceId } from "@/lib/integrations/task-sources/types";
 import { isCronAuthorized as isCronRequest } from "@/lib/api/cron-auth";
+import { forEachAccount } from "@/lib/db/accounts";
 
 /** Daily cron syncs run inline; the platform default is far too short for them. */
 export const maxDuration = 60;
@@ -42,45 +43,44 @@ async function shouldSkipDailySync(provider: TaskSourceId): Promise<{ skip: bool
   return { skip: false };
 }
 
+type SourceResult = { imported: number; markedDone: number; error?: string; alreadyRunning?: true };
+
+/** The current account's due task sources. */
+async function syncAccountSources() {
+  const providers: TaskSourceId[] = ["google_tasks", "monday", "github"];
+  const skipped: Record<string, string> = {};
+  const results: Record<string, SourceResult> = {};
+
+  for (const provider of providers) {
+    const check = await shouldSkipDailySync(provider);
+    if (check.skip && check.reason) {
+      skipped[provider] = check.reason;
+      continue;
+    }
+
+    try {
+      results[provider] = await syncTaskSource(provider);
+    } catch (err) {
+      results[provider] = {
+        imported: 0,
+        markedDone: 0,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  return { results, skipped };
+}
+
 export async function GET(req: NextRequest) {
   if (!isCronRequest(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  try {
-    const providers: TaskSourceId[] = ["google_tasks", "monday", "github"];
-    const skipped: Record<string, string> = {};
-    const results: Record<
-      string,
-      { imported: number; markedDone: number; error?: string; alreadyRunning?: true }
-    > = {};
-
-    for (const provider of providers) {
-      const check = await shouldSkipDailySync(provider);
-      if (check.skip && check.reason) {
-        skipped[provider] = check.reason;
-        continue;
-      }
-
-      try {
-        results[provider] = await syncTaskSource(provider);
-      } catch (err) {
-        results[provider] = {
-          imported: 0,
-          markedDone: 0,
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
-    }
-
-    return NextResponse.json({
-      ok: true,
-      results,
-      skipped,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "sync_failed";
-    console.error("[task-sources-sync-cron]", message);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  const accounts = await forEachAccount(syncAccountSources);
+  for (const run of accounts) {
+    if (!run.ok) console.error("[task-sources-sync-cron]", run.email, run.error);
   }
+  const ok = accounts.every((run) => run.ok);
+  return NextResponse.json({ ok, accounts }, { status: ok ? 200 : 500 });
 }

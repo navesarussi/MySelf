@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { fetchAllRows } from "@/lib/db/paginate";
 import { GOOGLE_PROVIDER } from "../google-config";
@@ -61,7 +60,6 @@ type LocalGoogleEvent = {
  * silently reverted.
  */
 async function fetchAllLocalGoogleEvents(errorTag: string): Promise<LocalGoogleEvent[]> {
-  const supabase = getSupabase();
   const db = await userDb();
   return fetchAllRows<LocalGoogleEvent>(async (from, to) => {
     const { data, error } = await db
@@ -88,7 +86,6 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
     });
 
     const googleEvents = await fetchAllPrimaryEvents(accessToken);
-    const supabase = getSupabase();
     const db = await userDb();
 
     const mappedEvents = googleEvents

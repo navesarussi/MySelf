@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { fetchAllRows } from "@/lib/db/paginate";
 import { dedupeGoals, goalFingerprint, habitNameKey } from "@/lib/data-integrity";
@@ -69,7 +68,6 @@ export function duplicateExternalTaskIds(tasks: TaskDedupeRow[]): string[] {
  * a last copy — but it could quietly stop cleaning.
  */
 export async function runDataIntegrityMaintenance(): Promise<MaintenanceResult> {
-  const supabase = getSupabase();
   const db = await userDb();
   let goalsRemoved = 0;
   let habitsRemoved = 0;

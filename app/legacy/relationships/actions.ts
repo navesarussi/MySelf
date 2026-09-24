@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { normalizePhone } from "@/lib/integrations/phone";
@@ -29,7 +28,6 @@ export async function addRelationship(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   await db.from("relationships").insert({
@@ -48,7 +46,6 @@ export async function addRelationship(formData: FormData) {
 export async function markContactedToday(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
   const db = await userDb();
   await db.from("relationships").update({ last_contact_date: todayISO() }).eq("id", id);
   await setFlash("flash.contactUpdated");
@@ -71,7 +68,6 @@ export async function updateRelationship(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   await db
@@ -93,7 +89,6 @@ export async function updateRelationshipNotes(formData: FormData) {
   const id = String(formData.get("id") || "");
   const notes = String(formData.get("notes") || "").trim();
   if (!id) return;
-  const supabase = getSupabase();
   const db = await userDb();
   await db.from("relationships").update({ notes: notes || null }).eq("id", id);
   await setFlash("flash.notesUpdated");
@@ -103,7 +98,6 @@ export async function updateRelationshipNotes(formData: FormData) {
 export async function deleteRelationship(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
   const db = await userDb();
   await db.from("relationships").delete().eq("id", id);
   await setFlash("flash.relationshipDeleted");

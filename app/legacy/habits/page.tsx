@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
@@ -28,7 +27,6 @@ export default async function HabitsPage({
     );
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { data: habits } = await db

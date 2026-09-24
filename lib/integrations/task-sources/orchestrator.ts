@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { fetchAllRows } from "@/lib/db/paginate";
 import type { TaskPriority, TaskStatus } from "@/lib/types";
@@ -31,7 +30,6 @@ async function fetchExistingExternalTaskIds(
   providerId: TaskSourceId,
   accountKeyPrefix?: string
 ) {
-  const supabase = getSupabase();
   const db = await userDb();
   const rows = await fetchAllRows<{ id: string; external_id: string | null; status: string; priority: string }>(
     async (from, to) => {
@@ -95,7 +93,6 @@ async function syncSingleAccount(
       accountKey
     );
 
-    const supabase = getSupabase();
 
     const db = await userDb();
     const existingByExternalId = await fetchExistingExternalTaskIds(
@@ -267,7 +264,6 @@ export async function syncTaskSource(
 export async function syncAllTaskSources(): Promise<
   Record<TaskSourceId, { imported: number; markedDone: number; error?: string }>
 > {
-  const supabase = getSupabase();
   const db = await userDb();
   const { data: tokens } = await db
     .from("integration_tokens")

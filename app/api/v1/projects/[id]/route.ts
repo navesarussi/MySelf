@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { canDeleteProject } from "@/lib/projects/delete-guard";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
@@ -18,7 +17,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const name = str(body.name);
   if (!id || !name) return badRequest("name_required");
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { data: dupe } = await db
@@ -40,7 +38,6 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   if (!id) return badRequest("id_required");
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const [{ count: taskCount }, { count: relCount }] = await Promise.all([

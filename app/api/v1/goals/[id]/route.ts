@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, notFound, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 
@@ -17,7 +16,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = await readJson(req);
   if (!id) return badRequest("id_required");
-  const supabase = getSupabase();
   const db = await userDb();
 
   if (body.toggle_status === true) {

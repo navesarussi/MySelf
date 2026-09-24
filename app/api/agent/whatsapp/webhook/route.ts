@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getAgentSettings, isAuthorizedWhatsAppSender } from "@/lib/agent/settings";
+import { accountForWhatsAppSender } from "@/lib/agent/account-by-phone";
+import { runAsUser } from "@/lib/db/user-context";
 import { processWhatsAppInbound } from "@/lib/agent/whatsapp-process";
 import { claimWhatsAppInbound } from "@/lib/agent/whatsapp-dedup";
 import {
@@ -39,36 +40,39 @@ export async function POST(req: NextRequest) {
     return webhookOk();
   }
 
-  const settings = await getAgentSettings();
-  if (!settings.enabled) return webhookOk({ ok: true, skipped: "disabled" });
-  if (!isAuthorizedWhatsAppSender(inbound.from, settings)) {
+  // The sender's number, registered in an account's enabled agent settings, is
+  // the only identity a webhook call has.
+  const account = await accountForWhatsAppSender(inbound.from);
+  if (!account) {
     console.log("[whatsapp-webhook] unauthorized_sender", inbound.from);
     return webhookOk({ ok: true, skipped: "unauthorized_sender" });
   }
 
-  const claim = await claimWhatsAppInbound(inbound.messageId);
-  if (claim === "duplicate") {
-    console.log("[whatsapp-webhook] duplicate", inbound.messageId);
-    return webhookOk({ ok: true, skipped: "duplicate" });
-  }
-  if (claim === "error") {
-    console.error("[whatsapp-webhook] claim_error", inbound.messageId);
-    return webhookOk({ ok: true, skipped: "claim_error" });
-  }
-
-  after(async () => {
-    try {
-      await processWhatsAppInbound(inbound);
-    } catch (err) {
-      const code = mapAgentErrorCode(err);
-      console.error("[whatsapp-webhook-after]", code, inbound.messageId);
-      await sendWhatsAppReplyOnce(
-        inbound.from,
-        inbound.messageId,
-        userFacingAgentError(code)
-      );
+  return runAsUser(account, async () => {
+    const claim = await claimWhatsAppInbound(inbound.messageId);
+    if (claim === "duplicate") {
+      console.log("[whatsapp-webhook] duplicate", inbound.messageId);
+      return webhookOk({ ok: true, skipped: "duplicate" });
     }
-  });
+    if (claim === "error") {
+      console.error("[whatsapp-webhook] claim_error", inbound.messageId);
+      return webhookOk({ ok: true, skipped: "claim_error" });
+    }
 
-  return webhookOk({ ok: true, queued: true, messageId: inbound.messageId });
+    after(() => runAsUser(account, async () => {
+      try {
+        await processWhatsAppInbound(inbound);
+      } catch (err) {
+        const code = mapAgentErrorCode(err);
+        console.error("[whatsapp-webhook-after]", code, inbound.messageId);
+        await sendWhatsAppReplyOnce(
+          inbound.from,
+          inbound.messageId,
+          userFacingAgentError(code)
+        );
+      }
+    }));
+
+    return webhookOk({ ok: true, queued: true, messageId: inbound.messageId });
+  });
 }

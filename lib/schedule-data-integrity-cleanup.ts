@@ -1,5 +1,7 @@
 import { after } from "next/server";
 import { runDataIntegrityMaintenance } from "@/lib/db-maintenance";
+import { currentUserId } from "@/lib/db/current-user";
+import { runAsUser } from "@/lib/db/user-context";
 
 /** Shortest gap between two dedup sweeps from the same instance. */
 export const CLEANUP_MIN_INTERVAL_MS = 10 * 60 * 1000;
@@ -58,9 +60,14 @@ const moduleState = newThrottleState();
 export function scheduleDataIntegrityCleanup(detectedDuplicates: boolean) {
   if (!claimCleanupSlot(moduleState, detectedDuplicates, Date.now())) return;
 
+  // Resolved now, while the request (and its session) is in scope; the callback
+  // runs after the response and must not depend on that.
+  const owner = currentUserId().catch(() => null);
+
   after(async () => {
     try {
-      await runDataIntegrityMaintenance();
+      const account = await owner;
+      if (account) await runAsUser(account, runDataIntegrityMaintenance);
     } catch (err) {
       console.error("[data-integrity-cleanup]", err instanceof Error ? err.message : err);
     } finally {

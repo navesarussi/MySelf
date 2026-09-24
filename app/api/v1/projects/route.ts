@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 
@@ -24,7 +23,6 @@ export async function POST(req: NextRequest) {
   const name = str(body.name);
   if (!name) return badRequest("name_required");
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { data: existing } = await db.from("projects").select("id").eq("name", name).maybeSingle();

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { normalizePhone } from "@/lib/integrations/phone";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
@@ -53,7 +52,6 @@ export async function POST(req: NextRequest) {
     project_id,
   };
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   let { data, error } = await db.from("relationships").insert(row).select().single();

@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
 import { dedupeHabits, effectiveStreak, isReportDue } from "@/lib/habit-stats";
@@ -17,7 +16,6 @@ export type AgentContextOptions = {
 };
 
 export async function buildAgentContext(now = new Date(), opts: AgentContextOptions = {}) {
-  const supabase = getSupabase();
   const db = await userDb();
   const today = now.toISOString().slice(0, 10);
 

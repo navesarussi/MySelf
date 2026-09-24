@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import type { IntegrationToken, SyncProgress, SyncStatus } from "@/lib/types";
 import { GOOGLE_PROVIDER } from "./google-config";
@@ -6,7 +5,6 @@ import { GOOGLE_PROVIDER } from "./google-config";
 const STALE_SYNC_MS = 30 * 60 * 1000;
 
 export async function getIntegrationToken(provider: string, accountKey = "") {
-  const supabase = getSupabase();
   const db = await userDb();
   const { data } = await db
     .from("integration_tokens")
@@ -18,7 +16,6 @@ export async function getIntegrationToken(provider: string, accountKey = "") {
 }
 
 export async function listIntegrationTokens(provider: string) {
-  const supabase = getSupabase();
   const db = await userDb();
   const { data } = await db
     .from("integration_tokens")
@@ -51,7 +48,6 @@ export async function saveIntegrationToken(
     expires_at?: string | null;
   }
 ) {
-  const supabase = getSupabase();
   const db = await userDb();
   const account_key = row.account_key ?? "";
   let settings = row.settings;
@@ -90,7 +86,6 @@ export async function updateTokenSettings(
   settings: Record<string, unknown>,
   accountKey = ""
 ) {
-  const supabase = getSupabase();
   const db = await userDb();
   await db
     .from("integration_tokens")
@@ -100,7 +95,6 @@ export async function updateTokenSettings(
 }
 
 export async function deleteIntegrationToken(provider: string, accountKey = "") {
-  const supabase = getSupabase();
   const db = await userDb();
   await db
     .from("integration_tokens")
@@ -110,7 +104,6 @@ export async function deleteIntegrationToken(provider: string, accountKey = "") 
 }
 
 export async function touchLastSync(provider: string, accountKey = "") {
-  const supabase = getSupabase();
   const db = await userDb();
   await db
     .from("integration_tokens")
@@ -120,7 +113,6 @@ export async function touchLastSync(provider: string, accountKey = "") {
 }
 
 export async function setSyncRunning(provider: string, accountKey = "") {
-  const supabase = getSupabase();
   const db = await userDb();
   await db
     .from("integration_tokens")
@@ -138,7 +130,6 @@ export async function updateSyncProgress(
   progress: SyncProgress,
   accountKey = ""
 ) {
-  const supabase = getSupabase();
   const db = await userDb();
   await db
     .from("integration_tokens")
@@ -148,7 +139,6 @@ export async function updateSyncProgress(
 }
 
 export async function setSyncCompleted(provider: string, accountKey = "") {
-  const supabase = getSupabase();
   const db = await userDb();
   await db
     .from("integration_tokens")
@@ -162,7 +152,6 @@ export async function setSyncCompleted(provider: string, accountKey = "") {
 }
 
 export async function setSyncFailed(provider: string, accountKey = "") {
-  const supabase = getSupabase();
   const db = await userDb();
   await db
     .from("integration_tokens")

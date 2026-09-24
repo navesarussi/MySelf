@@ -4,7 +4,6 @@ import {
   listGmailMessages,
   readGmailMessage,
 } from "@/lib/integrations/gmail/client";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import type { TaskPriority } from "@/lib/types";
 
@@ -55,7 +54,6 @@ export async function agentCreateTaskFromEmail(input: {
   due_date?: string | null;
 }) {
   const email = await agentReadEmail(input.email_id);
-  const supabase = getSupabase();
   const db = await userDb();
 
   const { data: existing } = await db

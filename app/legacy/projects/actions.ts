@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { canDeleteProject } from "@/lib/projects/delete-guard";
@@ -19,7 +18,6 @@ export async function addProject(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { data: existing } = await db
@@ -53,7 +51,6 @@ export async function renameProject(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const { data: dupe } = await db
@@ -76,7 +73,6 @@ export async function deleteProject(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
 
-  const supabase = getSupabase();
 
   const db = await userDb();
   const [{ count: taskCount }, { count: relCount }] = await Promise.all([

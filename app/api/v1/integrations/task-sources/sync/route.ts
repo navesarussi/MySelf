@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
+import { currentUserId } from "@/lib/db/current-user";
+import { runAsUser } from "@/lib/db/user-context";
 import { isApiAuthorized, unauthorized, badRequest, readJson } from "@/lib/api/auth";
 import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
 import { getIntegrationToken, listIntegrationTokens, tryStartSync, setSyncFailed } from "@/lib/integrations/tokens";
@@ -58,7 +60,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  after(async () => {
+  const account = await currentUserId();
+  after(() => runAsUser(account, async () => {
     try {
       await syncTaskSource(targetProvider, {
         ...syncOpts,
@@ -73,7 +76,7 @@ export async function POST(req: NextRequest) {
       const keys = claimedKeys ?? [accountKey ?? ""];
       await Promise.all(keys.map((k) => setSyncFailed(targetProvider, k)));
     }
-  });
+  }));
 
   return NextResponse.json({ ok: true, started: true, provider: targetProvider });
 }
