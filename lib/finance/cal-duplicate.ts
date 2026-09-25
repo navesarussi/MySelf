@@ -1,5 +1,9 @@
 import type { FinanceTransaction } from "@/lib/finance/types";
-import { formatMerchantLabel, normalizeMerchantKey } from "@/lib/finance/merchant-rules-client";
+import {
+  formatMerchantLabel,
+  legacyNormalizeMerchantKey,
+  normalizeMerchantKey,
+} from "@/lib/finance/merchant-rules-client";
 import { round2 } from "@/lib/finance/money";
 
 /** Category tokens glued ahead of the real merchant in Cal PDF OCR rows. */
@@ -7,12 +11,15 @@ const CAL_CATEGORY_GLUE_WORDS = [
   "ברכבות",
   "רכבות",
   "עמותות",
-  "תחבורה",
+  "משקאות",
+  "מסעדות",
   "מוסדות",
+  "תחבורה",
   "מילוד",
   "חבור",
   "ותר",
-  "גז",
+  "מזון",
+  "קניות",
   "תר",
 ] as const;
 
@@ -35,7 +42,7 @@ export function isCalOcrGarbageMerchant(text: string | null | undefined): boolea
 
 function stripLeadingCategoryGlueTokens(text: string): string {
   let parts = text.split(/\s+/).filter(Boolean);
-  const glue = CAL_CATEGORY_GLUE_WORDS.map((w) => w.toLowerCase());
+  const glue = [...CAL_CATEGORY_GLUE_WORDS].sort((a, b) => b.length - a.length);
 
   while (parts.length > 0) {
     const raw = parts[0];
@@ -46,17 +53,18 @@ function stripLeadingCategoryGlueTokens(text: string): string {
 
     let stripped = false;
     for (const word of glue) {
-      if (raw.toLowerCase() === word || raw.toLowerCase() === `ו${word}`) {
+      const lower = raw.toLowerCase();
+      if (lower === word || lower === `ו${word}`) {
         parts.shift();
         stripped = true;
         break;
       }
-      if (raw.startsWith(`ו${word}`) && raw.length > word.length + 1) {
+      if (lower.startsWith(`ו${word}`) && lower.length > word.length + 1) {
         parts[0] = raw.slice(word.length + 1);
         stripped = true;
         break;
       }
-      if (raw.toLowerCase().startsWith(word) && raw.length > word.length) {
+      if (lower.startsWith(word) && lower.length > word.length) {
         parts[0] = raw.slice(word.length);
         stripped = true;
         break;
@@ -66,7 +74,22 @@ function stripLeadingCategoryGlueTokens(text: string): string {
     break;
   }
 
-  return parts.join(" ").trim();
+  let joined = parts.join(" ").trim();
+  if (!joined.includes(" ") && joined.length >= 6) {
+    const compact = joined.replace(/\s+/g, "");
+    for (const word of glue) {
+      if (compact.startsWith(word) && compact.length > word.length) {
+        joined = compact.slice(word.length);
+        break;
+      }
+      if (compact.startsWith(`ו${word}`) && compact.length > word.length + 1) {
+        joined = compact.slice(word.length + 1);
+        break;
+      }
+    }
+  }
+
+  return joined.trim();
 }
 
 export function extractCoreMerchantName(text: string | null | undefined): string {
@@ -76,7 +99,7 @@ export function extractCoreMerchantName(text: string | null | undefined): string
   if (s.replace(/\s+/g, "").length >= 8 && !/\s/.test(s)) {
     s = stripLeadingCategoryGlueTokens(formatMerchantLabel(s.replace(/\s+/g, "")));
   }
-  return normalizeMerchantKey(s.replace(/\s+/g, " ").trim());
+  return legacyNormalizeMerchantKey(s.replace(/\s+/g, " ").trim());
 }
 
 export function recurringMerchantGroupKey(input: {

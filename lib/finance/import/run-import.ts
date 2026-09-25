@@ -2,6 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import { ingestFinanceTransactions, type FinanceIngestInput } from "@/lib/finance/ingest";
 import { parseImportFile } from "@/lib/finance/import/parse-file";
 import { importSourceToTxnSource } from "@/lib/finance/import/source-map";
+import { assignStableExternalKeys, cardScopeFromAccount } from "@/lib/finance/stable-external-key";
 import { isFinanceImportLayerMissing } from "@/lib/finance/import/table-missing";
 import type {
   FinanceImportBatchStatus,
@@ -125,7 +126,19 @@ export async function runFinanceImport(input: {
   await sb.from("finance_import_batches").update({ account_id: accountId }).eq("id", batchId);
 
   const txnSource = importSourceToTxnSource(parsed.source);
-  const ingestInputs: FinanceIngestInput[] = parsed.transactions.map((t) => ({
+  const cardScope = cardScopeFromAccount({
+    card_mask: typeof parsed.accountMetadata.card_mask === "string" ? parsed.accountMetadata.card_mask : null,
+  });
+  const stableRows = assignStableExternalKeys(
+    parsed.transactions.map((t) => ({
+      txn_date: t.booked_at,
+      amount: t.amount,
+      currency: t.currency ?? "ILS",
+      source_ref: t.source_ref,
+    })),
+    cardScope
+  );
+  const ingestInputs: FinanceIngestInput[] = parsed.transactions.map((t, idx) => ({
     source: txnSource,
     txn_date: t.booked_at,
     amount: t.amount,
@@ -133,7 +146,8 @@ export async function runFinanceImport(input: {
     currency: t.currency ?? "ILS",
     description: t.description,
     merchant: t.merchant ?? null,
-    external_key: t.source_ref,
+    external_key: stableRows[idx]?.source_ref ?? t.source_ref,
+    card_name: cardScope !== "default" ? cardScope : null,
     category: null,
     installment_index: t.installment_index ?? null,
     installment_total: t.installment_total ?? null,

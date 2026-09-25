@@ -27,34 +27,38 @@ describe("financeExternalKey", () => {
     assert.equal(key, "max:MAX-0812:tx-456");
   });
 
-  it("hashes when identifier missing", () => {
+  it("uses stable card+date+amount+currency keys without merchant", () => {
     const a = financeExternalKey({
       source: "apple_pay",
+      card_name: "1234",
       txn_date: "2026-09-01",
       amount: 47.9,
-      description: "Super",
-      merchant: "Super",
+      description: "3627ApplePay",
+      merchant: "3627ApplePay",
     });
     const b = financeExternalKey({
-      source: "apple_pay",
+      source: "visa_cal",
+      card_name: "1234",
       txn_date: "2026-09-01",
       amount: 47.9,
-      description: "Super",
-      merchant: "Super",
+      description: "Apple Pay Store",
+      merchant: "Apple Pay Store",
     });
-    assert.match(a, /^apple_pay:hash:[a-f0-9]{24}$/);
+    assert.match(a, /^fin:[a-f0-9]{24}$/);
     assert.equal(a, b);
   });
 
   it("differs for different amounts", () => {
     const a = financeExternalKey({
       source: "apple_pay",
+      card_name: "1234",
       txn_date: "2026-09-01",
       amount: 10,
       description: "x",
     });
     const b = financeExternalKey({
       source: "apple_pay",
+      card_name: "1234",
       txn_date: "2026-09-01",
       amount: 11,
       description: "x",

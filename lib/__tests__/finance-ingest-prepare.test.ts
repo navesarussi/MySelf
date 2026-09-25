@@ -18,25 +18,19 @@ function txn(over: Partial<FinanceIngestInput> = {}): FinanceIngestInput {
 }
 
 describe("prepareIngestRows", () => {
-  it("keeps the first of two rows sharing an external key and counts the rest", () => {
-    // Previously each repeat made its own INSERT and was skipped on the unique
-    // violation; the batched upsert needs them collapsed before the statement.
+  it("assigns distinct stable ordinals for same-day same-amount rows in one batch", () => {
     const { prepared, duplicatesInBatch } = prepareIngestRows(
       [
-        txn({ external_key: "k1", description: "first" }),
-        txn({ external_key: "k1", description: "second" }),
-        txn({ external_key: "k2" }),
+        txn({ card_name: "1234", amount: 42, description: "first" }),
+        txn({ card_name: "1234", amount: 42, description: "second" }),
+        txn({ card_name: "1234", amount: 43, description: "other" }),
       ],
       noRules,
       []
     );
-    assert.equal(prepared.length, 2);
-    assert.equal(duplicatesInBatch, 1);
-    assert.deepEqual(
-      prepared.map((p) => p.externalKey),
-      ["k1", "k2"]
-    );
-    assert.equal(prepared[0].row.description, "first");
+    assert.equal(prepared.length, 3);
+    assert.equal(duplicatesInBatch, 0);
+    assert.notEqual(prepared[0].externalKey, prepared[1].externalKey);
   });
 
   it("derives distinct keys for distinct transactions", () => {
@@ -70,6 +64,27 @@ describe("prepareIngestRows", () => {
     const { prepared, duplicatesInBatch } = prepareIngestRows([], noRules, []);
     assert.deepEqual(prepared, []);
     assert.equal(duplicatesInBatch, 0);
+  });
+
+  it("skips re-import rows that match an existing stable day+amount+card key", () => {
+    const existingStableCounts = new Map([["1234|2026-09-01|42.00|ILS", 1]]);
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({
+          card_name: "1234",
+          amount: 42,
+          merchant: "3627ApplePay",
+          description: "3627ApplePay",
+          external_key: "old-key",
+        }),
+      ],
+      noRules,
+      [],
+      new Set(),
+      existingStableCounts
+    );
+    assert.equal(prepared.length, 0);
+    assert.equal(duplicatesInBatch, 1);
   });
 
   it("collapses Cal OCR garbage duplicates and keeps the clean merchant row", () => {

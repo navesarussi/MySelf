@@ -43,6 +43,7 @@ describe("isBatchSettlementDescription", () => {
     assert.equal(isBatchSettlementDescription("חיוב חודשי כאל"), true);
     assert.equal(isBatchSettlementDescription("כרטיסי אשראי לישראל"), true);
     assert.equal(isBatchSettlementDescription("ויזה כאל"), true);
+    assert.equal(isBatchSettlementDescription("לאומי ויזה(כא)"), true);
     assert.equal(isBatchSettlementDescription("ישראכרט הוראת קבע"), true);
     assert.equal(isBatchSettlementDescription("סליקה מקס"), true);
     assert.equal(isBatchSettlementDescription("חיוב כרטיס אשראי"), true);

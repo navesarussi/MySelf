@@ -12,11 +12,12 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const month = sp.get("month");
   const uncategorized = sp.get("uncategorized") === "1";
+  const includeTotal = sp.get("includeTotal") === "1";
   const limit = Math.min(Number(sp.get("limit") ?? 100), 500);
 
   let query = getSupabase()
     .from("finance_transactions")
-    .select(TXN_LIST_COLUMNS)
+    .select(TXN_LIST_COLUMNS, uncategorized && includeTotal ? { count: "exact" } : undefined)
     .order("txn_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -29,17 +30,17 @@ export async function GET(req: NextRequest) {
   }
   if (uncategorized) query = query.eq("needs_categorization", true);
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) return dbError();
   const rows = (data ?? []).map((r) => rowToTxn(r as Record<string, unknown>));
 
   if (!uncategorized) return NextResponse.json(rows);
 
   const [history, rulesMap] = await Promise.all([loadCategoryHistory(), fetchMerchantRulesMap()]);
-  return NextResponse.json(
-    rows.map((txn) => {
-      const suggestion = suggestForTxn(txn, rulesMap, history);
-      return { ...txn, ...suggestion };
-    })
-  );
+  const items = rows.map((txn) => {
+    const suggestion = suggestForTxn(txn, rulesMap, history);
+    return { ...txn, ...suggestion };
+  });
+  if (includeTotal) return NextResponse.json({ items, total: count ?? items.length });
+  return NextResponse.json(items);
 }
