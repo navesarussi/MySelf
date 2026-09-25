@@ -86,7 +86,15 @@ function AppStack() {
         <Stack.Screen name="finance-history" options={{ title: t("nav.finance") }} />
         <Stack.Screen name="finance-wealth" options={{ title: t("nav.finance") }} />
         <Stack.Screen name="finance-import" options={{ title: t("finance.hubImport") }} />
-        <Stack.Screen name="agent-chat" options={{ title: t("agent.title"), presentation: "modal" }} />
+        <Stack.Screen
+          name="agent-chat"
+          options={{
+            title: t("agent.title"),
+            presentation: "modal",
+            gestureEnabled: true,
+            headerBackVisible: false,
+          }}
+        />
         <Stack.Screen name="trading-journal" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-trade" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-analytics" options={{ title: t("nav.trading") }} />
