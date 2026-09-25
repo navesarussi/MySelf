@@ -1,8 +1,16 @@
 import { createHash } from "crypto";
 import { extractCoreMerchantName } from "@/lib/finance/cal-duplicate";
 import {
+  isInformationalFxLine,
+  isHebrewFxCategoryNoise,
+  parseAbsAmount,
+  parseSignedAmount,
+  reverseLatinMerchantLine,
+} from "@/lib/finance/import/fx-line";
+import {
   compactImportText,
   extractCalInstallment,
+  extractCalLatinMerchantLine,
   extractCalMerchantFromTail,
   isCalDateTotalLine,
   isSummaryImportText,
@@ -15,24 +23,20 @@ const ILS_ROW =
   /^(?:₪|EU)\s*(-?[\d,.]+)\s+(?:₪|EU)\s*(-?[\d,.]+)\s+(.+)$/i;
 const FX_ROW = /^(?:\$|USD)\s*(-?[\d,.]+)\s*(.*)$/i;
 const FX_TOTAL_DATE = /סה"כ\s*לתאריך\s*(\d{2}\/\d{2}\/\d{2,4})/;
-const RTL_DATE = /\b(\d{4}\/\d{2}\/\d{2,3})\b/;
+const RTL_DATE = /(\d{4}\/\d{2}\/\d{2,3})/g;
 const AMOUNT_INLINE = /^(-?[\d,.]+)\s+(\d{4}\/\d{2}\/\d{2,3})$/;
 const MERCHANT_DATE = /^(.+?)\s+(\d{4}\/\d{2}\/\d{2,3})$/;
+const LATIN_MERCHANT_LINE = /^[A-Za-z0-9*.,/\\-\s]{4,}$/;
 
 type PendingUsd = {
   amount: number;
+  signedAmount: number;
   currency: string;
   merchant: string;
   line: number;
   bookedAt: string | null;
   ilsAmount: number | null;
 };
-
-function parseAmount(raw: string): number | null {
-  const cleaned = raw.replace(/,/g, "").trim();
-  const n = Number(cleaned);
-  return Number.isFinite(n) && n !== 0 ? Math.abs(n) : null;
-}
 
 function parseIsoFromDdMmYy(raw: string): string | null {
   const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{2,4})$/);
@@ -42,11 +46,22 @@ function parseIsoFromDdMmYy(raw: string): string | null {
   return `${year}-${m[2]}-${m[1]}`;
 }
 
-function extractRtlDateToken(text: string): string | null {
-  const direct = text.match(RTL_DATE);
-  if (direct) return direct[1];
-  const compact = text.replace(/[\|\t\s]/g, "").match(/(\d{4}\/\d{2}\/\d{2,3})/);
-  return compact?.[1] ?? null;
+function extractRtlDateTokens(text: string): string[] {
+  const tokens: string[] = [];
+  for (const m of text.matchAll(RTL_DATE)) tokens.push(m[1]);
+  if (tokens.length) return tokens;
+  const compact = text.replace(/[\|\t\s]/g, "");
+  for (const m of compact.matchAll(/(\d{4}\/\d{2}\/\d{2,3})/g)) tokens.push(m[1]);
+  return tokens;
+}
+
+/** Prefer the transaction date column — earliest valid ISO date in the cluster. */
+function pickTxnDateFromCluster(text: string): string | null {
+  const isos = extractRtlDateTokens(text)
+    .map((t) => unreverseRtlDateToken(t))
+    .filter((d): d is string => Boolean(d))
+    .sort();
+  return isos[0] ?? null;
 }
 
 function collapseSplitHebrew(text: string): string {
@@ -57,16 +72,20 @@ function collapseSplitHebrew(text: string): string {
     .trim();
 }
 
-function cleanCalMerchant(raw: string): string {
-  const { merchant } = extractCalMerchantFromTail(raw);
+function cleanCalMerchant(raw: string, preferLatin = false): string {
+  const { merchant } = extractCalMerchantFromTail(raw, { preferLatin });
   if (!merchant || isSummaryImportText(merchant)) return "";
+  if (preferLatin && isHebrewFxCategoryNoise(merchant)) return "";
   const core = extractCoreMerchantName(merchant);
   return core || merchant;
 }
 
-function extractMerchantFromTail(tail: string): { merchant: string; bookedAt: string | null } {
-  const dateToken = extractRtlDateToken(tail);
-  const bookedAt = dateToken ? unreverseRtlDateToken(dateToken) : null;
+function extractMerchantFromTail(
+  tail: string,
+  preferLatin = false
+): { merchant: string; bookedAt: string | null } {
+  const bookedAt = pickTxnDateFromCluster(tail);
+  const dateToken = extractRtlDateTokens(tail)[0];
   let merchantPart = dateToken ? tail.replace(dateToken, " ").replace(/\|/g, " ").trim() : tail;
   if (isSummaryImportText(merchantPart)) return { merchant: "", bookedAt };
 
@@ -78,12 +97,25 @@ function extractMerchantFromTail(tail: string): { merchant: string; bookedAt: st
       .replace(/[\d\s|/]+$/g, " ")
   );
 
-  const merchant = cleanCalMerchant(merchantPart);
+  const merchant = cleanCalMerchant(merchantPart, preferLatin);
   return { merchant, bookedAt };
 }
 
-function reversePendingMerchant(raw: string): string {
-  return cleanCalMerchant(raw.trim()) || normalizeHebrewDescription(raw.trim());
+function merchantFromPendingLatin(text: string): string {
+  const fromLine = extractCalLatinMerchantLine(text);
+  if (fromLine) return fromLine;
+  return cleanCalMerchant(text, true) || reverseLatinMerchantLine(text.trim());
+}
+
+function pickFxMerchant(input: {
+  tailRaw: string;
+  pendingLatin: string | null;
+}): string {
+  const tailMerchant = cleanCalMerchant(input.tailRaw, true);
+  const pending = input.pendingLatin ? merchantFromPendingLatin(input.pendingLatin) : "";
+  if (pending && (isHebrewFxCategoryNoise(tailMerchant) || !tailMerchant)) return pending;
+  if (tailMerchant && !isHebrewFxCategoryNoise(tailMerchant)) return tailMerchant;
+  return pending || tailMerchant;
 }
 
 function lineLooksLikeUsdSubtotal(line: string): boolean {
@@ -132,18 +164,13 @@ function pushTxn(
   transactions.push({ ...row, source_ref });
 }
 
-function flushUsdQueue(
-  transactions: ParsedImportTransaction[],
-  queue: PendingUsd[],
-  fallbackDate: string | null
-) {
+function flushUsdQueue(transactions: ParsedImportTransaction[], queue: PendingUsd[]) {
   for (const item of queue) {
-    const bookedAt = item.bookedAt ?? fallbackDate;
-    if (!bookedAt) continue;
+    if (!item.bookedAt) continue;
     pushTxn(transactions, {
-      booked_at: bookedAt,
+      booked_at: item.bookedAt,
       amount: item.amount,
-      kind: item.amount < 0 ? "income" : "expense",
+      kind: item.signedAmount < 0 ? "income" : "expense",
       description: item.merchant,
       merchant: item.merchant,
       currency: item.currency,
@@ -151,10 +178,22 @@ function flushUsdQueue(
         line: item.line,
         pattern: "fx_row",
         ils_amount: item.ilsAmount,
+        signed_amount: item.signedAmount,
       },
     });
   }
   queue.length = 0;
+}
+
+function attachDatesToPendingUsd(pending: PendingUsd, text: string): boolean {
+  const bookedAt = pickTxnDateFromCluster(text);
+  if (!bookedAt) return false;
+  pending.bookedAt = bookedAt;
+  if (!pending.merchant) {
+    const { merchant } = extractMerchantFromTail(text, true);
+    if (merchant && !isHebrewFxCategoryNoise(merchant)) pending.merchant = merchant;
+  }
+  return true;
 }
 
 /** Parse Cal / Visa Leumi / PayBox monthly statement PDFs. */
@@ -165,63 +204,88 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
   const transactions: ParsedImportTransaction[] = [];
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-  let pendingMerchant: { text: string; line: number; bookedAt: string | null } | null = null;
-  let pendingUsdAmount: { amount: number; line: number } | null = null;
+  let pendingMerchant: { text: string; line: number; bookedAt: string | null; latin: boolean } | null =
+    null;
+  let pendingUsd: PendingUsd | null = null;
   const usdQueue: PendingUsd[] = [];
-  let usdSectionDate: string | null = null;
-  const MAX_MERCHANT_PENDING_GAP = 2;
+  const MAX_MERCHANT_PENDING_GAP = 3;
+
+  function flushPendingUsd() {
+    if (!pendingUsd) return;
+    if (pendingUsd.bookedAt && pendingUsd.merchant) usdQueue.push(pendingUsd);
+    pendingUsd = null;
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
+    if (isInformationalFxLine(line)) {
+      pendingMerchant = null;
+      flushPendingUsd();
+      continue;
+    }
+
     if (isSummaryImportText(line) && !line.match(FX_ROW)) {
       pendingMerchant = null;
-      pendingUsdAmount = null;
+      flushPendingUsd();
       continue;
+    }
+
+    // Attach orphan date/category lines to a waiting USD row.
+    if (pendingUsd && !pendingUsd.bookedAt && !line.match(FX_ROW) && !line.match(ILS_ROW)) {
+      if (attachDatesToPendingUsd(pendingUsd, line)) {
+        flushPendingUsd();
+        pendingMerchant = null;
+        continue;
+      }
     }
 
     const ils = line.match(ILS_ROW);
     if (ils) {
-      const billing = parseAmount(ils[1]);
-      const txnAmount = parseAmount(ils[2]);
+      const billing = parseAbsAmount(ils[1]);
+      const txnAmount = parseAbsAmount(ils[2]);
+      const signedBilling = parseSignedAmount(ils[1]);
+      const signedTxn = parseSignedAmount(ils[2]);
       const amount = billing ?? txnAmount;
       let tail = ils[3];
       if (isSummaryImportText(tail)) {
         pendingMerchant = null;
+        flushPendingUsd();
         continue;
       }
 
-      if (!extractRtlDateToken(tail) && i + 1 < lines.length) {
+      if (!extractRtlDateTokens(tail).length && i + 1 < lines.length) {
         const next = lines[i + 1];
-        if (/^[\d\s/|]+$/.test(next.replace(/\t/g, "")) || extractRtlDateToken(next)) {
+        if (
+          /^[\d\s/|]+$/.test(next.replace(/\t/g, "")) ||
+          extractRtlDateTokens(next).length > 0 ||
+          (next.length < 80 && /[\u0590-\u05FF]/.test(next) && !next.match(FX_ROW))
+        ) {
           tail = `${tail} ${next}`;
+          i += 1;
         }
       }
 
       const { merchant, bookedAt } = extractMerchantFromTail(tail);
       const inst = extractCalInstallment(line, { billingAmount: billing, txnAmount });
 
-      if (pendingUsdAmount && merchant && bookedAt) {
-        usdQueue.push({
-          amount: pendingUsdAmount.amount,
-          currency: "USD",
-          merchant,
-          line: pendingUsdAmount.line,
-          bookedAt,
-          ilsAmount: amount,
-        });
-        pendingUsdAmount = null;
-        if (pendingMerchant && i - pendingMerchant.line <= MAX_MERCHANT_PENDING_GAP) {
-          pendingMerchant = null;
+      if (pendingUsd && merchant && bookedAt) {
+        pendingUsd.bookedAt = bookedAt;
+        pendingUsd.ilsAmount = amount;
+        if (!pendingUsd.merchant && merchant && !isHebrewFxCategoryNoise(merchant)) {
+          pendingUsd.merchant = merchant;
         }
+        flushPendingUsd();
+        pendingMerchant = null;
         continue;
       }
 
       if (amount && bookedAt && merchant) {
+        const signed = signedBilling ?? signedTxn ?? amount;
         pushTxn(transactions, {
           booked_at: bookedAt,
           amount,
-          kind: ils[1].startsWith("-") || ils[2].startsWith("-") ? "income" : "expense",
+          kind: signed < 0 ? "income" : "expense",
           description: merchant,
           merchant,
           currency: "ILS",
@@ -230,78 +294,95 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
           installment_label: inst.label,
           raw: { line: i + 1, pattern: "ils_row" },
         });
-        if (!pendingUsdAmount && pendingMerchant && i - pendingMerchant.line <= MAX_MERCHANT_PENDING_GAP) {
+        if (pendingMerchant && i - pendingMerchant.line <= MAX_MERCHANT_PENDING_GAP) {
           pendingMerchant = null;
         }
+        flushPendingUsd();
       }
       continue;
     }
 
     const fx = line.match(FX_ROW);
     if (fx) {
-      const amount = parseAmount(fx[1]);
+      flushPendingUsd();
+      const signedAmount = parseSignedAmount(fx[1]);
+      const amount = signedAmount == null ? null : Math.abs(signedAmount);
       const tailRaw = (fx[2] ?? "").trim();
       const fxDateOnLine = line.match(FX_TOTAL_DATE);
-      const tailIsSummary = lineLooksLikeUsdSubtotal(line) || isSummaryImportText(tailRaw) || isSummaryImportText(line);
+      const tailIsSummary =
+        lineLooksLikeUsdSubtotal(line) ||
+        (tailRaw ? isSummaryImportText(tailRaw) : false) ||
+        isSummaryImportText(line);
 
       if (fxDateOnLine) {
-        usdSectionDate = parseIsoFromDdMmYy(fxDateOnLine[1]);
-        if (pendingUsdAmount && pendingMerchant) {
-          const merchant = reversePendingMerchant(pendingMerchant.text);
-          if (merchant && !isSummaryImportText(merchant)) {
-            usdQueue.push({
-              amount: pendingUsdAmount.amount,
-              currency: "USD",
-              merchant,
-              line: pendingUsdAmount.line,
-              bookedAt: pendingMerchant.bookedAt ?? usdSectionDate,
-              ilsAmount: null,
-            });
-          }
-        }
-        flushUsdQueue(transactions, usdQueue, usdSectionDate);
+        flushUsdQueue(transactions, usdQueue);
         pendingMerchant = null;
-        pendingUsdAmount = null;
+        continue;
+      }
+
+      if (isInformationalFxLine(tailRaw) || isInformationalFxLine(line)) {
+        pendingMerchant = null;
         continue;
       }
 
       if (!amount || tailIsSummary) {
-        pendingUsdAmount = null;
         pendingMerchant = null;
         continue;
       }
 
-      const { merchant: tailMerchant, bookedAt: tailDate } = extractMerchantFromTail(tailRaw);
-      const merchantFromPending =
+      const pendingLatin =
         pendingMerchant && i - pendingMerchant.line <= MAX_MERCHANT_PENDING_GAP
-          ? reversePendingMerchant(pendingMerchant.text)
-          : "";
-      const merchant = tailMerchant || merchantFromPending;
+          ? pendingMerchant.text
+          : null;
+      const merchant = pickFxMerchant({ tailRaw, pendingLatin });
+      const bookedAt = tailRaw ? pickTxnDateFromCluster(tailRaw) : null;
 
       if (!merchant) {
-        pendingUsdAmount = { amount, line: i + 1 };
+        pendingUsd = {
+          amount,
+          signedAmount: signedAmount!,
+          currency: "USD",
+          merchant: "",
+          line: i + 1,
+          bookedAt,
+          ilsAmount: null,
+        };
+        pendingMerchant = null;
         continue;
       }
 
-      usdQueue.push({
+      if (bookedAt) {
+        usdQueue.push({
+          amount,
+          signedAmount: signedAmount!,
+          currency: "USD",
+          merchant,
+          line: i + 1,
+          bookedAt,
+          ilsAmount: null,
+        });
+        pendingMerchant = null;
+        continue;
+      }
+
+      pendingUsd = {
         amount,
+        signedAmount: signedAmount!,
         currency: "USD",
         merchant,
         line: i + 1,
-        bookedAt: tailDate ?? pendingMerchant?.bookedAt ?? usdSectionDate,
+        bookedAt: null,
         ilsAmount: null,
-      });
-      pendingUsdAmount = null;
+      };
       pendingMerchant = null;
       continue;
     }
 
     const fxDate = line.match(FX_TOTAL_DATE);
     if (fxDate) {
-      usdSectionDate = parseIsoFromDdMmYy(fxDate[1]);
-      flushUsdQueue(transactions, usdQueue, usdSectionDate);
+      flushUsdQueue(transactions, usdQueue);
       pendingMerchant = null;
-      pendingUsdAmount = null;
+      flushPendingUsd();
       continue;
     }
 
@@ -314,34 +395,28 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
         continue;
       }
 
-      const amt = parseAmount(inline[1]);
+      const amt = parseAbsAmount(inline[1]);
+      const signed = parseSignedAmount(inline[1]);
       const booked = unreverseRtlDateToken(inline[2]);
       const inst = extractCalInstallment(line);
 
-      if (pendingUsdAmount && merchantPending && booked) {
-        const merchant = reversePendingMerchant(merchantPending.text);
-        if (merchant && !isSummaryImportText(merchant)) {
-          usdQueue.push({
-            amount: pendingUsdAmount.amount,
-            currency: "USD",
-            merchant,
-            line: pendingUsdAmount.line,
-            bookedAt: booked,
-            ilsAmount: amt,
-          });
-        }
-        pendingUsdAmount = null;
+      if (pendingUsd && merchantPending && booked) {
+        pendingUsd.bookedAt = booked;
+        pendingUsd.ilsAmount = amt;
+        flushPendingUsd();
         pendingMerchant = null;
         continue;
       }
 
       if (amt && booked && merchantPending) {
-        const merchant = reversePendingMerchant(merchantPending.text);
+        const merchant = merchantPending.latin
+          ? merchantFromPendingLatin(merchantPending.text)
+          : cleanCalMerchant(merchantPending.text);
         if (merchant && !isSummaryImportText(merchant)) {
           pushTxn(transactions, {
             booked_at: booked,
             amount: amt,
-            kind: inline[1].startsWith("-") ? "income" : "expense",
+            kind: (signed ?? amt) < 0 ? "income" : "expense",
             description: merchant,
             merchant,
             currency: "ILS",
@@ -361,24 +436,33 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
     const merchantDate = line.match(MERCHANT_DATE);
     if (merchantDate && !/^(₪|EU|\$)/.test(merchantDate[1]) && !isSummaryImportText(merchantDate[1])) {
       const bookedAt = unreverseRtlDateToken(merchantDate[2]);
-      pendingMerchant = { text: merchantDate[1].trim(), line: i, bookedAt };
+      pendingMerchant = { text: merchantDate[1].trim(), line: i, bookedAt, latin: false };
       continue;
     }
 
-    if (
-      /^[A-Za-z0-9*.,\s/-]{4,}$/.test(line) &&
+    const isLatinLine =
+      LATIN_MERCHANT_LINE.test(line) &&
       !/^\d{4}\/\d{2}\/\d{2,3}$/.test(line) &&
       !/^\d{10,}-\d{3}-\d/.test(line) &&
       !/^[\d\s/|.-]+$/.test(line) &&
-      !/PRD-|ctovet|www\./i.test(line)
+      !/PRD-|ctovet|www\./i.test(line) &&
+      !/[\u0590-\u05FF]/.test(line);
+
+    if (isLatinLine) {
+      pendingMerchant = { text: line, line: i, bookedAt: null, latin: true };
+    } else if (
+      pendingUsd &&
+      !pendingUsd.bookedAt &&
+      (extractRtlDateTokens(line).length > 0 || /[\u0590-\u05FF]/.test(line))
     ) {
-      pendingMerchant = { text: line, line: i, bookedAt: null };
+      if (attachDatesToPendingUsd(pendingUsd, line)) flushPendingUsd();
     } else if (pendingMerchant && i - pendingMerchant.line > MAX_MERCHANT_PENDING_GAP) {
       pendingMerchant = null;
     }
   }
 
-  flushUsdQueue(transactions, usdQueue, usdSectionDate);
+  flushPendingUsd();
+  flushUsdQueue(transactions, usdQueue);
 
   if (transactions.length === 0) warnings.push("no_transactions_found");
 

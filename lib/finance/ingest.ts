@@ -33,6 +33,9 @@ export function rowToTxn(row: Record<string, unknown>): FinanceTransaction {
     amount: Number(row.amount),
     kind: row.kind as FinanceTxnKind,
     currency: String(row.currency ?? "ILS"),
+    original_amount: row.original_amount != null ? Number(row.original_amount) : null,
+    amount_ils: row.amount_ils != null ? Number(row.amount_ils) : null,
+    ils_estimated: Boolean(row.ils_estimated),
     description: String(row.description ?? ""),
     merchant: row.merchant != null ? String(row.merchant) : null,
     account_number: row.account_number != null ? String(row.account_number) : null,
@@ -95,6 +98,9 @@ function normalizeInput(input: FinanceIngestInput) {
     account_number,
     card_name,
     currency: (input.currency ?? "ILS").trim() || "ILS",
+    original_amount: input.original_amount ?? null,
+    amount_ils: input.amount_ils ?? null,
+    ils_estimated: Boolean(input.ils_estimated),
     status: input.status ?? "completed",
     needs_categorization: hasCategory ? false : needs_categorization,
     category: hasCategory ? (input.category?.trim() || autoCat) : null,
@@ -231,7 +237,12 @@ export function prepareIngestRows(
     });
     const incomingOrdinal = (incomingStableOrdinals.get(stableBase) ?? 0) + 1;
     incomingStableOrdinals.set(stableBase, incomingOrdinal);
-    const existingCount = existingStableCounts.get(stableBase) ?? 0;
+    const existingCount = existingStableCount(
+      existingStableCounts,
+      stableBase,
+      input.source,
+      input.account_number
+    );
     if (incomingOrdinal <= existingCount) {
       duplicatesInBatch += 1;
       continue;
@@ -269,6 +280,9 @@ export function prepareIngestRows(
       amount: input.amount,
       kind: input.kind,
       currency: input.currency,
+      original_amount: input.original_amount ?? null,
+      amount_ils: input.amount_ils ?? input.amount,
+      ils_estimated: input.ils_estimated ?? false,
       description: input.description,
       merchant: input.merchant,
       account_number: input.account_number ?? null,
@@ -373,19 +387,47 @@ function collapseCalBatchDuplicates(prepared: PreparedRow[]): PreparedRow[] {
   return [...passthrough, ...kept];
 }
 
+function shiftIsoDate(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function existingStableCount(
+  counts: Map<string, number>,
+  base: string,
+  source: string,
+  account_number: string | null | undefined
+): number {
+  let max = counts.get(base) ?? 0;
+  if (source !== "leumi") return max;
+  const scope = cardScopeFromAccount({ account_number });
+  const parts = base.split("|");
+  if (parts.length < 4) return max;
+  const date = parts[1];
+  for (const offset of [-1, 1]) {
+    const altDate = shiftIsoDate(date, offset);
+    const altBase = `${parts[0]}|${altDate}|${parts.slice(2).join("|")}`;
+    max = Math.max(max, counts.get(altBase) ?? 0);
+  }
+  void scope;
+  return max;
+}
+
 async function loadExistingStableKeyCounts(inputs: FinanceIngestInput[]): Promise<Map<string, number>> {
   const dates = [
     ...new Set(
       inputs
         .map((i) => i.txn_date?.trim())
         .filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d)))
+        .flatMap((d) => [shiftIsoDate(d, -1), d, shiftIsoDate(d, 1)])
     ),
   ];
   if (!dates.length) return new Map();
 
   const { data, error } = await getSupabase()
     .from("finance_transactions")
-    .select("txn_date, amount, currency, account_number, card_name")
+    .select("txn_date, amount, currency, account_number, card_name, source")
     .in("txn_date", dates);
   if (error) throw new Error(error.message);
 

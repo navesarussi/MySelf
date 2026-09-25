@@ -41,6 +41,7 @@ export type FinanceImportBatchRow = {
 /** Parsed row before mapping into finance_transactions ingest. */
 export type ParsedImportTransaction = {
   booked_at: string;
+  /** ILS amount for cashflow when foreign currency; otherwise the row amount. */
   amount: number;
   kind: "income" | "expense";
   description: string;
@@ -48,6 +49,11 @@ export type ParsedImportTransaction = {
   merchant?: string | null;
   /** Per-row currency (Cal FX rows may be USD/EUR). Default ILS. */
   currency?: string;
+  /** Foreign-currency face amount before ILS conversion. */
+  original_amount?: number | null;
+  /** ILS charge from statement or estimated. */
+  amount_ils?: number | null;
+  ils_estimated?: boolean;
   installment_index?: number | null;
   installment_total?: number | null;
   installment_label?: string | null;

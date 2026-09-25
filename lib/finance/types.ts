@@ -6,9 +6,13 @@ export type FinanceTxnStatus = "pending" | "completed";
 export type FinanceIngestInput = {
   source: FinanceSource;
   txn_date: string;
+  /** ILS amount used for cashflow totals. */
   amount: number;
   kind?: FinanceTxnKind;
   currency?: string;
+  original_amount?: number | null;
+  amount_ils?: number | null;
+  ils_estimated?: boolean;
   description?: string;
   merchant?: string | null;
   account_number?: string | null;
@@ -35,6 +39,9 @@ export type FinanceTransaction = {
   amount: number;
   kind: FinanceTxnKind;
   currency: string;
+  original_amount: number | null;
+  amount_ils: number | null;
+  ils_estimated: boolean;
   description: string;
   merchant: string | null;
   account_number: string | null;

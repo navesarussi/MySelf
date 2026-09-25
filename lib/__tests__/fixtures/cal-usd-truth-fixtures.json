@@ -1,0 +1,317 @@
+[
+  {
+    "id": "cal-25-02-f25store",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nEROTS52F\n$ 183.58 לא יפאןשונות 5202/10/61 5202/10/71",
+    "expect": {
+      "date": "2025-01-16",
+      "original_amount": 183.58,
+      "merchant": "F25STORE",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-25-02-onlychain",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nNIAHCYLNO\n$ 1000.00 לא ליטואניהשונות 5202/10/81 5202/10/12",
+    "expect": {
+      "date": "2025-01-18",
+      "original_amount": 1000,
+      "merchant": "ONLYCHAIN",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-25-02-selectmedia",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nAIDEMTCELES\n$ 20.00 לא ארצות הברית מחשבים 5202/10/91 5202/10/12",
+    "expect": {
+      "date": "2025-01-19",
+      "original_amount": 20,
+      "merchant": "SELECTMEDIA",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-25-03-f25store",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nEROTS52F\n$ -183.58 לא זיכוי 5202/10/03 5202/20/30",
+    "expect": {
+      "date": "2025-01-30",
+      "original_amount": 183.58,
+      "merchant": "F25STORE",
+      "kind": "income"
+    }
+  },
+  {
+    "id": "cal-25-03-onlychain",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nNIAHCYLNO\n$ 1000.00 לא ליטואניהשונות 5202/20/60 5202/20/70",
+    "expect": {
+      "date": "2025-02-06",
+      "original_amount": 1000,
+      "merchant": "ONLYCHAIN",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-25-03-selectmedia",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nAIDEMTCELES\n$ 20.00 לא ארצות הברית מחשבים 5202/20/91 5202/20/91",
+    "expect": {
+      "date": "2025-02-19",
+      "original_amount": 20,
+      "merchant": "SELECTMEDIA",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-25-11-cursor",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nROSRUC EGASU PES\n$ 20.00 ארצות הברית 5202/01/40 5202/01/60",
+    "expect": {
+      "date": "2025-10-04",
+      "original_amount": 20,
+      "merchant": "CURSOR",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-25-11-cursor",
+    "text": "דף חיוב חודשי\n2853755000-966-01\n,ROSRUC IA DEREWOP EDI\n$ 60.00 ארצות הברית 5202/01/60 5202/01/80",
+    "expect": {
+      "date": "2025-10-06",
+      "original_amount": 60,
+      "merchant": "CURSOR",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-25-11-railway",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nYAWLIAR\n$ 5.00 ארצות הברית 5202/01/61 5202/01/71",
+    "expect": {
+      "date": "2025-10-16",
+      "original_amount": 5,
+      "merchant": "RAILWAY",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-03-railway",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nYAWLIAR\n$ 5.00 ארצות הברית 6202/20/61 6202/20/71",
+    "expect": {
+      "date": "2026-02-16",
+      "original_amount": 5,
+      "merchant": "RAILWAY",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-04-railway",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nYAWLIAR\n$ 5.00 ארצות הברית 6202/30/61 6202/30/71",
+    "expect": {
+      "date": "2026-03-16",
+      "original_amount": 5,
+      "merchant": "RAILWAY",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-05-railway",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nYAWLIAR\n$ 5.00 ארצות הברית 6202/40/61 6202/40/71",
+    "expect": {
+      "date": "2026-04-16",
+      "original_amount": 5,
+      "merchant": "RAILWAY",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-06-replit",
+    "text": "דף חיוב חודשי\n2853755000-966-01\n,TILPER .CNI\n$ 10.00 לא ארצות הברית מחשבים 6202/50/20 6202/50/40",
+    "expect": {
+      "date": "2026-05-02",
+      "original_amount": 10,
+      "merchant": "REPLIT",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-06-claude.ai",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nIA.EDUALC NOITPIRCSBUS\n$ 20.00 לא ארצות הברית מחשבים 6202/50/50 6202/50/60",
+    "expect": {
+      "date": "2026-05-05",
+      "original_amount": 20,
+      "merchant": "CLAUDE.AI",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-06-claude.ai",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nIA.EDUALC NOITPIRCSBUS\n$ 81.19 לא ארצות הברית מחשבים 6202/50/70 6202/50/80",
+    "expect": {
+      "date": "2026-05-07",
+      "original_amount": 81.19,
+      "merchant": "CLAUDE.AI",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-06-railway",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nYAWLIAR\n$ 13.01 ארצות הברית 6202/50/61 6202/50/81",
+    "expect": {
+      "date": "2026-05-16",
+      "original_amount": 13.01,
+      "merchant": "RAILWAY",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-06-dept",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nTPED FO EMOH SRIAFFA\n$ 505.79 לא אוסטרליה 6202/50/71 6202/50/91",
+    "expect": {
+      "date": "2026-05-17",
+      "original_amount": 505.79,
+      "merchant": "DEPT",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-06-hostinger.co",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nmoc.regnitsoh\n$ 3.19 לא קפריסין 6202/50/02 6202/50/12",
+    "expect": {
+      "date": "2026-05-20",
+      "original_amount": 3.19,
+      "merchant": "HOSTINGER.COM",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-06-google",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nELGOOG YALP\n$ 25.00 לא ארצות הברית מוצרי און 6202/50/52 6202/50/62",
+    "expect": {
+      "date": "2026-05-25",
+      "original_amount": 25,
+      "merchant": "GOOGLE",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-06-apple.com/us",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nSU/MOC.ELPPA\n$ 99.00 לא ארצות הברית מוצרי און 6202/50/62 6202/50/62",
+    "expect": {
+      "date": "2026-05-26",
+      "original_amount": 99,
+      "merchant": "APPLE.COM/US",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-07-anthropic*cl",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nEDUALC*CIPORHTNA BUS\n$ 100.00 לא ארצות הברית מחשבים 6202/60/70 6202/60/80",
+    "expect": {
+      "date": "2026-06-07",
+      "original_amount": 100,
+      "merchant": "ANTHROPIC*CLAUDE",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-07-hostinger",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nmoc.regnitsoh\n$ 10.19 לא קפריסין 6202/60/51 6202/60/61",
+    "expect": {
+      "date": "2026-06-15",
+      "original_amount": 10.19,
+      "merchant": "HOSTINGER",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-07-railway",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nYAWLIAR\n$ 1.19 ארצות הברית 6202/60/61 6202/60/71",
+    "expect": {
+      "date": "2026-06-16",
+      "original_amount": 1.19,
+      "merchant": "RAILWAY",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-07-etihad",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nDAHITE RIA\n$ 988.97 לא ישראל תיירות 6202/60/12 6202/60/42",
+    "expect": {
+      "date": "2026-06-21",
+      "original_amount": 988.97,
+      "merchant": "ETIHAD",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-07-etihad",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nDAHITE RIA\n$ 120.00 לא ישראל תיירות 6202/60/12 6202/60/42",
+    "expect": {
+      "date": "2026-06-21",
+      "original_amount": 120,
+      "merchant": "ETIHAD",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-07-fx-fee-skip",
+    "text": "דף חיוב חודשי\n$ 14.73 עמלת עסקה במט\"ח - לידיעה בלבד 6202/60/42",
+    "expectSkip": true
+  },
+  {
+    "id": "cal-26-08-origin",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nNIGIRO ETUTITSNI\n$ 63.49 לא אוסטרליה 6202/70/20 6202/70/60",
+    "expect": {
+      "date": "2026-07-02",
+      "original_amount": 63.49,
+      "merchant": "ORIGIN",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-08-anthropic",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nEDUALC*CIPORHTNA BUS\n$ 10.00 ארצות הברית 6202/70/40 6202/70/60",
+    "expect": {
+      "date": "2026-07-04",
+      "original_amount": 10,
+      "merchant": "ANTHROPIC",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-08-anthropic*cl",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nEDUALC*CIPORHTNA BUS\n$ 20.00 לא ארצות הברית מחשבים 6202/70/70 6202/70/90",
+    "expect": {
+      "date": "2026-07-07",
+      "original_amount": 20,
+      "merchant": "ANTHROPIC*CLAUDE",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-26-08-anthropic",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nEDUALC*CIPORHTNA BUS\n$ -10.00 לא זיכוי 6202/70/60 6202/70/01",
+    "expect": {
+      "date": "2026-07-06",
+      "original_amount": 10,
+      "merchant": "ANTHROPIC",
+      "kind": "income"
+    }
+  },
+  {
+    "id": "cal-26-09-anthropic*cl",
+    "text": "דף חיוב חודשי\n2853755000-966-01\nEDUALC*CIPORHTNA BUS\n$ 20.00 לא ארצות הברית מחשבים 6202/80/70 6202/80/01",
+    "expect": {
+      "date": "2026-08-07",
+      "original_amount": 20,
+      "merchant": "ANTHROPIC*CLAUDE",
+      "kind": "expense"
+    }
+  },
+  {
+    "id": "cal-25-05-multiline-transfer",
+    "text": "דף חיוב חודשי\nxoByaP\n₪ 700.00 ₪ 700.00 העברה ל\nציפי שפיננסים 5202/40/72",
+    "expectIls": {
+      "date": "2025-04-27",
+      "amount": 700,
+      "merchant": "ציפי",
+      "kind": "expense"
+    }
+  }
+]
