@@ -158,6 +158,21 @@ $ 26.00 סה"כ לתאריך 01/10/25
     assert.ok(result.transactions.every((t) => !/סה"כ/i.test(t.merchant ?? "")));
   });
 
+  it("keeps repeated same-day same-amount ILS rows as separate transactions", () => {
+    const text = `
+דף חיוב חודשי
+2853755000-966-01
+₪ 130.00 ₪ 130.00 זיגו 6202/60/82
+₪ 130.00 ₪ 130.00 זיגו 6202/60/82
+`;
+    const result = parseCalStatementPdf(text);
+    const zigo = result.transactions.filter(
+      (t) => t.amount === 130 && t.booked_at === "2026-06-28"
+    );
+    assert.equal(zigo.length, 2, JSON.stringify(result.transactions));
+    assert.notEqual(zigo[0].source_ref, zigo[1].source_ref);
+  });
+
   it("extracts Anthropic from latin-only merchant line", () => {
     const { merchant } = extractCalMerchantFromTail("CITROPAIC/HPA ANTHROPIC");
     assert.match(merchant, /anthropic/i, `got ${merchant}`);

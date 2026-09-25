@@ -117,13 +117,15 @@ function pushTxn(
   transactions: ParsedImportTransaction[],
   row: Omit<ParsedImportTransaction, "source_ref"> & { source_ref?: string }
 ) {
+  const lineNo =
+    typeof row.raw?.line === "number" ? row.raw.line : transactions.length + 1;
   const source_ref =
     row.source_ref ??
     makeSourceRef({
       d: row.booked_at,
       a: row.amount,
       c: row.currency ?? "ILS",
-      m: row.merchant ?? row.description,
+      n: lineNo,
       i: row.installment_index ?? "",
       t: row.installment_total ?? "",
     });
@@ -378,16 +380,13 @@ export function parseCalStatementPdf(text: string): ParseFileResult {
 
   flushUsdQueue(transactions, usdQueue, usdSectionDate);
 
-  const deduped = new Map<string, ParsedImportTransaction>();
-  for (const t of transactions) deduped.set(t.source_ref, t);
-
-  if (deduped.size === 0) warnings.push("no_transactions_found");
+  if (transactions.length === 0) warnings.push("no_transactions_found");
 
   return {
     source: "cal",
     accountLabel: label,
     accountMetadata: meta,
-    transactions: [...deduped.values()],
+    transactions,
     warnings,
   };
 }

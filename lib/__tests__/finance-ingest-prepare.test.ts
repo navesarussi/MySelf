@@ -66,6 +66,35 @@ describe("prepareIngestRows", () => {
     assert.equal(duplicatesInBatch, 0);
   });
 
+  it("assigns distinct stable keys for repeated same-day same-amount rows", () => {
+    const { prepared } = prepareIngestRows(
+      [
+        txn({ card_name: "6601", txn_date: "2026-06-28", amount: 130, merchant: "Zigo", description: "Zigo refund" }),
+        txn({ card_name: "6601", txn_date: "2026-06-28", amount: 130, merchant: "Zigo", description: "Zigo refund" }),
+      ],
+      noRules,
+      []
+    );
+    assert.equal(prepared.length, 2);
+    assert.notEqual(prepared[0].externalKey, prepared[1].externalKey);
+  });
+
+  it("skips re-import when stable key ordinals already exist in DB", () => {
+    const existingStableCounts = new Map([["6601|2026-06-28|130.00|ILS", 2]]);
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({ card_name: "6601", txn_date: "2026-06-28", amount: 130, merchant: "Zigo" }),
+        txn({ card_name: "6601", txn_date: "2026-06-28", amount: 130, merchant: "Zigo" }),
+      ],
+      noRules,
+      [],
+      new Set(),
+      existingStableCounts
+    );
+    assert.equal(prepared.length, 0);
+    assert.equal(duplicatesInBatch, 2);
+  });
+
   it("skips re-import rows that match an existing stable day+amount+card key", () => {
     const existingStableCounts = new Map([["1234|2026-09-01|42.00|ILS", 1]]);
     const { prepared, duplicatesInBatch } = prepareIngestRows(
