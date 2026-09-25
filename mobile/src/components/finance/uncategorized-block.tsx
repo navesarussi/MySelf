@@ -12,12 +12,15 @@ import { UncategorizedQuickRow } from "./uncategorized-quick-row";
 
 export function UncategorizedBlock({
   items,
+  totalCount,
   expanded,
   onToggle,
   onOpen,
   onCategorized,
 }: {
   items: UncategorizedTxn[];
+  /** Full queue size when the fetched list is capped (defaults to items.length). */
+  totalCount?: number;
   expanded: boolean;
   onToggle: () => void;
   onOpen: (id: string) => void;
@@ -37,6 +40,7 @@ export function UncategorizedBlock({
   }, [token, serverUrl]);
 
   if (items.length === 0) return null;
+  const count = totalCount ?? items.length;
   const visible = expanded ? items : items.slice(0, 4);
 
   async function quickCategorize(txn: UncategorizedTxn, category: string) {
@@ -62,7 +66,7 @@ export function UncategorizedBlock({
         backgroundColor: c.surface,
       }}
     >
-      <SectionTitle>{`${t("finance.uncategorized")} · ${items.length}`}</SectionTitle>
+      <SectionTitle>{`${t("finance.uncategorized")} · ${count}`}</SectionTitle>
       <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>
         {t("finance.quickCategorizeHint")}
       </Text>

@@ -69,9 +69,9 @@ export default function FinanceScreen() {
     queryKeys.financeTransactions(month),
     (cfg) => api.financeTransactions(cfg, { month, limit: 100 })
   );
-  const { data: uncategorizedTxns, refresh: refreshUncat } = useApiQuery(
+  const { data: uncategorizedPayload, refresh: refreshUncat } = useApiQuery(
     queryKeys.financeUncategorized,
-    (cfg) => api.financeTransactions(cfg, { uncategorized: true, limit: 500 })
+    (cfg) => api.financeTransactions(cfg, { uncategorized: true, limit: 500, includeTotal: true })
   );
 
   const refresh = () => {
@@ -89,7 +89,13 @@ export default function FinanceScreen() {
       weekly_pace: normalizeWeeklyPace(p.weekly_pace),
     };
   }, [plan]);
-  const uncategorized = (uncategorizedTxns ?? []) as UncategorizedTxn[];
+  const uncategorized = (
+    Array.isArray(uncategorizedPayload)
+      ? uncategorizedPayload
+      : (uncategorizedPayload?.items ?? [])
+  ) as UncategorizedTxn[];
+  const uncategorizedTotal =
+    Array.isArray(uncategorizedPayload) ? uncategorized.length : (uncategorizedPayload?.total ?? uncategorized.length);
 
   const openTxn = useCallback(
     (item: FinanceTransaction) => {
@@ -152,6 +158,7 @@ export default function FinanceScreen() {
       ) : null}
       <UncategorizedBlock
         items={uncategorized}
+        totalCount={uncategorizedTotal}
         expanded={showAllUncat}
         onToggle={() => setShowAllUncat((v) => !v)}
         onCategorized={refresh}

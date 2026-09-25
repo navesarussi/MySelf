@@ -1,3 +1,4 @@
+import { extractCoreMerchantName } from "@/lib/finance/cal-duplicate";
 import { lineTypeForCategory, type PlanLineType } from "@/lib/finance/expense-type";
 import { normalizeHebrewDescription } from "@/lib/finance/hebrew-merchant";
 
@@ -22,10 +23,30 @@ export function formatMerchantLabel(value: string | null | undefined): string {
   return normalizeHebrewDescription(raw);
 }
 
+/** Legacy key before category-glue stripping (kept for existing finance_merchant_rules). */
+export function legacyNormalizeMerchantKey(value: string | null | undefined): string {
+  const spaced = formatMerchantLabel(value);
+  return spaced.toLowerCase().replace(/\s+/g, " ");
+}
+
 /** Normalize merchant/description for consistent lookup and rule keys. */
 export function normalizeMerchantKey(value: string | null | undefined): string {
   const spaced = formatMerchantLabel(value);
-  return spaced.toLowerCase().replace(/\s+/g, " ");
+  const core = extractCoreMerchantName(spaced);
+  if (core) return core;
+  return legacyNormalizeMerchantKey(spaced);
+}
+
+function merchantLookupKeys(merchant: string | null | undefined, description: string | null | undefined): string[] {
+  const keys = new Set<string>();
+  for (const raw of [merchant, description]) {
+    if (!raw?.trim()) continue;
+    const modern = normalizeMerchantKey(raw);
+    const legacy = legacyNormalizeMerchantKey(raw);
+    if (modern) keys.add(modern);
+    if (legacy) keys.add(legacy);
+  }
+  return [...keys];
 }
 
 /** Find a matching rule for a given merchant/description. */
@@ -34,16 +55,18 @@ export function matchMerchantRule<T extends { merchant_key: string }>(
   description: string | null | undefined,
   rules: Map<string, T> | T[]
 ): T | null {
-  const m = normalizeMerchantKey(merchant);
-  const d = normalizeMerchantKey(description);
+  const keys = merchantLookupKeys(merchant, description);
   if (rules instanceof Map) {
-    if (m && rules.has(m)) return rules.get(m)!;
-    if (d && rules.has(d)) return rules.get(d)!;
+    for (const k of keys) {
+      if (rules.has(k)) return rules.get(k)!;
+    }
     return null;
   }
-  for (const r of rules) {
-    const k = normalizeMerchantKey(r.merchant_key);
-    if ((m && k === m) || (d && k === d)) return r;
+  for (const k of keys) {
+    for (const r of rules) {
+      const ruleKeys = merchantLookupKeys(r.merchant_key, r.merchant_key);
+      if (ruleKeys.includes(k)) return r;
+    }
   }
   return null;
 }

@@ -440,14 +440,18 @@ export const api = {
     apiFetch<{ ok: boolean }>(c, `/finance/plan/lines/${lineId}`, { method: "DELETE" }),
   financeTransactions: (
     c: ApiConfig,
-    params: { month?: string; uncategorized?: boolean; limit?: number }
+    params: { month?: string; uncategorized?: boolean; limit?: number; includeTotal?: boolean }
   ) => {
     const sp = new URLSearchParams();
     if (params.month) sp.set("month", params.month);
     if (params.uncategorized) sp.set("uncategorized", "1");
     if (params.limit) sp.set("limit", String(params.limit));
+    if (params.includeTotal) sp.set("includeTotal", "1");
     const q = sp.toString();
-    return apiFetch<FinanceTransaction[]>(c, `/finance/transactions${q ? `?${q}` : ""}`);
+    return apiFetch<FinanceTransaction[] | { items: FinanceTransaction[]; total: number }>(
+      c,
+      `/finance/transactions${q ? `?${q}` : ""}`
+    );
   },
   financeTransaction: (c: ApiConfig, id: string) =>
     apiFetch<

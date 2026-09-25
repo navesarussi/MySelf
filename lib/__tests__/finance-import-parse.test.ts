@@ -9,6 +9,7 @@ import { parseCsvText } from "../finance/import/parse-tabular";
 import { importSourceToTxnSource } from "../finance/import/source-map";
 import { formatInstallmentLabel, parseInstallmentLabel } from "../finance/import/installment-label";
 import {
+  compactImportText,
   extractCalInstallment,
   extractCalMerchantFromTail,
   isSummaryImportText,
@@ -40,6 +41,8 @@ describe("installment helpers", () => {
 describe("normalize-import-row", () => {
   it("detects summary/total rows", () => {
     assert.equal(isSummaryImportText('סה"כ לתאריך 01/11/25'), true);
+    assert.equal(isSummaryImportText('16.20סה"כ לתאריך'), true);
+    assert.equal(isSummaryImportText(compactImportText('סה"כלתאריך')), true);
     assert.equal(isSummaryImportText("344 5202/11/11"), false);
     assert.equal(isSummaryImportText("סופר-פאר"), false);
   });
@@ -54,6 +57,18 @@ describe("normalize-import-row", () => {
     assert.match(merchant, /מוצרי און/);
     assert.doesNotMatch(merchant, /1234/);
     assert.doesNotMatch(merchant, /ApplePay/i);
+  });
+
+  it("keeps Latin merchant when PayBox label is present", () => {
+    const { merchant } = extractCalMerchantFromTail("מזהה כרטיס 1234ApplePay MOC.REGNITSOH");
+    assert.match(merchant, /HOSTINGER/i);
+    assert.doesNotMatch(merchant, /מזהה/);
+  });
+
+  it("strips glued category prefix from merchant tails", () => {
+    const { merchant } = extractCalMerchantFromTail("מסעדותקפהג׳ו");
+    assert.match(merchant, /קפה/);
+    assert.doesNotMatch(merchant, /^מסעדות/);
   });
 
   it("sets installments only for explicit Cal markers", () => {
@@ -122,6 +137,30 @@ EU 16.20סה"כ לתאריך
 `;
     const result = parseCalStatementPdf(text);
     assert.equal(result.transactions.length, 0);
+  });
+
+  it("parses USD merchant rows and skips glued subtotal lines", () => {
+    const text = `
+דף חיוב חודשי
+2853755000-966-01
+$ 20.00 RAILWAY.APP
+$ 5.00 CLAUDE.AI SUBSCR
+$ 1.00 FOREIGN TX FEE
+$ 26.00 סה"כ לתאריך 01/10/25
+₪ 95.30 ₪ 95.30 סופר-פאר 5202/11/01
+`;
+    const result = parseCalStatementPdf(text);
+    const usd = result.transactions.filter((t) => t.currency === "USD");
+    assert.equal(usd.length, 3);
+    assert.ok(usd.some((t) => /railway/i.test(t.merchant ?? "")));
+    assert.ok(usd.some((t) => /claude/i.test(t.merchant ?? "")));
+    assert.ok(usd.every((t) => t.booked_at === "2025-10-01"));
+    assert.ok(result.transactions.every((t) => !/סה"כ/i.test(t.merchant ?? "")));
+  });
+
+  it("extracts Anthropic from latin-only merchant line", () => {
+    const { merchant } = extractCalMerchantFromTail("CITROPAIC/HPA ANTHROPIC");
+    assert.match(merchant, /anthropic/i, `got ${merchant}`);
   });
 
   it("parses a redacted real Cal PDF fixture when present", async () => {

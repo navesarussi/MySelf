@@ -10,6 +10,11 @@ import {
   txnRowQualityScore,
 } from "@/lib/finance/cal-duplicate";
 import { financeExternalKey, type FinanceSource } from "@/lib/finance/external-key";
+import {
+  cardScopeFromAccount,
+  stableTxnBaseKey,
+  stableTxnExternalKey,
+} from "@/lib/finance/stable-external-key";
 import { inferTxnKind, inferredCategory, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
 import { loadCategoryHistory, suggestCategoryFromHistory, type MerchantCategoryRow } from "@/lib/finance/merchant-category";
 import { fetchMerchantRulesMap, matchMerchantRule, resolveExpenseType, type MerchantRule } from "@/lib/finance/merchant-rules";
@@ -68,7 +73,17 @@ function normalizeInput(input: FinanceIngestInput) {
   const account_number = input.account_number?.trim() || null;
   const external_key =
     input.external_key?.trim() ||
-    financeExternalKey({ source: input.source, account_number, card_name, identifier: input.identifier, txn_date, amount, description, merchant });
+    financeExternalKey({
+      source: input.source,
+      account_number,
+      card_name,
+      identifier: input.identifier,
+      txn_date,
+      amount,
+      currency: input.currency,
+      description,
+      merchant,
+    });
 
   return {
     ...input,
@@ -192,15 +207,39 @@ export function prepareIngestRows(
   inputs: FinanceIngestInput[],
   rulesMap: Map<string, MerchantRule>,
   history: MerchantCategoryRow[],
-  existingCleanKeys: Set<string> = new Set()
+  existingCleanKeys: Set<string> = new Set(),
+  existingStableCounts: Map<string, number> = new Map()
 ): PreparedBatch {
   const prepared: PreparedRow[] = [];
   const seenKeys = new Set<string>();
   const batchCleanKeys = new Set<string>();
+  const incomingStableOrdinals = new Map<string, number>();
   let duplicatesInBatch = 0;
 
   for (const raw of inputs) {
-    const input = applyRules(normalizeInput(raw), rulesMap, history);
+    let input = applyRules(normalizeInput(raw), rulesMap, history);
+
+    const cardScope = cardScopeFromAccount({
+      account_number: input.account_number,
+      card_name: input.card_name,
+    });
+    const stableBase = stableTxnBaseKey({
+      cardScope,
+      txn_date: input.txn_date,
+      amount: input.amount,
+      currency: input.currency,
+    });
+    const incomingOrdinal = (incomingStableOrdinals.get(stableBase) ?? 0) + 1;
+    incomingStableOrdinals.set(stableBase, incomingOrdinal);
+    const existingCount = existingStableCounts.get(stableBase) ?? 0;
+    if (incomingOrdinal <= existingCount) {
+      duplicatesInBatch += 1;
+      continue;
+    }
+    input = {
+      ...input,
+      external_key: stableTxnExternalKey(stableBase, incomingOrdinal),
+    };
 
     if (
       shouldSkipCalGarbageDuplicate({
@@ -334,6 +373,38 @@ function collapseCalBatchDuplicates(prepared: PreparedRow[]): PreparedRow[] {
   return [...passthrough, ...kept];
 }
 
+async function loadExistingStableKeyCounts(inputs: FinanceIngestInput[]): Promise<Map<string, number>> {
+  const dates = [
+    ...new Set(
+      inputs
+        .map((i) => i.txn_date?.trim())
+        .filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d)))
+    ),
+  ];
+  if (!dates.length) return new Map();
+
+  const { data, error } = await getSupabase()
+    .from("finance_transactions")
+    .select("txn_date, amount, currency, account_number, card_name")
+    .in("txn_date", dates);
+  if (error) throw new Error(error.message);
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    const base = stableTxnBaseKey({
+      cardScope: cardScopeFromAccount({
+        account_number: row.account_number != null ? String(row.account_number) : null,
+        card_name: row.card_name != null ? String(row.card_name) : null,
+      }),
+      txn_date: String(row.txn_date),
+      amount: Number(row.amount),
+      currency: String(row.currency ?? "ILS"),
+    });
+    counts.set(base, (counts.get(base) ?? 0) + 1);
+  }
+  return counts;
+}
+
 async function loadExistingCalCleanKeys(inputs: FinanceIngestInput[]): Promise<Set<string>> {
   const calDates = [
     ...new Set(
@@ -371,12 +442,19 @@ async function loadExistingCalCleanKeys(inputs: FinanceIngestInput[]): Promise<S
 }
 
 export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): Promise<IngestResult> {
-  const [history, rulesMap, existingCleanKeys] = await Promise.all([
+  const [history, rulesMap, existingCleanKeys, existingStableCounts] = await Promise.all([
     loadCategoryHistory(),
     fetchMerchantRulesMap(),
     loadExistingCalCleanKeys(inputs),
+    loadExistingStableKeyCounts(inputs),
   ]);
-  const { prepared, duplicatesInBatch } = prepareIngestRows(inputs, rulesMap, history, existingCleanKeys);
+  const { prepared, duplicatesInBatch } = prepareIngestRows(
+    inputs,
+    rulesMap,
+    history,
+    existingCleanKeys,
+    existingStableCounts
+  );
 
   let skipped = duplicatesInBatch;
   const created: FinanceTransaction[] = [];

@@ -1,5 +1,11 @@
 import { getSupabase } from "@/lib/supabase";
-import { normalizeMerchantKey, type ExpenseType, type MerchantRule, type MerchantRuleKind } from "@/lib/finance/merchant-rules-client";
+import {
+  legacyNormalizeMerchantKey,
+  normalizeMerchantKey,
+  type ExpenseType,
+  type MerchantRule,
+  type MerchantRuleKind,
+} from "@/lib/finance/merchant-rules-client";
 
 export {
   matchMerchantRule,
@@ -23,7 +29,10 @@ export async function fetchMerchantRulesMap(): Promise<Map<string, MerchantRule>
   const rules = await fetchMerchantRules();
   const map = new Map<string, MerchantRule>();
   for (const r of rules) {
-    map.set(normalizeMerchantKey(r.merchant_key), r);
+    const modern = normalizeMerchantKey(r.merchant_key);
+    const legacy = legacyNormalizeMerchantKey(r.merchant_key);
+    if (modern) map.set(modern, r);
+    if (legacy && legacy !== modern) map.set(legacy, r);
   }
   return map;
 }
