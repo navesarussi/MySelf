@@ -100,6 +100,11 @@ export function dbError(message = "db_error") {
   return NextResponse.json({ error: message }, { status: 500 });
 }
 
+/** A write naming a project the account doesn't own fails its (project_id, user_id) key. */
+export function projectWriteError(error: { code?: string } | null) {
+  return error?.code === "23503" ? badRequest("project_not_found") : dbError();
+}
+
 export function conflict(message = "duplicate") {
   return NextResponse.json({ error: message }, { status: 409 });
 }

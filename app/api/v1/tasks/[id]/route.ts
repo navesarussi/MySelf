@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
-import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized, notFound, projectWriteError } from "@/lib/api/auth";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { applyExternalStatusChange } from "@/lib/integrations/task-sources/writeback";
 import { TASK_SELECT, TaskJoin, projectNameFromJoin } from "@/lib/api/tasks";
@@ -27,8 +27,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     .from("tasks")
     .select(TASK_SELECT)
     .eq("id", id)
-    .single();
-  if (error || !data) return dbError();
+    .maybeSingle();
+  if (error) return dbError();
+  if (!data) return notFound();
 
   const row = data as unknown as TaskJoin;
   return NextResponse.json({
@@ -50,8 +51,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .from("tasks")
     .select("*")
     .eq("id", id)
-    .single();
-  if (fetchError || !existingTask) return dbError();
+    .maybeSingle();
+  if (fetchError) return dbError();
+  if (!existingTask) return notFound();
 
   const task = existingTask as Task;
   const isExternal = task.source !== "manual";
@@ -96,7 +98,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const { data, error } = await (await userDb()).from("tasks").update(patch).eq("id", id).select().single();
-  if (error) return dbError();
+  if (error) return projectWriteError(error);
   revalidateTaskPaths();
   return NextResponse.json(data);
 }
@@ -110,8 +112,9 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     .from("tasks")
     .select("*")
     .eq("id", id)
-    .single();
-  if (fetchError || !existingTask) return dbError();
+    .maybeSingle();
+  if (fetchError) return dbError();
+  if (!existingTask) return notFound();
 
   const task = existingTask as Task;
 

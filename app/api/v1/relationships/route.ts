@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
 import { normalizePhone } from "@/lib/integrations/phone";
-import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized, projectWriteError } from "@/lib/api/auth";
 import type { Relationship } from "@/lib/types";
 
 type RelRow = Relationship & { projects: { name: string } | null };
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     console.error("[relationships POST]", error.message, error.code, error.details);
-    return dbError(error.message || "db_error");
+    return error.code === "23503" ? projectWriteError(error) : dbError(error.message || "db_error");
   }
   revalidateRelationshipPaths();
   return NextResponse.json(data, { status: 201 });

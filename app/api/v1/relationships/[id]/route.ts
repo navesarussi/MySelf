@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
 import { normalizePhone } from "@/lib/integrations/phone";
-import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized, projectWriteError } from "@/lib/api/auth";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -51,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .eq("id", id)
     .select()
     .single();
-  if (error) return dbError();
+  if (error) return projectWriteError(error);
   revalidateRelationshipPaths();
   return NextResponse.json(data);
 }

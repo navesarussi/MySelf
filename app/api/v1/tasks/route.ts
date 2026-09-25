@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
-import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized, projectWriteError } from "@/lib/api/auth";
 import { dedupeTasks } from "@/lib/data-integrity";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single();
-  if (error) return dbError();
+  if (error) return projectWriteError(error);
   revalidateTaskPaths();
   return NextResponse.json(data, { status: 201 });
 }
