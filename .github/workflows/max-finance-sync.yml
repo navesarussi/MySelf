@@ -10,20 +10,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The scraper needs MAX_USERNAME / MAX_PASSWORD. Without them every run
+      # used to download a 700MB browser and then fail on missing_env — every
+      # 20 minutes, since the workflow was added. Skip cleanly instead.
+      - name: Check credentials
+        id: creds
+        env:
+          MAX_USERNAME: ${{ secrets.MAX_USERNAME }}
+          MAX_PASSWORD: ${{ secrets.MAX_PASSWORD }}
+        run: |
+          if [ -n "$MAX_USERNAME" ] && [ -n "$MAX_PASSWORD" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::MAX_USERNAME / MAX_PASSWORD secrets are not set — skipping sync."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.creds.outputs.ok == 'true'
 
       - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ok == 'true'
         with:
           node-version: "22"
           cache: npm
 
       - name: Install dependencies
+        if: steps.creds.outputs.ok == 'true'
         run: npm ci
 
       - name: Install Camoufox browser
+        if: steps.creds.outputs.ok == 'true'
         run: npx camoufox-js fetch
 
       - name: Sync MAX → MySelf
+        if: steps.creds.outputs.ok == 'true'
         env:
           MAX_USERNAME: ${{ secrets.MAX_USERNAME }}
           MAX_PASSWORD: ${{ secrets.MAX_PASSWORD }}
