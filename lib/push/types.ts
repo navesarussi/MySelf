@@ -7,7 +7,9 @@ export type NotificationType =
   | "tasks"
   | "timeline"
   | "finance"
-  | "test";
+  | "test"
+  /** Production alerts to the operator (smoke test, health digest). */
+  | "ops";
 
 export type NotificationPreferences = {
   enabled: boolean;
