@@ -22,11 +22,12 @@ export type HabitHistoryPartition = {
 };
 
 /** Split history into the backfill queue vs already-reported days. */
-export function partitionHabitHistory(days: HabitHistoryDay[]): HabitHistoryPartition {
+export function partitionHabitHistory(days: HabitHistoryDay[] | undefined | null): HabitHistoryPartition {
+  const safeDays = Array.isArray(days) ? days : [];
   const missed: HabitHistoryDay[] = [];
   const reported: HabitHistoryDay[] = [];
   const other: HabitHistoryDay[] = [];
-  for (const day of days) {
+  for (const day of safeDays) {
     if (day.status === "missed") missed.push(day);
     else if (day.status === "success" || day.status === "fall") reported.push(day);
     else other.push(day);
@@ -35,18 +36,20 @@ export function partitionHabitHistory(days: HabitHistoryDay[]): HabitHistoryPart
 }
 
 /** Optimistically drop a missed day from the actionable queue. */
-export function removeMissedHistoryDay(days: HabitHistoryDay[], date: string): HabitHistoryDay[] {
-  return days.filter((day) => day.date !== date);
+export function removeMissedHistoryDay(days: HabitHistoryDay[] | undefined | null, date: string): HabitHistoryDay[] {
+  const safeDays = Array.isArray(days) ? days : [];
+  return safeDays.filter((day) => day.date !== date);
 }
 
 /** Restore a missed day after a failed write (keeps date order). */
 export function restoreMissedHistoryDay(
-  days: HabitHistoryDay[],
+  days: HabitHistoryDay[] | undefined | null,
   date: string,
 ): HabitHistoryDay[] {
-  if (days.some((day) => day.date === date)) return days;
+  const safeDays = Array.isArray(days) ? days : [];
+  if (safeDays.some((day) => day.date === date)) return safeDays;
   const restored: HabitHistoryDay = { date, status: "missed" };
-  const next = [...days, restored];
+  const next = [...safeDays, restored];
   next.sort((a, b) => a.date.localeCompare(b.date));
   return next;
 }

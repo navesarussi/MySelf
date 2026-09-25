@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildHabitHistoryGrid } from "../habit-history";
+import {
+  buildHabitHistoryGrid,
+  partitionHabitHistory,
+  removeMissedHistoryDay,
+  restoreMissedHistoryDay,
+} from "../habit-history";
 import type { Habit } from "../types";
 
 const habit: Habit = {
@@ -33,5 +38,21 @@ describe("buildHabitHistoryGrid", () => {
     assert.equal(byDate.get("2026-07-10"), "success");
     assert.equal(byDate.get("2026-07-08"), "fall");
     assert.equal(byDate.get("2026-07-11"), "missed");
+  });
+});
+
+describe("partitionHabitHistory", () => {
+  it("treats undefined or null days as empty", () => {
+    assert.deepEqual(partitionHabitHistory(undefined), { missed: [], reported: [], other: [] });
+    assert.deepEqual(partitionHabitHistory(null), { missed: [], reported: [], other: [] });
+  });
+});
+
+describe("missed-day optimistic helpers", () => {
+  it("handle undefined grids safely", () => {
+    assert.deepEqual(removeMissedHistoryDay(undefined, "2026-07-01"), []);
+    assert.deepEqual(restoreMissedHistoryDay(undefined, "2026-07-01"), [
+      { date: "2026-07-01", status: "missed" },
+    ]);
   });
 });

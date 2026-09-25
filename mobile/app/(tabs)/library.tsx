@@ -16,6 +16,7 @@ import {
   patchLibraryEntryInHome,
   removeLibraryEntryFromHome,
 } from "../../src/query";
+import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import {
   Badge,
   Btn,
@@ -271,6 +272,7 @@ export default function LibraryScreen() {
   );
 
   return (
+    <ScreenErrorBoundary name="library">
     <>
       <ScreenList
         title={t("library.title")}
@@ -319,5 +321,6 @@ export default function LibraryScreen() {
         ) : null}
       </FormModal>
     </>
+    </ScreenErrorBoundary>
   );
 }

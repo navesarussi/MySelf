@@ -1,9 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { api, type HomePayload } from "../../src/api/resources";
 import { todayLocalISO } from "../../src/hooks";
+import { useHabitActions } from "../../src/hooks/use-habit-actions";
 import { useI18n } from "../../src/i18n";
-import { useApiQuery, useApiMutation, queryKeys, queryClient, patchTaskInHome, patchHabitInHome, patchRelationshipInHome } from "../../src/query";
+import { useApiQuery, useApiMutation, queryKeys, queryClient, patchTaskInHome, patchRelationshipInHome } from "../../src/query";
 import { ErrorNote, HomeScreenSkeleton, Screen } from "../../src/components/ui";
+import { ScreenErrorBoundary, WidgetErrorBoundary } from "../../src/components/error-boundary";
+import { HabitDetailsModal } from "../../src/components/habit-details-modal";
+import { HabitEditModal } from "../../src/components/habit-edit-modal";
 import { HomeHero } from "../../src/components/home/home-hero";
 import { HomeKpiSection } from "../../src/components/home/home-kpi-section";
 import { HomeHabitsFeed } from "../../src/components/home/home-habits-feed";
@@ -24,14 +28,25 @@ import { achievabilityScore, rankGoalsForHome } from "@/lib/goals-rank";
 import { filterDueRelationships } from "@/lib/relationships-due";
 import { topPriorityTasks } from "@/lib/task-priority";
 import { homeHeroCount } from "@/lib/home-kpis";
-import type { ContentEntry, Goal, Relationship, Task } from "@/lib/types";
+import type { ContentEntry, Goal, Habit, Relationship, Task } from "@/lib/types";
 
 export default function HomeScreen() {
   const { t, locale } = useI18n();
   const { data, loading, isFetching, error, refresh } = useApiQuery(queryKeys.home, api.home);
   const { run, isPending } = useApiMutation();
+  const {
+    handleCheckIn: habitCheckIn,
+    handleReportFall: habitReportFall,
+    handleReset: habitReset,
+    handleBackfill: habitBackfill,
+    handleSave: habitSave,
+    handleDelete: habitDelete,
+    isPending: habitBusy,
+  } = useHabitActions();
   const [goalForm, setGoalForm] = useState<Goal | null>(null);
   const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags"> | null>(null);
+  const [viewingHabitId, setViewingHabitId] = useState<string | null>(null);
+  const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const today = todayISO();
   const todayDate = new Date();
   const uniqueHabits = useMemo(() => dedupeHabits(data?.habits ?? [], today), [data?.habits, today]);
@@ -54,6 +69,10 @@ export default function HomeScreen() {
   }).length;
   const bestStreak = uniqueHabits.reduce((m, h) => Math.max(m, effectiveStreak(h, habitReportDay(h.report_time))), 0);
   const topTasks = useMemo(() => topPriorityTasks(data?.openTasks ?? [], 10), [data?.openTasks]);
+  const viewingHabit = useMemo(
+    () => (viewingHabitId ? uniqueHabits.find((h) => h.id === viewingHabitId) ?? null : null),
+    [uniqueHabits, viewingHabitId]
+  );
   const heroCount = homeHeroCount({
     habitsOverdue: habitsOverdueToday.length,
     dueRelationships: dueRelationships.length,
@@ -77,12 +96,16 @@ export default function HomeScreen() {
   }
 
   return (
+    <ScreenErrorBoundary name="home">
     <Screen title={t("home.compass")} subtitle={t("home.quote")} refreshing={isFetching} onRefresh={refresh}>
       {error && !data ? <ErrorNote message={error} onRetry={refresh} /> : null}
       {loading && !data ? <HomeScreenSkeleton /> : null}
       {data ? (
         <>
-          <HomeHero count={heroCount} />
+          <WidgetErrorBoundary name="home-hero">
+            <HomeHero count={heroCount} />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary name="home-kpis">
           <HomeKpiSection
             input={{
               habitsCount: uniqueHabits.length,
@@ -106,59 +129,20 @@ export default function HomeScreen() {
               tradingKill: Boolean(data.trading?.kill_switch_active),
             }}
           />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary name="home-habits">
           <HomeHabitsFeed
             uniqueCount={uniqueHabits.length}
             pending={habitsPendingToday}
             failureTotal={uniqueHabits.reduce((s, h) => s + (h.failure_count ?? 0), 0)}
-            busy={isPending}
-            onCheckIn={async (h) => {
-              const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-              const todayStr = habitReportDay(h.report_time);
-              queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-                patchHabitInHome(old, h.id, { last_checked_on: todayStr, streak_count: (h.streak_count ?? 0) + 1 })
-              );
-              await run((config) => api.reportHabit(config, h.id, "check_in"), {
-                itemId: h.id,
-                flash: { success: "flash.checkInRecorded" },
-                onError: () => {
-                  if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-                },
-                onSuccess: () => {
-                  queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                },
-              });
-            }}
-            onReportFall={async (h) => {
-              const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-              queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-                patchHabitInHome(old, h.id, { streak_count: 0, failure_count: (h.failure_count ?? 0) + 1 })
-              );
-              await run((config) => api.reportHabit(config, h.id, "fall"), {
-                itemId: h.id,
-                flash: { success: "flash.fallRecorded" },
-                onError: () => {
-                  if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-                },
-                onSuccess: () => {
-                  queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                },
-              });
-            }}
-            onReset={async (h) => {
-              const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-              queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => patchHabitInHome(old, h.id, { streak_count: 0 }));
-              await run((config) => api.reportHabit(config, h.id, "reset"), {
-                itemId: h.id,
-                flash: { success: "flash.streakReset" },
-                onError: () => {
-                  if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-                },
-                onSuccess: () => {
-                  queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-                },
-              });
-            }}
+            busy={(id) => isPending(id) || habitBusy(id)}
+            onOpenHabit={(h) => setViewingHabitId(h.id)}
+            onCheckIn={habitCheckIn}
+            onReportFall={habitReportFall}
+            onReset={habitReset}
           />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary name="home-lists">
           <HomeListsFeed
             rankedGoals={rankedGoals}
             pendingCommitments={data.pendingCommitments}
@@ -207,10 +191,44 @@ export default function HomeScreen() {
               });
             }}
           />
+          </WidgetErrorBoundary>
         </>
       ) : null}
       <HomeGoalModal goal={goalForm} onClose={() => setGoalForm(null)} onSaved={refresh} />
       <HomeLibraryModal entry={libraryForm} onClose={() => setLibraryForm(null)} onSaved={refresh} />
+      <HabitDetailsModal
+        habit={viewingHabit}
+        visible={viewingHabit !== null}
+        onClose={() => setViewingHabitId(null)}
+        onEdit={(h) => {
+          setViewingHabitId(null);
+          setEditingHabit(h);
+        }}
+        onCheckIn={habitCheckIn}
+        onReportFall={habitReportFall}
+        onBackfill={habitBackfill}
+        busy={viewingHabit ? habitBusy(viewingHabit.id) : false}
+      />
+      <HabitEditModal
+        habit={editingHabit}
+        visible={editingHabit !== null}
+        onClose={() => setEditingHabit(null)}
+        onSave={async (fields) => {
+          if (!editingHabit) return;
+          const h = editingHabit;
+          setEditingHabit(null);
+          await habitSave(h, fields);
+        }}
+        onDelete={async () => {
+          if (!editingHabit) return;
+          const h = editingHabit;
+          setEditingHabit(null);
+          setViewingHabitId(null);
+          await habitDelete(h);
+        }}
+        saving={editingHabit ? habitBusy(editingHabit.id) : false}
+      />
     </Screen>
+    </ScreenErrorBoundary>
   );
 }

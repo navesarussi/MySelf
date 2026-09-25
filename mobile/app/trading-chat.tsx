@@ -5,6 +5,7 @@ import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/query";
+import { ScreenErrorBoundary } from "../src/components/error-boundary";
 import { Badge, Btn, Screen } from "../src/components/ui";
 import type { ChatMessageRow } from "@/lib/trading/types-client";
 
@@ -61,6 +62,7 @@ export default function TradingChatScreen() {
   );
 
   return (
+    <ScreenErrorBoundary name="trading-chat">
     <Screen title={t("trading.hubChat")} subtitle={t("trading.chatSubtitle")}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={80}>
         <ScrollView ref={scrollRef} style={{ flex: 1, minHeight: 360 }} contentContainerStyle={{ paddingBottom: 16 }} onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
@@ -104,5 +106,6 @@ export default function TradingChatScreen() {
         </View>
       </KeyboardAvoidingView>
     </Screen>
+    </ScreenErrorBoundary>
   );
 }

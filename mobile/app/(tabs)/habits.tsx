@@ -1,19 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { api, type HomePayload } from "../../src/api/resources";
+import { api } from "../../src/api/resources";
+import { useHabitActions } from "../../src/hooks/use-habit-actions";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
-import {
-  useApiQuery,
-  useApiMutation,
-  queryKeys,
-  queryClient,
-  patchItemInList,
-  removeItemFromList,
-  patchHabitInHome,
-  removeHabitFromHome,
-} from "../../src/query";
+import { useApiQuery, useApiMutation, queryKeys, queryClient } from "../../src/query";
+import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import type { Habit } from "@/lib/types";
 import {
   Btn,
@@ -30,14 +23,7 @@ import { HabitCard } from "../../src/components/habit-card";
 import { HabitsReportedSection } from "../../src/components/habits-reported-section";
 import { HabitDetailsModal } from "../../src/components/habit-details-modal";
 import { HabitEditModal, type HabitEditFields } from "../../src/components/habit-edit-modal";
-import {
-  computeCheckIn,
-  computeFall,
-  dedupeHabits,
-  habitNeedsAction,
-  habitReportDay,
-  sortHabitsByOldestReport,
-} from "@/lib/habit-stats";
+import { dedupeHabits, habitNeedsAction, sortHabitsByOldestReport } from "@/lib/habit-stats";
 
 type AddFormState = {
   name: string;
@@ -59,7 +45,16 @@ export default function HabitsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { data, loading, isFetching, error, refresh } = useApiQuery(queryKeys.habits, api.habits);
-  const { run, busy, isPending } = useApiMutation();
+  const { run, busy } = useApiMutation();
+  const {
+    handleCheckIn,
+    handleReportFall,
+    handleBackfill,
+    handleReset,
+    handleSave: saveHabit,
+    handleDelete: deleteHabit,
+    isPending,
+  } = useHabitActions();
   const [addForm, setAddForm] = useState<AddFormState | null>(null);
   const [viewingHabitId, setViewingHabitId] = useState<string | null>(null);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
@@ -89,182 +84,14 @@ export default function HabitsScreen() {
     [allHabits, viewingHabitId]
   );
 
-  const handleCheckIn = useCallback(
-    async (h: Habit) => {
-      const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
-      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-
-      const todayStr = habitReportDay(h.report_time);
-      queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
-        patchItemInList(old, h.id, {
-          streak_count: (h.streak_count ?? 0) + 1,
-          last_checked_on: todayStr,
-        })
-      );
-      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-        patchHabitInHome(old, h.id, {
-          streak_count: (h.streak_count ?? 0) + 1,
-          last_checked_on: todayStr,
-        })
-      );
-
-      await run((config) => api.reportHabit(config, h.id, "check_in"), {
-        itemId: h.id,
-        flash: { success: "flash.checkInRecorded" },
-        onError: () => {
-          if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
-          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-        },
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-        },
-      });
-    },
-    [run]
-  );
-
-  const handleReportFall = useCallback(
-    async (h: Habit) => {
-      const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
-      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-      queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
-        patchItemInList(old, h.id, {
-          streak_count: 0,
-          failure_count: (h.failure_count ?? 0) + 1,
-        })
-      );
-      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-        patchHabitInHome(old, h.id, {
-          streak_count: 0,
-          failure_count: (h.failure_count ?? 0) + 1,
-        })
-      );
-      await run((config) => api.reportHabit(config, h.id, "fall"), {
-        itemId: h.id,
-        flash: { success: "flash.fallRecorded" },
-        onError: () => {
-          if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
-          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-        },
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-        },
-      });
-    },
-    [run]
-  );
-
-  const handleBackfill = useCallback(
-    async (h: Habit, date: string, type: "check_in" | "fall"): Promise<boolean> => {
-      const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
-      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-
-      const applyOptimisticPatch = (current: Habit): Partial<Habit> => {
-        const isSequential = !current.last_checked_on || date > current.last_checked_on;
-        if (isSequential) {
-          const result = type === "check_in" ? computeCheckIn(current, date) : computeFall(current, date);
-          return {
-            streak_count: result.streak,
-            best_streak: result.bestStreak,
-            total_success_days: result.totalSuccessDays,
-            failure_count: result.failureCount,
-            last_checked_on: date,
-            last_reported_at: new Date().toISOString(),
-          };
-        }
-        return {
-          total_success_days:
-            type === "check_in" ? (current.total_success_days ?? 0) + 1 : current.total_success_days,
-          failure_count: type === "fall" ? (current.failure_count ?? 0) + 1 : current.failure_count,
-          last_reported_at: new Date().toISOString(),
-        };
-      };
-
-      queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => {
-        const current = old?.find((item) => item.id === h.id) ?? h;
-        return patchItemInList(old, h.id, applyOptimisticPatch(current));
-      });
-      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => {
-        const current = old?.habits.find((item) => item.id === h.id) ?? h;
-        return patchHabitInHome(old, h.id, applyOptimisticPatch(current));
-      });
-
-      const updated = await run((config) => api.reportHabit(config, h.id, type, { for_date: date }), {
-        flash: { success: type === "check_in" ? "flash.checkInRecorded" : "flash.fallRecorded" },
-        onError: () => {
-          if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
-          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-        },
-        onSuccess: (serverHabit) => {
-          if (serverHabit) {
-            queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => patchItemInList(old, h.id, serverHabit));
-            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => patchHabitInHome(old, h.id, serverHabit));
-          }
-        },
-      });
-      return updated !== null;
-    },
-    [run]
-  );
-
-  const handleReset = useCallback(
-    async (h: Habit) => {
-      const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
-      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-      queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
-        patchItemInList(old, h.id, { streak_count: 0 })
-      );
-      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-        patchHabitInHome(old, h.id, { streak_count: 0 })
-      );
-      await run((config) => api.reportHabit(config, h.id, "reset"), {
-        itemId: h.id,
-        flash: { success: "flash.streakReset" },
-        onError: () => {
-          if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
-          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-        },
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-        },
-      });
-    },
-    [run]
-  );
-
   const handleSave = useCallback(
     async (fields: HabitEditFields) => {
       if (!editingHabit) return;
       const h = editingHabit;
-      const body = {
-        name: fields.name,
-        kind: fields.kind,
-        target_note: fields.target_note || null,
-        report_time: fields.report_time || null,
-        streak_count: Number(fields.streak_count) || 0,
-        best_streak: Number(fields.best_streak) || 0,
-        total_success_days: Number(fields.total_success_days) || 0,
-        failure_count: Number(fields.failure_count) || 0,
-        last_checked_on: fields.last_checked_on || null,
-      };
       setEditingHabit(null);
-      await run((config) => api.updateHabit(config, h.id, body), {
-        itemId: h.id,
-        flash: { success: "flash.habitUpdated" },
-        onSuccess: (updated) => {
-          if (updated) {
-            queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) =>
-              patchItemInList(old, h.id, updated)
-            );
-            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-              patchHabitInHome(old, h.id, updated)
-            );
-          }
-          queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-        },
-      });
+      await saveHabit(h, fields);
     },
-    [editingHabit, run]
+    [editingHabit, saveHabit]
   );
 
   const handleDelete = useCallback(async () => {
@@ -272,22 +99,8 @@ export default function HabitsScreen() {
     const h = editingHabit;
     setEditingHabit(null);
     setViewingHabitId(null);
-    const prevHabits = queryClient.getQueryData<Habit[]>(queryKeys.habits);
-    const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-    queryClient.setQueryData<Habit[]>(queryKeys.habits, (old) => removeItemFromList(old, h.id));
-    queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => removeHabitFromHome(old, h.id));
-    await run((config) => api.deleteHabit(config, h.id), {
-      itemId: h.id,
-      flash: { success: "flash.habitDeleted" },
-      onError: () => {
-        if (prevHabits) queryClient.setQueryData(queryKeys.habits, prevHabits);
-        if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-      },
-    });
-  }, [editingHabit, run]);
+    await deleteHabit(h);
+  }, [editingHabit, deleteHabit]);
 
   async function submitAdd() {
     if (!addForm || !addForm.name.trim()) return;
@@ -334,6 +147,7 @@ export default function HabitsScreen() {
   );
 
   return (
+    <ScreenErrorBoundary name="habits">
     <>
       <ScreenList
         title={t("habits.title")}
@@ -434,5 +248,6 @@ export default function HabitsScreen() {
         ) : null}
       </FormModal>
     </>
+    </ScreenErrorBoundary>
   );
 }

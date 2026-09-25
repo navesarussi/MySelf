@@ -18,6 +18,7 @@ import {
   patchRelationshipInHome,
   removeRelationshipFromHome,
 } from "../../src/query";
+import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import {
   Badge,
   Btn,
@@ -325,6 +326,7 @@ export default function RelationshipsScreen() {
   );
 
   return (
+    <ScreenErrorBoundary name="relationships">
     <>
       <ScreenList
         title={t("relationships.title")}
@@ -427,5 +429,6 @@ export default function RelationshipsScreen() {
         ) : null}
       </FormModal>
     </>
+    </ScreenErrorBoundary>
   );
 }

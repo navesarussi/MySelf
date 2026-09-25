@@ -87,10 +87,11 @@ export function HabitHistoryTable({
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
   const [reportedExpanded, setReportedExpanded] = useState(false);
+  const safeDays = Array.isArray(days) ? days : [];
 
-  const { missed, reported, other } = useMemo(() => partitionHabitHistory(days), [days]);
+  const { missed, reported, other } = useMemo(() => partitionHabitHistory(safeDays), [safeDays]);
 
-  if (days.length === 0) {
+  if (safeDays.length === 0) {
     return (
       <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
         {t("habits.historyEmpty")}

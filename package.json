@@ -1,6 +1,6 @@
 {
   "name": "myself-dashboard",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,7 +14,8 @@
     "sync:cal": "tsx scripts/finance/sync-visa-cal.ts",
     "test": "node --import tsx --test lib/__tests__/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p mobile/tsconfig.json",
-    "verify": "npm run typecheck && npm test"
+    "lint:mobile": "npm run lint --prefix mobile",
+    "verify": "npm run typecheck && npm run lint:mobile && npm test"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.101",

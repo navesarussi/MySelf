@@ -28,6 +28,7 @@ import {
   SectionTitle,
   confirmDelete,
 } from "../../src/components/ui";
+import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import { FormModal } from "../../src/components/form-modal";
 import { GoalCard } from "../../src/components/goal-card";
 import { CommitmentCard } from "../../src/components/commitment-card";
@@ -349,6 +350,7 @@ export default function GoalsScreen() {
   );
 
   return (
+    <ScreenErrorBoundary name="goals">
     <>
       <ScreenList
         title={t("goals.title")}
@@ -399,5 +401,6 @@ export default function GoalsScreen() {
         ) : null}
       </FormModal>
     </>
+    </ScreenErrorBoundary>
   );
 }

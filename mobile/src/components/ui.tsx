@@ -520,7 +520,6 @@ export function SectionTitle({
 /** Cross-platform destructive confirm: Alert on native, window.confirm on web. */
 export function confirmDelete(title: string, onConfirm: () => void, confirmLabel = "OK", cancelLabel = "Cancel") {
   if (Platform.OS === "web") {
-    // eslint-disable-next-line no-alert
     if (window.confirm(title)) onConfirm();
     return;
   }

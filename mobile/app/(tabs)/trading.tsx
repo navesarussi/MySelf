@@ -8,6 +8,7 @@ import { useColors, tokens } from "../../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../../src/query";
 import { Badge, Btn, Card, EmptyState, ErrorNote, KpiGridSkeleton, Screen, SectionTitle, SkeletonCard, confirmDelete } from "../../src/components/ui";
 import { KpiGrid, SeriesChart } from "../../src/components/trading/charts";
+import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import { PhaseGateCard, PositionCard, TradingHubLinks, TradingText, TriggerCard } from "../../src/components/trading/blocks";
 import { fmtDateTime, fmtPct, fmtR, fmtSignedUsd, fmtUsd } from "@/lib/trading/format";
 
@@ -23,8 +24,10 @@ export default function TradingScreen() {
   const events = useApiQuery(queryKeys.tradingEventsFeed, (cfg) => api.tradingEvents(cfg, 30), { staleTime: 30_000 });
 
   const data = overview.data;
-  const triggerRows = triggers.data;
-  const eventRows = events.data;
+  const triggerRows = triggers.data ?? [];
+  const eventRows = events.data ?? [];
+  const positions = data?.positions ?? [];
+  const otherPositions = data?.other_positions ?? [];
   const refreshing = overview.isFetching || triggers.isFetching || events.isFetching;
 
   const refresh = () => {
@@ -52,6 +55,7 @@ export default function TradingScreen() {
     : [];
 
   return (
+    <ScreenErrorBoundary name="trading">
     <Screen title={t("trading.title")} subtitle={t("trading.subtitle")} onRefresh={refresh} refreshing={refreshing}>
       {data ? (
         <View style={{ ...row, gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
@@ -123,7 +127,7 @@ export default function TradingScreen() {
         <>
           <View style={{ ...row, gap: 8, marginBottom: 8 }}>
             <Btn small variant="ghost" label={data.settings.entries_paused ? t("trading.resume") : t("trading.pause")} onPress={() => void control({ action: data.settings.entries_paused ? "resume_entries" : "pause_entries" })} />
-            {data.positions.length ? (
+            {positions.length ? (
               <Btn small variant="warn" label={t("trading.closeAll")} onPress={() => confirmDelete(t("trading.closeAllConfirm"), () => void control({ action: "close_all", confirm: true }), t("trading.closeAll"), t("common.cancel"))} />
             ) : null}
             <View style={{ flex: 1 }} />
@@ -133,21 +137,21 @@ export default function TradingScreen() {
               </TradingText>
             ) : null}
           </View>
-          {data.positions.length === 0 ? <EmptyState text={t("trading.noPositions")} /> : null}
-          {data.positions.map((p) => (
+          {positions.length === 0 ? <EmptyState text={t("trading.noPositions")} /> : null}
+          {positions.map((p) => (
             <PositionCard
               key={p.id}
               p={p}
               onClose={() => confirmDelete(t("trading.closeConfirm", { symbol: p.symbol }), () => void control({ action: "close_position", trade_id: p.id, confirm: true }), t("trading.close"), t("common.cancel"))}
             />
           ))}
-          {data.other_positions?.length ? (
+          {otherPositions.length ? (
             <>
               <SectionTitle>{t("trading.otherPositions")}</SectionTitle>
               <TradingText muted size={tokens.textXs}>
                 {t("trading.otherPositionsHint")}
               </TradingText>
-              {data.other_positions.map((p) => (
+              {otherPositions.map((p) => (
                 <PositionCard
                   key={p.id}
                   p={p}
@@ -173,8 +177,8 @@ export default function TradingScreen() {
       ) : null}
 
       <SectionTitle>{t("trading.triggers")}</SectionTitle>
-      {triggers.error && !triggerRows ? <ErrorNote message={triggers.error} onRetry={() => void triggers.refresh()} /> : null}
-      {triggerRows ? (
+      {triggers.error && triggers.data == null ? <ErrorNote message={triggers.error} onRetry={() => void triggers.refresh()} /> : null}
+      {triggers.data != null ? (
         <>
           {triggerRows.length === 0 ? <EmptyState text={t("trading.noTriggers")} /> : null}
           {triggerRows.slice(0, 12).map((tr) => (
@@ -189,8 +193,8 @@ export default function TradingScreen() {
       ) : null}
 
       <SectionTitle>{t("trading.events")}</SectionTitle>
-      {events.error && !eventRows ? <ErrorNote message={events.error} onRetry={() => void events.refresh()} /> : null}
-      {eventRows ? (
+      {events.error && events.data == null ? <ErrorNote message={events.error} onRetry={() => void events.refresh()} /> : null}
+      {events.data != null ? (
         <Card>
           {eventRows.slice(0, 15).map((e) => (
             <View key={e.id} style={{ ...row, gap: 8, alignItems: "flex-start", paddingVertical: 4 }}>
@@ -208,5 +212,6 @@ export default function TradingScreen() {
         <SkeletonCard lines={4} />
       ) : null}
     </Screen>
+    </ScreenErrorBoundary>
   );
 }

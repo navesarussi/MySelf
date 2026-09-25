@@ -15,6 +15,7 @@ import {
   removeTaskFromHome,
 } from "../../src/query";
 import type { HomePayload } from "../../src/api/resources";
+import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import {
   Btn,
   Chip,
@@ -389,6 +390,7 @@ export default function TasksScreen() {
   );
 
   return (
+    <ScreenErrorBoundary name="tasks">
     <>
       <ScreenList
         title={t("tasks.title")}
@@ -530,5 +532,6 @@ export default function TasksScreen() {
         ) : null}
       </FormModal>
     </>
+    </ScreenErrorBoundary>
   );
 }
