@@ -1,0 +1,48 @@
+# Smoke-test production after every Vercel production deploy.
+#
+# Vercel reports each deploy back to GitHub as a deployment status; this runs
+# when a Production one succeeds. It calls the key read endpoints with a session
+# token minted from AUTH_SECRET and fails on any non-200 or non-empty
+# `degraded` — and pushes the failure to the owner's phone (see
+# scripts/ops/post-deploy-smoke.ts).
+#
+# Requires secrets: MYSELF_API_URL, AUTH_SECRET (same value as the Vercel env
+# var), SMOKE_EMAIL (the primary account's Google email).
+name: Post-deploy smoke
+
+on:
+  deployment_status:
+  workflow_dispatch:
+
+concurrency:
+  group: post-deploy-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Smoke test production
+        env:
+          MYSELF_API_URL: ${{ secrets.MYSELF_API_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          GITHUB_SHA: ${{ github.event.deployment.sha || github.sha }}
+        run: npx tsx scripts/ops/post-deploy-smoke.ts

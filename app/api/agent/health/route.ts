@@ -1,29 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAgentSettings } from "@/lib/agent/settings";
-import { isWhatsAppConfigured, sendWhatsAppText } from "@/lib/whatsapp/client";
 import { isCronAuthorized } from "@/lib/api/cron-auth";
-import { runAsPrimary } from "@/lib/db/accounts";
+import { sendOpsAlert } from "@/lib/ops/alert";
+import { runHealthProbes } from "@/lib/ops/health-probes";
+import { formatHealthDigest } from "@/lib/ops/health-rules";
 
-/** Daily probe: Gemini key + WhatsApp send path. */
+export const maxDuration = 60;
+
+/**
+ * Daily dependency digest (Vercel cron, 03:00 UTC).
+ *
+ * Probes Gemini (credits / key), Alpaca (auth / account blocks), the WhatsApp
+ * token, and every account's integration tokens, then sends one push listing
+ * what is broken. Nothing is sent when everything is healthy — the old probe
+ * WhatsApp'd the owner every morning regardless, which trained them to ignore it.
+ */
 export async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // The probe message goes to the primary account's WhatsApp only.
-  const settings = await runAsPrimary(getAgentSettings);
-  const issues: string[] = [];
+  const issues = await runHealthProbes();
+  const digest = formatHealthDigest(issues);
+  if (!digest) return NextResponse.json({ ok: true, issues });
 
-  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) issues.push("missing_gemini_api_key");
-  if (!isWhatsAppConfigured()) issues.push("whatsapp_not_configured");
-
-  if (settings?.whatsapp_phone && isWhatsAppConfigured()) {
-    const probe = await sendWhatsAppText(
-      settings.whatsapp_phone,
-      "[health] בדיקת חיבור אוטומטית — אפשר להתעלם."
-    );
-    if (!probe.ok) issues.push(`whatsapp_send_failed:${probe.error}`);
-  }
-
-  return NextResponse.json({ ok: issues.length === 0, issues });
+  const alert = await sendOpsAlert({ ...digest, ref: "health-digest" }).catch((err) => {
+    console.error("[agent/health] alert failed", err instanceof Error ? err.message : err);
+    return null;
+  });
+  console.warn("[agent/health] issues", JSON.stringify(issues));
+  return NextResponse.json({ ok: false, issues, alert });
 }

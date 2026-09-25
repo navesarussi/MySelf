@@ -82,7 +82,8 @@ export function isTypeEnabled(
   prefs: NotificationPreferences,
   type: NotificationType
 ): boolean {
-  if (type === "test") return true;
+  // Test pushes and operator alerts have no preference toggle.
+  if (type === "test" || type === "ops") return true;
   if (!prefs.enabled) return false;
   return Boolean(prefs[type]);
 }

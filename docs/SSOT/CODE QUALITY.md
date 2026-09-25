@@ -47,6 +47,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 - `lib/trading/account-equity.ts` — `equityFromTrades` is the only account-equity formula. The tick and the dashboard both call it; each used to have its own.
 - `lib/ai-model.ts` — `GEMINI_MODEL_ID`. The model id was written out in the chat agent, the trading agent and the transcriber.
 - `lib/api/cron-auth.ts` — scheduler auth. Eight routes each compared the secret with `===`.
+- `lib/ops/` — production alerting. `health-rules.ts` (pure: classify Gemini/Alpaca/integration failures, format the digest) + `health-probes.ts` (live probes) back the daily `/api/agent/health` digest; `smoke.ts` backs the post-deploy smoke workflow (`scripts/ops/post-deploy-smoke.ts`); `alert.ts` `sendOpsAlert` is the one way to page the owner (push, WhatsApp fallback). Add a dependency check as a probe there, not a new cron.
 - `lib/habit-report-service.ts` — `applyHabitReport` is the only habit write path (REST, agent, legacy). Three copies existed and only one wrote the `habit_reports` history row.
 
 ## Notes
