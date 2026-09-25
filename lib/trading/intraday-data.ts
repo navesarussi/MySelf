@@ -2,8 +2,10 @@ import { isRegularSessionBar, latestStockPrices, stockBars } from "./broker/alpa
 import { isAlpacaConfigured } from "./broker/alpaca";
 import { fetchBars } from "./market-data";
 import { M15, M5, buildIntradayFrames, type IntradayFrames } from "./strategy/intraday";
-import type { AssetClass, Bar } from "./types";
+import { applyFetched, createTailCache, planRefresh, type TailCache } from "./intraday-bar-cache";
+import type { AssetClass } from "./types";
 import { mapWithConcurrency } from "@/lib/concurrency";
+import { chunk } from "@/lib/db/paginate";
 
 /**
  * Bars for the intraday strategy: crypto from Binance (per symbol), stocks from Alpaca (multi-symbol, IEX feed,
@@ -18,7 +20,40 @@ const MIN_5M = 60;
 export type IntradaySymbol = { symbol: string; asset_class: AssetClass; provider_symbol: string };
 export type LoadedFrames = { sym: IntradaySymbol; f: IntradayFrames; lastPrice: number };
 
-const closedOnly = (bars: Bar[], ms: number, now: number) => bars.filter((b) => b.t + ms <= now);
+// Stocks: ~26 regular-session 15m bars/day → 400 bars ≈ 16 sessions ≈ 24 calendar days (+ holidays margin).
+const STOCK_15M_DAYS = 30;
+const STOCK_5M_DAYS = 8;
+/** ~550 15m bars per symbol at ~800 bars per Alpaca page → ~18 pages per request, well inside MAX_PAGES. */
+const STOCK_BATCH = 25;
+/** Measured cold load of 151 stocks: 26s at 2, 20s at 4, 15s at 8 (~180 requests, under the 200/min data limit). */
+const STOCK_CONCURRENCY = 8;
+/** Re-read the newest cached bars in case the provider was still settling them. */
+const STOCK_OVERLAP_BARS = 3;
+
+/** Module scope: survives warm invocations, so a warm tick fetches minutes of bars instead of weeks. */
+const stockCache = { m15: createTailCache(BARS_15M), m5: createTailCache(BARS_5M) };
+
+/** Closed, regular-session bars only — applied at parse time so extended-hours bars never become objects. */
+export function regularClosedBar(ms: number, now: number) {
+  return (t: number) => t + ms <= now && isRegularSessionBar(t);
+}
+
+/** Refresh one timeframe of the stock cache. Returns the symbols whose batch failed (their cache is not current). */
+async function refreshStockSeries(cache: TailCache, names: string[], tf: "15Min" | "5Min", ms: number, fullStart: number, now: number, errors: string[]): Promise<Set<string>> {
+  const plan = planRefresh(cache, names, new Date(now).toISOString().slice(0, 10), fullStart, STOCK_OVERLAP_BARS * ms);
+  const jobs = [...chunk(plan.cold, STOCK_BATCH).map((b) => ({ batch: b, cold: true })), ...chunk(plan.warm, STOCK_BATCH).map((b) => ({ batch: b, cold: false }))];
+  const failed = new Set<string>();
+  await mapWithConcurrency(jobs, STOCK_CONCURRENCY, async ({ batch, cold }) => {
+    try {
+      const fetched = await stockBars(batch, tf, cold ? fullStart : plan.warmStart, { feed: "iex", keep: regularClosedBar(ms, now), tail: cache.tail });
+      applyFetched(cache, fetched, batch, cold);
+    } catch (err) {
+      for (const s of batch) failed.add(s);
+      errors.push(`stock bars ${tf}: ${err instanceof Error ? err.message.slice(0, 160) : String(err)}`);
+    }
+  });
+  return failed;
+}
 
 export async function loadIntradayFrames(symbols: IntradaySymbol[], now: number, errors: string[]): Promise<Map<string, LoadedFrames>> {
   const out = new Map<string, LoadedFrames>();
@@ -37,23 +72,14 @@ export async function loadIntradayFrames(symbols: IntradaySymbol[], now: number,
 
   if (stocks.length && isAlpacaConfigured()) {
     const names = stocks.map((s) => s.provider_symbol);
-    const batches: string[][] = [];
-    for (let i = 0; i < names.length; i += 100) batches.push(names.slice(i, i + 100));
-    const m15 = new Map<string, Bar[]>();
-    const m5 = new Map<string, Bar[]>();
-    await mapWithConcurrency(batches, 3, async (batch) => {
-      try {
-        // ~26 regular-session 15m bars/day → 400 bars ≈ 16 sessions ≈ 24 calendar days (+ holidays margin).
-        const [a, b] = await Promise.all([stockBars(batch, "15Min", now - 30 * 86_400_000, { feed: "iex" }), stockBars(batch, "5Min", now - 8 * 86_400_000, { feed: "iex" })]);
-        for (const [s, bars] of a) m15.set(s, bars);
-        for (const [s, bars] of b) m5.set(s, bars);
-      } catch (err) {
-        errors.push(`stock bars: ${err instanceof Error ? err.message.slice(0, 160) : String(err)}`);
-      }
-    });
+    const [f15, f5] = await Promise.all([
+      refreshStockSeries(stockCache.m15, names, "15Min", M15, now - STOCK_15M_DAYS * 86_400_000, now, errors),
+      refreshStockSeries(stockCache.m5, names, "5Min", M5, now - STOCK_5M_DAYS * 86_400_000, now, errors),
+    ]);
     for (const sym of stocks) {
-      const b15 = closedOnly((m15.get(sym.provider_symbol) ?? []).filter((b) => isRegularSessionBar(b.t)), M15, now).slice(-BARS_15M);
-      const b5 = closedOnly((m5.get(sym.provider_symbol) ?? []).filter((b) => isRegularSessionBar(b.t)), M5, now).slice(-BARS_5M);
+      if (f15.has(sym.provider_symbol) || f5.has(sym.provider_symbol)) continue;
+      const b15 = stockCache.m15.series.get(sym.provider_symbol) ?? [];
+      const b5 = stockCache.m5.series.get(sym.provider_symbol) ?? [];
       if (b15.length < MIN_15M || b5.length < MIN_5M) continue;
       out.set(sym.symbol, { sym, f: buildIntradayFrames(b15, b5), lastPrice: b5[b5.length - 1].c });
     }
