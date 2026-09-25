@@ -18,6 +18,17 @@ import {
 import { inferTxnKind, inferredCategory, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
 import { loadCategoryHistory, suggestCategoryFromHistory, type MerchantCategoryRow } from "@/lib/finance/merchant-category";
 import { fetchMerchantRulesMap, matchMerchantRule, resolveExpenseType, type MerchantRule } from "@/lib/finance/merchant-rules";
+import {
+  FUZZY_USD_DATE_WINDOW_DAYS,
+  FX_DEBIT_DATE_WINDOW_DAYS,
+  findMatchingLeumiFxDebit,
+  inheritFromLeumiFxDebit,
+  shouldSkipCalUsdForExistingFxDebit,
+  shouldSkipForFuzzyUsdDuplicate,
+  stableDedupeAmount,
+  type FuzzyUsdRow,
+  type LeumiFxDebitRow,
+} from "@/lib/finance/fx-import-link";
 import { isBatchSettlementDescription, reconcileMonthTransactions } from "@/lib/finance/reconcile";
 import type { FinanceIngestInput, FinanceTransaction, FinanceTxnKind, FinanceTxnStatus } from "@/lib/finance/types";
 
@@ -209,13 +220,23 @@ export type PreparedBatch = {
  * `history` (mutated in place) so later rows in the same batch can learn from
  * it. Split out from the writes so it can be tested without a database.
  */
+export type PrepareIngestContext = {
+  existingCleanKeys?: Set<string>;
+  existingStableCounts?: Map<string, number>;
+  existingFxDebits?: LeumiFxDebitRow[];
+  existingFuzzyUsd?: FuzzyUsdRow[];
+};
+
 export function prepareIngestRows(
   inputs: FinanceIngestInput[],
   rulesMap: Map<string, MerchantRule>,
   history: MerchantCategoryRow[],
-  existingCleanKeys: Set<string> = new Set(),
-  existingStableCounts: Map<string, number> = new Map()
+  ctx: PrepareIngestContext = {}
 ): PreparedBatch {
+  const existingCleanKeys = ctx.existingCleanKeys ?? new Set();
+  const existingStableCounts = ctx.existingStableCounts ?? new Map();
+  const existingFxDebits = ctx.existingFxDebits ?? [];
+  const existingFuzzyUsd = ctx.existingFuzzyUsd ?? [];
   const prepared: PreparedRow[] = [];
   const seenKeys = new Set<string>();
   const batchCleanKeys = new Set<string>();
@@ -229,10 +250,11 @@ export function prepareIngestRows(
       account_number: input.account_number,
       card_name: input.card_name,
     });
+    const dedupeAmount = stableDedupeAmount(input);
     const stableBase = stableTxnBaseKey({
       cardScope,
       txn_date: input.txn_date,
-      amount: input.amount,
+      amount: dedupeAmount,
       currency: input.currency,
     });
     const incomingOrdinal = (incomingStableOrdinals.get(stableBase) ?? 0) + 1;
@@ -241,16 +263,36 @@ export function prepareIngestRows(
       existingStableCounts,
       stableBase,
       input.source,
-      input.account_number
+      input.account_number,
+      input.currency
     );
     if (incomingOrdinal <= existingCount) {
       duplicatesInBatch += 1;
       continue;
     }
-    input = {
-      ...input,
-      external_key: stableTxnExternalKey(stableBase, incomingOrdinal),
-    };
+
+    if (shouldSkipCalUsdForExistingFxDebit(input, existingFxDebits)) {
+      duplicatesInBatch += 1;
+      continue;
+    }
+
+    if (shouldSkipForFuzzyUsdDuplicate(input, existingFuzzyUsd)) {
+      duplicatesInBatch += 1;
+      continue;
+    }
+
+    const preassignedKey = raw.external_key?.trim();
+    if (!preassignedKey?.startsWith("fin:")) {
+      input = {
+        ...input,
+        external_key: stableTxnExternalKey(stableBase, incomingOrdinal),
+      };
+    }
+
+    const matchedFx = findMatchingLeumiFxDebit(input, existingFxDebits);
+    if (matchedFx && !input.category?.trim()) {
+      input = { ...input, ...inheritFromLeumiFxDebit(matchedFx) };
+    }
 
     if (
       shouldSkipCalGarbageDuplicate({
@@ -397,54 +439,162 @@ function existingStableCount(
   counts: Map<string, number>,
   base: string,
   source: string,
-  account_number: string | null | undefined
+  account_number: string | null | undefined,
+  currency?: string | null
 ): number {
   let max = counts.get(base) ?? 0;
-  if (source !== "leumi") return max;
-  const scope = cardScopeFromAccount({ account_number });
   const parts = base.split("|");
   if (parts.length < 4) return max;
   const date = parts[1];
-  for (const offset of [-1, 1]) {
+  const offsets =
+    source === "leumi"
+      ? [-1, 1]
+      : (currency ?? "ILS").trim().toUpperCase() !== "ILS"
+        ? Array.from({ length: FUZZY_USD_DATE_WINDOW_DAYS * 2 + 1 }, (_, i) => i - FUZZY_USD_DATE_WINDOW_DAYS)
+        : [];
+  for (const offset of offsets) {
+    if (offset === 0) continue;
     const altDate = shiftIsoDate(date, offset);
     const altBase = `${parts[0]}|${altDate}|${parts.slice(2).join("|")}`;
     max = Math.max(max, counts.get(altBase) ?? 0);
   }
-  void scope;
+  void account_number;
   return max;
 }
 
+function dateWindow(iso: string, days: number): string[] {
+  const out: string[] = [];
+  for (let offset = -days; offset <= days; offset += 1) {
+    out.push(shiftIsoDate(iso, offset));
+  }
+  return out;
+}
+
 async function loadExistingStableKeyCounts(inputs: FinanceIngestInput[]): Promise<Map<string, number>> {
+  const hasForeign = inputs.some((i) => (i.currency ?? "ILS").trim().toUpperCase() !== "ILS");
+  const window = hasForeign ? FUZZY_USD_DATE_WINDOW_DAYS : 1;
   const dates = [
     ...new Set(
       inputs
         .map((i) => i.txn_date?.trim())
         .filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d)))
-        .flatMap((d) => [shiftIsoDate(d, -1), d, shiftIsoDate(d, 1)])
+        .flatMap((d) => dateWindow(d, window))
     ),
   ];
   if (!dates.length) return new Map();
 
   const { data, error } = await getSupabase()
     .from("finance_transactions")
-    .select("txn_date, amount, currency, account_number, card_name, source")
+    .select("txn_date, amount, original_amount, currency, account_number, card_name, source")
     .in("txn_date", dates);
   if (error) throw new Error(error.message);
 
   const counts = new Map<string, number>();
   for (const row of data ?? []) {
+    const currency = String(row.currency ?? "ILS");
+    const dedupeAmount = stableDedupeAmount({
+      amount: Number(row.amount),
+      currency,
+      original_amount: row.original_amount != null ? Number(row.original_amount) : null,
+    });
     const base = stableTxnBaseKey({
       cardScope: cardScopeFromAccount({
         account_number: row.account_number != null ? String(row.account_number) : null,
         card_name: row.card_name != null ? String(row.card_name) : null,
       }),
       txn_date: String(row.txn_date),
-      amount: Number(row.amount),
-      currency: String(row.currency ?? "ILS"),
+      amount: dedupeAmount,
+      currency,
     });
     counts.set(base, (counts.get(base) ?? 0) + 1);
   }
   return counts;
+}
+
+async function loadExistingLeumiFxDebits(inputs: FinanceIngestInput[]): Promise<LeumiFxDebitRow[]> {
+  const hasCalForeign = inputs.some(
+    (i) => i.source === "visa_cal" && (i.currency ?? "ILS").trim().toUpperCase() !== "ILS"
+  );
+  if (!hasCalForeign) return [];
+
+  const dates = [
+    ...new Set(
+      inputs
+        .filter((i) => i.source === "visa_cal")
+        .map((i) => i.txn_date?.trim())
+        .filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d)))
+        .flatMap((d) => dateWindow(d, FX_DEBIT_DATE_WINDOW_DAYS))
+    ),
+  ];
+  if (!dates.length) return [];
+
+  const { data, error } = await getSupabase()
+    .from("finance_transactions")
+    .select("id, txn_date, amount, category, purpose_note, categorized_at, description, merchant, is_internal")
+    .eq("source", "leumi")
+    .eq("kind", "expense")
+    .in("txn_date", dates);
+  if (error) throw new Error(error.message);
+
+  return (data ?? [])
+    .map((row) => ({
+      id: String(row.id),
+      txn_date: String(row.txn_date),
+      amount: Number(row.amount),
+      category: row.category != null ? String(row.category) : null,
+      purpose_note: row.purpose_note != null ? String(row.purpose_note) : null,
+      categorized_at: row.categorized_at != null ? String(row.categorized_at) : null,
+      description: String(row.description ?? ""),
+      merchant: row.merchant != null ? String(row.merchant) : null,
+      is_internal: Boolean(row.is_internal),
+    }))
+    .filter((row) => !row.is_internal);
+}
+
+async function loadExistingFuzzyUsdRows(inputs: FinanceIngestInput[]): Promise<FuzzyUsdRow[]> {
+  const foreign = inputs.filter(
+    (i) => i.source === "visa_cal" && (i.currency ?? "ILS").trim().toUpperCase() !== "ILS"
+  );
+  if (!foreign.length) return [];
+
+  const dates = [
+    ...new Set(
+      foreign
+        .map((i) => i.txn_date?.trim())
+        .filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d)))
+        .flatMap((d) => dateWindow(d, FUZZY_USD_DATE_WINDOW_DAYS))
+    ),
+  ];
+  if (!dates.length) return [];
+
+  const { data, error } = await getSupabase()
+    .from("finance_transactions")
+    .select("id, txn_date, card_name, account_number, currency, original_amount, amount")
+    .eq("source", "visa_cal")
+    .neq("currency", "ILS")
+    .in("txn_date", dates);
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    txn_date: String(row.txn_date),
+    card_name: row.card_name != null ? String(row.card_name) : null,
+    account_number: row.account_number != null ? String(row.account_number) : null,
+    currency: String(row.currency ?? "USD"),
+    original_amount: row.original_amount != null ? Number(row.original_amount) : null,
+    amount: Number(row.amount),
+  }));
+}
+
+async function markLeumiFxDebitsInternal(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const now = new Date().toISOString();
+  const { error } = await getSupabase()
+    .from("finance_transactions")
+    .update({ is_internal: true, needs_categorization: false, updated_at: now })
+    .in("id", ids)
+    .eq("is_internal", false);
+  if (error) throw new Error(error.message);
 }
 
 async function loadExistingCalCleanKeys(inputs: FinanceIngestInput[]): Promise<Set<string>> {
@@ -484,19 +634,21 @@ async function loadExistingCalCleanKeys(inputs: FinanceIngestInput[]): Promise<S
 }
 
 export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): Promise<IngestResult> {
-  const [history, rulesMap, existingCleanKeys, existingStableCounts] = await Promise.all([
-    loadCategoryHistory(),
-    fetchMerchantRulesMap(),
-    loadExistingCalCleanKeys(inputs),
-    loadExistingStableKeyCounts(inputs),
-  ]);
-  const { prepared, duplicatesInBatch } = prepareIngestRows(
-    inputs,
-    rulesMap,
-    history,
+  const [history, rulesMap, existingCleanKeys, existingStableCounts, existingFxDebits, existingFuzzyUsd] =
+    await Promise.all([
+      loadCategoryHistory(),
+      fetchMerchantRulesMap(),
+      loadExistingCalCleanKeys(inputs),
+      loadExistingStableKeyCounts(inputs),
+      loadExistingLeumiFxDebits(inputs),
+      loadExistingFuzzyUsdRows(inputs),
+    ]);
+  const { prepared, duplicatesInBatch } = prepareIngestRows(inputs, rulesMap, history, {
     existingCleanKeys,
-    existingStableCounts
-  );
+    existingStableCounts,
+    existingFxDebits,
+    existingFuzzyUsd,
+  });
 
   let skipped = duplicatesInBatch;
   const created: FinanceTransaction[] = [];
@@ -516,6 +668,28 @@ export async function ingestFinanceTransactions(inputs: FinanceIngestInput[]): P
     const rows = (data ?? []) as Record<string, unknown>[];
     for (const r of rows) created.push(rowToTxn(r));
     skipped += chunk.length - rows.length;
+  }
+
+  const fxDebitIdsToInternalize = new Set<string>();
+  for (const item of prepared) {
+    const inputLike: FinanceIngestInput = {
+      source: String(item.row.source) as FinanceIngestInput["source"],
+      txn_date: String(item.row.txn_date),
+      amount: Number(item.row.amount),
+      kind: item.row.kind as FinanceIngestInput["kind"],
+      currency: String(item.row.currency ?? "ILS"),
+      original_amount: item.row.original_amount != null ? Number(item.row.original_amount) : null,
+      amount_ils: item.row.amount_ils != null ? Number(item.row.amount_ils) : null,
+      card_name: item.row.card_name != null ? String(item.row.card_name) : null,
+      account_number: item.row.account_number != null ? String(item.row.account_number) : null,
+    };
+    const matched = findMatchingLeumiFxDebit(inputLike, existingFxDebits);
+    if (matched) {
+      fxDebitIdsToInternalize.add(matched.id);
+    }
+  }
+  if (fxDebitIdsToInternalize.size > 0) {
+    await markLeumiFxDebitsInternal([...fxDebitIdsToInternalize]);
   }
 
   const ruleByKey = new Map(prepared.map((p) => [p.externalKey, p.hadRule]));

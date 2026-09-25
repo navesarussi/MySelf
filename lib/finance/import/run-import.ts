@@ -132,12 +132,17 @@ export async function runFinanceImport(input: {
   });
   const normalizedParsed = normalizeParsedForeignAmounts(parsed.transactions);
   const stableRows = assignStableExternalKeys(
-    parsed.transactions.map((t) => ({
-      txn_date: t.booked_at,
-      amount: t.amount,
-      currency: t.currency ?? "ILS",
-      source_ref: t.source_ref,
-    })),
+    normalizedParsed.map((t) => {
+      const currency = t.currency ?? "ILS";
+      const dedupeAmount =
+        currency.trim().toUpperCase() === "ILS" ? t.amount : (t.original_amount ?? t.amount);
+      return {
+        txn_date: t.booked_at,
+        amount: dedupeAmount,
+        currency,
+        source_ref: t.source_ref,
+      };
+    }),
     cardScope
   );
   const ingestInputs: FinanceIngestInput[] = normalizedParsed.map((t, idx) => ({

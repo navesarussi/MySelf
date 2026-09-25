@@ -158,6 +158,36 @@ describe("findReconcilableBatchTransactions", () => {
     assert.equal(result.matches[0].matchType, "description_match");
   });
 
+  it("does not internalize Leumi FX conversion debits (expense-of-record pattern)", () => {
+    const txns: FinanceTransaction[] = [
+      makeTxn({
+        id: "fx-debit",
+        source: "leumi",
+        txn_date: "2026-06-15",
+        amount: 365.5,
+        kind: "expense",
+        description: "המרת קנ במטח",
+        category: "מנויים",
+        categorized_at: "2026-06-16T00:00:00.000Z",
+      }),
+      makeTxn({
+        id: "cal-usd",
+        source: "visa_cal",
+        txn_date: "2026-06-14",
+        amount: 100,
+        kind: "expense",
+        currency: "USD",
+        original_amount: 100,
+        amount_ils: 365.5,
+        description: "ANTHROPIC",
+      }),
+    ];
+
+    const result = findReconcilableBatchTransactions(txns);
+    assert.deepEqual(result.reconciledIds, []);
+    assert.equal(result.matches.length, 0);
+  });
+
   it("ignores non-leumi batch-like descriptions or income transactions", () => {
     const txns: FinanceTransaction[] = [
       makeTxn({

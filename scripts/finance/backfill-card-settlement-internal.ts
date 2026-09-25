@@ -1,7 +1,11 @@
 /**
- * Idempotent backfill: mark existing Leumi card-settlement and FX-conversion rows internal.
+ * Idempotent backfill: mark existing Leumi card-settlement rows internal.
  *
- * Usage: tsx scripts/finance/backfill-card-settlement-internal.ts [--month YYYY-MM]
+ * Does NOT touch Leumi FX conversion debits (המרת קנ במטח) — those may be the
+ * categorized expense-of-record in production. Does not change category,
+ * purpose_note, or categorized_at on any row.
+ *
+ * Usage: tsx scripts/finance/backfill-card-settlement-internal.ts [--month=YYYY-MM]
  */
 import { getSupabase } from "../../lib/supabase";
 import { rowToTxn } from "../../lib/finance/ingest";
@@ -44,7 +48,7 @@ async function main() {
       .in("id", ids);
     if (error) throw new Error(error.message);
     updated += ids.length;
-    console.log(`${month}: marked ${ids.length} settlement/FX rows internal`);
+    console.log(`${month}: marked ${ids.length} card-settlement rows internal`);
   }
 
   console.log(`Done. Updated ${updated} rows.`);

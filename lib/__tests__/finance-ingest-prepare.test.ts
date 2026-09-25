@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { prepareIngestRows } from "../finance/ingest";
+import type { FuzzyUsdRow, LeumiFxDebitRow } from "../finance/fx-import-link";
 import type { MerchantRule } from "../finance/merchant-rules";
 import type { MerchantCategoryRow } from "../finance/merchant-category";
 import type { FinanceIngestInput } from "../finance/types";
@@ -88,8 +89,7 @@ describe("prepareIngestRows", () => {
       ],
       noRules,
       [],
-      new Set(),
-      existingStableCounts
+      { existingStableCounts }
     );
     assert.equal(prepared.length, 0);
     assert.equal(duplicatesInBatch, 2);
@@ -109,8 +109,111 @@ describe("prepareIngestRows", () => {
       ],
       noRules,
       [],
-      new Set(),
-      existingStableCounts
+      { existingStableCounts }
+    );
+    assert.equal(prepared.length, 0);
+    assert.equal(duplicatesInBatch, 1);
+  });
+
+  it("skips Cal USD when a categorized Leumi FX debit is the expense of record", () => {
+    const existingFxDebits: LeumiFxDebitRow[] = [
+      {
+        id: "fx-1",
+        txn_date: "2026-06-15",
+        amount: 365.5,
+        category: "מנויים",
+        purpose_note: "Anthropic $100",
+        categorized_at: "2026-06-16T00:00:00.000Z",
+        description: "המרת קנ במטח",
+        merchant: null,
+        is_internal: false,
+      },
+    ];
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({
+          source: "visa_cal",
+          card_name: "6601",
+          txn_date: "2026-06-14",
+          amount: 100,
+          currency: "USD",
+          original_amount: 100,
+          amount_ils: 365.5,
+          description: "ANTHROPIC",
+        }),
+      ],
+      noRules,
+      [],
+      { existingFxDebits }
+    );
+    assert.equal(prepared.length, 0);
+    assert.equal(duplicatesInBatch, 1);
+  });
+
+  it("inserts Cal USD when Leumi FX debit is uncategorized (pair for internalization)", () => {
+    const existingFxDebits: LeumiFxDebitRow[] = [
+      {
+        id: "fx-2",
+        txn_date: "2026-06-15",
+        amount: 365.5,
+        category: null,
+        purpose_note: null,
+        categorized_at: null,
+        description: "המרת קנ במטח",
+        merchant: null,
+        is_internal: false,
+      },
+    ];
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({
+          source: "visa_cal",
+          card_name: "6601",
+          txn_date: "2026-06-14",
+          amount: 100,
+          currency: "USD",
+          original_amount: 100,
+          amount_ils: 365.5,
+          description: "ANTHROPIC",
+        }),
+      ],
+      noRules,
+      [],
+      { existingFxDebits }
+    );
+    assert.equal(prepared.length, 1);
+    assert.equal(duplicatesInBatch, 0);
+    assert.equal(prepared[0].row.currency, "USD");
+  });
+
+  it("dedupes legacy manual USD rows by account + amount within date window", () => {
+    const existingFuzzyUsd: FuzzyUsdRow[] = [
+      {
+        id: "legacy-1",
+        txn_date: "2026-03-01",
+        card_name: "6601",
+        account_number: null,
+        currency: "USD",
+        original_amount: 20,
+        amount: 20,
+      },
+    ];
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({
+          source: "visa_cal",
+          card_name: "6601",
+          txn_date: "2026-03-04",
+          amount: 20,
+          currency: "USD",
+          original_amount: 20,
+          amount_ils: 73,
+          description: "OPENAI",
+        }),
+      ],
+      noRules,
+      [],
+      { existingFuzzyUsd }
     );
     assert.equal(prepared.length, 0);
     assert.equal(duplicatesInBatch, 1);

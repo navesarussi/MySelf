@@ -62,36 +62,6 @@ export function isLeumiFxConversionDescription(
   return LEUMI_FX_CONVERSION_KEYWORDS.some((kw) => text.includes(kw));
 }
 
-function matchForeignCardCharge(
-  fxRow: FinanceTransaction,
-  cardTxns: FinanceTransaction[]
-): FinanceTransaction | null {
-  const windowDays = 7;
-  const candidates = cardTxns.filter(
-    (c) =>
-      c.currency !== "ILS" &&
-      c.kind === "expense" &&
-      !c.is_internal &&
-      daysDiff(c.txn_date, fxRow.txn_date) <= windowDays
-  );
-
-  for (const c of candidates) {
-    const ils = c.amount_ils ?? c.amount;
-    if (Math.abs(ils - fxRow.amount) <= 0.1) return c;
-  }
-
-  const sumByDate = new Map<string, number>();
-  for (const c of candidates) {
-    const ils = c.amount_ils ?? c.amount;
-    sumByDate.set(c.txn_date, round2((sumByDate.get(c.txn_date) ?? 0) + ils));
-  }
-  for (const sum of sumByDate.values()) {
-    if (Math.abs(sum - fxRow.amount) <= 0.1) return candidates[0] ?? null;
-  }
-
-  return null;
-}
-
 function daysDiff(d1: string, d2: string): number {
   const t1 = new Date(d1).getTime();
   const t2 = new Date(d2).getTime();
@@ -133,12 +103,14 @@ function matchCardSum(
 export function findReconcilableBatchTransactions(
   transactions: FinanceTransaction[]
 ): ReconcileResult {
+  // Card-bill settlements only. Leumi FX debits (המרת קנ במטח) may be the
+  // categorized expense-of-record — ingest dedupe handles those separately.
   const candidateBatches = transactions.filter(
     (t) =>
       t.source === "leumi" &&
       t.kind === "expense" &&
-      (isBatchSettlementDescription(t.description, t.merchant) ||
-        isLeumiFxConversionDescription(t.description, t.merchant))
+      isBatchSettlementDescription(t.description, t.merchant) &&
+      !isLeumiFxConversionDescription(t.description, t.merchant)
   );
 
   const cardTxns = transactions.filter(
@@ -149,20 +121,6 @@ export function findReconcilableBatchTransactions(
   const reconciledIds: string[] = [];
 
   for (const batch of candidateBatches) {
-    if (isLeumiFxConversionDescription(batch.description, batch.merchant)) {
-      const linked = matchForeignCardCharge(batch, cardTxns);
-      if (linked) {
-        matches.push({
-          batchId: batch.id,
-          batchDescription: batch.description,
-          batchAmount: batch.amount,
-          matchedSum: linked.amount_ils ?? linked.amount,
-          matchType: "sum_match",
-        });
-        reconciledIds.push(batch.id);
-      }
-      continue;
-    }
     const { matched, sum } = matchCardSum(batch, cardTxns);
     if (matched) {
       matches.push({
