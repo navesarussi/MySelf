@@ -171,17 +171,8 @@ export const TaskCard = React.memo(function TaskCard({
   return (
     <Card style={{ opacity: done ? 0.55 : 1 }}>
       <Row style={{ alignItems: "flex-start", gap: 10 }}>
-        {/* First child sits on the locale start edge (right in Hebrew, left in English). */}
-        <TaskDoneCheckbox
-          done={done}
-          busy={busy}
-          checkedLabel={t("common.done")}
-          uncheckedLabel={t("common.open")}
-          onPress={() => {
-            hapticImpact();
-            onToggleDone(task);
-          }}
-        />
+        {/* Title first (locale start / physical right in Hebrew). Checkbox second
+            sits on the far edge opposite the text (physical left in Hebrew). */}
         {onPress ? (
           <Pressable
             unstable_pressDelay={0}
@@ -196,6 +187,16 @@ export const TaskCard = React.memo(function TaskCard({
         ) : (
           titleBlock
         )}
+        <TaskDoneCheckbox
+          done={done}
+          busy={busy}
+          checkedLabel={t("common.done")}
+          uncheckedLabel={t("common.open")}
+          onPress={() => {
+            hapticImpact();
+            onToggleDone(task);
+          }}
+        />
       </Row>
       <Row style={{ marginTop: 8 }} wrap>
         {task.project_name ? <Badge label={task.project_name} /> : null}
