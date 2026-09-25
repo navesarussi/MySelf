@@ -62,7 +62,8 @@ export function HabitDetailsModal({
       .habitHistory({ token, serverUrl }, habit.id, 35)
       .then((res) => {
         if (cancelled) return;
-        setHistoryDays((prev) => mergeHistoryGrid(res.grid, prev, pendingDatesRef.current));
+        const grid = Array.isArray(res?.grid) ? res.grid : [];
+        setHistoryDays((prev) => mergeHistoryGrid(grid, prev, pendingDatesRef.current));
       })
       .catch(() => {
         if (!cancelled) setHistoryDays([]);
@@ -78,6 +79,30 @@ export function HabitDetailsModal({
       setRowErrors(new Map());
     }
   }, [visible]);
+
+  const handleHistoryBackfill = useCallback(
+    (date: string, type: "check_in" | "fall") => {
+      if (!onBackfill || !habit) return;
+      if (pendingDatesRef.current.has(date)) return;
+
+      pendingDatesRef.current.add(date);
+      setRowErrors((prev) => {
+        if (!prev.has(date)) return prev;
+        const next = new Map(prev);
+        next.delete(date);
+        return next;
+      });
+      setHistoryDays((prev) => removeMissedHistoryDay(prev, date));
+
+      void Promise.resolve(onBackfill(habit, date, type)).then((ok) => {
+        pendingDatesRef.current.delete(date);
+        if (ok) return;
+        setHistoryDays((prev) => restoreMissedHistoryDay(prev, date));
+        setRowErrors((prev) => new Map(prev).set(date, t("common.error")));
+      });
+    },
+    [habit, onBackfill, t],
+  );
 
   if (!habit) return null;
 
@@ -104,30 +129,6 @@ export function HabitDetailsModal({
   const streakPct =
     habit.best_streak > 0 ? Math.min(100, Math.round((streak / habit.best_streak) * 100)) : 0;
   const sheetMaxHeight = Math.min(windowHeight * 0.88, 640);
-
-  const handleHistoryBackfill = useCallback(
-    (date: string, type: "check_in" | "fall") => {
-      if (!onBackfill || !habit) return;
-      if (pendingDatesRef.current.has(date)) return;
-
-      pendingDatesRef.current.add(date);
-      setRowErrors((prev) => {
-        if (!prev.has(date)) return prev;
-        const next = new Map(prev);
-        next.delete(date);
-        return next;
-      });
-      setHistoryDays((prev) => removeMissedHistoryDay(prev, date));
-
-      void Promise.resolve(onBackfill(habit, date, type)).then((ok) => {
-        pendingDatesRef.current.delete(date);
-        if (ok) return;
-        setHistoryDays((prev) => restoreMissedHistoryDay(prev, date));
-        setRowErrors((prev) => new Map(prev).set(date, t("common.error")));
-      });
-    },
-    [habit, onBackfill, t],
-  );
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -263,10 +264,11 @@ export function HabitDetailsModal({
 
 /** Keep optimistic removals while backfill writes are still in flight. */
 function mergeHistoryGrid(
-  serverGrid: HabitHistoryDay[],
+  serverGrid: HabitHistoryDay[] | undefined | null,
   _localGrid: HabitHistoryDay[],
   pendingDates: ReadonlySet<string>,
 ): HabitHistoryDay[] {
-  if (pendingDates.size === 0) return serverGrid;
-  return serverGrid.filter((day) => !pendingDates.has(day.date));
+  const grid = Array.isArray(serverGrid) ? serverGrid : [];
+  if (pendingDates.size === 0) return grid;
+  return grid.filter((day) => !pendingDates.has(day.date));
 }

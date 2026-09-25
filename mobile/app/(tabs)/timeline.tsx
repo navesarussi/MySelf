@@ -21,6 +21,7 @@ import {
   pollUntilSyncDone,
 } from "../../src/query";
 import type { TimelineEventsPage } from "../../src/api/resources";
+import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import {
   Badge,
   Btn,
@@ -404,6 +405,7 @@ export default function TimelineScreen() {
   }
 
   return (
+    <ScreenErrorBoundary name="timeline">
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <View style={{ paddingHorizontal: tokens.padLg, paddingTop: tokens.padLg }}>
         <Text
@@ -694,5 +696,6 @@ export default function TimelineScreen() {
         ) : null}
       </FormModal>
     </View>
+    </ScreenErrorBoundary>
   );
 }

@@ -19,6 +19,7 @@ import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { NavigationBackButton } from "../src/components/navigation-back-button";
+import { ScreenErrorBoundary } from "../src/components/error-boundary";
 import { Btn, Screen } from "../src/components/ui";
 
 type ChatMsg = { role: "user" | "assistant"; text: string; imageUri?: string };
@@ -99,6 +100,7 @@ export default function AgentChatScreen() {
   }
 
   return (
+    <ScreenErrorBoundary name="agent-chat">
     <>
       <Stack.Screen
         options={{
@@ -196,5 +198,6 @@ export default function AgentChatScreen() {
       </KeyboardAvoidingView>
     </Screen>
     </>
+    </ScreenErrorBoundary>
   );
 }

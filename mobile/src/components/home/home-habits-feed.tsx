@@ -16,6 +16,7 @@ export function HomeHabitsFeed({
   onCheckIn,
   onReportFall,
   onReset,
+  onOpenHabit,
 }: {
   uniqueCount: number;
   pending: Habit[];
@@ -24,6 +25,7 @@ export function HomeHabitsFeed({
   onCheckIn: (habit: Habit) => void | Promise<void>;
   onReportFall: (habit: Habit) => void | Promise<void>;
   onReset: (habit: Habit) => void | Promise<void>;
+  onOpenHabit: (habit: Habit) => void;
 }) {
   const { t } = useI18n();
   const c = useColors();
@@ -46,7 +48,7 @@ export function HomeHabitsFeed({
             key={h.id}
             habit={h}
             busy={busy(h.id)}
-            onPress={() => router.push("/habits")}
+            onPress={() => onOpenHabit(h)}
             onCheckIn={() => onCheckIn(h)}
             onReportFall={() => onReportFall(h)}
             onReset={() => onReset(h)}

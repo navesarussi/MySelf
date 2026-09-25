@@ -18,6 +18,7 @@ import { RemainingWeekCard } from "../../src/components/finance/remaining-week";
 import { FinanceHubLinks } from "../../src/components/finance/finance-hub-links";
 import { FinanceSourcesStrip } from "../../src/components/finance/finance-sources-strip";
 import { AddPlanLineModal } from "../../src/components/finance/add-plan-line-modal";
+import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import { FinanceHero } from "../../src/components/finance/finance-hero";
 import { FinanceMonthNav } from "../../src/components/finance/month-nav";
 import { UncategorizedBlock } from "../../src/components/finance/uncategorized-block";
@@ -191,6 +192,7 @@ export default function FinanceScreen() {
   );
 
   return (
+    <ScreenErrorBoundary name="finance">
     <>
       <ScreenList
         title={t("finance.title")}
@@ -208,5 +210,6 @@ export default function FinanceScreen() {
         <AddPlanLineModal visible lineType={addType} onClose={() => setAddType(null)} onSave={(n, a) => void addLine(n, a)} />
       ) : null}
     </>
+    </ScreenErrorBoundary>
   );
 }

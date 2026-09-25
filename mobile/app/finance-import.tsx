@@ -84,7 +84,6 @@ export default function FinanceImportScreen() {
 
       {Platform.OS === "web" ? (
         <>
-          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <input
             ref={inputRef as never}
             type="file"

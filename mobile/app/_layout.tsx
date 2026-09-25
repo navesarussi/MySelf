@@ -137,7 +137,7 @@ export default function RootLayout() {
                 <SessionProvider>
                   <NavPrefsProvider>
                     <ToastProvider>
-                      <ErrorBoundary>
+                      <ErrorBoundary name="app-root">
                         <AppStack />
                       </ErrorBoundary>
                     </ToastProvider>
