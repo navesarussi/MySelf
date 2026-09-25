@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildHabitHistoryGrid } from "../habit-history";
+import {
+  buildHabitHistoryGrid,
+  partitionHabitHistory,
+  removeMissedHistoryDay,
+  restoreMissedHistoryDay,
+} from "../habit-history";
 import type { Habit } from "../types";
 
 const habit: Habit = {
@@ -49,5 +54,41 @@ describe("buildHabitHistoryGrid backfill visibility", () => {
     );
     const byDate = new Map(grid.map((day) => [day.date, day.status]));
     assert.equal(byDate.get("2026-09-10"), "fall");
+  });
+});
+
+describe("partitionHabitHistory", () => {
+  it("separates missed days from reported history", () => {
+    const days = [
+      { date: "2026-09-10", status: "success" as const },
+      { date: "2026-09-11", status: "missed" as const },
+      { date: "2026-09-12", status: "fall" as const },
+      { date: "2026-09-13", status: "pending" as const },
+    ];
+    const { missed, reported, other } = partitionHabitHistory(days);
+    assert.deepEqual(missed, [{ date: "2026-09-11", status: "missed" }]);
+    assert.deepEqual(reported, [
+      { date: "2026-09-10", status: "success" },
+      { date: "2026-09-12", status: "fall" },
+    ]);
+    assert.deepEqual(other, [{ date: "2026-09-13", status: "pending" }]);
+  });
+});
+
+describe("optimistic missed-day queue", () => {
+  const queue = [
+    { date: "2026-09-10", status: "missed" as const },
+    { date: "2026-09-11", status: "missed" as const },
+  ];
+
+  it("removes a day immediately after tap", () => {
+    assert.deepEqual(removeMissedHistoryDay(queue, "2026-09-10"), [
+      { date: "2026-09-11", status: "missed" },
+    ]);
+  });
+
+  it("restores a day after a failed write", () => {
+    const shrunk = removeMissedHistoryDay(queue, "2026-09-10");
+    assert.deepEqual(restoreMissedHistoryDay(shrunk, "2026-09-10"), queue);
   });
 });
