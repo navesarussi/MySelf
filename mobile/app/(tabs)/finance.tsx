@@ -89,6 +89,10 @@ export default function FinanceScreen() {
       weekly_pace: normalizeWeeklyPace(p.weekly_pace),
     };
   }, [plan]);
+  const monthTxns = useMemo(
+    () => (Array.isArray(txns) ? txns : (txns?.items ?? [])) as FinanceTransaction[],
+    [txns]
+  );
   const uncategorized = (
     Array.isArray(uncategorizedPayload)
       ? uncategorizedPayload
@@ -205,7 +209,7 @@ export default function FinanceScreen() {
         title={t("finance.title")}
         subtitle={t("finance.subtitlePlan")}
         headerExtra={headerExtra}
-        data={showTxns ? (txns ?? []) : []}
+        data={showTxns ? monthTxns : []}
         renderItem={renderTxn}
         keyExtractor={(item) => item.id}
         refreshing={planFetching}
