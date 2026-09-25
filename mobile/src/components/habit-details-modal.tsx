@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -18,7 +18,11 @@ import { StatTile } from "./habit-stat-tile";
 import { effectiveStreak, habitReportDay, isReportDue, normalizeReportTime } from "@/lib/habit-stats";
 import { HabitHistoryTable } from "./habit-history-table";
 import { formatLocaleDate } from "@/lib/i18n/core";
-import type { HabitHistoryDay } from "@/lib/habit-history";
+import {
+  removeMissedHistoryDay,
+  restoreMissedHistoryDay,
+  type HabitHistoryDay,
+} from "@/lib/habit-history";
 import type { Habit } from "@/lib/types";
 import { api } from "../api/resources";
 import { useSession } from "../session";
@@ -48,14 +52,32 @@ export function HabitDetailsModal({
   const { height: windowHeight } = useWindowDimensions();
   const { token, serverUrl } = useSession();
   const [historyDays, setHistoryDays] = useState<HabitHistoryDay[]>([]);
+  const [rowErrors, setRowErrors] = useState<Map<string, string>>(() => new Map());
+  const pendingDatesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!visible || !habit || !token) return;
+    let cancelled = false;
     api
       .habitHistory({ token, serverUrl }, habit.id, 35)
-      .then((res) => setHistoryDays(res.grid))
-      .catch(() => setHistoryDays([]));
-  }, [visible, habit?.id, habit?.last_checked_on, habit?.failure_count, token, serverUrl]);
+      .then((res) => {
+        if (cancelled) return;
+        setHistoryDays((prev) => mergeHistoryGrid(res.grid, prev, pendingDatesRef.current));
+      })
+      .catch(() => {
+        if (!cancelled) setHistoryDays([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, habit?.id, token, serverUrl]);
+
+  useEffect(() => {
+    if (!visible) {
+      pendingDatesRef.current.clear();
+      setRowErrors(new Map());
+    }
+  }, [visible]);
 
   if (!habit) return null;
 
@@ -83,18 +105,29 @@ export function HabitDetailsModal({
     habit.best_streak > 0 ? Math.min(100, Math.round((streak / habit.best_streak) * 100)) : 0;
   const sheetMaxHeight = Math.min(windowHeight * 0.88, 640);
 
-  const handleHistoryBackfill = async (date: string, type: "check_in" | "fall") => {
-    const previous = historyDays;
-    setHistoryDays((prev) =>
-      prev.map((day) =>
-        day.date === date ? { ...day, status: type === "check_in" ? "success" : "fall" } : day,
-      ),
-    );
-    if (onBackfill) {
-      const ok = await onBackfill(habit, date, type);
-      if (!ok) setHistoryDays(previous);
-    }
-  };
+  const handleHistoryBackfill = useCallback(
+    (date: string, type: "check_in" | "fall") => {
+      if (!onBackfill || !habit) return;
+      if (pendingDatesRef.current.has(date)) return;
+
+      pendingDatesRef.current.add(date);
+      setRowErrors((prev) => {
+        if (!prev.has(date)) return prev;
+        const next = new Map(prev);
+        next.delete(date);
+        return next;
+      });
+      setHistoryDays((prev) => removeMissedHistoryDay(prev, date));
+
+      void Promise.resolve(onBackfill(habit, date, type)).then((ok) => {
+        pendingDatesRef.current.delete(date);
+        if (ok) return;
+        setHistoryDays((prev) => restoreMissedHistoryDay(prev, date));
+        setRowErrors((prev) => new Map(prev).set(date, t("common.error")));
+      });
+    },
+    [habit, onBackfill, t],
+  );
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -164,8 +197,8 @@ export function HabitDetailsModal({
               </Text>
               <HabitHistoryTable
                 days={historyDays}
-                busy={busy}
                 onBackfill={onBackfill ? handleHistoryBackfill : undefined}
+                rowErrors={rowErrors}
               />
             </View>
 
@@ -226,4 +259,14 @@ export function HabitDetailsModal({
       </KeyboardAvoidingView>
     </Modal>
   );
+}
+
+/** Keep optimistic removals while backfill writes are still in flight. */
+function mergeHistoryGrid(
+  serverGrid: HabitHistoryDay[],
+  _localGrid: HabitHistoryDay[],
+  pendingDates: ReadonlySet<string>,
+): HabitHistoryDay[] {
+  if (pendingDates.size === 0) return serverGrid;
+  return serverGrid.filter((day) => !pendingDates.has(day.date));
 }
