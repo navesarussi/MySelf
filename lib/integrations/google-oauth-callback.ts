@@ -5,7 +5,8 @@ import {
   fetchGoogleUserEmail,
 } from "@/lib/integrations/google-calendar/client";
 import { syncGoogleCalendar } from "@/lib/integrations/google-calendar/sync";
-import { isAllowedGoogleEmail, isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
+import { ensureAccountRow, isAllowedGoogleEmail, isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
+import { runAsUser } from "@/lib/db/user-context";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { saveGoogleTokensToAllProviders } from "@/lib/integrations/google-unified";
 import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
@@ -50,14 +51,20 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
       return NextResponse.redirect(new URL("/login", url.origin));
     }
 
+    // Every per-account row references the account's allowlist row; an account
+    // allowed only through ALLOWED_GOOGLE_EMAIL gets one on first sign-in.
+    await ensureAccountRow(email);
     const isPrimary = await isPrimaryGoogleEmail(email);
 
+    // This request carries no session yet, so the account is named explicitly.
     if (isPrimary) {
-      const existing = await getIntegrationToken(GOOGLE_PROVIDER);
-      const refreshToken = tokens.refresh_token ?? existing?.refresh_token;
-      if (!refreshToken) throw new Error("missing_refresh_token");
+      await runAsUser(email, async () => {
+        const existing = await getIntegrationToken(GOOGLE_PROVIDER);
+        const refreshToken = tokens.refresh_token ?? existing?.refresh_token;
+        if (!refreshToken) throw new Error("missing_refresh_token");
 
-      await saveGoogleTokensToAllProviders(tokens);
+        await saveGoogleTokensToAllProviders(tokens);
+      });
     }
 
     // This response mints the session, so the cookie is not on the request yet —
@@ -74,14 +81,16 @@ export async function handleGoogleOAuthCallback(req: NextRequest) {
 
     if (isPrimary) {
       setFlashCookie(jar, "Google מחובר — יומן, משימות ומייל");
-      if (await tryStartSync(GOOGLE_PROVIDER)) {
-        after(async () => {
-          try {
-            await syncGoogleCalendar();
-          } catch {
-            // sync status is persisted as failed
-          }
-        });
+      if (await runAsUser(email, () => tryStartSync(GOOGLE_PROVIDER))) {
+        after(() =>
+          runAsUser(email, async () => {
+            try {
+              await syncGoogleCalendar();
+            } catch {
+              // sync status is persisted as failed
+            }
+          })
+        );
       }
     } else {
       setFlashCookie(jar, "מחובר");

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
+import { denyUnlessPrimary } from "@/lib/api/auth";
 import { findBestTrade } from "@/lib/trading/trade-finder";
 
 export const maxDuration = 120;
 
 /** "Search trade": scan the intraday universe now and return the agent-planned best options (a short-lived proposal). */
 export async function POST(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   try {
     const result = await findBestTrade();
     const options = (result.options ?? []).map(({ rating_input: _omit, ...o }) => o);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
-import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { userDb } from "@/lib/db/user-db";
+import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized, projectWriteError } from "@/lib/api/auth";
 import { dedupeTasks } from "@/lib/data-integrity";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
@@ -78,9 +78,10 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(Math.max(Number(sp.get("limit") ?? 2500), 1), 5000);
   const doneLimit = Math.min(Math.max(Number(sp.get("done_limit") ?? 200), 0), 1000);
 
+  const db = await userDb();
   // Rebuilt per query: a Supabase builder cannot be reused once awaited.
   const filtered = () => {
-    let query = getSupabase().from("tasks").select(TASK_SELECT);
+    let query = db.from("tasks").select(TASK_SELECT);
     if (project) query = query.eq("project_id", project);
     if (status) {
       const list = status
@@ -159,7 +160,7 @@ export async function POST(req: NextRequest) {
   if (!title) return badRequest("title_required");
   if (!project_id) return badRequest("project_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("tasks")
     .insert({
       title,
@@ -172,7 +173,7 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single();
-  if (error) return dbError();
+  if (error) return projectWriteError(error);
   revalidateTaskPaths();
   return NextResponse.json(data, { status: 201 });
 }

@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { getNotificationPreferences, isTypeEnabled } from "@/lib/push/preferences";
 import { isQuietHour, jerusalemParts } from "@/lib/push/time";
 import type { NotificationType } from "@/lib/push/types";
@@ -33,7 +33,7 @@ export async function shouldSend(
     return { ok: false, reason: "quiet" };
   }
 
-  const { data } = await getSupabase()
+  const { data } = await (await userDb())
     .from("notification_log")
     .select("id")
     .eq("notif_type", type)

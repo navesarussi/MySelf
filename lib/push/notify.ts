@@ -20,7 +20,7 @@ export async function notifyUser(
   // Claim the day's slot before sending, not after. Reading then sending then
   // writing let two overlapping runs both read "not sent yet" and both push.
   const entry = { type, refId, dayKey: gate.dayKey, title: payload.title, body: payload.body };
-  const client = sendLogClient();
+  const client = await sendLogClient();
   if (!(await claimSend(client, entry))) return { ok: false, reason: "duplicate" };
 
   const result = await sendPush(payload).catch(

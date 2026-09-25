@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isApiAuthorized, sessionIdentity, unauthorized } from "@/lib/api/auth";
+import { hasValidSession, sessionIdentity, unauthorized } from "@/lib/api/auth";
 import { makeSessionToken, sessionNeedsRefresh } from "@/lib/auth";
 
 /**
@@ -12,7 +12,7 @@ import { makeSessionToken, sessionNeedsRefresh } from "@/lib/auth";
  * loses access on schedule — which is the point of having an expiry at all.
  */
 export async function GET(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  if (!(await hasValidSession(req))) return unauthorized();
 
   const identity = await sessionIdentity(req);
   if (!identity) {

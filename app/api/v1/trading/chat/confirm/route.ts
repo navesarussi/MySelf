@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, readJson, str, denyUnlessPrimary } from "@/lib/api/auth";
 import { resolveChatCommand } from "@/lib/trading/chat";
 import { executeCommand } from "@/lib/trading/service";
 
@@ -7,7 +7,8 @@ export const maxDuration = 60;
 
 /** The only path from a chat proposal to an action: an explicit tap in the app. */
 export async function POST(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const body = await readJson(req);
   const id = str(body.message_id);
   if (!id || typeof body.confirm !== "boolean") return badRequest("invalid_request");

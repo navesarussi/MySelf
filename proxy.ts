@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, isValidSessionToken, readSessionToken } from "@/lib/auth";
 import { isCronAuthorized, matchesAnySecret } from "@/lib/api/cron-auth";
 
 function rewriteToSpa(req: NextRequest) {
@@ -84,7 +84,9 @@ export async function proxy(req: NextRequest) {
     if (pathname.startsWith("/legacy/login")) {
       return NextResponse.next();
     }
-    if (secret && (await isValidSessionToken(token, secret))) {
+    // The pages read and write the signed-in account's rows, so the session
+    // must name one; a pre-identity legacy cookie goes back to sign-in.
+    if (secret && (await readSessionToken(token, secret))) {
       return NextResponse.next();
     }
     const loginUrl = new URL("/legacy/login", req.url);

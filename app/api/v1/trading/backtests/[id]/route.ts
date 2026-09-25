@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbError, isApiAuthorized, notFound, unauthorized } from "@/lib/api/auth";
+import { dbError, notFound, denyUnlessPrimary } from "@/lib/api/auth";
 import { getBacktest } from "@/lib/trading/service";
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const { id } = await ctx.params;
   try {
     const bt = await getBacktest(id);

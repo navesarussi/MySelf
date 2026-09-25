@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, dbError, unauthorized } from "@/lib/api/auth";
 import { GITHUB_PROVIDER } from "@/lib/integrations/github-config";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 
 export async function DELETE(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
-  const { error } = await getSupabase()
+  const { error } = await (await userDb())
     .from("integration_tokens")
     .delete()
     .eq("provider", GITHUB_PROVIDER)

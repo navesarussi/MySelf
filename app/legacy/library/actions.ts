@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 
 export async function addContentEntry(formData: FormData) {
@@ -15,8 +15,9 @@ export async function addContentEntry(formData: FormData) {
     ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean)
     : [];
 
-  const supabase = getSupabase();
-  await supabase.from("content_entries").insert({
+
+  const db = await userDb();
+  await db.from("content_entries").insert({
     title,
     category: category || "כללי",
     body,
@@ -38,8 +39,9 @@ export async function updateContentEntry(formData: FormData) {
     ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean)
     : [];
 
-  const supabase = getSupabase();
-  await supabase
+
+  const db = await userDb();
+  await db
     .from("content_entries")
     .update({ title, category: category || "כללי", body, tags, updated_at: new Date().toISOString() })
     .eq("id", id);
@@ -50,8 +52,8 @@ export async function updateContentEntry(formData: FormData) {
 export async function deleteContentEntry(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
-  await supabase.from("content_entries").delete().eq("id", id);
+  const db = await userDb();
+  await db.from("content_entries").delete().eq("id", id);
   await setFlash("flash.entryDeleted");
   revalidatePath("/legacy/library");
 }

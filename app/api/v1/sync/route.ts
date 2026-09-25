@@ -3,6 +3,8 @@ import { revalidatePath } from "next/cache";
 import { syncGoogleCalendar } from "@/lib/integrations/google-calendar/sync";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
+import { currentUserId } from "@/lib/db/current-user";
+import { runAsUser } from "@/lib/db/user-context";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 
 /** Manual calendar sync from the app — same behavior as the web's manual sync. */
@@ -19,7 +21,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, alreadyRunning: true });
   }
 
-  after(async () => {
+  const account = await currentUserId();
+  after(() => runAsUser(account, async () => {
     try {
       await syncGoogleCalendar();
       revalidatePath("/timeline");
@@ -28,7 +31,7 @@ export async function POST(req: NextRequest) {
       const message = err instanceof Error ? err.message : "sync_failed";
       console.error("[google-sync-v1]", message);
     }
-  });
+  }));
 
   return NextResponse.json({ ok: true, started: true });
 }

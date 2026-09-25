@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 
 type Params = { params: Promise<{ id: string }> };
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("content_entries")
     .select("id, title, category, body, tags, created_at, updated_at")
     .eq("id", id)
@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const text = str(body.body);
   if (!id || !title || !text) return badRequest("title_and_body_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("content_entries")
     .update({
       title,
@@ -56,7 +56,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
-  const { error } = await getSupabase().from("content_entries").delete().eq("id", id);
+  const { error } = await (await userDb()).from("content_entries").delete().eq("id", id);
   if (error) return dbError();
   revalidatePath("/library");
   return NextResponse.json({ ok: true });

@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { claimAgentMessage } from "@/lib/agent/whatsapp-claim";
 import { shouldSend } from "@/lib/push/should-send";
 import { claimSend, releaseSend, sendLogClient } from "@/lib/push/claim";
@@ -17,7 +17,7 @@ export async function claimWhatsAppInbound(messageId: string): Promise<InboundCl
 }
 
 export async function finalizeWhatsAppInbound(messageId: string, content: string): Promise<void> {
-  await getSupabase()
+  await (await userDb())
     .from("agent_messages")
     .update({ content })
     .eq("external_id", messageId)
@@ -45,7 +45,7 @@ export async function claimMotivationDig(
 ): Promise<{ ok: true; dayKey: string } | { ok: false; reason: string }> {
   const gate = await shouldSend("agent", DIG_REF[kind], now, { bypassQuiet: true });
   if (!gate.ok) return { ok: false, reason: gate.reason };
-  const claimed = await claimSend(sendLogClient(), {
+  const claimed = await claimSend(await sendLogClient(), {
     type: "agent",
     refId: DIG_REF[kind],
     dayKey: gate.dayKey,
@@ -58,7 +58,7 @@ export async function claimMotivationDig(
 
 /** Nothing was sent — free the slot so the next cron slot can try again. */
 export async function releaseMotivationDig(kind: MotivationKind, dayKey: string): Promise<void> {
-  await releaseSend(sendLogClient(), {
+  await releaseSend(await sendLogClient(), {
     type: "agent",
     refId: DIG_REF[kind],
     dayKey,
@@ -73,7 +73,7 @@ export async function recordMotivationDig(
   dayKey: string,
   text: string
 ): Promise<void> {
-  await getSupabase()
+  await (await userDb())
     .from("notification_log")
     .update({ body: text.slice(0, 500) })
     .eq("notif_type", "agent")

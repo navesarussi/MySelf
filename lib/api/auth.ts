@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, isValidSessionToken, readSessionToken, verifyScopedToken, type SessionClaims } from "@/lib/auth";
+import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
 
 /** The token this request presents, Bearer first then cookie. */
 async function requestTokens(req: NextRequest): Promise<(string | undefined)[]> {
@@ -10,15 +11,33 @@ async function requestTokens(req: NextRequest): Promise<(string | undefined)[]> 
   return [bearer || undefined, jar.get(SESSION_COOKIE)?.value];
 }
 
-/** Route-level auth check for /api/v1 handlers — defense in depth on top of
- *  proxy.ts. Accepts the session token as a Bearer header or the cookie. */
-export async function isApiAuthorized(req: NextRequest): Promise<boolean> {
+/** Any valid session, including a pre-identity legacy token. Only the session
+ *  probe wants this: it answers a legacy token with `legacy: true` so the client
+ *  knows to sign in again. */
+export async function hasValidSession(req: NextRequest): Promise<boolean> {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return false;
   for (const token of await requestTokens(req)) {
     if (await isValidSessionToken(token, secret)) return true;
   }
   return false;
+}
+
+/** Route-level auth check for /api/v1 handlers — defense in depth on top of
+ *  proxy.ts. Accepts the session token as a Bearer header or the cookie, and
+ *  requires it to name an account: every data route reads or writes some
+ *  account's rows, and a legacy token names none. */
+export async function isApiAuthorized(req: NextRequest): Promise<boolean> {
+  return (await sessionIdentity(req)) !== null;
+}
+
+/** Trading is one engine on one brokerage account: only the primary account
+ *  may reach it. 401 without a session, 403 for any other account. */
+export async function denyUnlessPrimary(req: NextRequest): Promise<NextResponse | null> {
+  const identity = await sessionIdentity(req);
+  if (!identity) return unauthorized();
+  if (!(await isPrimaryGoogleEmail(identity.sub))) return forbidden();
+  return null;
 }
 
 /**
@@ -47,21 +66,30 @@ export async function sessionIdentity(req: NextRequest): Promise<SessionClaims |
  *  back through the deep link. */
 export const OAUTH_START_AUDIENCE = "oauth-start";
 
-export async function isOAuthStartAuthorized(req: NextRequest): Promise<boolean> {
-  if (await isApiAuthorized(req)) return true;
+/** The account starting an OAuth connect — the integration's tokens are stored
+ *  for it. Null when unauthenticated or when only a legacy (anonymous) token is
+ *  presented. */
+export async function oauthStartIdentity(req: NextRequest): Promise<string | null> {
+  const session = await sessionIdentity(req);
+  if (session) return session.sub;
   const secret = process.env.AUTH_SECRET;
-  if (!secret) return false;
+  if (!secret) return null;
   const queryToken = req.nextUrl.searchParams.get("token") ?? undefined;
   // Preferred: a five-minute token minted for this one purpose. A URL ends up in
   // browser history, Referer headers and access logs, so what travels there must
   // not be the 90-day session token.
-  if (await verifyScopedToken(queryToken, secret, OAUTH_START_AUDIENCE)) return true;
-  // Accepted until installed native builds have rolled over to the scoped token.
-  return isValidSessionToken(queryToken, secret);
+  const scoped = await verifyScopedToken(queryToken, secret, OAUTH_START_AUDIENCE);
+  if (scoped) return scoped.sub;
+  // Installed native builds that still pass the session token itself.
+  return (await readSessionToken(queryToken, secret))?.sub ?? null;
 }
 
 export function unauthorized() {
   return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+}
+
+export function forbidden() {
+  return NextResponse.json({ error: "forbidden" }, { status: 403 });
 }
 
 export function badRequest(message: string) {
@@ -70,6 +98,11 @@ export function badRequest(message: string) {
 
 export function dbError(message = "db_error") {
   return NextResponse.json({ error: message }, { status: 500 });
+}
+
+/** A write naming a project the account doesn't own fails its (project_id, user_id) key. */
+export function projectWriteError(error: { code?: string } | null) {
+  return error?.code === "23503" ? badRequest("project_not_found") : dbError();
 }
 
 export function conflict(message = "duplicate") {

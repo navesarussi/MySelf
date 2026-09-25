@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { randomBytes } from "crypto";
 import { setOAuthState } from "@/lib/integrations/oauth-state";
-import { isOAuthStartAuthorized, unauthorized } from "@/lib/api/auth";
+import { oauthStartIdentity, unauthorized } from "@/lib/api/auth";
+import { mintOAuthState } from "@/lib/integrations/oauth-state-token";
 import { isAllowedAppRedirect } from "@/lib/integrations/mobile-redirect";
 import { mondayAuthUrl } from "@/lib/integrations/task-sources/monday/client";
 import { mondayConfigured } from "@/lib/integrations/monday-config";
@@ -18,10 +18,11 @@ const cookieOpts = {
 };
 
 export async function GET(req: NextRequest) {
-  // Starting this flow binds whichever account authorises it to the shared
-  // integration token row, so it must require an existing session — proxy.ts
-  // lets non-/api/v1 routes through and leaves the check to the handler.
-  if (!(await isOAuthStartAuthorized(req))) return unauthorized();
+  // The integration's tokens are stored for the account that starts this flow,
+  // so it must name one — proxy.ts lets non-/api/v1 routes through and leaves
+  // the check to the handler.
+  const owner = await oauthStartIdentity(req);
+  if (!owner) return unauthorized();
 
   if (!mondayConfigured()) {
     return NextResponse.json({ error: "monday_not_configured" }, { status: 500 });
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
   const next = sp.get("next");
   const appRedirect = sp.get("app_redirect");
 
-  const state = randomBytes(16).toString("hex");
+  const state = await mintOAuthState(owner);
   const nextPath = next && next.startsWith("/") && !next.startsWith("//") ? next : undefined;
   await setOAuthState("monday", state, nextPath);
 

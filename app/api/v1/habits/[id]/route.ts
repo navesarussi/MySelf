@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { normalizeReportTime } from "@/lib/habit-stats";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 
@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!id || !name) return badRequest("name_required");
 
   const streak_count = num(body.streak_count);
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("habits")
     .update({
       name,
@@ -47,7 +47,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
-  const { error } = await getSupabase().from("habits").delete().eq("id", id);
+  const { error } = await (await userDb()).from("habits").delete().eq("id", id);
   if (error) return dbError();
   revalidateHabitPaths();
   return NextResponse.json({ ok: true });

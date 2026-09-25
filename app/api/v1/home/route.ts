@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
 import { dedupeHabits } from "@/lib/habit-stats";
@@ -7,6 +8,7 @@ import { avgTaskCloseDays } from "@/lib/task-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
 import { loadTradingSnapshot } from "@/lib/trading/account-equity";
+import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
 import { formatUrgentFinanceLabel } from "@/lib/widget-snapshot";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
@@ -46,7 +48,10 @@ function projectNameFromJoin(projects: TaskJoin["projects"]): string | undefined
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const supabase = getSupabase();
+  const db = await userDb();
   const month = currentMonthKey();
+  // Trading is the primary account's alone; other accounts' home has no trading card.
+  const showTrading = await isPrimaryGoogleEmail(db.userId);
 
   const [
     habitsRes,
@@ -67,33 +72,33 @@ export async function GET(req: NextRequest) {
     financeNetRes,
     tradingRes,
   ] = await Promise.all([
-    supabase
+    db
       .from("habits")
       .select(
         "id, name, kind, target_note, streak_count, best_streak, total_success_days, failure_count, last_checked_on, report_time, last_reported_at, archived, created_at"
       )
       .eq("archived", false),
-    supabase
+    db
       .from("goals")
       .select("id, title, category, horizon, first_step, definition_of_done, status, sort_order, created_at")
       .eq("status", "active"),
-    supabase.from("goals").select("id", { count: "exact", head: true }).eq("status", "done"),
-    supabase
+    db.from("goals").select("id", { count: "exact", head: true }).eq("status", "done"),
+    db
       .from("commitments")
       .select("id, commitment_date, text, status, created_at")
       .eq("status", "pending")
       .order("commitment_date", { ascending: false }),
-    supabase
+    db
       .from("relationships")
       .select("id, name, last_contact_date, reminder_days, phone, email")
       .order("name"),
-    supabase
+    db
       .from("timeline_events")
       .select("id, title, title_override, source, event_date, event_time, hidden_at")
       .is("hidden_at", null)
       .order("event_date", { ascending: false })
       .limit(60),
-    supabase
+    db
       .from("tasks")
       .select(
         "id, title, project_id, priority, status, due_date, notes, source, external_id, external_list_id, external_meta, synced_at, created_at, updated_at, projects(name)"
@@ -101,22 +106,22 @@ export async function GET(req: NextRequest) {
       .in("status", ["open", "in_progress", "stuck", "review"])
       .order("created_at", { ascending: false })
       .limit(25),
-    supabase.from("projects").select("id, name, sort_order, created_at").order("sort_order"),
-    supabase
+    db.from("projects").select("id, name, sort_order, created_at").order("sort_order"),
+    db
       .from("content_entries")
       .select("id, title, category, tags, updated_at")
       .order("updated_at", { ascending: false })
       .limit(20),
-    supabase
+    db
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("status", "open"),
-    supabase
+    db
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("status", "in_progress"),
-    supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "done"),
-    supabase
+    db.from("tasks").select("id", { count: "exact", head: true }).eq("status", "done"),
+    db
       .from("tasks")
       .select("created_at, updated_at, status")
       .eq("status", "done")
@@ -137,7 +142,7 @@ export async function GET(req: NextRequest) {
       (net) => ({ data: net, error: null }),
       (err: Error) => ({ data: null, error: { message: err.message } })
     ),
-    loadTradingSnapshot().catch(() => null),
+    showTrading ? loadTradingSnapshot().catch(() => null) : null,
   ]);
 
   const degraded = collectFailures({
@@ -158,8 +163,8 @@ export async function GET(req: NextRequest) {
     urgentFinance: urgentFinanceRes,
     financeNet: financeNetRes,
   });
-  if (!tradingRes) degraded.push("trading");
-  else if (tradingRes.equityFailed) degraded.push("trading.equity");
+  if (showTrading && !tradingRes) degraded.push("trading");
+  else if (tradingRes?.equityFailed) degraded.push("trading.equity");
 
   const selected = selectHomeEvents(eventsRes.data || [], new Date(), 10);
 

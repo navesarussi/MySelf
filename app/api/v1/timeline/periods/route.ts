@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("life_periods")
     .select("*")
     .order("sort_order", { ascending: true });
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const start_date = str(body.start_date);
   if (!title || !start_date) return badRequest("title_and_start_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("life_periods")
     .insert({
       title,

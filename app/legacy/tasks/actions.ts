@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { rememberLastProject } from "@/lib/last-project";
 import type { TaskPriority, TaskStatus } from "@/lib/types";
@@ -31,8 +31,9 @@ export async function addTask(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
-  const { error } = await supabase.from("tasks").insert({
+
+  const db = await userDb();
+  const { error } = await db.from("tasks").insert({
     title,
     project_id,
     priority: pick(String(formData.get("priority") || ""), PRIORITIES, "medium"),
@@ -59,8 +60,9 @@ export async function updateTask(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
-  const { error } = await supabase
+
+  const db = await userDb();
+  const { error } = await db
     .from("tasks")
     .update({
       title,
@@ -82,8 +84,9 @@ export async function updateTaskStatus(formData: FormData) {
   const status = pick(String(formData.get("status") || ""), STATUSES, "open");
   if (!id) return;
 
-  const supabase = getSupabase();
-  const { error } = await supabase
+
+  const db = await userDb();
+  const { error } = await db
     .from("tasks")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", id);
@@ -95,8 +98,8 @@ export async function updateTaskStatus(formData: FormData) {
 export async function deleteTask(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
-  const { error } = await supabase.from("tasks").delete().eq("id", id);
+  const db = await userDb();
+  const { error } = await db.from("tasks").delete().eq("id", id);
   await setFlash(error ? "flash.taskDeleteError" : "flash.taskDeleted", error ? "error" : "success");
   revalidateTaskPaths();
 }

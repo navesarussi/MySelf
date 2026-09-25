@@ -9,6 +9,8 @@ import { getIntegrationToken, saveIntegrationToken } from "@/lib/integrations/to
 import { consumeOAuthNext, consumeOAuthState } from "@/lib/integrations/oauth-state";
 import { redirectToAppOrNext } from "@/lib/integrations/oauth-redirect";
 import { setFlashCookie } from "@/lib/flash";
+import { oauthStateAccount } from "@/lib/integrations/oauth-state-token";
+import { runAsUser } from "@/lib/db/user-context";
 
 const APP_REDIRECT_COOKIE = "github_oauth_app_redirect";
 
@@ -30,29 +32,36 @@ export async function GET(req: NextRequest) {
     setFlashCookie(jar, "Invalid OAuth state — try again", "error");
     return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
   }
-
-  try {
-    const tokens = await exchangeGithubCode(code);
-    const user = await fetchGithubUser(tokens.access_token);
-    const existing = await getIntegrationToken(GITHUB_PROVIDER);
-
-    await saveIntegrationToken({
-      provider: GITHUB_PROVIDER,
-      access_token: tokens.access_token,
-      refresh_token: null,
-      expires_at: null,
-      settings: {
-        ...(existing?.settings ?? {}),
-        account_name: user.login,
-        account_login: user.login,
-      },
-    });
-
-    setFlashCookie(jar, "GitHub connected", "success");
-    return redirectToAppOrNext({ jar, origin: url.origin, next: next || "/settings", appRedirectCookie: APP_REDIRECT_COOKIE });
-  } catch (err) {
-    console.error("[github-callback]", err);
-    setFlashCookie(jar, "GitHub connection failed", "error");
-    return redirectToAppOrNext({ jar, origin: url.origin, next: next || "/settings", appRedirectCookie: APP_REDIRECT_COOKIE });
+  const owner = await oauthStateAccount(state);
+  if (!owner) {
+    setFlashCookie(jar, "Invalid OAuth state — try again", "error");
+    return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
   }
+
+  return runAsUser(owner, async () => {
+    try {
+      const tokens = await exchangeGithubCode(code);
+      const user = await fetchGithubUser(tokens.access_token);
+      const existing = await getIntegrationToken(GITHUB_PROVIDER);
+
+      await saveIntegrationToken({
+        provider: GITHUB_PROVIDER,
+        access_token: tokens.access_token,
+        refresh_token: null,
+        expires_at: null,
+        settings: {
+          ...(existing?.settings ?? {}),
+          account_name: user.login,
+          account_login: user.login,
+        },
+      });
+
+      setFlashCookie(jar, "GitHub connected", "success");
+      return redirectToAppOrNext({ jar, origin: url.origin, next: next || "/settings", appRedirectCookie: APP_REDIRECT_COOKIE });
+    } catch (err) {
+      console.error("[github-callback]", err);
+      setFlashCookie(jar, "GitHub connection failed", "error");
+      return redirectToAppOrNext({ jar, origin: url.origin, next: next || "/settings", appRedirectCookie: APP_REDIRECT_COOKIE });
+    }
+  });
 }

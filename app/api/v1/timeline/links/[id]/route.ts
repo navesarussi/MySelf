@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, unauthorized } from "@/lib/api/auth";
 
 type Params = { params: Promise<{ id: string }> };
@@ -9,7 +9,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   if (!id) return badRequest("id_required");
 
-  const { error } = await getSupabase().from("timeline_event_links").delete().eq("id", id);
+  const { error } = await (await userDb()).from("timeline_event_links").delete().eq("id", id);
   if (error) return dbError();
   return NextResponse.json({ ok: true });
 }

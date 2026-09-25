@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, notFound, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { TimelineEventLinkKind } from "@/lib/types";
 
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   if (!id) return badRequest("id_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("timeline_event_links")
     .select("*")
     .eq("event_id", id)
@@ -35,15 +35,16 @@ export async function POST(req: NextRequest, { params }: Params) {
   if ((kind === "image" || kind === "link") && !url) return badRequest("url_required");
   if (kind === "note" && !content) return badRequest("content_required");
 
-  const supabase = getSupabase();
-  const { data: event } = await supabase
+
+  const db = await userDb();
+  const { data: event } = await db
     .from("timeline_events")
     .select("id")
     .eq("id", id)
     .maybeSingle();
   if (!event) return notFound();
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("timeline_event_links")
     .insert({ event_id: id, kind, url, content })
     .select()

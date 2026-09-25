@@ -7,6 +7,7 @@ import {
 } from "@/lib/push/dispatch";
 import { jerusalemParts } from "@/lib/push/time";
 import { isCronAuthorized } from "@/lib/api/cron-auth";
+import { forEachAccount } from "@/lib/db/accounts";
 
 export const maxDuration = 60;
 
@@ -21,9 +22,10 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
   const { hour, dayKey } = jerusalemParts(now);
-  const results: Record<string, unknown> = { dayKey, hour };
 
-  try {
+  // Each account gets its own digest from its own rows, sent to its own devices.
+  const accounts = await forEachAccount(async () => {
+    const results: Record<string, unknown> = {};
     // Morning digest slot (08:00 Jerusalem) for relationships / tasks / timeline
     if (hour === 8) {
       results.relationships = await dispatchRelationships(now);
@@ -31,11 +33,12 @@ export async function GET(req: NextRequest) {
       results.timeline = await dispatchTimeline(now);
     }
     results.habits = await dispatchHabits(now);
+    return results;
+  });
 
-    return NextResponse.json({ ok: true, results });
-  } catch (err) {
-    const code = err instanceof Error ? err.message : "dispatch_failed";
-    console.error("[push-dispatch]", code);
-    return NextResponse.json({ error: code }, { status: 500 });
+  for (const run of accounts) {
+    if (!run.ok) console.error("[push-dispatch]", run.email, run.error);
   }
+  const ok = accounts.every((run) => run.ok);
+  return NextResponse.json({ ok, dayKey, hour, accounts }, { status: ok ? 200 : 500 });
 }

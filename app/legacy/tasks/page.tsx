@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader, FilterBar, FilterChips, type ChipOption } from "@/components/ui";
@@ -8,7 +8,8 @@ import { TasksPanel } from "./task-board";
 import { isAddTarget } from "@/lib/add-menu";
 import { getLastProject } from "@/lib/last-project";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 const statuses: Array<TaskStatus | typeof ALL_FILTER> = [
   ALL_FILTER,
@@ -29,14 +30,14 @@ const priorities: Array<TaskPriority | typeof ALL_FILTER> = [
 type TaskRow = Task & { projects: { name: string } | null };
 
 async function getProjects(): Promise<Project[]> {
-  const supabase = getSupabase();
-  const { data } = await supabase.from("projects").select("*").order("sort_order");
+  const db = await userDb();
+  const { data } = await db.from("projects").select("*").order("sort_order");
   return (data || []) as Project[];
 }
 
 async function getTasks(projectId?: string, statuses?: TaskStatus[], priority?: string): Promise<Task[]> {
-  const supabase = getSupabase();
-  let q = supabase
+  const db = await userDb();
+  let q = db
     .from("tasks")
     .select("*, projects(name)")
     .order("created_at", { ascending: false });

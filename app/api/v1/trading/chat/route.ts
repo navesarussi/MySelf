@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
+import { badRequest, dbError, readJson, str, denyUnlessPrimary } from "@/lib/api/auth";
 import { getChatHistory, runTradingChat } from "@/lib/trading/chat";
 
 export const maxDuration = 120;
 
 export async function GET(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   try {
     return NextResponse.json(await getChatHistory());
   } catch {
@@ -14,7 +15,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const message = str((await readJson(req)).message);
   if (!message) return badRequest("message_required");
   try {

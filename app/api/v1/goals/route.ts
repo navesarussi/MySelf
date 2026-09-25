@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, conflict, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, isUniqueViolation } from "@/lib/data-integrity";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
@@ -12,7 +12,7 @@ function revalidateGoalPaths() {
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("goals")
     .select("id, title, category, horizon, first_step, definition_of_done, status, sort_order, created_at")
     .order("sort_order");
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   const title = str(body.title);
   if (!title) return badRequest("title_required");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("goals")
     .insert({
       title,

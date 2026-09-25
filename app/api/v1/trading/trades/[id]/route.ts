@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbError, isApiAuthorized, notFound, readJson, unauthorized } from "@/lib/api/auth";
+import { dbError, notFound, readJson, denyUnlessPrimary } from "@/lib/api/auth";
 import { getTradeDetail, patchTradeJournal } from "@/lib/trading/service";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, ctx: Ctx) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const { id } = await ctx.params;
   try {
     const detail = await getTradeDetail(id);
@@ -17,7 +18,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
 /** Journal fields only — lifecycle/price fields are owned by the engine. */
 export async function PATCH(req: NextRequest, ctx: Ctx) {
-  if (!(await isApiAuthorized(req))) return unauthorized();
+  const denied = await denyUnlessPrimary(req);
+  if (denied) return denied;
   const { id } = await ctx.params;
   const body = await readJson(req);
   try {

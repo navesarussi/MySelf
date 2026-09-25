@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { todayISO } from "@/lib/habit-stats";
 
@@ -13,8 +13,9 @@ export async function addGoal(formData: FormData) {
   const definition_of_done = String(formData.get("definition_of_done") || "").trim();
   if (!title) return;
 
-  const supabase = getSupabase();
-  await supabase.from("goals").insert({
+
+  const db = await userDb();
+  await db.from("goals").insert({
     title,
     category: category || null,
     horizon: horizon || null,
@@ -35,8 +36,9 @@ export async function updateGoal(formData: FormData) {
   const definition_of_done = String(formData.get("definition_of_done") || "").trim();
   if (!id || !title) return;
 
-  const supabase = getSupabase();
-  await supabase
+
+  const db = await userDb();
+  await db
     .from("goals")
     .update({
       title,
@@ -55,8 +57,8 @@ export async function toggleGoalStatus(formData: FormData) {
   const id = String(formData.get("id") || "");
   const status = String(formData.get("status") || "active");
   if (!id) return;
-  const supabase = getSupabase();
-  await supabase
+  const db = await userDb();
+  await db
     .from("goals")
     .update({ status: status === "active" ? "done" : "active" })
     .eq("id", id);
@@ -68,8 +70,8 @@ export async function toggleGoalStatus(formData: FormData) {
 export async function deleteGoal(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
-  await supabase.from("goals").delete().eq("id", id);
+  const db = await userDb();
+  await db.from("goals").delete().eq("id", id);
   await setFlash("flash.goalDeleted");
   revalidatePath("/legacy/goals");
   revalidatePath("/legacy");
@@ -79,8 +81,8 @@ export async function addCommitment(formData: FormData) {
   const text = String(formData.get("text") || "").trim();
   const commitment_date = String(formData.get("commitment_date") || todayISO());
   if (!text) return;
-  const supabase = getSupabase();
-  await supabase.from("commitments").insert({ text, commitment_date });
+  const db = await userDb();
+  await db.from("commitments").insert({ text, commitment_date });
   await setFlash("flash.commitmentAdded");
   revalidatePath("/legacy/goals");
   revalidatePath("/legacy");
@@ -90,8 +92,8 @@ export async function setCommitmentStatus(formData: FormData) {
   const id = String(formData.get("id") || "");
   const status = String(formData.get("status") || "pending");
   if (!id) return;
-  const supabase = getSupabase();
-  await supabase.from("commitments").update({ status }).eq("id", id);
+  const db = await userDb();
+  await db.from("commitments").update({ status }).eq("id", id);
   await setFlash("flash.commitmentUpdated");
   revalidatePath("/legacy/goals");
   revalidatePath("/legacy");
@@ -100,8 +102,8 @@ export async function setCommitmentStatus(formData: FormData) {
 export async function deleteCommitment(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
-  await supabase.from("commitments").delete().eq("id", id);
+  const db = await userDb();
+  await db.from("commitments").delete().eq("id", id);
   await setFlash("flash.commitmentDeleted");
   revalidatePath("/legacy/goals");
   revalidatePath("/legacy");

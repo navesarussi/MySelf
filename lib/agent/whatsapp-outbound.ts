@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { claimAgentMessage } from "@/lib/agent/whatsapp-claim";
 import { sendWhatsAppText } from "@/lib/whatsapp/client";
 
@@ -90,7 +90,7 @@ export async function recordWhatsAppOutbound(
   content: string,
   waMessageId: string
 ): Promise<void> {
-  await getSupabase()
+  await (await userDb())
     .from("agent_messages")
     .update({ content: `${content}\n[wa:${waMessageId}]` })
     .eq("external_id", outboundRef(inboundId))

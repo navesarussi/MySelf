@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import { sendPush } from "@/lib/push/send";
+import { runAsPrimary } from "@/lib/db/accounts";
 import { PAPER_STARTING_EQUITY, SEED_UNIVERSE } from "./config";
 import { FOMC_DATES } from "./calendar-seed";
 import type { JournalTrade } from "./learning";
@@ -92,7 +93,10 @@ export async function logEvent(input: { kind: string; message: string; severity?
     .from("trading_events")
     .insert({ kind: input.kind, message: input.message, severity: input.severity ?? "info", symbol: input.symbol ?? null, data: input.data ?? null });
   if (input.push) {
-    await sendPush({ title: `מסחר · ${input.kind}`, body: input.message, data: { url: "/trading" } }).catch(() => undefined);
+    // Trading is the primary account's: its alerts go to that account's devices only.
+    await runAsPrimary(() =>
+      sendPush({ title: `מסחר · ${input.kind}`, body: input.message, data: { url: "/trading" } })
+    ).catch(() => undefined);
   }
 }
 

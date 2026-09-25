@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
@@ -16,8 +16,8 @@ import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 export const dynamic = "force-dynamic";
 
 async function getEvents(): Promise<TimelineEvent[]> {
-  const supabase = getSupabase();
-  const { data } = await supabase
+  const db = await userDb();
+  const { data } = await db
     .from("timeline_events")
     .select("*")
     .order("event_date", { ascending: false })
@@ -26,8 +26,8 @@ async function getEvents(): Promise<TimelineEvent[]> {
 }
 
 async function getPeriods(): Promise<LifePeriod[]> {
-  const supabase = getSupabase();
-  const { data } = await supabase
+  const db = await userDb();
+  const { data } = await db
     .from("life_periods")
     .select("*")
     .order("sort_order", { ascending: true });

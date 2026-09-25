@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { isValidPhone, normalizePhone } from "@/lib/integrations/phone";
 import { isAuthorizedWhatsAppSender as phonesMatch } from "@/lib/whatsapp/phone-match";
 import type { AgentSettings, AgentTone } from "@/lib/agent/types";
@@ -47,10 +47,9 @@ function rowToSettings(row: Record<string, unknown>): AgentSettings {
 }
 
 export async function getAgentSettings(): Promise<AgentSettings> {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("agent_settings")
     .select("*")
-    .eq("id", true)
     .maybeSingle();
   if (error || !data) return DEFAULTS;
   return rowToSettings(data as Record<string, unknown>);
@@ -114,10 +113,10 @@ export async function updateAgentSettings(patch: AgentSettingsPatch): Promise<Ag
     }
   }
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("agent_settings")
-    .update(body)
-    .eq("id", true)
+    // Upsert: an account that never saved settings has no row yet.
+    .upsert(body, { onConflict: "user_id" })
     .select("*")
     .single();
   if (error || !data) throw new Error("settings_update_failed");

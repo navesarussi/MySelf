@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import type { PushPlatform } from "@/lib/push/types";
 
 const EXPO_TOKEN_RE = /^ExponentPushToken\[.+\]$/;
@@ -18,7 +18,7 @@ export async function upsertPushToken(input: {
     throw new Error("invalid_platform");
   }
 
-  const { error } = await getSupabase().from("push_tokens").upsert(
+  const { error } = await (await userDb()).from("push_tokens").upsert(
     {
       expo_push_token: token,
       platform: input.platform,
@@ -34,7 +34,7 @@ export async function upsertPushToken(input: {
 export async function deletePushToken(expoPushToken: string): Promise<{ ok: true }> {
   const token = expoPushToken.trim();
   if (!token) throw new Error("invalid_token");
-  const { error } = await getSupabase()
+  const { error } = await (await userDb())
     .from("push_tokens")
     .delete()
     .eq("expo_push_token", token);
@@ -43,7 +43,7 @@ export async function deletePushToken(expoPushToken: string): Promise<{ ok: true
 }
 
 export async function listPushTokens(): Promise<string[]> {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("push_tokens")
     .select("expo_push_token");
   if (error || !data) return [];
@@ -52,5 +52,5 @@ export async function listPushTokens(): Promise<string[]> {
 
 export async function removePushTokens(tokens: string[]): Promise<void> {
   if (!tokens.length) return;
-  await getSupabase().from("push_tokens").delete().in("expo_push_token", tokens);
+  await (await userDb()).from("push_tokens").delete().in("expo_push_token", tokens);
 }

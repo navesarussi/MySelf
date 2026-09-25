@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import type { HabitReportOutcome, HabitReportRow } from "@/lib/habit-history";
 
 export async function upsertHabitReport(
@@ -6,7 +6,7 @@ export async function upsertHabitReport(
   reportDate: string,
   outcome: HabitReportOutcome
 ): Promise<void> {
-  const { error } = await getSupabase()
+  const { error } = await (await userDb())
     .from("habit_reports")
     .upsert(
       {
@@ -15,7 +15,7 @@ export async function upsertHabitReport(
         outcome,
         reported_at: new Date().toISOString(),
       },
-      { onConflict: "habit_id,report_date" }
+      { onConflict: "user_id,habit_id,report_date" }
     );
   if (error) throw new Error(error.message);
 }
@@ -24,7 +24,7 @@ export async function loadHabitReportForDate(
   habitId: string,
   reportDate: string,
 ): Promise<HabitReportRow | null> {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("habit_reports")
     .select("report_date, outcome, reported_at")
     .eq("habit_id", habitId)
@@ -40,7 +40,7 @@ export async function loadHabitReportForDate(
 }
 
 export async function loadAllHabitReports(habitId: string): Promise<HabitReportRow[]> {
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("habit_reports")
     .select("report_date, outcome, reported_at")
     .eq("habit_id", habitId)
@@ -58,7 +58,7 @@ export async function loadHabitReports(habitId: string, days = 60): Promise<Habi
   since.setUTCDate(since.getUTCDate() - days);
   const sinceKey = since.toISOString().slice(0, 10);
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("habit_reports")
     .select("report_date, outcome, reported_at")
     .eq("habit_id", habitId)

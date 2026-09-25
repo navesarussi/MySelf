@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 
 type Params = { params: Promise<{ id: string }> };
@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!id || !title || !start_date) return badRequest("title_and_start_required");
   if (end_date && end_date < start_date) return badRequest("end_before_start");
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("life_periods")
     .update({
       title,
@@ -36,7 +36,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
-  const { error } = await getSupabase().from("life_periods").delete().eq("id", id);
+  const { error } = await (await userDb()).from("life_periods").delete().eq("id", id);
   if (error) return dbError();
   revalidatePath("/timeline");
   return NextResponse.json({ ok: true });

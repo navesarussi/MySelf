@@ -2,19 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized, dbError } from "@/lib/api/auth";
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import { listIntegrationTokens } from "@/lib/integrations/tokens";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   try {
     const rows = await listIntegrationTokens(MONDAY_PROVIDER);
-    const supabase = getSupabase();
+    const db = await userDb();
 
     const accounts = await Promise.all(
       rows.map(async (row) => {
         const settings = row.settings ?? {};
-        const { data: taskRows } = await supabase
+        const { data: taskRows } = await db
           .from("tasks")
           .select("external_list_id")
           .eq("source", "monday")

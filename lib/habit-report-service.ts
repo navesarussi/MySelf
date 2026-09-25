@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { recomputeHabitStatsFromReports, resolveHabitReportDay } from "@/lib/habit-stats";
 import { loadAllHabitReports, loadHabitReportForDate, upsertHabitReport } from "@/lib/habit-reports-store";
 import type { HabitReportOutcome } from "@/lib/habit-history";
@@ -47,7 +47,7 @@ export async function applyHabitReport(input: {
   const reportsMap = new Map(reports.map((row) => [row.report_date, row.outcome]));
   const stats = recomputeHabitStatsFromReports(habit, reportsMap, input.now ?? new Date());
 
-  const { data, error } = await getSupabase()
+  const { data, error } = await (await userDb())
     .from("habits")
     .update({
       streak_count: stats.streak_count,
@@ -66,6 +66,6 @@ export async function applyHabitReport(input: {
 }
 
 export async function loadHabit(id: string): Promise<Habit | null> {
-  const { data } = await getSupabase().from("habits").select("*").eq("id", id).single<Habit>();
+  const { data } = await (await userDb()).from("habits").select("*").eq("id", id).single<Habit>();
   return data ?? null;
 }

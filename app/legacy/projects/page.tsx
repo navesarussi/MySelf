@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
@@ -7,7 +7,8 @@ import type { Project, Relationship, Task } from "@/lib/types";
 import { ProjectBoard } from "./project-board";
 import { isAddTarget } from "@/lib/add-menu";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 type TaskRow = Task & { projects: { name: string } | null };
 type RelRow = Relationship & { projects: { name: string } | null };
@@ -30,11 +31,11 @@ export default async function ProjectsPage({
 
   const sp = await searchParams;
   const add = isAddTarget(sp.add) ? sp.add : undefined;
-  const supabase = getSupabase();
+  const db = await userDb();
   const [{ data: projects }, { data: tasks }, { data: relationships }] = await Promise.all([
-    supabase.from("projects").select("*").order("sort_order"),
-    supabase.from("tasks").select("*, projects(name)").order("created_at", { ascending: false }),
-    supabase.from("relationships").select("*, projects(name)").order("name"),
+    db.from("projects").select("*").order("sort_order"),
+    db.from("tasks").select("*, projects(name)").order("created_at", { ascending: false }),
+    db.from("relationships").select("*, projects(name)").order("name"),
   ]);
 
   const projectList = (projects || []) as Project[];

@@ -1,16 +1,19 @@
-import { NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { NextRequest, NextResponse } from "next/server";
+import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
+import { userDb } from "@/lib/db/user-db";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken } from "@/lib/integrations/tokens";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!(await isApiAuthorized(req))) return unauthorized();
   const token = await getIntegrationToken(GOOGLE_PROVIDER);
   if (!token) {
     return NextResponse.json({ connected: false }, { status: 404 });
   }
 
-  const supabase = getSupabase();
-  const { count } = await supabase
+
+  const db = await userDb();
+  const { count } = await db
     .from("timeline_events")
     .select("id", { count: "exact", head: true })
     .eq("source", "google_calendar");

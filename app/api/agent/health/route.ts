@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAgentSettings } from "@/lib/agent/settings";
 import { isWhatsAppConfigured, sendWhatsAppText } from "@/lib/whatsapp/client";
 import { isCronAuthorized } from "@/lib/api/cron-auth";
+import { runAsPrimary } from "@/lib/db/accounts";
 
 /** Daily probe: Gemini key + WhatsApp send path. */
 export async function GET(req: NextRequest) {
@@ -9,13 +10,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const settings = await getAgentSettings();
+  // The probe message goes to the primary account's WhatsApp only.
+  const settings = await runAsPrimary(getAgentSettings);
   const issues: string[] = [];
 
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) issues.push("missing_gemini_api_key");
   if (!isWhatsAppConfigured()) issues.push("whatsapp_not_configured");
 
-  if (settings.whatsapp_phone && isWhatsAppConfigured()) {
+  if (settings?.whatsapp_phone && isWhatsAppConfigured()) {
     const probe = await sendWhatsAppText(
       settings.whatsapp_phone,
       "[health] בדיקת חיבור אוטומטית — אפשר להתעלם."

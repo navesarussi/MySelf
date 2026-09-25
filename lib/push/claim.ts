@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import type { NotificationType } from "@/lib/push/types";
 
 /**
@@ -54,7 +54,7 @@ export async function claimSend(client: SendLogClient, entry: SendLogEntry): Pro
         title: entry.title,
         body: entry.body,
       },
-      { onConflict: "notif_type,ref_id,day_key", ignoreDuplicates: true }
+      { onConflict: "user_id,notif_type,ref_id,day_key", ignoreDuplicates: true }
     )
     // With ignoreDuplicates, select() returns only the rows actually inserted.
     .select("id");
@@ -73,4 +73,6 @@ export async function releaseSend(client: SendLogClient, entry: SendLogEntry): P
     .select("id");
 }
 
-export const sendLogClient = (): SendLogClient => getSupabase() as unknown as SendLogClient;
+/** The current account's send log. */
+export const sendLogClient = async (): Promise<SendLogClient> =>
+  (await userDb()) as unknown as SendLogClient;

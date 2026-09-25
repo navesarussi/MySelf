@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { setFlash } from "@/lib/flash-actions";
 import { parseMinZoom } from "@/lib/timeline-zoom";
 
@@ -18,8 +18,9 @@ export async function addTimelineEvent(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
-  const { error } = await supabase.from("timeline_events").insert({
+
+  const db = await userDb();
+  const { error } = await db.from("timeline_events").insert({
     event_date,
     event_time,
     title,
@@ -48,15 +49,16 @@ export async function updateTimelineEvent(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
-  const { data: existing } = await supabase.from("timeline_events").select("*").eq("id", id).maybeSingle();
+
+  const db = await userDb();
+  const { data: existing } = await db.from("timeline_events").select("*").eq("id", id).maybeSingle();
   if (!existing) {
     await setFlash("flash.eventNotFound", "error");
     return;
   }
 
   if (existing.source === "google_calendar") {
-    const { error } = await supabase
+    const { error } = await db
       .from("timeline_events")
       .update({
         event_date,
@@ -69,7 +71,7 @@ export async function updateTimelineEvent(formData: FormData) {
       .eq("id", id);
     await setFlash(error ? "flash.eventUpdateError" : "flash.eventUpdated", error ? "error" : "success");
   } else {
-    const { error } = await supabase
+    const { error } = await db
       .from("timeline_events")
       .update({
         event_date,
@@ -90,17 +92,17 @@ export async function updateTimelineEvent(formData: FormData) {
 export async function deleteTimelineEvent(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
-  const supabase = getSupabase();
-  const { data: existing } = await supabase.from("timeline_events").select("source").eq("id", id).maybeSingle();
+  const db = await userDb();
+  const { data: existing } = await db.from("timeline_events").select("source").eq("id", id).maybeSingle();
 
   if (existing?.source === "google_calendar") {
-    const { error } = await supabase
+    const { error } = await db
       .from("timeline_events")
       .update({ hidden_at: new Date().toISOString() })
       .eq("id", id);
     await setFlash(error ? "flash.eventHideError" : "flash.eventHidden", error ? "error" : "success");
   } else {
-    const { error } = await supabase.from("timeline_events").delete().eq("id", id);
+    const { error } = await db.from("timeline_events").delete().eq("id", id);
     await setFlash(error ? "flash.eventDeleteError" : "flash.eventDeleted", error ? "error" : "success");
   }
 
@@ -118,8 +120,9 @@ export async function addLifePeriod(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
-  const { error } = await supabase.from("life_periods").insert({
+
+  const db = await userDb();
+  const { error } = await db.from("life_periods").insert({
     title,
     start_date,
     end_date,
@@ -149,8 +152,9 @@ export async function updateLifePeriod(formData: FormData) {
     return;
   }
 
-  const supabase = getSupabase();
-  const { error } = await supabase
+
+  const db = await userDb();
+  const { error } = await db
     .from("life_periods")
     .update({ title, start_date, end_date, color, kind })
     .eq("id", id);
@@ -163,8 +167,9 @@ export async function deleteLifePeriod(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
 
-  const supabase = getSupabase();
-  const { error } = await supabase.from("life_periods").delete().eq("id", id);
+
+  const db = await userDb();
+  const { error } = await db.from("life_periods").delete().eq("id", id);
   await setFlash(error ? "flash.periodDeleteError" : "flash.periodDeleted", error ? "error" : "success");
   revalidatePath("/legacy/timeline");
 }

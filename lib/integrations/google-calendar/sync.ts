@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { fetchAllRows } from "@/lib/db/paginate";
 import { GOOGLE_PROVIDER } from "../google-config";
 import {
@@ -60,9 +60,9 @@ type LocalGoogleEvent = {
  * silently reverted.
  */
 async function fetchAllLocalGoogleEvents(errorTag: string): Promise<LocalGoogleEvent[]> {
-  const supabase = getSupabase();
+  const db = await userDb();
   return fetchAllRows<LocalGoogleEvent>(async (from, to) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("timeline_events")
       .select("id, source, google_event_id, title_override, description_override, hidden_at")
       .eq("source", "google_calendar")
@@ -86,7 +86,7 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
     });
 
     const googleEvents = await fetchAllPrimaryEvents(accessToken);
-    const supabase = getSupabase();
+    const db = await userDb();
 
     const mappedEvents = googleEvents
       .map(mapGoogleEvent)
@@ -115,9 +115,9 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
     let imported = 0;
     for (let i = 0; i < toUpsert.length; i += UPSERT_BATCH) {
       const chunk = toUpsert.slice(i, i + UPSERT_BATCH);
-      const { error } = await supabase
+      const { error } = await db
         .from("timeline_events")
-        .upsert(chunk, { onConflict: "google_event_id" });
+        .upsert(chunk, { onConflict: "user_id,google_event_id" });
       if (error) throw new Error(`sync_upsert_failed:${error.message}`);
 
       imported += chunk.length;
@@ -144,7 +144,7 @@ export async function syncGoogleCalendar(): Promise<{ imported: number; removed:
 
     for (let i = 0; i < toDelete.length; i += UPSERT_BATCH) {
       const chunk = toDelete.slice(i, i + UPSERT_BATCH);
-      await supabase.from("timeline_events").delete().in("id", chunk);
+      await db.from("timeline_events").delete().in("id", chunk);
       removed += chunk.length;
     }
 

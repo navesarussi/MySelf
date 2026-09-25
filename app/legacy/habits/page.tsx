@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
 import { PageHeader } from "@/components/ui";
@@ -7,7 +7,8 @@ import { HabitsSection } from "./habits-section";
 import { getTranslations } from "@/lib/i18n";
 import { isAddTarget } from "@/lib/add-menu";
 
-export const revalidate = 30;
+// Per-account data: never serve one cached render to every visitor.
+export const dynamic = "force-dynamic";
 
 export default async function HabitsPage({
   searchParams,
@@ -27,8 +28,9 @@ export default async function HabitsPage({
     );
   }
 
-  const supabase = getSupabase();
-  const { data: habits } = await supabase
+
+  const db = await userDb();
+  const { data: habits } = await db
     .from("habits")
     .select("*")
     .eq("archived", false)

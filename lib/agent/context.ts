@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
 import { dedupeHabits, effectiveStreak, isReportDue } from "@/lib/habit-stats";
 import { filterDueRelationships } from "@/lib/relationships-due";
@@ -16,29 +16,29 @@ export type AgentContextOptions = {
 };
 
 export async function buildAgentContext(now = new Date(), opts: AgentContextOptions = {}) {
-  const supabase = getSupabase();
+  const db = await userDb();
   const today = now.toISOString().slice(0, 10);
 
   const [habitsRes, goalsRes, tasksRes, relRes, eventsRes, commitmentsRes, gmailStatus] =
     await Promise.all([
-    supabase.from("habits").select("*").eq("archived", false),
-    supabase.from("goals").select("*").eq("status", "active"),
-    supabase
+    db.from("habits").select("*").eq("archived", false),
+    db.from("goals").select("*").eq("status", "active"),
+    db
       .from("tasks")
       .select("id, title, priority, status, due_date, source, project_id")
       .in("status", ["open", "in_progress", "stuck", "review"]),
-    supabase
+    db
       .from("relationships")
       .select("id, name, last_contact_date, reminder_days")
       .order("name"),
-    supabase
+    db
       .from("timeline_events")
       .select("id, title, event_date, event_time, category")
       .is("hidden_at", null)
       .gte("event_date", today)
       .order("event_date")
       .limit(10),
-    supabase
+    db
       .from("commitments")
       .select("id, text, status, commitment_date")
       .eq("commitment_date", today),

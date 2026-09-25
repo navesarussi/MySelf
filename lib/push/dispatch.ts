@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { habitReportDay } from "@/lib/habit-stats";
 import { filterDueRelationships } from "@/lib/relationships-due";
 import { notifyUser } from "@/lib/push/notify";
@@ -12,7 +12,7 @@ function jerusalemTodayDate(now = new Date()): Date {
 }
 
 export async function dispatchRelationships(now = new Date()): Promise<NotifyResult | null> {
-  const { data } = await getSupabase()
+  const { data } = await (await userDb())
     .from("relationships")
     .select("id, name, last_contact_date, reminder_days");
   if (!data?.length) return null;
@@ -39,7 +39,7 @@ export async function dispatchRelationships(now = new Date()): Promise<NotifyRes
 }
 
 export async function dispatchHabits(now = new Date()): Promise<NotifyResult | null> {
-  const { data } = await getSupabase()
+  const { data } = await (await userDb())
     .from("habits")
     .select("id, name, report_time, last_checked_on, archived")
     .eq("archived", false);
@@ -75,7 +75,7 @@ export async function dispatchHabits(now = new Date()): Promise<NotifyResult | n
 
 export async function dispatchTasks(now = new Date()): Promise<NotifyResult | null> {
   const { dayKey } = jerusalemParts(now);
-  const { data } = await getSupabase()
+  const { data } = await (await userDb())
     .from("tasks")
     .select("id, title, due_date, status")
     .not("due_date", "is", null)
@@ -100,7 +100,7 @@ export async function dispatchTasks(now = new Date()): Promise<NotifyResult | nu
 
 export async function dispatchTimeline(now = new Date()): Promise<NotifyResult | null> {
   const { dayKey } = jerusalemParts(now);
-  const { data } = await getSupabase()
+  const { data } = await (await userDb())
     .from("timeline_events")
     .select("id, title, event_date, hidden_at")
     .eq("event_date", dayKey)

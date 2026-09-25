@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized, dbError } from "@/lib/api/auth";
 import { GITHUB_PROVIDER } from "@/lib/integrations/github-config";
 import { getIntegrationToken, getTokenSettings } from "@/lib/integrations/tokens";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 
 export async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       account_login?: string;
     }>(GITHUB_PROVIDER);
 
-    const { data: rows } = await getSupabase()
+    const { data: rows } = await (await userDb())
       .from("tasks")
       .select("external_list_id")
       .eq("source", "github")

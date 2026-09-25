@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken } from "@/lib/integrations/tokens";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ connected: false });
   }
 
-  const { count } = await getSupabase()
+  const { count } = await (await userDb())
     .from("timeline_events")
     .select("id", { count: "exact", head: true })
     .eq("source", "google_calendar");

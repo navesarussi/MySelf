@@ -1,3 +1,4 @@
+import { forEachAccount } from "@/lib/db/accounts";
 import { getSupabase } from "@/lib/supabase";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { notifyUser } from "@/lib/push/notify";
@@ -99,15 +100,18 @@ async function notifyCategorize(
   const sign = txn.kind === "income" ? "+" : "−";
   const identityHint = opts?.hasMerchantRule ? "לסיווג" : "סוחר חדש · לסיווג";
   const ask = txn.kind === "income" ? "מה ההכנסה?" : "בחר קטגוריה";
-  await notifyUser(
-    "finance",
-    {
-      title: `תנועה ${identityHint}`,
-      body: `${sign}₪${txn.amount.toFixed(2)} · ${label} — ${ask}`,
-      data: { screen: `/finance-categorize?id=${txn.id}` },
-    },
-    txn.id,
-    { bypassQuiet: true }
+  // Finance is shared: every account is asked, each under its own preferences.
+  await forEachAccount(() =>
+    notifyUser(
+      "finance",
+      {
+        title: `תנועה ${identityHint}`,
+        body: `${sign}₪${txn.amount.toFixed(2)} · ${label} — ${ask}`,
+        data: { screen: `/finance-categorize?id=${txn.id}` },
+      },
+      txn.id,
+      { bypassQuiet: true }
+    )
   );
 }
 
