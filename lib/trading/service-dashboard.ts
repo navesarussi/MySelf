@@ -74,8 +74,7 @@ export type TriggerRow = {
 
 export type TradingEvent = { id: string; kind: string; severity: string; symbol: string | null; message: string; created_at: string };
 
-
-export type DashboardPayload = {
+export type DashboardOverview = {
   settings: TradingSettings;
   params: StrategyV2Params;
   params_locked_until: string | null;
@@ -96,15 +95,17 @@ export type DashboardPayload = {
     kill_switch_distance_pct: number;
   };
   positions: LivePosition[];
-  /** Open but outside the account for this phase (e.g. leftover SHADOW rows). */
   other_positions: LivePosition[];
   shadow_open: number;
-  triggers: TriggerRow[];
-  events: TradingEvent[];
   gate: PhaseGateView;
   equity_history: { day: string; equity: number; open_risk_r: number }[];
   envelope: typeof RISK_ENVELOPE;
   execution_rules: typeof EXECUTION_RULES;
+};
+
+export type DashboardPayload = DashboardOverview & {
+  triggers: TriggerRow[];
+  events: TradingEvent[];
   broker: BrokerStatus;
 };
 
@@ -116,6 +117,15 @@ export type BrokerStatus = {
   cash: number | null;
   error: string | null;
 };
+
+const OFFLINE_BROKER = (venue: "SIM" | "ALPACA_PAPER"): BrokerStatus => ({
+  configured: false,
+  venue,
+  connected: false,
+  equity: null,
+  cash: null,
+  error: null,
+});
 
 export async function getBrokerStatus(venue: "SIM" | "ALPACA_PAPER"): Promise<BrokerStatus> {
   if (!isAlpacaConfigured()) return { configured: false, venue, connected: false, equity: null, cash: null, error: null };
@@ -139,6 +149,7 @@ export async function getBrokerStatus(venue: "SIM" | "ALPACA_PAPER"): Promise<Br
   }
 }
 
+/** External bar/quote fetch — kept for commands and chat; not on the hot dashboard path. */
 export async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
   const cache = createBarCache();
   const out = new Map<string, number>();
@@ -177,28 +188,54 @@ export async function getEvents(limit = 30): Promise<TradingEvent[]> {
   return (data ?? []) as TradingEvent[];
 }
 
-export async function getDashboard(): Promise<DashboardPayload> {
-  // Settings first: every consumer of `closed` below — the P&L sums, the
-  // positions table and computePhaseGate — discards anything closed before
-  // phase_started_at, so the phase bound belongs in the query rather than in a
-  // JS filter over every closed trade ever recorded.
+async function equitySnapshots() {
+  const { data: snaps } = await getSupabase().from("trading_equity_snapshots").select("day, equity, open_risk_r").order("day", { ascending: true }).limit(400);
+  return ((snaps ?? []) as { day: string; equity: number; open_risk_r: number }[]).map((s) => ({ day: s.day, equity: Number(s.equity), open_risk_r: Number(s.open_risk_r) }));
+}
+
+function toLivePosition(t: TradeRow, prices: Map<string, number>): LivePosition {
+  const p = t.sim_state;
+  const last = prices.get(t.symbol) ?? null;
+  const entry = p.entry_price;
+  return {
+    id: t.id,
+    symbol: t.symbol,
+    asset_class: t.asset_class,
+    mode: t.mode,
+    track: t.track,
+    execution: t.execution,
+    state: t.state,
+    entry_price: entry,
+    entry_limit: t.entry_limit,
+    stop_price: p.stop_price,
+    target_price: p.target_price,
+    last_price: last,
+    current_r: entry !== null && last !== null && p.stop_distance > 0 ? round((last - entry) / p.stop_distance, 2) : null,
+    distance_to_stop_pct: last !== null ? round((last - p.stop_price) / last) : null,
+    distance_to_target_pct: last !== null && p.exit_plan !== "TRAIL_2ATR" ? round((p.target_price - last) / last) : null,
+    exit_plan: p.exit_plan,
+    open_risk_r: openRiskR(p),
+    agent_risk_multiplier: t.agent_risk_multiplier,
+    opened_at: t.opened_at,
+    trigger_timestamp: t.trigger_timestamp,
+    broker: t.broker,
+    broker_status: t.broker_status,
+    baseline_enter: t.baseline_enter,
+  };
+}
+
+/** DB-only dashboard core — no external market-data or broker calls. */
+export async function getDashboardOverview(): Promise<DashboardOverview> {
   const settings = await getSettings();
-  const [open, closed, universe, triggers, events, active] = await Promise.all([
+  const [open, closed, active] = await Promise.all([
     getOpenTrades(),
     getClosedTrades({ sinceIso: settings.phase_started_at }),
-    getUniverse(),
-    getTriggers({ limit: 25 }),
-    getEvents(30),
     getActiveV2Params(),
   ]);
   const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
-  // Open trades that are not part of the account in this phase — typically
-  // SHADOW rows left over from an earlier phase. They do not count toward
-  // equity, but they are still open and the user must be able to see and close
-  // them; until now they were filtered out of the dashboard entirely, which
-  // left them invisible in the app and untouched by close_all.
   const otherOpen = open.filter((t) => !isAccountTrade(t, settings.phase));
-  const prices = await lastPrices(open, universe);
+  // Position cards poll live prices client-side; entry_price fallback keeps equity sane.
+  const prices = new Map<string, number>();
   const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase) && t.closed_at && t.closed_at >= settings.phase_started_at);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
@@ -212,43 +249,14 @@ export async function getDashboard(): Promise<DashboardPayload> {
   const w = sumBy((t) => weekStartIso(new Date(t.closed_at!)) === week);
   const m = sumBy((t) => t.closed_at!.slice(0, 7) === month);
 
-  const toLivePosition = (t: TradeRow): LivePosition => {
-    const p = t.sim_state;
-    const last = prices.get(t.symbol) ?? null;
-    const entry = p.entry_price;
-    return {
-      id: t.id,
-      symbol: t.symbol,
-      asset_class: t.asset_class,
-      mode: t.mode,
-      track: t.track,
-      execution: t.execution,
-      state: t.state,
-      entry_price: entry,
-      entry_limit: t.entry_limit,
-      stop_price: p.stop_price,
-      target_price: p.target_price,
-      last_price: last,
-      current_r: entry !== null && last !== null && p.stop_distance > 0 ? round((last - entry) / p.stop_distance, 2) : null,
-      distance_to_stop_pct: last !== null ? round((last - p.stop_price) / last) : null,
-      distance_to_target_pct: last !== null && p.exit_plan !== "TRAIL_2ATR" ? round((p.target_price - last) / last) : null,
-      exit_plan: p.exit_plan,
-      open_risk_r: openRiskR(p),
-      agent_risk_multiplier: t.agent_risk_multiplier,
-      opened_at: t.opened_at,
-      trigger_timestamp: t.trigger_timestamp,
-      broker: t.broker,
-      broker_status: t.broker_status,
-      baseline_enter: t.baseline_enter,
-    };
-  };
-  const positions: LivePosition[] = accountOpen.map(toLivePosition);
-  const otherPositions: LivePosition[] = otherOpen.map(toLivePosition);
+  const positions = accountOpen.map((t) => toLivePosition(t, prices));
+  const otherPositions = otherOpen.map((t) => toLivePosition(t, prices));
   const equity = equityFromTrades(settings, accountOpen, accountClosed, prices);
   const peak = Math.max(settings.peak_equity, equity);
   const dd = drawdownFromPeak(equity, peak);
   const halts = haltStatus({ realized_r_today: d.r, realized_r_week: w.r });
-  const { data: snaps } = await getSupabase().from("trading_equity_snapshots").select("day, equity, open_risk_r").order("day", { ascending: true }).limit(400);
+
+  const [equity_history, gate] = await Promise.all([equitySnapshots(), computePhaseGate(settings, closed)]);
 
   return {
     settings,
@@ -273,12 +281,25 @@ export async function getDashboard(): Promise<DashboardPayload> {
     positions,
     other_positions: otherPositions,
     shadow_open: open.length - accountOpen.length,
-    triggers,
-    events,
-    gate: await computePhaseGate(settings, closed),
-    equity_history: ((snaps ?? []) as { day: string; equity: number; open_risk_r: number }[]).map((s) => ({ day: s.day, equity: Number(s.equity), open_risk_r: Number(s.open_risk_r) })),
+    gate,
+    equity_history,
     envelope: RISK_ENVELOPE,
     execution_rules: EXECUTION_RULES,
-    broker: await getBrokerStatus(settings.execution_venue),
+  };
+}
+
+/** Full dashboard for chat/commands — composes overview + feed + optional broker. */
+export async function getDashboard(opts?: { includeBroker?: boolean }): Promise<DashboardPayload> {
+  const [overview, triggers, events, broker] = await Promise.all([
+    getDashboardOverview(),
+    getTriggers({ limit: 25 }),
+    getEvents(30),
+    opts?.includeBroker ? getBrokerStatus((await getSettings()).execution_venue) : Promise.resolve(null),
+  ]);
+  return {
+    ...overview,
+    triggers,
+    events,
+    broker: broker ?? OFFLINE_BROKER(overview.settings.execution_venue),
   };
 }

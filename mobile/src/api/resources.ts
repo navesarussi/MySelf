@@ -18,7 +18,9 @@ import type { FinanceSourcesStatusResponse, RecurringSuggestion } from "@/lib/fi
 import type {
   AnalyticsPayload,
   ChatMessageRow,
-  DashboardPayload,
+  BrokerStatus,
+  DashboardOverview,
+  TradingEvent,
   TradeListItem,
   TradingBacktestDetail,
   TradingBacktestSummary,
@@ -551,7 +553,9 @@ export const api = {
     }
     return data as import("@/lib/finance/import/types").ImportUploadSummary;
   },
-  tradingDashboard: (c: ApiConfig) => apiFetch<DashboardPayload>(c, "/trading/dashboard"),
+  tradingDashboard: (c: ApiConfig) => apiFetch<DashboardOverview>(c, "/trading/dashboard"),
+  tradingBroker: (c: ApiConfig) => apiFetch<BrokerStatus>(c, "/trading/broker"),
+  tradingEvents: (c: ApiConfig, limit = 30) => apiFetch<TradingEvent[]>(c, `/trading/events?limit=${limit}`),
   tradingTrades: (c: ApiConfig, filters: Record<string, string | undefined> = {}) => {
     const q = new URLSearchParams(Object.entries(filters).filter((e): e is [string, string] => Boolean(e[1]))).toString();
     return apiFetch<TradeListItem[]>(c, `/trading/trades${q ? `?${q}` : ""}`);

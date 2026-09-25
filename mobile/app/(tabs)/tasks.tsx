@@ -22,7 +22,6 @@ import {
   ErrorNote,
   Input,
   Label,
-  Loading,
   Row,
   Screen,
   ScreenList,
@@ -384,7 +383,6 @@ export default function TasksScreen() {
           listOptions={listOptionsRef.current}
         />
         {tasksQ.error ? <ErrorNote message={tasksQ.error} onRetry={tasksQ.refresh} /> : null}
-        {tasksQ.loading && !tasksQ.data ? <Loading /> : null}
       </View>
     ),
     [filter, projects, tasksQ.error, tasksQ.loading, tasksQ.data, tasksQ.refresh]
@@ -395,8 +393,9 @@ export default function TasksScreen() {
       <ScreenList
         title={t("tasks.title")}
         subtitle={t("tasks.subtitleAlt")}
-        refreshing={tasksQ.loading}
+        refreshing={tasksQ.isFetching}
         onRefresh={tasksQ.refresh}
+        initialLoading={tasksQ.loading && !tasksQ.data}
         headerRight={
           <Btn small label={`+ ${t("tasks.addTask")}`} onPress={() => setForm(emptyForm(defaultProjectId))} />
         }

@@ -22,7 +22,6 @@ import {
   ErrorNote,
   Input,
   Label,
-  Loading,
   Row,
   ScreenList,
 } from "../../src/components/ui";
@@ -59,7 +58,7 @@ export default function HabitsScreen() {
   const { textLtr } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
-  const { data, loading, error, refresh } = useApiQuery(queryKeys.habits, api.habits);
+  const { data, loading, isFetching, error, refresh } = useApiQuery(queryKeys.habits, api.habits);
   const { run, busy, isPending } = useApiMutation();
   const [addForm, setAddForm] = useState<AddFormState | null>(null);
   const [viewingHabitId, setViewingHabitId] = useState<string | null>(null);
@@ -329,7 +328,6 @@ export default function HabitsScreen() {
     () => (
       <View>
         {error ? <ErrorNote message={error} onRetry={refresh} /> : null}
-        {loading && !data ? <Loading /> : null}
       </View>
     ),
     [error, loading, data, refresh]
@@ -340,8 +338,9 @@ export default function HabitsScreen() {
       <ScreenList
         title={t("habits.title")}
         subtitle={t("habits.subtitle")}
-        refreshing={loading}
+        refreshing={isFetching}
         onRefresh={refresh}
+        initialLoading={loading && !data}
         headerRight={<Btn small label={t("habits.addNew")} onPress={() => setAddForm(emptyForm)} />}
         headerExtra={headerExtra}
         data={habitsPending}

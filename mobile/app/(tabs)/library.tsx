@@ -24,7 +24,6 @@ import {
   EmptyState,
   ErrorNote,
   Input,
-  Loading,
   Row,
   Screen,
   ScreenList,
@@ -266,7 +265,6 @@ export default function LibraryScreen() {
           </Row>
         ) : null}
         {entriesQ.error ? <ErrorNote message={entriesQ.error} onRetry={entriesQ.refresh} /> : null}
-        {entriesQ.loading && !entriesQ.data ? <Loading /> : null}
       </View>
     ),
     [search, t, categories, category, entriesQ.error, entriesQ.loading, entriesQ.data, entriesQ.refresh]
@@ -277,8 +275,9 @@ export default function LibraryScreen() {
       <ScreenList
         title={t("library.title")}
         subtitle={t("library.subtitle")}
-        refreshing={entriesQ.loading}
+        refreshing={entriesQ.isFetching}
         onRefresh={entriesQ.refresh}
+        initialLoading={entriesQ.loading && !entriesQ.data}
         headerRight={<Btn small label={t("library.addEntry")} onPress={() => setForm(emptyForm)} />}
         headerExtra={headerExtra}
         data={entries}

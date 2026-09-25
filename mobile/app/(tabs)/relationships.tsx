@@ -27,7 +27,6 @@ import {
   ErrorNote,
   Input,
   Label,
-  Loading,
   Row,
   Screen,
   ScreenList,
@@ -320,7 +319,6 @@ export default function RelationshipsScreen() {
           </Row>
         ) : null}
         {relQ.error ? <ErrorNote message={relQ.error} onRetry={relQ.refresh} /> : null}
-        {relQ.loading && !relQ.data ? <Loading /> : null}
       </View>
     ),
     [groups, groupFilter, t, relQ.error, relQ.loading, relQ.data, relQ.refresh]
@@ -331,8 +329,9 @@ export default function RelationshipsScreen() {
       <ScreenList
         title={t("relationships.title")}
         subtitle={t("relationships.subtitle")}
-        refreshing={relQ.loading}
+        refreshing={relQ.isFetching}
         onRefresh={relQ.refresh}
+        initialLoading={relQ.loading && !relQ.data}
         headerRight={
           <Btn
             small

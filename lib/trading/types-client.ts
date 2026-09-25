@@ -237,7 +237,8 @@ export type BrokerStatus = {
   error: string | null;
 };
 
-export type DashboardPayload = {
+/** Fast dashboard core — positions, KPIs, gate, equity curve (no feed or broker). */
+export type DashboardOverview = {
   settings: TradingSettings;
   params: StrategyV2Params;
   params_locked_until: string | null;
@@ -260,12 +261,15 @@ export type DashboardPayload = {
   positions: LivePosition[];
   other_positions: LivePosition[];
   shadow_open: number;
-  triggers: TriggerRow[];
-  events: TradingEvent[];
   gate: PhaseGateView;
   equity_history: { day: string; equity: number; open_risk_r: number }[];
   envelope: typeof RISK_ENVELOPE;
   execution_rules: typeof EXECUTION_RULES;
+};
+
+export type DashboardPayload = DashboardOverview & {
+  triggers: TriggerRow[];
+  events: TradingEvent[];
   broker: BrokerStatus;
 };
 

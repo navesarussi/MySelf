@@ -23,7 +23,7 @@ import { FinanceMonthNav } from "../../src/components/finance/month-nav";
 import { UncategorizedBlock } from "../../src/components/finance/uncategorized-block";
 import { FinanceTxnRow } from "../../src/components/finance/txn-row";
 import { RecurringSuggestionsCard } from "../../src/components/finance/recurring-suggestions";
-import { EmptyState, ErrorNote, Loading, Row, SectionTitle } from "../../src/components/ui";
+import { EmptyState, ErrorNote, FinancePlanSkeleton, Row, SectionTitle } from "../../src/components/ui";
 import { ScreenList } from "../../src/components/screen-list";
 
 const monthKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -59,7 +59,7 @@ export default function FinanceScreen() {
     if (typeof m === "string" && /^\d{4}-\d{2}$/.test(m)) setMonth(m);
   }, [params.month]);
 
-  const { data: plan, loading: planLoading, error: planError, refresh: refreshPlan } = useApiQuery(
+  const { data: plan, loading: planLoading, isFetching: planFetching, error: planError, refresh: refreshPlan } = useApiQuery(
     queryKeys.financePlan(month),
     (cfg) => api.financePlan(cfg, month),
     { staleTime: 60_000 }
@@ -132,8 +132,8 @@ export default function FinanceScreen() {
 
   const headerExtra = (
     <>
-      {planError ? <ErrorNote message={planError} onRetry={refresh} /> : null}
-      {planLoading && !view ? <Loading /> : null}
+      {planError && !view ? <ErrorNote message={planError} onRetry={refresh} /> : null}
+      {planLoading && !view ? <FinancePlanSkeleton /> : null}
       <FinanceMonthNav
         label={formatMonthLabel(month, locale)}
         canGoPrev={canGoPrev}
@@ -199,7 +199,7 @@ export default function FinanceScreen() {
         data={showTxns ? (txns ?? []) : []}
         renderItem={renderTxn}
         keyExtractor={(item) => item.id}
-        refreshing={planLoading}
+        refreshing={planFetching}
         onRefresh={refresh}
         maxWidth={720}
         ListEmptyComponent={showTxns && !txLoading ? <EmptyState text={t("finance.noTransactions")} /> : null}

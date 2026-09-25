@@ -23,7 +23,7 @@ import {
   EmptyState,
   ErrorNote,
   Input,
-  Loading,
+  ListSkeleton,
   ScreenList,
   SectionTitle,
   confirmDelete,
@@ -273,7 +273,6 @@ export default function GoalsScreen() {
     () => (
       <View>
         {goalsQ.error ? <ErrorNote message={goalsQ.error} onRetry={goalsQ.refresh} /> : null}
-        {goalsQ.loading && !goalsQ.data ? <Loading /> : null}
       </View>
     ),
     [goalsQ.error, goalsQ.loading, goalsQ.data, goalsQ.refresh]
@@ -311,6 +310,8 @@ export default function GoalsScreen() {
           />
           <Btn label={t("common.add")} onPress={addCommitment} disabled={busy || !commitmentText.trim()} />
         </Card>
+        {commitmentsQ.error ? <ErrorNote message={commitmentsQ.error} onRetry={commitmentsQ.refresh} /> : null}
+        {commitmentsQ.loading && !commitmentsQ.data ? <ListSkeleton count={2} lines={2} /> : null}
         {commitmentsQ.data && commitments.length === 0 ? <EmptyState text={t("goals.noCommitments")} /> : null}
         {[...pending, ...resolved].map((cm) => (
           <CommitmentCard
@@ -336,6 +337,9 @@ export default function GoalsScreen() {
       addCommitment,
       busy,
       commitmentsQ.data,
+      commitmentsQ.error,
+      commitmentsQ.loading,
+      commitmentsQ.refresh,
       commitments.length,
       pending,
       resolved,
@@ -349,7 +353,8 @@ export default function GoalsScreen() {
       <ScreenList
         title={t("goals.title")}
         subtitle={t("goals.subtitle")}
-        refreshing={goalsQ.loading || commitmentsQ.loading}
+        refreshing={goalsQ.isFetching || commitmentsQ.isFetching}
+        initialLoading={goalsQ.loading && !goalsQ.data}
         onRefresh={() => {
           goalsQ.refresh();
           commitmentsQ.refresh();
