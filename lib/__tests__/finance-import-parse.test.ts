@@ -81,8 +81,8 @@ describe("normalize-import-row", () => {
     const falsePositive = extractCalInstallment("5|2|0|2/1|1/6|2", { billingAmount: 120, txnAmount: 120 });
     assert.deepEqual(falsePositive, { index: null, total: null, label: null });
 
-    const splitBilling = extractCalInstallment("5|2|0|2/1|1/6|2", { billingAmount: 823, txnAmount: 4118 });
-    assert.deepEqual(splitBilling, { index: 2, total: 6, label: "2 מתוך 6" });
+    const dateClusterOnly = extractCalInstallment("5|2|0|2/1|1/6|2", { billingAmount: 823, txnAmount: 4118 });
+    assert.deepEqual(dateClusterOnly, { index: null, total: null, label: null });
   });
 });
 
@@ -124,10 +124,10 @@ EU 16.20סה"כ לתאריך
     assert.equal(regular?.installment_index, null);
     assert.equal(regular?.installment_total, null);
 
-    const installment = result.transactions.find((t) => t.amount === 823);
-    assert.ok(installment, "expected split-billing installment row");
-    assert.equal(installment?.installment_index, 2);
-    assert.equal(installment?.installment_total, 6);
+    const splitBilling = result.transactions.find((t) => t.amount === 823);
+    assert.ok(splitBilling, "expected split-billing row");
+    assert.equal(splitBilling?.installment_index, null);
+    assert.equal(splitBilling?.installment_total, null);
   });
 
   it("skips summary rows in tabular-style Cal lines", () => {
@@ -143,9 +143,9 @@ EU 16.20סה"כ לתאריך
     const text = `
 דף חיוב חודשי
 2853755000-966-01
-$ 20.00 RAILWAY.APP
-$ 5.00 CLAUDE.AI SUBSCR
-$ 1.00 FOREIGN TX FEE
+$ 20.00 RAILWAY.APP 5202/01/10 5202/01/11
+$ 5.00 CLAUDE.AI SUBSCR 5202/01/20 5202/01/21
+$ 1.00 FOREIGN TX FEE 5202/01/30 5202/01/31
 $ 26.00 סה"כ לתאריך 01/10/25
 ₪ 95.30 ₪ 95.30 סופר-פאר 5202/11/01
 `;
@@ -154,7 +154,8 @@ $ 26.00 סה"כ לתאריך 01/10/25
     assert.equal(usd.length, 3);
     assert.ok(usd.some((t) => /railway/i.test(t.merchant ?? "")));
     assert.ok(usd.some((t) => /claude/i.test(t.merchant ?? "")));
-    assert.ok(usd.every((t) => t.booked_at === "2025-10-01"));
+    assert.equal(usd.find((t) => /railway/i.test(t.merchant ?? ""))?.booked_at, "2025-10-01");
+    assert.equal(usd.find((t) => /claude/i.test(t.merchant ?? ""))?.booked_at, "2025-10-02");
     assert.ok(result.transactions.every((t) => !/סה"כ/i.test(t.merchant ?? "")));
   });
 

@@ -2,6 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import { ingestFinanceTransactions, type FinanceIngestInput } from "@/lib/finance/ingest";
 import { parseImportFile } from "@/lib/finance/import/parse-file";
 import { importSourceToTxnSource } from "@/lib/finance/import/source-map";
+import { normalizeParsedForeignAmounts } from "@/lib/finance/import/foreign-amount";
 import { assignStableExternalKeys, cardScopeFromAccount } from "@/lib/finance/stable-external-key";
 import { isFinanceImportLayerMissing } from "@/lib/finance/import/table-missing";
 import type {
@@ -129,6 +130,7 @@ export async function runFinanceImport(input: {
   const cardScope = cardScopeFromAccount({
     card_mask: typeof parsed.accountMetadata.card_mask === "string" ? parsed.accountMetadata.card_mask : null,
   });
+  const normalizedParsed = normalizeParsedForeignAmounts(parsed.transactions);
   const stableRows = assignStableExternalKeys(
     parsed.transactions.map((t) => ({
       txn_date: t.booked_at,
@@ -138,12 +140,15 @@ export async function runFinanceImport(input: {
     })),
     cardScope
   );
-  const ingestInputs: FinanceIngestInput[] = parsed.transactions.map((t, idx) => ({
+  const ingestInputs: FinanceIngestInput[] = normalizedParsed.map((t, idx) => ({
     source: txnSource,
     txn_date: t.booked_at,
     amount: t.amount,
     kind: t.kind,
     currency: t.currency ?? "ILS",
+    original_amount: t.original_amount ?? null,
+    amount_ils: t.amount_ils ?? t.amount,
+    ils_estimated: t.ils_estimated ?? false,
     description: t.description,
     merchant: t.merchant ?? null,
     external_key: stableRows[idx]?.source_ref ?? t.source_ref,
@@ -165,8 +170,11 @@ export async function runFinanceImport(input: {
       skipped = result.skipped;
 
       const now = new Date().toISOString();
+      const parsedByStableKey = new Map(
+        normalizedParsed.map((p, idx) => [stableRows[idx]?.source_ref ?? p.source_ref, p])
+      );
       for (const txn of result.created) {
-        const parsedTxn = parsed.transactions.find((p) => p.source_ref === txn.external_key);
+        const parsedTxn = parsedByStableKey.get(txn.external_key);
         await sb
           .from("finance_transactions")
           .update({
@@ -176,6 +184,9 @@ export async function runFinanceImport(input: {
             source_ref: txn.external_key,
             merchant: parsedTxn?.merchant ?? txn.merchant,
             currency: parsedTxn?.currency ?? txn.currency,
+            original_amount: parsedTxn?.original_amount ?? null,
+            amount_ils: parsedTxn?.amount_ils ?? txn.amount,
+            ils_estimated: parsedTxn?.ils_estimated ?? false,
             installment_index: parsedTxn?.installment_index ?? null,
             installment_total: parsedTxn?.installment_total ?? null,
             installment_label: parsedTxn?.installment_label ?? null,

@@ -10,6 +10,9 @@ function txn(
   return {
     external_key: `key-${partial.id}`,
     currency: "ILS",
+    original_amount: null,
+    amount_ils: partial.amount,
+    ils_estimated: false,
     merchant: null,
     account_number: null,
     card_name: null,

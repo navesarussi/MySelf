@@ -1,4 +1,10 @@
 import { extractCoreMerchantName } from "@/lib/finance/cal-duplicate";
+import {
+  isHebrewFxCategoryNoise,
+  looksRtlLatinToken,
+  reverseLatinMerchantLine,
+  reverseLatinToken,
+} from "@/lib/finance/import/fx-line";
 import { formatInstallmentLabel } from "@/lib/finance/import/installment-label";
 import {
   isHebrewLocationNoise,
@@ -51,33 +57,10 @@ export function isCalDateTotalLine(line: string, hasPendingMerchant: boolean): b
   return false;
 }
 
-/** True when a Latin token is probably RTL-mirrored from Cal PDF text. */
-function looksRtlLatinToken(raw: string): boolean {
-  const t = raw.trim();
-  if (!/^[A-Za-z0-9*./\\-]+$/.test(t)) return false;
-  if (/\.(?:moc|gro|ten|vog|iam|ude|oc)$/i.test(t)) return true;
-  if (/^moc\./i.test(t)) return true;
-  if (/\.(?:com|net|org|app|io|ai)$/i.test(t)) return false;
-  if (/^[A-Z][A-Z0-9*./\\-]{4,}$/.test(t) && /[AEIOUY]/.test(t)) return false;
-  if (/[AEIOU]{2,}/.test(t) || /\.[A-Z]{2,}$/.test(t)) return false;
-  return t.length >= 5 && !/[aeiou]{2}/i.test(t);
-}
-
-function reverseLatinToken(raw: string): string {
-  if (!/^[A-Za-z0-9*./\\-]+$/.test(raw)) return raw;
-  if (!looksRtlLatinToken(raw)) return raw;
-  return raw.split("").reverse().join("");
-}
-
 function reverseMerchantLabel(raw: string): string {
   const trimmed = raw.trim();
   if (/[\u0590-\u05FF]/.test(trimmed)) return normalizeHebrewDescription(trimmed);
-  return trimmed
-    .split(/\s+/)
-    .map((w) => reverseLatinToken(w))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return reverseLatinMerchantLine(trimmed);
 }
 
 function stripTerminalPrefix(label: string): string {
@@ -118,32 +101,62 @@ function pickLatinMerchant(chunks: string[]): string | null {
 }
 
 /** Extract merchant name from Cal PDF row tail (after amounts). */
-export function extractCalMerchantFromTail(tail: string): { merchant: string; noise: string } {
+export function extractCalMerchantFromTail(
+  tail: string,
+  opts?: { preferLatin?: boolean }
+): { merchant: string; noise: string } {
   const cleaned = tail.replace(/\|/g, " ").replace(/\s+/g, " ").trim();
   const hebrewChunks = cleaned.match(/[\u0590-\u05FF][\u0590-\u05FF\s"'\-]*/gu) ?? [];
   const latinChunks = cleaned
     .split(/\s+/)
     .flatMap((part) => part.split(/[/\\|]+/))
     .map((c) => c.trim())
-    .filter((c) => /^[A-Za-z0-9*.-]{3,}$/.test(c));
+    .filter((c) => /^[A-Za-z0-9*.,-]{3,}$/.test(c));
 
   const hebrew = pickHebrewMerchant(hebrewChunks);
   const latin = pickLatinMerchant(latinChunks);
+  const hebrewIsFxNoise = hebrew ? isHebrewFxCategoryNoise(hebrew) : false;
 
+  if (opts?.preferLatin && latin && (hebrewIsFxNoise || !hebrew)) {
+    return { merchant: latin, noise: hebrew ?? "" };
+  }
   if (hebrew && latin && /apple/i.test(latin)) return { merchant: hebrew, noise: latin };
   if (hebrew && isPayboxMerchantNoise(hebrew) && latin) return { merchant: latin, noise: hebrew };
-  if (hebrew && latin && latin.length >= 4) {
-    const hebrewLooksLikeCategory = hebrew.length <= 12 && !/\s/.test(hebrew);
-    if (hebrewLooksLikeCategory) return { merchant: latin, noise: hebrew };
+  if (hebrew && latin && (hebrewIsFxNoise || (latin.length >= 4 && hebrew.length <= 14))) {
+    return { merchant: latin, noise: hebrew };
   }
-  if (hebrew) {
+  if (hebrew && !hebrewIsFxNoise) {
     const core = extractCoreMerchantName(hebrew);
     return { merchant: core || hebrew, noise: latin ?? "" };
   }
-  if (latin) return { merchant: latin, noise: "" };
+  if (latin) return { merchant: latin, noise: hebrew ?? "" };
   const fallback = normalizeHebrewDescription(cleaned.slice(0, 80));
   if (isPayboxMerchantNoise(fallback)) return { merchant: latin ?? "", noise: fallback };
+  if (isHebrewFxCategoryNoise(fallback)) return { merchant: latin ?? "", noise: fallback };
   return { merchant: fallback, noise: "" };
+}
+
+/** Merchant from a standalone Latin line (often RTL-reversed in Cal PDFs). */
+export function extractCalLatinMerchantLine(line: string): string {
+  const trimmed = line.trim();
+  if (!trimmed || /[\u0590-\u05FF]/.test(trimmed)) return "";
+  if (!/^[A-Za-z0-9*.,/\\-\s]{3,}$/.test(trimmed)) return "";
+
+  // Cal PDFs mirror Latin runs — uppercase merchant lines are reversed char-wise.
+  if (/^[A-Z0-9*.,/\\-\s]+$/.test(trimmed)) {
+    return trimmed
+      .split(/\s+/)
+      .map((w) => w.split("").reverse().join(""))
+      .join(" ");
+  }
+
+  if (/[a-z]/.test(trimmed) && /\.(?:com|net|org|app|io|ai)\b/i.test(trimmed) && !/\.(?:moc|gro)\b/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  const reversed = reverseLatinMerchantLine(trimmed);
+  if (reversed !== trimmed) return reversed;
+  return reverseMerchantLabel(trimmed);
 }
 
 export type InstallmentExtract = {
@@ -182,29 +195,6 @@ export function extractCalInstallment(
     const total = Number(pipeZero[1]);
     const index = Number(pipeZero[2]);
     if (validInstallment(index, total)) return installmentResult(index, total);
-  }
-
-  const billing = ctx?.billingAmount ?? null;
-  const txn = ctx?.txnAmount ?? null;
-  if (billing != null && txn != null && Math.abs(billing - txn) > 0.009) {
-    const pipeAlt = normalized.match(/\/(\d{1,2})[\|\t](\d{1,2})\s*$/);
-    if (pipeAlt) {
-      const total = Number(pipeAlt[1]);
-      const index = Number(pipeAlt[2]);
-      if (validInstallment(index, total)) {
-        const ratio = txn / billing;
-        if (Math.abs(ratio - total) / total <= 0.2) return installmentResult(index, total);
-      }
-    }
-  }
-
-  // Slash pairs inside Cal date clusters (e.g. tab-split `2/7`) — only when a `0/` pipe marker exists.
-  if (/0\/\d{1,2}[\|\t]/.test(normalized)) {
-    for (const m of normalized.matchAll(/(?:^|[\|\t\s])(\d)\/(\d)(?:[\|\t\s]|$)/g)) {
-      const index = Number(m[1]);
-      const total = Number(m[2]);
-      if (validInstallment(index, total) && total >= 2) return installmentResult(index, total);
-    }
   }
 
   return { index: null, total: null, label: null };

@@ -124,7 +124,7 @@ describe("parseCalStatementPdf tab-split dates", () => {
   it("parses real-format ILS rows with tab-split RTL dates and Hebrew merchants", () => {
     const text = `
 דף חיוב חודשי
-₪ 228.85 ₪ 228.85 לא הורא\tת\tקבע גז א\tל\tק\tט\tר\tה\tפ\tאוור 6\t2\t0\t2/7\t0/1\t3
+₪ 228.85 ₪ 228.85 2 מתוך 7 לא הורא\tת\tקבע גז א\tל\tק\tט\tר\tה\tפ\tאוור 6\t2\t0\t2/7\t0/1\t3
 ₪ 82.50 ₪ 82.50 לא תיירות סנט\tר\tל\tפ\tא\tר\tק\tב\tע"מ\t-
 6\t2\t0\t2/8\t0/8\t2
 `;
