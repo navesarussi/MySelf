@@ -470,7 +470,11 @@ export const api = {
           txn_time?: string | null;
         }
       | { skip: true }
-  ) => apiFetch<FinanceTransaction>(c, `/finance/transactions/${id}`, { method: "PATCH", body }),
+  ) =>
+    apiFetch<FinanceTransaction & { applied_ids?: string[] }>(c, `/finance/transactions/${id}`, {
+      method: "PATCH",
+      body,
+    }),
   patchFinanceTransaction: (
     c: ApiConfig,
     id: string,
