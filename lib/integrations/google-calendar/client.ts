@@ -98,13 +98,27 @@ export async function fetchPrimaryEvents(accessToken: string, range: FetchRange 
   return items;
 }
 
-/** Recent events first (last 6 years), then older history. */
-export async function fetchAllPrimaryEvents(accessToken: string) {
-  const recentCutoff = new Date();
+/**
+ * How far ahead recurring events are expanded. `singleEvents=true` with no
+ * `timeMax` expands a series without an end date indefinitely: one weekly event
+ * alone was stored through 2040 — 650 rows, 14% of the timeline. The sync drops
+ * local rows Google no longer returns, so rows past the horizon clean
+ * themselves up, and the window moves forward with each daily sync.
+ */
+export const FUTURE_HORIZON_YEARS = 2;
+
+/** Recent events first (last 6 years up to the future horizon), then older history. */
+export async function fetchAllPrimaryEvents(accessToken: string, now = new Date()) {
+  const recentCutoff = new Date(now);
   recentCutoff.setFullYear(recentCutoff.getFullYear() - 6);
   const cutoffIso = recentCutoff.toISOString();
+  const horizon = new Date(now);
+  horizon.setFullYear(horizon.getFullYear() + FUTURE_HORIZON_YEARS);
 
-  const recent = await fetchPrimaryEvents(accessToken, { timeMin: cutoffIso });
+  const recent = await fetchPrimaryEvents(accessToken, {
+    timeMin: cutoffIso,
+    timeMax: horizon.toISOString(),
+  });
   const older = await fetchPrimaryEvents(accessToken, {
     timeMin: "1990-01-01T00:00:00Z",
     timeMax: cutoffIso,
