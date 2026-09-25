@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { api } from "../src/api/resources";
@@ -18,6 +18,7 @@ import { useSession } from "../src/session";
 import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
+import { NavigationBackButton } from "../src/components/navigation-back-button";
 import { Btn, Screen } from "../src/components/ui";
 
 type ChatMsg = { role: "user" | "assistant"; text: string; imageUri?: string };
@@ -28,7 +29,6 @@ export default function AgentChatScreen() {
   const { t } = useI18n();
   const c = useColors();
   const { textStart, writingDirection, row, alignStart, alignEnd } = useLayoutDir();
-  const router = useRouter();
   const { token, serverUrl } = useSession();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -99,7 +99,14 @@ export default function AgentChatScreen() {
   }
 
   return (
-    <Screen title={t("agent.title")} subtitle={t("agent.subtitle")}>
+    <>
+      <Stack.Screen
+        options={{
+          headerLeft: () => <NavigationBackButton />,
+          headerBackVisible: false,
+        }}
+      />
+      <Screen subtitle={t("agent.subtitle")}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -186,10 +193,8 @@ export default function AgentChatScreen() {
           <Btn label={t("agent.send")} onPress={send} disabled={busy || (!input.trim() && !pendingImage)} small />
         </View>
 
-        <Pressable onPress={() => router.back()} style={{ marginTop: 10 }}>
-          <Text style={{ color: c.muted, textAlign: "center", fontSize: tokens.textXs }}>{t("common.close")}</Text>
-        </Pressable>
       </KeyboardAvoidingView>
     </Screen>
+    </>
   );
 }
