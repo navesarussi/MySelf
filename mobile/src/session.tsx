@@ -46,12 +46,21 @@ async function storeSet(key: string, value: string | null) {
   }
 }
 
-type SessionResponse = { ok: boolean; email?: string; expires_at?: string; token?: string; legacy?: boolean };
+type SessionResponse = {
+  ok: boolean;
+  email?: string;
+  expires_at?: string;
+  token?: string;
+  legacy?: boolean;
+  primary?: boolean;
+};
 
 type SessionValue = {
   ready: boolean;
   token: string | null;
   serverUrl: string;
+  /** The primary account owns trading; other accounts don't see it. */
+  primary: boolean;
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -60,6 +69,7 @@ const SessionContext = createContext<SessionValue>({
   ready: false,
   token: null,
   serverUrl: API_URL,
+  primary: true,
   signIn: async () => {},
   signOut: async () => {},
 });
@@ -74,6 +84,7 @@ export function normalizeServerUrl(url: string): string {
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  const [primary, setPrimary] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -88,6 +99,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
             { serverUrl: API_URL, token: storedToken },
             "/session"
           );
+          // A pre-identity token no longer opens any data: sign in again.
+          if (session?.legacy) throw new Error("legacy_session");
+          setPrimary(session?.primary ?? true);
           const active = session?.token ?? storedToken;
           setToken(active);
           if (session?.token) await storeSet(TOKEN_KEY, session.token);
@@ -105,8 +119,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       ready,
       token,
       serverUrl: API_URL,
+      primary,
       signIn: async (newToken: string) => {
-        await apiFetch({ serverUrl: API_URL, token: newToken }, "/session");
+        const session = await apiFetch<SessionResponse>({ serverUrl: API_URL, token: newToken }, "/session");
+        setPrimary(session?.primary ?? true);
         setToken(newToken);
         await storeSet(TOKEN_KEY, newToken);
         await syncFinanceIngestSessionToken(newToken);
@@ -114,6 +130,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       },
       signOut: async () => {
         setToken(null);
+        setPrimary(true);
         await storeSet(TOKEN_KEY, null);
         await syncFinanceIngestSessionToken(null);
         void syncWidgetSnapshot({ signedIn: false, home: null }).catch(() => {});
@@ -126,7 +143,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         }
       },
     }),
-    [ready, token]
+    [ready, token, primary]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasValidSession, sessionIdentity, unauthorized } from "@/lib/api/auth";
 import { makeSessionToken, sessionNeedsRefresh } from "@/lib/auth";
+import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
 
 /**
  * Session probe — the app calls this on launch and after sign-in.
@@ -28,6 +29,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     email: identity.sub,
+    // Trading belongs to the primary account; the app hides it for the others.
+    primary: await isPrimaryGoogleEmail(identity.sub),
     expires_at: new Date(identity.exp * 1000).toISOString(),
     ...(refreshed ? { token: refreshed } : {}),
   });
