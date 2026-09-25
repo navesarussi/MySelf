@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,7 +28,8 @@ const TAB_ORDER: BottomTabId[] = [
 /**
  * Custom bottom bar: + is always dead-center; visible tabs split evenly
  * left/right with Home pinned to the far right. Uses forced LTR so Hebrew
- * RTL does not reverse tab positions.
+ * RTL does not reverse tab positions. Icons only — the tab name is the
+ * accessibility label.
  */
 export function CenteredTabBar({
   state,
@@ -84,12 +85,10 @@ export function CenteredTabBar({
         accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
         onPress={onPress}
         onLongPress={onLongPress}
-        style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 4 }}
+        hitSlop={4}
+        style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 8 }}
       >
-        <Ionicons name={TAB_ICON[id]} color={color} size={22} />
-        <Text numberOfLines={1} style={{ color, fontSize: 10, marginTop: 2, textAlign: "center" }}>
-          {label}
-        </Text>
+        <Ionicons name={TAB_ICON[id]} color={color} size={25} />
       </Pressable>
     );
   }
@@ -105,7 +104,7 @@ export function CenteredTabBar({
         borderTopWidth: 1,
         paddingTop: 6,
         paddingBottom: bottomPad,
-        minHeight: 52 + bottomPad,
+        minHeight: 48 + bottomPad,
       }}
     >
       <View style={{ flex: 1, flexDirection: "row" }}>{leftIds.map(renderTab)}</View>
