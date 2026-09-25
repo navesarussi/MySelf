@@ -1,27 +1,38 @@
 import { getSupabase } from "@/lib/supabase";
+import { fetchAllRows } from "@/lib/db/paginate";
 import { round2 } from "@/lib/finance/money";
 import { monthBounds } from "@/lib/finance/txn-range";
 
-type SumRow = { sum: number | null };
+type NetRow = { kind: string; amount: number | string | null };
 
-/** Aggregate month net without loading every transaction row (home KPI). */
+/** Income minus expense; other kinds (transfers) don't count. */
+export function monthNet(rows: NetRow[]): number {
+  let net = 0;
+  for (const row of rows) {
+    const amount = Number(row.amount ?? 0);
+    if (row.kind === "income") net += amount;
+    else if (row.kind === "expense") net -= amount;
+  }
+  return round2(net);
+}
+
+/**
+ * Month net for the home KPI. Summed here rather than with PostgREST's
+ * `amount.sum()`: aggregates are disabled on this project, so that query
+ * failed on every home load.
+ */
 export async function fetchMonthNetActual(month: string): Promise<number> {
   const { start, end } = monthBounds(month);
-  const supabase = getSupabase();
-  const filters = (kind: "income" | "expense") =>
-    supabase
+  const rows = await fetchAllRows<NetRow>(async (from, to) =>
+    getSupabase()
       .from("finance_transactions")
-      .select("amount.sum()")
-      .eq("kind", kind)
+      .select("kind, amount")
+      .in("kind", ["income", "expense"])
       .eq("is_internal", false)
       .gte("txn_date", start)
-      .lt("txn_date", end);
-
-  const [incomeRes, expenseRes] = await Promise.all([filters("income"), filters("expense")]);
-  if (incomeRes.error) throw new Error(incomeRes.error.message);
-  if (expenseRes.error) throw new Error(expenseRes.error.message);
-
-  const income = Number((incomeRes.data?.[0] as SumRow | undefined)?.sum ?? 0);
-  const expense = Number((expenseRes.data?.[0] as SumRow | undefined)?.sum ?? 0);
-  return round2(income - expense);
+      .lt("txn_date", end)
+      .order("id")
+      .range(from, to)
+  );
+  return monthNet(rows);
 }
