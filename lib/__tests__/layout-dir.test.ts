@@ -34,7 +34,7 @@ describe("rowFlexDirection", () => {
   });
 });
 
-describe("checkbox start edge (first child of row)", () => {
+describe("task card row layout", () => {
   it("Hebrew text start is physical right when native does not swap", () => {
     assert.equal(physicalTextStart(nativeHe), "right");
     assert.equal(physicalTextStart(webHe), "right");
@@ -42,6 +42,11 @@ describe("checkbox start edge (first child of row)", () => {
   it("English text start is physical left", () => {
     assert.equal(physicalTextStart(nativeEn), "left");
     assert.equal(physicalTextStart(webEn), "left");
+  });
+  it("checkbox as second child lands on physical end (left in Hebrew)", () => {
+    assert.equal(physicalAlignEnd(nativeHe), "flex-start");
+    assert.equal(physicalAlignEnd(webHe), "flex-end");
+    assert.equal(physicalAlignEnd(nativeEn), "flex-end");
   });
 });
 
