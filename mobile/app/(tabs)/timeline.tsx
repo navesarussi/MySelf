@@ -29,7 +29,7 @@ import {
   ErrorNote,
   Input,
   Label,
-  Loading,
+  ListSkeleton,
   Row,
   ScreenList,
   SectionTitle,
@@ -327,6 +327,7 @@ export default function TimelineScreen() {
   }
 
   const loading = eventsQ.loading || periodsQ.loading;
+  const fetching = eventsQ.isFetching || periodsQ.isFetching;
 
   function openEventForm(ev: TimelineEvent) {
     setEventForm({
@@ -469,7 +470,12 @@ export default function TimelineScreen() {
       ) : null}
 
       {eventsQ.error ? <ErrorNote message={eventsQ.error} onRetry={eventsQ.refresh} /> : null}
-      {loading && events.length === 0 && periods.length === 0 ? <Loading /> : null}
+      {loading && events.length === 0 && periods.length === 0 ? (
+        <View style={{ marginBottom: 12 }}>
+          <ListSkeleton count={1} lines={1} />
+          <View style={{ height: 180, marginTop: 10, borderRadius: tokens.radius, backgroundColor: c.border, opacity: 0.55 }} />
+        </View>
+      ) : null}
       {!loading && events.length === 0 && periods.length === 0 ? (
         <EmptyState text={t("timeline.empty")} />
       ) : null}
@@ -489,7 +495,7 @@ export default function TimelineScreen() {
         data={chronoRows}
         keyExtractor={(row) => row.key}
         estimatedItemSize={96}
-        refreshing={loading}
+        refreshing={fetching}
         onRefresh={refreshAll}
         headerExtra={
           periods.length > 0 ? (

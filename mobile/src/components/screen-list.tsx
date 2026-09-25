@@ -3,6 +3,7 @@ import { RefreshControl, Text, View } from "react-native";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useColors, tokens } from "../theme";
 import { useLayoutDir } from "../layout-dir";
+import { ListSkeleton } from "./ui";
 
 export type ScreenListProps<T> = {
   title?: string;
@@ -16,6 +17,9 @@ export type ScreenListProps<T> = {
   onRefresh?: () => void;
   ListEmptyComponent?: ReactElement | null;
   ListFooterComponent?: ReactElement | null;
+  /** When true and data is empty, show list skeletons instead of a blank list. */
+  initialLoading?: boolean;
+  skeletonCount?: number;
   estimatedItemSize?: number;
   maxWidth?: number;
 };
@@ -32,6 +36,8 @@ export function ScreenList<T>({
   onRefresh,
   ListEmptyComponent,
   ListFooterComponent,
+  initialLoading,
+  skeletonCount = 5,
   maxWidth,
 }: ScreenListProps<T>) {
   const c = useColors();
@@ -85,7 +91,13 @@ export function ScreenList<T>({
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           ListHeaderComponent={header}
-          ListEmptyComponent={ListEmptyComponent}
+          ListEmptyComponent={
+            initialLoading && data.length === 0 ? (
+              <ListSkeleton count={skeletonCount} />
+            ) : (
+              ListEmptyComponent ?? null
+            )
+          }
           ListFooterComponent={ListFooterComponent}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: tokens.padLg, paddingBottom: 48 }}

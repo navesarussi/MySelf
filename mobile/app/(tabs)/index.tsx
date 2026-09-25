@@ -3,7 +3,7 @@ import { api, type HomePayload } from "../../src/api/resources";
 import { todayLocalISO } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useApiQuery, useApiMutation, queryKeys, queryClient, patchTaskInHome, patchHabitInHome, patchRelationshipInHome } from "../../src/query";
-import { ErrorNote, Loading, Screen } from "../../src/components/ui";
+import { ErrorNote, HomeScreenSkeleton, Screen } from "../../src/components/ui";
 import { HomeHero } from "../../src/components/home/home-hero";
 import { HomeKpiSection } from "../../src/components/home/home-kpi-section";
 import { HomeHabitsFeed } from "../../src/components/home/home-habits-feed";
@@ -28,7 +28,7 @@ import type { ContentEntry, Goal, Relationship, Task } from "@/lib/types";
 
 export default function HomeScreen() {
   const { t, locale } = useI18n();
-  const { data, loading, error, refresh } = useApiQuery(queryKeys.home, api.home);
+  const { data, loading, isFetching, error, refresh } = useApiQuery(queryKeys.home, api.home);
   const { run, isPending } = useApiMutation();
   const [goalForm, setGoalForm] = useState<Goal | null>(null);
   const [libraryForm, setLibraryForm] = useState<Pick<ContentEntry, "id" | "title" | "category" | "tags"> | null>(null);
@@ -77,9 +77,9 @@ export default function HomeScreen() {
   }
 
   return (
-    <Screen title={t("home.compass")} subtitle={t("home.quote")} refreshing={loading} onRefresh={refresh}>
-      {error ? <ErrorNote message={error} onRetry={refresh} /> : null}
-      {loading && !data ? <Loading /> : null}
+    <Screen title={t("home.compass")} subtitle={t("home.quote")} refreshing={isFetching} onRefresh={refresh}>
+      {error && !data ? <ErrorNote message={error} onRetry={refresh} /> : null}
+      {loading && !data ? <HomeScreenSkeleton /> : null}
       {data ? (
         <>
           <HomeHero count={heroCount} />

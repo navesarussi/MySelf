@@ -8,5 +8,6 @@ export * from "./sync-progress";
 export * from "./task-sync";
 export * from "./timeline-cache";
 export * from "./use-api-query";
+export * from "./section-state";
 export * from "./use-api-mutation";
 export * from "./use-timeline-events";

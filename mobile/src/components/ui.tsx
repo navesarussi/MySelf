@@ -368,6 +368,41 @@ export function SkeletonCard({ lines = 2 }: { lines?: number }) {
   );
 }
 
+/** Placeholder rows for FlashList / ScreenList while the first fetch is in flight. */
+export function ListSkeleton({ count = 5, lines = 3 }: { count?: number; lines?: number }) {
+  return (
+    <View style={{ gap: 10 }}>
+      {Array.from({ length: count }, (_, i) => (
+        <SkeletonCard key={i} lines={lines} />
+      ))}
+    </View>
+  );
+}
+
+/** Home tab first-paint placeholders — hero, KPIs, feed cards. */
+export function HomeScreenSkeleton() {
+  return (
+    <View style={{ gap: 10 }}>
+      <SkeletonCard lines={2} />
+      <KpiGridSkeleton count={6} />
+      <SkeletonCard lines={4} />
+      <SkeletonCard lines={4} />
+      <SkeletonCard lines={3} />
+    </View>
+  );
+}
+
+/** Finance plan hero + section placeholders. */
+export function FinancePlanSkeleton() {
+  return (
+    <View style={{ gap: 10, marginBottom: 10 }}>
+      <SkeletonCard lines={3} />
+      <KpiGridSkeleton count={4} />
+      <SkeletonCard lines={5} />
+    </View>
+  );
+}
+
 export function KpiGridSkeleton({ count = 6 }: { count?: number }) {
   const c = useColors();
   const { row } = useLayoutDir();

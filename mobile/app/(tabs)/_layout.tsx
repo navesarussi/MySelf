@@ -17,7 +17,7 @@ enableFreeze(true);
 export default function TabsLayout() {
   const { ready, token } = useSession();
   const { t } = useI18n();
-  const { ready: prefsReady } = useNavPrefs();
+  useNavPrefs();
   const [addOpen, setAddOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -38,7 +38,7 @@ export default function TabsLayout() {
     []
   );
 
-  if (!ready || !prefsReady) return <Loading />;
+  if (!ready) return <Loading />;
   if (!token) return <Redirect href="/login" />;
 
   function tabOptions(id: BottomTabId) {
