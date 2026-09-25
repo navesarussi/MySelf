@@ -337,6 +337,66 @@ export function Loading() {
   );
 }
 
+/** Pulsing placeholder block for progressive section loading. */
+export function Skeleton({ height = 16, width = "100%", style }: { height?: number; width?: number | `${number}%`; style?: ViewStyle }) {
+  const c = useColors();
+  return (
+    <View
+      style={[
+        {
+          height,
+          width,
+          borderRadius: tokens.radiusSm,
+          backgroundColor: c.border,
+          opacity: 0.55,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+export function SkeletonCard({ lines = 2 }: { lines?: number }) {
+  return (
+    <Card>
+      <View style={{ gap: 8 }}>
+        {Array.from({ length: lines }, (_, i) => (
+          <Skeleton key={i} height={i === 0 ? 14 : 10} width={i === 0 ? "55%" : "80%"} />
+        ))}
+      </View>
+    </Card>
+  );
+}
+
+export function KpiGridSkeleton({ count = 6 }: { count?: number }) {
+  const c = useColors();
+  const { row } = useLayoutDir();
+  return (
+    <View style={{ ...row, flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+      {Array.from({ length: count }, (_, i) => (
+        <View
+          key={i}
+          style={{
+            flexGrow: 1,
+            flexBasis: "30%",
+            minWidth: 100,
+            backgroundColor: c.surface,
+            borderColor: c.border,
+            borderWidth: 1,
+            borderRadius: tokens.radiusSm,
+            padding: 10,
+            gap: 6,
+          }}
+        >
+          <Skeleton height={10} width="70%" />
+          <Skeleton height={18} width="50%" />
+          <Skeleton height={8} width="60%" />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const c = useColors();
   const { t } = useI18n();

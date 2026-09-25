@@ -5,7 +5,7 @@ import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/query";
-import { Badge, Btn, Card, Chip, Input, Loading, Row, Screen, SectionTitle, confirmDelete } from "../src/components/ui";
+import { Badge, Btn, Card, Chip, ErrorNote, Input, Row, Screen, SectionTitle, SkeletonCard, confirmDelete } from "../src/components/ui";
 import { TradingText } from "../src/components/trading/blocks";
 import { fmtDateTime, fmtPct, fmtR } from "@/lib/trading/format";
 
@@ -29,10 +29,11 @@ export default function TradingControlScreen() {
   const c = useColors();
   const { row } = useLayoutDir();
   const { run } = useApiMutation();
-  const { data: dash, refresh: refreshDash, loading } = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg));
-  const { data: uni, refresh: refreshUni } = useApiQuery(queryKeys.tradingUniverse, (cfg) => api.tradingUniverse(cfg));
-  const { data: paramSets, refresh: refreshParams } = useApiQuery(queryKeys.tradingParamSets, (cfg) => api.tradingParamSets(cfg));
-  const { data: learning, refresh: refreshLearning } = useApiQuery(queryKeys.tradingLearning, (cfg) => api.tradingLearning(cfg));
+  const { data: dash, refresh: refreshDash, loading: dashLoading, isFetching: dashFetching } = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg));
+  const { data: broker, refresh: refreshBroker, loading: brokerLoading, error: brokerError } = useApiQuery(queryKeys.tradingBroker, (cfg) => api.tradingBroker(cfg));
+  const { data: uni, refresh: refreshUni, loading: uniLoading } = useApiQuery(queryKeys.tradingUniverse, (cfg) => api.tradingUniverse(cfg));
+  const { data: paramSets, refresh: refreshParams, loading: paramsLoading } = useApiQuery(queryKeys.tradingParamSets, (cfg) => api.tradingParamSets(cfg));
+  const { data: learning, refresh: refreshLearning, loading: learningLoading } = useApiQuery(queryKeys.tradingLearning, (cfg) => api.tradingLearning(cfg));
   const [phrase, setPhrase] = useState("");
   const [evKind, setEvKind] = useState<(typeof EVENT_KINDS)[number]>("CPI");
   const [evDate, setEvDate] = useState("");
@@ -41,6 +42,7 @@ export default function TradingControlScreen() {
 
   const refreshAll = () => {
     void refreshDash();
+    void refreshBroker();
     void refreshUni();
     void refreshParams();
     void refreshLearning();
@@ -48,10 +50,11 @@ export default function TradingControlScreen() {
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
   const control = (body: Record<string, unknown>) => run((cfg) => api.tradingControl(cfg, body), { onSuccess: invalidate });
 
-  if (!dash) return <Screen title={t("trading.hubControl")}>{loading ? <Loading /> : null}</Screen>;
-  const { settings, envelope } = dash;
+  const settings = dash?.settings;
+  const envelope = dash?.envelope;
 
-  const envelopeRows: [string, string][] = [
+  const envelopeRows: [string, string][] = envelope
+    ? [
     ["MAX_RISK_PER_TRADE", `crypto ${fmtPct(envelope.MAX_RISK_PER_TRADE.CRYPTO_ALT)} · stocks ${fmtPct(envelope.MAX_RISK_PER_TRADE.STOCK)}`],
     ["MIN_RR_RATIO", `${envelope.MIN_RR_RATIO}`],
     ["MAX_CONCURRENT_POSITIONS", `${envelope.MAX_CONCURRENT_POSITIONS}`],
@@ -62,66 +65,78 @@ export default function TradingControlScreen() {
     ["MASTER_KILL_SWITCH", `−${fmtPct(envelope.MASTER_KILL_SWITCH_DD, 0)}`],
     ["MAX_ASSET_EXPOSURE", fmtPct(envelope.MAX_ASSET_EXPOSURE, 0)],
     ["AGENT_RISK_MULTIPLIERS", envelope.AGENT_RISK_MULTIPLIERS.join(" / ")],
-  ];
+      ]
+    : [];
 
   return (
-    <Screen title={t("trading.hubControl")} subtitle={t("trading.controlSubtitle")} onRefresh={refreshAll} refreshing={loading}>
+    <Screen title={t("trading.hubControl")} subtitle={t("trading.controlSubtitle")} onRefresh={refreshAll} refreshing={dashFetching}>
       <SectionTitle>{t("trading.demoTitle")}</SectionTitle>
-      <Card style={dash.broker.connected ? { borderColor: c.good } : undefined}>
-        <TradingText muted size={tokens.textXs}>
-          {t("trading.demoNote")}
-        </TradingText>
-        <View style={{ marginTop: 8 }}>
-          {!dash.broker.configured ? (
-            <TradingText color={c.warn}>{t("trading.demoNotConfigured")}</TradingText>
-          ) : dash.broker.connected ? (
-            <TradingText bold color={c.good}>
-              {t("trading.demoConnected", { equity: Math.round(dash.broker.equity ?? 0).toLocaleString("en-US") })}
-            </TradingText>
-          ) : (
-            <TradingText color={c.warn}>{t("trading.demoError", { error: dash.broker.error ?? "?" })}</TradingText>
-          )}
-        </View>
-        <View style={{ ...row, gap: 8, marginTop: 10 }}>
-          {settings.execution_venue === "ALPACA_PAPER" && settings.phase === "PAPER" ? (
-            <>
-              <Badge label={t("trading.demoActive")} tone="good" />
-              <View style={{ flex: 1 }} />
-              <Btn small variant="warn" label={t("trading.stopDemo")} onPress={() => void control({ action: "stop_demo" })} />
-            </>
-          ) : (
-            <Btn
-              label={t("trading.startDemo")}
-              disabled={!dash.broker.connected}
-              onPress={() => confirmDelete(t("trading.startDemoConfirm"), () => void control({ action: "start_demo", confirm: true }), t("trading.startDemo"), t("common.cancel"))}
-            />
-          )}
-        </View>
-      </Card>
+      {brokerError && !broker ? <ErrorNote message={brokerError} onRetry={() => void refreshBroker()} /> : null}
+      {broker ? (
+        <Card style={broker.connected ? { borderColor: c.good } : undefined}>
+          <TradingText muted size={tokens.textXs}>
+            {t("trading.demoNote")}
+          </TradingText>
+          <View style={{ marginTop: 8 }}>
+            {!broker.configured ? (
+              <TradingText color={c.warn}>{t("trading.demoNotConfigured")}</TradingText>
+            ) : broker.connected ? (
+              <TradingText bold color={c.good}>
+                {t("trading.demoConnected", { equity: Math.round(broker.equity ?? 0).toLocaleString("en-US") })}
+              </TradingText>
+            ) : (
+              <TradingText color={c.warn}>{t("trading.demoError", { error: broker.error ?? "?" })}</TradingText>
+            )}
+          </View>
+          {settings ? (
+            <View style={{ ...row, gap: 8, marginTop: 10 }}>
+              {settings.execution_venue === "ALPACA_PAPER" && settings.phase === "PAPER" ? (
+                <>
+                  <Badge label={t("trading.demoActive")} tone="good" />
+                  <View style={{ flex: 1 }} />
+                  <Btn small variant="warn" label={t("trading.stopDemo")} onPress={() => void control({ action: "stop_demo" })} />
+                </>
+              ) : (
+                <Btn
+                  label={t("trading.startDemo")}
+                  disabled={!broker.connected}
+                  onPress={() => confirmDelete(t("trading.startDemoConfirm"), () => void control({ action: "start_demo", confirm: true }), t("trading.startDemo"), t("common.cancel"))}
+                />
+              )}
+            </View>
+          ) : null}
+        </Card>
+      ) : brokerLoading ? (
+        <SkeletonCard lines={3} />
+      ) : null}
 
       <SectionTitle>{t("trading.liveControls")}</SectionTitle>
-      <Card>
-        <SwitchRow label={settings.entries_paused ? t("trading.entriesPaused") : t("trading.resume")} value={!settings.entries_paused} onChange={(v) => void control({ action: v ? "resume_entries" : "pause_entries" })} />
-        <SwitchRow label={t("trading.agentLayer")} value={settings.agent_enabled} onChange={(v) => void control({ action: "set_agent", enabled: v })} />
-        <TradingText bold>{t("trading.riskScale", { v: settings.risk_scale })}</TradingText>
-        <TradingText muted size={tokens.textXs}>
-          {t("trading.riskScaleNote")}
-        </TradingText>
-        <View style={{ marginTop: 6 }}>
-          <Row wrap>
-            {[0.25, 0.5, 0.75, 1].map((v) => (
-              <Chip key={v} label={`×${v}`} active={settings.risk_scale === v} onPress={() => void control({ action: "set_risk_scale", value: v })} />
-            ))}
-          </Row>
-        </View>
-        {settings.pending_risk_scale !== null && settings.pending_risk_scale_at ? (
-          <TradingText size={tokens.textXs} color={c.accent2}>
-            {t("trading.pendingRaise", { v: settings.pending_risk_scale, at: fmtDateTime(settings.pending_risk_scale_at, locale) })}
+      {settings ? (
+        <Card>
+          <SwitchRow label={settings.entries_paused ? t("trading.entriesPaused") : t("trading.resume")} value={!settings.entries_paused} onChange={(v) => void control({ action: v ? "resume_entries" : "pause_entries" })} />
+          <SwitchRow label={t("trading.agentLayer")} value={settings.agent_enabled} onChange={(v) => void control({ action: "set_agent", enabled: v })} />
+          <TradingText bold>{t("trading.riskScale", { v: settings.risk_scale })}</TradingText>
+          <TradingText muted size={tokens.textXs}>
+            {t("trading.riskScaleNote")}
           </TradingText>
-        ) : null}
-      </Card>
+          <View style={{ marginTop: 6 }}>
+            <Row wrap>
+              {[0.25, 0.5, 0.75, 1].map((v) => (
+                <Chip key={v} label={`×${v}`} active={settings.risk_scale === v} onPress={() => void control({ action: "set_risk_scale", value: v })} />
+              ))}
+            </Row>
+          </View>
+          {settings.pending_risk_scale !== null && settings.pending_risk_scale_at ? (
+            <TradingText size={tokens.textXs} color={c.accent2}>
+              {t("trading.pendingRaise", { v: settings.pending_risk_scale, at: fmtDateTime(settings.pending_risk_scale_at, locale) })}
+            </TradingText>
+          ) : null}
+        </Card>
+      ) : dashLoading ? (
+        <SkeletonCard lines={4} />
+      ) : null}
 
-      {settings.kill_switch_active ? (
+      {settings?.kill_switch_active ? (
         <Card style={{ borderColor: c.warn }}>
           <TradingText bold color={c.warn}>
             {t("trading.killSwitchActive")}: {settings.kill_switch_reason}
@@ -132,36 +147,46 @@ export default function TradingControlScreen() {
       ) : null}
 
       <SectionTitle>{t("trading.envelope")}</SectionTitle>
-      <Card>
-        <TradingText muted size={tokens.textXs}>
-          {t("trading.envelopeNote")}
-        </TradingText>
-        {envelopeRows.map(([k, v]) => (
-          <View key={k} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: c.border, direction: "ltr" }}>
-            <TradingText muted size={tokens.textXs}>
-              {k}
-            </TradingText>
-            <TradingText bold size={tokens.textXs}>
-              {v}
-            </TradingText>
-          </View>
-        ))}
-      </Card>
+      {envelope ? (
+        <Card>
+          <TradingText muted size={tokens.textXs}>
+            {t("trading.envelopeNote")}
+          </TradingText>
+          {envelopeRows.map(([k, v]) => (
+            <View key={k} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: c.border, direction: "ltr" }}>
+              <TradingText muted size={tokens.textXs}>
+                {k}
+              </TradingText>
+              <TradingText bold size={tokens.textXs}>
+                {v}
+              </TradingText>
+            </View>
+          ))}
+        </Card>
+      ) : dashLoading ? (
+        <SkeletonCard lines={5} />
+      ) : null}
 
       <SectionTitle>{t("trading.calibration")}</SectionTitle>
       <Card>
         <TradingText muted size={tokens.textXs}>
           {t("trading.calibrationNote")}
         </TradingText>
-        <TradingText>{t("trading.activeParams", { v: dash.params.version })}</TradingText>
-        {dash.params_locked_until ? (
-          <TradingText muted size={tokens.textXs}>
-            {t("trading.lockedUntil", { d: dash.params_locked_until.slice(0, 10) })}
-          </TradingText>
+        {dash ? (
+          <>
+            <TradingText>{t("trading.activeParams", { v: dash.params.version })}</TradingText>
+            {dash.params_locked_until ? (
+              <TradingText muted size={tokens.textXs}>
+                {t("trading.lockedUntil", { d: dash.params_locked_until.slice(0, 10) })}
+              </TradingText>
+            ) : null}
+            <TradingText muted size={tokens.textXs}>
+              {t("trading.strategyParams")}: {dash.params.setups.map((x) => t(`trading.setup_${x}`)).join(" + ")} · score ≥ {dash.params.min_score} · squeeze ≤ {Math.round(dash.params.squeeze_pct * 100)}% · stop {dash.params.min_stop_atr4h}–{dash.params.max_stop_atr4h}×ATR4h · BE @{dash.params.breakeven_at_r}R · trail @{dash.params.trail_after_r ?? "—"}R {dash.params.trail_mult_atr4h}×ATR · TP ext {dash.params.extension_enabled ? "on" : "off"}
+            </TradingText>
+          </>
+        ) : dashLoading ? (
+          <SkeletonCard lines={2} />
         ) : null}
-        <TradingText muted size={tokens.textXs}>
-          {t("trading.strategyParams")}: {dash.params.setups.map((x) => t(`trading.setup_${x}`)).join(" + ")} · score ≥ {dash.params.min_score} · squeeze ≤ {Math.round(dash.params.squeeze_pct * 100)}% · stop {dash.params.min_stop_atr4h}–{dash.params.max_stop_atr4h}×ATR4h · BE @{dash.params.breakeven_at_r}R · trail @{dash.params.trail_after_r ?? "—"}R {dash.params.trail_mult_atr4h}×ATR · TP ext {dash.params.extension_enabled ? "on" : "off"}
-        </TradingText>
         <View style={{ marginTop: 8 }}>
           <Btn
             small
@@ -175,6 +200,7 @@ export default function TradingControlScreen() {
             }}
           />
         </View>
+        {paramsLoading && !paramSets ? <SkeletonCard lines={2} /> : null}
         {(paramSets ?? []).map((ps) => (
           <View key={ps.id} style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: c.border }}>
             <View style={{ ...row, gap: 6, flexWrap: "wrap" }}>
@@ -204,6 +230,7 @@ export default function TradingControlScreen() {
         <TradingText muted size={tokens.textXs}>
           {t("trading.learningNote")}
         </TradingText>
+        {learningLoading && !learning ? <SkeletonCard lines={3} /> : null}
         {learning?.playbook ? (
           <View style={{ marginTop: 8 }}>
             <View style={{ ...row, gap: 6 }}>
@@ -248,6 +275,7 @@ export default function TradingControlScreen() {
       </Card>
 
       <SectionTitle>{t("trading.universe")}</SectionTitle>
+      {uniLoading && !uni ? <SkeletonCard lines={3} /> : null}
       {(uni?.universe ?? []).map((u) => (
         <Card key={u.symbol}>
           <SwitchRow label={u.symbol} value={u.manual_enabled} onChange={(v) => void control({ action: "set_symbol_enabled", symbol: u.symbol, enabled: v })} />

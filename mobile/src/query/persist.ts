@@ -12,7 +12,7 @@ const persister = createAsyncStoragePersister({
 export const persistOptions: Omit<PersistQueryClientOptions, "queryClient"> = {
   persister,
   maxAge: 1000 * 60 * 60 * 24,
-  buster: "1.15.7",
+  buster: "1.15.8",
   dehydrateOptions: {
     shouldDehydrateQuery: (query) => {
       if (query.queryKey[0] === "timelineEvents") return false;

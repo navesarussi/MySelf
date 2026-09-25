@@ -30,4 +30,16 @@ export function prefetchAppShell(config: ApiConfig) {
     queryKey: queryKeys.periods,
     queryFn: () => api.periods(config),
   });
+  void queryClient.prefetchQuery({
+    queryKey: queryKeys.tradingDashboard,
+    queryFn: () => api.tradingDashboard(config),
+  });
+  void queryClient.prefetchQuery({
+    queryKey: queryKeys.tradingTriggersFeed,
+    queryFn: () => api.tradingTriggers(config, undefined),
+  });
+  void queryClient.prefetchQuery({
+    queryKey: queryKeys.tradingEventsFeed,
+    queryFn: () => api.tradingEvents(config, 30),
+  });
 }
