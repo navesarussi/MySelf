@@ -25,6 +25,7 @@ import { round2 } from "@/lib/finance/money";
 import { parseTxnTime } from "@/lib/finance/txn-datetime";
 import { getSupabase } from "@/lib/supabase";
 import { rowToTxn } from "@/lib/finance/ingest";
+import { applyRuleToPending } from "@/lib/finance/apply-rule-pending";
 
 function parseExpenseType(raw: string, fallback: ExpenseType | null): ExpenseType | null {
   if (raw === "fixed" || raw === "variable" || raw === "savings") return raw;
@@ -157,10 +158,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 
   const remember_rule = body.remember_rule === true;
+  let savedRule: Awaited<ReturnType<typeof upsertMerchantRule>> = null;
   if (remember_rule) {
     const merchantKey = merchant || current.description;
     if (merchantKey) {
-      await upsertMerchantRule({
+      savedRule = await upsertMerchantRule({
         merchant_key: merchantKey,
         category,
         expense_type,
@@ -192,5 +194,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   if (error) return dbError();
   if (!data) return notFound();
-  return NextResponse.json(rowToTxn(data as Record<string, unknown>));
+
+  // The rest of the queue from this merchant is settled by the same rule. Best
+  // effort: the transaction itself is saved either way.
+  let applied_ids: string[] = [];
+  if (savedRule) {
+    applied_ids = await applyRuleToPending(savedRule, id).catch((err: Error) => {
+      console.error("[finance] apply rule to pending", err.message);
+      return [];
+    });
+  }
+  return NextResponse.json({ ...rowToTxn(data as Record<string, unknown>), applied_ids });
 }

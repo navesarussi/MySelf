@@ -27,7 +27,7 @@ export async function saveCategorization(
     if (opts?.skip) {
       await api.categorizeFinanceTransaction(config, txn.id, { skip: true });
     } else {
-      await api.categorizeFinanceTransaction(config, txn.id, {
+      const saved = await api.categorizeFinanceTransaction(config, txn.id, {
         category,
         purpose_note: txn.default_note ?? txn.purpose_note ?? null,
         expense_type:
@@ -38,6 +38,7 @@ export async function saveCategorization(
         txn_date: txn.txn_date,
         txn_time: txn.txn_time ?? null,
       });
+      dropSettledFromQueue(saved.applied_ids);
     }
   } catch (err) {
     if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
@@ -51,6 +52,17 @@ export async function saveCategorization(
     queryClient.invalidateQueries({ queryKey: queryKeys.financePlan(month) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.home }),
   ]);
+}
+
+/** The rule also settled other pending rows from this merchant. Drop them from
+ *  the cached queue now so "next" never lands on one — the list query may be
+ *  inactive, in which case invalidation alone would not refetch it. */
+function dropSettledFromQueue(ids: string[] | undefined): void {
+  if (!ids?.length) return;
+  const settled = new Set(ids);
+  queryClient.setQueryData<UncategorizedTxn[]>(queryKeys.financeUncategorized, (old) =>
+    old ? old.filter((t) => !settled.has(t.id)) : old
+  );
 }
 
 export function nextUncategorizedId(currentId: string): string | null {
