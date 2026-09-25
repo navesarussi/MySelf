@@ -11,7 +11,6 @@ import { useSession, API_URL } from "../../src/session";
 import { Btn, Card, Chip, Row, Screen, SectionTitle, confirmDelete } from "../../src/components/ui";
 import { getAppVersion } from "../../src/version";
 import {
-  ALL_BOTTOM_TAB_IDS,
   TAB_LABEL_KEY,
   useNavPrefs,
 } from "../../src/nav-prefs";
@@ -41,7 +40,7 @@ export default function SettingsScreen() {
   const version = getAppVersion();
   const { ready, signOut, token, serverUrl } = useSession();
   const { run, busy } = useApiMutation();
-  const { bottomTabs, toggleBottomTab } = useNavPrefs();
+  const { bottomTabs, toggleBottomTab, tabIds } = useNavPrefs();
   const syncQ = useApiQuery(queryKeys.syncStatus, api.syncStatus);
   const googleTasksQ = useApiQuery(queryKeys.googleTasksStatus, api.googleTasksStatus);
   const gmailQ = useApiQuery(queryKeys.gmailStatus, api.gmailStatus);
@@ -290,7 +289,7 @@ export default function SettingsScreen() {
           {t("settings.bottomTabsHint")}
         </Text>
         <Row wrap>
-          {ALL_BOTTOM_TAB_IDS.map((id) => (
+          {tabIds.map((id) => (
             <Chip
               key={id}
               label={t(TAB_LABEL_KEY[id])}

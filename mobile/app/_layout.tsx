@@ -134,15 +134,15 @@ export default function RootLayout() {
           <ThemeProvider>
             <ThemeCanvas>
               <I18nProvider>
-                <NavPrefsProvider>
-                  <SessionProvider>
+                <SessionProvider>
+                  <NavPrefsProvider>
                     <ToastProvider>
                       <ErrorBoundary>
                         <AppStack />
                       </ErrorBoundary>
                     </ToastProvider>
-                  </SessionProvider>
-                </NavPrefsProvider>
+                  </NavPrefsProvider>
+                </SessionProvider>
               </I18nProvider>
             </ThemeCanvas>
           </ThemeProvider>

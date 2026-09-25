@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSession } from "./session";
 
 /** Tab screens that can sit in the bottom bar (excluding the center + button). */
 export type BottomTabId =
@@ -42,6 +43,8 @@ const TABS_ADDED_IN_V3: BottomTabId[] = ["trading"];
 
 type NavPrefsValue = {
   ready: boolean;
+  /** Tabs this account can open at all — trading only for the primary account. */
+  tabIds: BottomTabId[];
   bottomTabs: BottomTabId[];
   isBottomTab: (id: BottomTabId) => boolean;
   toggleBottomTab: (id: BottomTabId) => void;
@@ -50,6 +53,7 @@ type NavPrefsValue = {
 
 const NavPrefsContext = createContext<NavPrefsValue>({
   ready: false,
+  tabIds: ALL_BOTTOM_TAB_IDS,
   bottomTabs: DEFAULT_BOTTOM_TABS,
   isBottomTab: () => true,
   toggleBottomTab: () => {},
@@ -118,15 +122,22 @@ export function NavPrefsProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const { primary } = useSession();
+  const tabIds = useMemo(
+    () => ALL_BOTTOM_TAB_IDS.filter((id) => primary || id !== "trading"),
+    [primary]
+  );
+
   const value = useMemo<NavPrefsValue>(
     () => ({
       ready,
+      tabIds,
       bottomTabs,
-      isBottomTab: (id) => bottomTabs.includes(id),
+      isBottomTab: (id) => tabIds.includes(id) && bottomTabs.includes(id),
       toggleBottomTab,
       resetBottomTabs: () => persist([...DEFAULT_BOTTOM_TABS]),
     }),
-    [ready, bottomTabs, toggleBottomTab, persist]
+    [ready, tabIds, bottomTabs, toggleBottomTab, persist]
   );
 
   return <NavPrefsContext.Provider value={value}>{children}</NavPrefsContext.Provider>;

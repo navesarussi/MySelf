@@ -8,7 +8,6 @@ import { useColors, tokens } from "../theme";
 import { confirmDelete } from "./ui";
 import { useSession } from "../session";
 import {
-  ALL_BOTTOM_TAB_IDS,
   TAB_HREF,
   TAB_ICON,
   TAB_LABEL_KEY,
@@ -21,9 +20,9 @@ export function MoreMenuModal({ visible, onClose }: { visible: boolean; onClose:
   const { textStart, writingDirection, row, menuAnchor } = useLayoutDir();
   const router = useRouter();
   const { signOut } = useSession();
-  const { isBottomTab } = useNavPrefs();
+  const { isBottomTab, tabIds } = useNavPrefs();
 
-  const items = ALL_BOTTOM_TAB_IDS.filter((id) => !isBottomTab(id)).map((id) => ({
+  const items = tabIds.filter((id) => !isBottomTab(id)).map((id) => ({
     href: TAB_HREF[id],
     labelKey: TAB_LABEL_KEY[id],
     icon: TAB_ICON[id],
