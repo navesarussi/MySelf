@@ -158,6 +158,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 
   const remember_rule = body.remember_rule === true;
+
+  let is_internal = current.is_internal;
+  if (body.is_internal !== undefined) is_internal = Boolean(body.is_internal);
+
   let savedRule: Awaited<ReturnType<typeof upsertMerchantRule>> = null;
   if (remember_rule) {
     const merchantKey = merchant || current.description;
@@ -180,6 +184,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     txn_time,
     amount,
     merchant,
+    is_internal,
     needs_categorization: false,
     categorized_at: current.categorized_at || now,
     updated_at: now,
@@ -205,4 +210,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     });
   }
   return NextResponse.json({ ...rowToTxn(data as Record<string, unknown>), applied_ids });
+}
+
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await isApiAuthorized(_req))) return unauthorized();
+  const { id } = await ctx.params;
+  const { error } = await getSupabase().from("finance_transactions").delete().eq("id", id);
+  if (error) return dbError();
+  return NextResponse.json({ ok: true });
 }

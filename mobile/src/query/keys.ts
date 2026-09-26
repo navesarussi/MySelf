@@ -32,6 +32,8 @@ export const queryKeys = {
   financeTransactions: (month: string) => ["financeTransactions", month] as const,
   financeUncategorized: ["financeUncategorized"] as const,
   financePlan: (month: string) => ["financePlan", "v2", month] as const,
+  financeFixedExpenses: (month: string) => ["financeFixedExpenses", month] as const,
+  financeCategories: ["financeCategories"] as const,
   financeRecurringSuggestions: (month?: string) => ["financeRecurringSuggestions", month ?? "current"] as const,
   financeForecast: (month: string) => ["financeForecast", month] as const,
   financeHistory: (months: number) => ["financeHistory", months] as const,

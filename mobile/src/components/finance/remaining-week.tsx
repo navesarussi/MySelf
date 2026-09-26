@@ -11,10 +11,16 @@ import { WeeklyBudgetModal } from "./weekly-budget-modal";
 
 export function RemainingWeekCard({
   pace: rawPace,
-  onEditBudget,
+  onSaveBudget,
+  saving,
+  saveError,
+  onRetrySave,
 }: {
   pace: WeeklyPace;
-  onEditBudget?: (amount: number | null) => void;
+  onSaveBudget?: (amount: number | null) => boolean | Promise<boolean>;
+  saving?: boolean;
+  saveError?: string | null;
+  onRetrySave?: () => void;
 }) {
   const pace = normalizeWeeklyPace(rawPace);
   const { t } = useI18n();
@@ -29,9 +35,15 @@ export function RemainingWeekCard({
   const over = left < 0;
   const ratio = variableBudget > 0 ? Math.min(1, spent / variableBudget) : 0;
 
+  async function handleSave(amount: number | null) {
+    if (!onSaveBudget) return;
+    const ok = await onSaveBudget(amount);
+    if (ok) setShowEdit(false);
+  }
+
   return (
     <>
-      <Pressable onPress={() => onEditBudget && setShowEdit(true)} disabled={!onEditBudget}>
+      <Pressable onPress={() => onSaveBudget && setShowEdit(true)} disabled={!onSaveBudget} accessibilityRole="button">
         <Card style={{ marginBottom: 12 }}>
           <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
             {t("finance.thisWeek", { week: String(pace.week) })}
@@ -68,7 +80,7 @@ export function RemainingWeekCard({
               budget: fmtAmount0(variableBudget),
             })}
           </Text>
-          {onEditBudget ? (
+          {onSaveBudget ? (
             <Text
               style={{
                 color: c.accent,
@@ -83,12 +95,15 @@ export function RemainingWeekCard({
           ) : null}
         </Card>
       </Pressable>
-      {onEditBudget && showEdit && pace ? (
+      {onSaveBudget && showEdit && pace ? (
         <WeeklyBudgetModal
           visible={showEdit}
           pace={pace}
-          onClose={() => setShowEdit(false)}
-          onSave={onEditBudget}
+          saving={saving}
+          error={saveError}
+          onClose={() => !saving && setShowEdit(false)}
+          onSave={handleSave}
+          onRetry={onRetrySave}
         />
       ) : null}
     </>

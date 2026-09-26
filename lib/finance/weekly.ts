@@ -119,6 +119,18 @@ export function weekBucketsForMonth(
   return buckets;
 }
 
+/** Normalize override: null clears; equal-to-computed avoids spurious override flag. */
+export function resolveWeeklyBudgetOverrideValue(
+  amount: number | null,
+  computedBudget: number
+): number | null {
+  if (amount == null) return null;
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  const rounded = round2(amount);
+  if (Math.abs(rounded - round2(computedBudget)) < 0.005) return null;
+  return rounded;
+}
+
 /** Weekly discretionary budget from plan; optional per-month override. */
 export function weeklyVariablePace(
   weeks: WeekBucket[],

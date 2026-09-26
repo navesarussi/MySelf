@@ -438,6 +438,31 @@ export const api = {
   ) => apiFetch<PlanLineRow>(c, "/finance/plan/lines", { method: "POST", body }),
   deleteFinancePlanLine: (c: ApiConfig, lineId: string) =>
     apiFetch<{ ok: boolean }>(c, `/finance/plan/lines/${lineId}`, { method: "DELETE" }),
+  financeFixedExpenses: (c: ApiConfig, month: string) =>
+    apiFetch<{ month: string; items: import("@/lib/finance/fixed-expenses").FixedExpenseItem[] }>(
+      c,
+      `/finance/fixed-expenses?month=${encodeURIComponent(month)}`
+    ),
+  createFinanceMerchantRule: (
+    c: ApiConfig,
+    body: {
+      merchant_key: string;
+      display_name?: string | null;
+      category?: string | null;
+      planned_amount?: number;
+      charge_day?: number | null;
+      frequency?: "monthly" | "weekly" | "yearly";
+      default_note?: string | null;
+      is_active?: boolean;
+    }
+  ) => apiFetch<import("@/lib/finance/merchant-rules-client").MerchantRule>(c, "/finance/merchant-rules", { method: "POST", body }),
+  patchFinanceMerchantRule: (
+    c: ApiConfig,
+    id: string,
+    body: Record<string, unknown>
+  ) => apiFetch<import("@/lib/finance/merchant-rules-client").MerchantRule>(c, `/finance/merchant-rules/${id}`, { method: "PATCH", body }),
+  deleteFinanceMerchantRule: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/finance/merchant-rules/${id}`, { method: "DELETE" }),
   financeTransactions: (
     c: ApiConfig,
     params: { month?: string; uncategorized?: boolean; limit?: number; includeTotal?: boolean }
@@ -492,8 +517,11 @@ export const api = {
       merchant?: string | null;
       txn_date?: string;
       txn_time?: string | null;
+      is_internal?: boolean;
     }
   ) => apiFetch<FinanceTransaction>(c, `/finance/transactions/${id}`, { method: "PATCH", body }),
+  deleteFinanceTransaction: (c: ApiConfig, id: string) =>
+    apiFetch<{ ok: boolean }>(c, `/finance/transactions/${id}`, { method: "DELETE" }),
   financeSourcesStatus: (c: ApiConfig) =>
     apiFetch<FinanceSourcesStatusResponse>(c, "/finance/sources/status"),
   financeRecurringSuggestions: (c: ApiConfig, month?: string) =>

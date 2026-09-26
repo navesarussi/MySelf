@@ -5,13 +5,20 @@ import { normalizeHebrewDescription } from "@/lib/finance/hebrew-merchant";
 export type ExpenseType = "fixed" | "variable" | "savings";
 export type MerchantRuleKind = "income" | "expense";
 
+export type FixedExpenseFrequency = "monthly" | "weekly" | "yearly";
+
 export type MerchantRule = {
   id?: string;
   merchant_key: string;
+  display_name?: string | null;
   category: string | null;
   expense_type: ExpenseType | null;
   kind: MerchantRuleKind | null;
   default_note: string | null;
+  planned_amount?: number | null;
+  charge_day?: number | null;
+  frequency?: FixedExpenseFrequency | null;
+  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
 };
