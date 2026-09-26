@@ -14,7 +14,7 @@ describe("trading equity query key contract", () => {
   });
 
   it("matches the mobile keys module shape", async () => {
-    const { queryKeys } = await import("../../mobile/src/query/keys.ts");
+    const { queryKeys } = await import("../../mobile/src/query/keys");
     assert.deepEqual(queryKeys.tradingEquity, ["trading", "equity"]);
     assert.ok(queryKeys.tradingAll[0] === queryKeys.tradingEquity[0]);
   });
