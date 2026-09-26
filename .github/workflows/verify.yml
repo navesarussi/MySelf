@@ -47,5 +47,28 @@ jobs:
       - name: Run verify
         run: npm run verify
 
+  production-build:
+    name: Production build (Expo web + next build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install mobile dependencies
+        run: npm ci --prefix mobile
+
+      - name: Run production build
+        run: npm run build
+
   migrations:
     uses: ./.github/workflows/migrations-check.yml

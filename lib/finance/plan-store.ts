@@ -13,7 +13,7 @@ import { inferredCategory, inferTxnKind, shouldSkipCategorizationPrompt } from "
 import type { FinanceSource } from "@/lib/finance/external-key";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
 import { reconcileMonthTransactions } from "@/lib/finance/reconcile";
-import { fetchSplitsByParentIds } from "@/lib/finance/month-net";
+import { fetchSplitsByParentIds } from "@/lib/finance/month-net-server";
 import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
 
 /** Bank/card sync and import sources — kind is authoritative from the feed. */

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { summarizeCashflow, type CashflowRow } from "@/lib/finance/cashflow";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
-import { fetchSplitsByParentIds } from "@/lib/finance/month-net";
+import { fetchSplitsByParentIds } from "@/lib/finance/month-net-server";
 import { TXN_CASHFLOW_COLUMNS } from "@/lib/finance/txn-columns";
 import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
 import { withRouteHandler } from "@/lib/api/with-route-handler";
