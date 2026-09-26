@@ -6,7 +6,10 @@ export function cardScopeFromAccount(input: {
   account_number?: string | null;
   card_name?: string | null;
   card_mask?: string | null;
+  /** Leumi is a single bank account — dedupe ignores account number form. */
+  source?: string | null;
 }): string {
+  if (input.source === "leumi") return "default";
   const mask = input.card_mask?.trim();
   if (mask) {
     const digits = mask.replace(/\D/g, "");
@@ -17,6 +20,15 @@ export function cardScopeFromAccount(input: {
   if (digits.length >= 4) return digits.slice(-4);
   if (acct) return acct.toLowerCase().replace(/\s+/g, "-");
   return "default";
+}
+
+/** Leumi scopes equivalent for dedupe: Excel null account vs sync last-4. */
+export function leumiDedupeScopes(input: {
+  account_number?: string | null;
+  card_name?: string | null;
+}): string[] {
+  const raw = cardScopeFromAccount({ ...input, source: undefined });
+  return raw === "default" ? ["default"] : ["default", raw];
 }
 
 /** Stable identity for one charge — survives merchant/parser changes; omits import source. */

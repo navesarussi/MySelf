@@ -67,11 +67,11 @@ describe("prepareIngestRows", () => {
     assert.equal(duplicatesInBatch, 0);
   });
 
-  it("assigns distinct stable keys for repeated same-day same-amount rows", () => {
+  it("assigns distinct stable keys for same-day same-amount rows with different descriptions", () => {
     const { prepared } = prepareIngestRows(
       [
-        txn({ card_name: "6601", txn_date: "2026-06-28", amount: 130, merchant: "Zigo", description: "Zigo refund" }),
-        txn({ card_name: "6601", txn_date: "2026-06-28", amount: 130, merchant: "Zigo", description: "Zigo refund" }),
+        txn({ card_name: "6601", txn_date: "2026-06-28", amount: 130, merchant: "Zigo", description: "Zigo refund A" }),
+        txn({ card_name: "6601", txn_date: "2026-06-28", amount: 130, merchant: "Zigo", description: "Zigo refund B" }),
       ],
       noRules,
       []
@@ -216,6 +216,55 @@ describe("prepareIngestRows", () => {
       { existingFuzzyUsd }
     );
     assert.equal(prepared.length, 0);
+    assert.equal(duplicatesInBatch, 1);
+  });
+
+  it("skips Leumi re-import when Excel row had null account and sync has account number", () => {
+    const existingStableCounts = new Map([["default|2026-09-01|100.00|ILS", 1]]);
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({
+          account_number: "669-55735/82",
+          amount: 100,
+          description: "העברה לפיגור",
+        }),
+      ],
+      noRules,
+      [],
+      { existingStableCounts }
+    );
+    assert.equal(prepared.length, 0);
+    assert.equal(duplicatesInBatch, 1);
+  });
+
+  it("skips Leumi re-import within ±1 day date window", () => {
+    const existingStableCounts = new Map([["default|2026-09-01|100.00|ILS", 1]]);
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({
+          txn_date: "2026-09-02",
+          amount: 100,
+          description: "העברה לפיגור",
+        }),
+      ],
+      noRules,
+      [],
+      { existingStableCounts }
+    );
+    assert.equal(prepared.length, 0);
+    assert.equal(duplicatesInBatch, 1);
+  });
+
+  it("dedupes identical Leumi rows within one sync payload", () => {
+    const { prepared, duplicatesInBatch } = prepareIngestRows(
+      [
+        txn({ amount: 100, description: "העברה לפיגור" }),
+        txn({ amount: 100, description: "העברה לפיגור" }),
+      ],
+      noRules,
+      []
+    );
+    assert.equal(prepared.length, 1);
     assert.equal(duplicatesInBatch, 1);
   });
 

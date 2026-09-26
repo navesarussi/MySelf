@@ -10,9 +10,58 @@ import {
 } from "@/lib/finance/plan";
 import type { PlanLineType } from "@/lib/finance/expense-type";
 import { inferredCategory, inferTxnKind, shouldSkipCategorizationPrompt } from "@/lib/finance/classify";
+import type { FinanceSource } from "@/lib/finance/external-key";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
 import { reconcileMonthTransactions } from "@/lib/finance/reconcile";
 import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
+
+/** Bank/card sync and import sources — kind is authoritative from the feed. */
+export const BANK_CARD_SOURCES = new Set<FinanceSource>([
+  "leumi",
+  "max",
+  "visa_cal",
+  "apple_pay",
+  "excel",
+]);
+
+/** Pure patch planner for autoClassifyObvious — exported for tests. */
+export function autoClassifyPatchForTxn(
+  t: FinanceTransaction,
+  now: string
+): Record<string, unknown> | null {
+  if (t.categorized_at || !t.needs_categorization) return null;
+
+  const kind = inferTxnKind({
+    kind: t.kind,
+    description: t.description,
+    merchant: t.merchant,
+    signedAmount: t.kind === "income" ? t.amount : -t.amount,
+  });
+  const isBankCard = BANK_CARD_SOURCES.has(t.source);
+  const effectiveKind = isBankCard ? t.kind : kind;
+  const skip = shouldSkipCategorizationPrompt({
+    description: t.description,
+    merchant: t.merchant,
+    kind: effectiveKind,
+  });
+  const category = inferredCategory({
+    description: t.description,
+    merchant: t.merchant,
+    kind: effectiveKind,
+  });
+  const kindChange = !isBankCard && kind !== t.kind;
+  const markDone = skip;
+  const applyCat = Boolean(category) && !t.category;
+
+  if (!kindChange && !markDone && !applyCat) return null;
+
+  return {
+    ...(kindChange ? { kind } : {}),
+    ...(applyCat ? { category } : {}),
+    ...(markDone ? { needs_categorization: false, categorized_at: now } : {}),
+    updated_at: now,
+  };
+}
 
 async function fetchTransactions(month: string): Promise<FinanceTransaction[]> {
   return (await fetchTransactionsInRange(monthBounds(month))).map(rowToTxn);
@@ -27,20 +76,10 @@ async function autoClassifyObvious(
   let changed = false;
   await Promise.all(
     txns.map(async (t) => {
-      const kind = inferTxnKind({ description: t.description, merchant: t.merchant });
-      const skip = shouldSkipCategorizationPrompt({ description: t.description, merchant: t.merchant, kind });
-      const category = inferredCategory({ description: t.description, merchant: t.merchant, kind });
-      const markDone = skip && t.needs_categorization;
-      const applyCat = Boolean(category) && t.needs_categorization && !t.category;
-      if (kind === t.kind && !markDone && !applyCat) return;
+      const patch = autoClassifyPatchForTxn(t, now);
+      if (!patch) return;
       changed = true;
-      await getSupabase().from("finance_transactions").update({
-        kind,
-        category: applyCat ? category : t.category,
-        needs_categorization: markDone ? false : t.needs_categorization,
-        categorized_at: markDone ? now : t.categorized_at,
-        updated_at: now,
-      }).eq("id", t.id);
+      await getSupabase().from("finance_transactions").update(patch).eq("id", t.id);
     })
   );
   return changed;

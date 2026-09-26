@@ -154,7 +154,12 @@ export async function reconcileMonthTransactions(
 
   const result = findReconcilableBatchTransactions(txns);
   const idsToUpdate = txns
-    .filter((t) => result.reconciledIds.includes(t.id) && (!t.is_internal || t.needs_categorization))
+    .filter(
+      (t) =>
+        result.reconciledIds.includes(t.id) &&
+        !t.categorized_at &&
+        t.needs_categorization
+    )
     .map((t) => t.id);
 
   if (idsToUpdate.length > 0) {
