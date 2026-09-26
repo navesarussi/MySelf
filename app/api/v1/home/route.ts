@@ -131,11 +131,13 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
     supabase
       .from("finance_transactions")
       .select("id", { count: "exact", head: true })
-      .eq("needs_categorization", true),
+      .eq("needs_categorization", true)
+      .is("deleted_at", null),
     supabase
       .from("finance_transactions")
       .select("id, amount, merchant, description")
       .eq("needs_categorization", true)
+      .is("deleted_at", null)
       .order("txn_date", { ascending: true })
       .order("created_at", { ascending: true })
       .limit(1),

@@ -251,6 +251,7 @@ export async function listRecentImportTransactions(userId: string, limit = 30) {
     )
     .eq("user_id", userId)
     .not("import_batch_id", "is", null)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new FinanceImportLayerError(error.message, "db_error");

@@ -29,6 +29,7 @@ export async function fetchMonthNetActual(month: string): Promise<number> {
       .select("kind, amount")
       .in("kind", ["income", "expense"])
       .eq("is_internal", false)
+      .is("deleted_at", null)
       .gte("txn_date", start)
       .lt("txn_date", end)
       .order("id")
