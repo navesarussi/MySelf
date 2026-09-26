@@ -11,6 +11,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # labeled/unlabeled re-run the migration check when `migration-edit-ok` changes.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
   group: verify-${{ github.ref }}
@@ -44,3 +46,6 @@ jobs:
 
       - name: Run verify
         run: npm run verify
+
+  migrations:
+    uses: ./.github/workflows/migrations-check.yml
