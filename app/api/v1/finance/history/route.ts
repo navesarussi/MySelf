@@ -9,7 +9,7 @@ import {
   type HistoryPlanSeed,
 } from "@/lib/finance/history";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
-import { fetchSplitsByParentIds } from "@/lib/finance/month-net";
+import { fetchSplitsByParentIds } from "@/lib/finance/month-net-server";
 import { TXN_CASHFLOW_COLUMNS } from "@/lib/finance/txn-columns";
 import { fetchTransactionsInRange, monthsBounds } from "@/lib/finance/txn-range";
 import { withRouteHandler } from "@/lib/api/with-route-handler";

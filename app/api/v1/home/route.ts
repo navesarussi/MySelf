@@ -16,7 +16,7 @@ import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
 import { formatUrgentFinanceLabel } from "@/lib/widget-snapshot";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
-import { fetchMonthNetActual } from "@/lib/finance/month-net";
+import { fetchMonthNetActual } from "@/lib/finance/month-net-server";
 import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Rows sampled for the average-close-days KPI. Ordered by updated_at so the
