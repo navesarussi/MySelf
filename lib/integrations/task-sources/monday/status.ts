@@ -1,43 +1,18 @@
 import { reportIntegrationError } from "@/lib/error-reporting";
 import { isExpectedMondayWritebackError } from "../writeback-errors";
-import { mondayGraphql, MondayGraphqlError } from "./graphql";
 import { pickDoneLabelIndex, pickReopenLabelIndex } from "./map";
 import type { MondayStatusLabelOption } from "./types";
 import { fetchBoardMeta, fetchMondayItemWritebackContext } from "./fetch";
 import { getIntegrationToken } from "../../tokens";
 import { MONDAY_PROVIDER } from "../../monday-config";
 import { parseMondayExternalId } from "./ids";
-
-async function changeStatusByIndex(
-  accessToken: string,
-  boardId: string,
-  itemId: string,
-  columnId: string,
-  labelIndex: number
-) {
-  await mondayGraphql(
-    accessToken,
-    `mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: String!) {
-      change_simple_column_value(
-        board_id: $boardId
-        item_id: $itemId
-        column_id: $columnId
-        value: $value
-      ) { id }
-    }`,
-    { boardId, itemId, columnId, value: String(labelIndex) }
-  );
-}
-
-async function archiveMondayItem(accessToken: string, itemId: string) {
-  await mondayGraphql(
-    accessToken,
-    `mutation ($itemId: ID!) {
-      archive_item(item_id: $itemId) { id }
-    }`,
-    { itemId }
-  );
-}
+import { MondayGraphqlError } from "./graphql";
+import { assertMondayWriteScope } from "./scopes";
+import {
+  archiveMondayItem,
+  isMondayPermissionError,
+  mutateMondayStatusColumn,
+} from "./write-column";
 
 function reportMondayFailure(action: string, err: unknown, context: Record<string, string>) {
   if (isExpectedMondayWritebackError(err)) {
@@ -49,7 +24,7 @@ function reportMondayFailure(action: string, err: unknown, context: Record<strin
     userAction: action,
     upstreamBody:
       err instanceof MondayGraphqlError
-        ? { body: err.body, messages: err.graphqlMessages, ...context }
+        ? { body: err.body, messages: err.graphqlMessages, codes: err.graphqlCodes, ...context }
         : context,
   });
 }
@@ -90,9 +65,7 @@ async function resolveWriteback(
   if (!meta.statusColumnId) throw new Error("monday_no_status_column");
 
   const labels =
-    meta.statusLabels.length > 0
-      ? meta.statusLabels
-      : (cache?.statusLabels ?? []);
+    meta.statusLabels.length > 0 ? meta.statusLabels : (cache?.statusLabels ?? []);
 
   return {
     boardId,
@@ -101,6 +74,10 @@ async function resolveWriteback(
     previousLabel: cache?.statusLabel,
     previousIndex: cache?.statusLabelIndex,
   };
+}
+
+function labelTextForIndex(labels: MondayStatusLabelOption[], index: number): string | null {
+  return labels.find((l) => l.index === index)?.label ?? null;
 }
 
 export async function completeMondayItem(
@@ -112,7 +89,20 @@ export async function completeMondayItem(
 ) {
   const labelIndex = pickDoneLabelIndex(statusLabels);
   if (labelIndex == null) throw new Error("monday_no_done_label");
-  await changeStatusByIndex(accessToken, boardId, itemId, statusColumnId, labelIndex);
+  const labelText = labelTextForIndex(statusLabels, labelIndex);
+  try {
+    await mutateMondayStatusColumn(
+      accessToken,
+      boardId,
+      itemId,
+      statusColumnId,
+      labelIndex,
+      labelText
+    );
+  } catch (err) {
+    if (!isMondayPermissionError(err)) throw err;
+    await archiveMondayItem(accessToken, itemId);
+  }
 }
 
 export async function reopenMondayItem(
@@ -126,7 +116,15 @@ export async function reopenMondayItem(
 ) {
   const labelIndex = pickReopenLabelIndex(statusLabels, previousLabel, previousIndex);
   if (labelIndex == null) throw new Error("monday_no_reopen_label");
-  await changeStatusByIndex(accessToken, boardId, itemId, statusColumnId, labelIndex);
+  const labelText = previousLabel ?? labelTextForIndex(statusLabels, labelIndex);
+  await mutateMondayStatusColumn(
+    accessToken,
+    boardId,
+    itemId,
+    statusColumnId,
+    labelIndex,
+    labelText
+  );
 }
 
 type MondayWritebackCache = {
@@ -142,6 +140,7 @@ export async function completeByExternalId(
   cache?: MondayWritebackCache
 ) {
   const { accountKey, itemId } = parseMondayExternalId(externalId);
+  await assertMondayWriteScope(accountKey);
   const token = await getMondayAccessToken(accountKey);
   try {
     const resolved = await resolveWriteback(token, itemId, boardId, cache);
@@ -165,6 +164,7 @@ export async function reopenByExternalId(
   cache?: MondayWritebackCache
 ) {
   const { accountKey, itemId } = parseMondayExternalId(externalId);
+  await assertMondayWriteScope(accountKey);
   const token = await getMondayAccessToken(accountKey);
   try {
     const resolved = await resolveWriteback(token, itemId, boardId, cache);
@@ -186,6 +186,7 @@ export async function reopenByExternalId(
 /** Archive upstream item — used when status change is blocked but archive succeeds. */
 export async function archiveByExternalId(externalId: string, boardId: string) {
   const { accountKey, itemId } = parseMondayExternalId(externalId);
+  await assertMondayWriteScope(accountKey);
   const token = await getMondayAccessToken(accountKey);
   try {
     await archiveMondayItem(token, itemId);
@@ -194,3 +195,5 @@ export async function archiveByExternalId(externalId: string, boardId: string) {
     throw err;
   }
 }
+
+export { mutateMondayStatusColumn, archiveMondayItem } from "./write-column";

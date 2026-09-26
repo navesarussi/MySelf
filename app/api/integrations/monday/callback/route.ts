@@ -57,6 +57,7 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
           pull_completed: prev.pull_completed ?? "none",
           account_name: account.name,
           account_slug: account.slug,
+          ...(tokens.scope ? { oauth_scope: tokens.scope } : {}),
         },
       });
 

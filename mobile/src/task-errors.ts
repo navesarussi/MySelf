@@ -42,6 +42,7 @@ export function taskUpdateErrorFlash(task: Task, apiError?: string): string {
     return taskReconnectFlash(task.source);
   }
   if (apiError === "external_missing_ids") return "flash.taskResyncRequired";
+  if (apiError === "monday_permission_denied") return "flash.taskMondayPermissionDenied";
   if (task.source === "google_tasks") return "flash.taskUpdateGoogleFailed";
   if (task.source === "monday") return "flash.taskUpdateMondayFailed";
   if (task.source === "github") return "flash.taskUpdateGithubFailed";
@@ -65,6 +66,9 @@ export function taskLocalOnlyWarningFlash(payload: TaskMutationPayload): string 
   if (payload.user_message_he) return payload.user_message_he;
   const source = payload.source ?? "manual";
   if (payload.warning === "external_missing_ids") return "flash.taskLocalOnlyResync";
+  if (payload.warning === "monday_permission_denied") {
+    return "flash.taskMondayPermissionDenied";
+  }
   return taskReconnectFlash(source);
 }
 
@@ -78,6 +82,15 @@ export function taskDeleteLocalOnlyFlash(payload: TaskMutationPayload): string {
     return "flash.taskDeleteHiddenMonday";
   }
   return taskLocalOnlyWarningFlash(payload);
+}
+
+/** Resolve a local-only warning to display text (Hebrew body or i18n flash key). */
+export function formatLocalOnlyWarning(
+  payload: TaskMutationPayload,
+  t: (key: string) => string
+): string {
+  const warn = taskLocalOnlyWarningFlash(payload);
+  return warn.startsWith("flash.") ? t(warn) : warn;
 }
 
 function taskReconnectFlash(source: TaskSource): string {

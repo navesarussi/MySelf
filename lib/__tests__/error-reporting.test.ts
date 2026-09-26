@@ -74,6 +74,17 @@ describe("error-reporting noise filter", () => {
   it("keeps unexpected server failures", () => {
     assert.equal(isNoiseError({ error: new Error("monday_graphql_failed") }), false);
   });
+
+  it("skips expected Monday permission denials", () => {
+    assert.equal(isNoiseError({ error: new Error("monday_permission_denied") }), true);
+    assert.equal(
+      isNoiseError({
+        error: new Error("monday_graphql:User unauthorized to perform action"),
+        message: "monday_graphql:User unauthorized to perform action",
+      }),
+      true
+    );
+  });
 });
 
 describe("error-reporting dedupe", () => {

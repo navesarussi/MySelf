@@ -23,6 +23,7 @@ import type { Project, Task } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
 import { useToast } from "../../src/toast";
 import {
+  formatLocalOnlyWarning,
   isLocalOnlyAllowed,
   isLocalOnlyPayload,
   readApiError,
@@ -166,8 +167,7 @@ export default function TasksScreen() {
                 patchTaskInHome(old, targetId, updated as Task)
               );
               if (isLocalOnlyPayload(updated)) {
-                const warn = taskLocalOnlyWarningFlash(updated);
-                showToast(warn.startsWith("flash.") ? t(warn) : warn, "error");
+                showToast(formatLocalOnlyWarning(updated, t), "error");
               }
             }
             queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
@@ -265,9 +265,36 @@ export default function TasksScreen() {
           when: "immediate",
         },
         onError: (err) => {
+          const msg = readApiError(err);
+          if (isLocalOnlyAllowed(err)) {
+            Alert.alert(t("tasks.externalActionTitle"), msg ?? t("flash.taskUpdateError"), [
+              { text: t("common.cancel"), style: "cancel" },
+              {
+                text: t("tasks.saveLocallyOnly"),
+                onPress: () =>
+                  void run((config) =>
+                    api.updateTask(config, task.id, { status: next, force_local: true })
+                  , {
+                    itemId: task.id,
+                    suppressErrorToast: true,
+                    onSuccess: (updated) => {
+                      if (updated) {
+                        queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+                          patchItemInList(old, task.id, updated as Task)
+                        );
+                        if (isLocalOnlyPayload(updated)) {
+                          showToast(formatLocalOnlyWarning(updated, t), "error");
+                        }
+                      }
+                    },
+                  }),
+              },
+            ]);
+            return;
+          }
           if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
           if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-          showToast(t(taskUpdateErrorFlash(task, readApiError(err))), "error");
+          showToast(t(taskUpdateErrorFlash(task, msg)), "error");
         },
         onSuccess: (updated) => {
           if (updated) {
@@ -278,7 +305,7 @@ export default function TasksScreen() {
               patchTaskInHome(old, task.id, updated as Task)
             );
             if (isLocalOnlyPayload(updated)) {
-              showToast(t(taskLocalOnlyWarningFlash(updated)), "error");
+              showToast(formatLocalOnlyWarning(updated, t), "error");
             }
           }
         },
@@ -308,9 +335,36 @@ export default function TasksScreen() {
           when: "immediate",
         },
         onError: (err) => {
+          const msg = readApiError(err);
+          if (isLocalOnlyAllowed(err)) {
+            Alert.alert(t("tasks.externalActionTitle"), msg ?? t("flash.taskUpdateError"), [
+              { text: t("common.cancel"), style: "cancel" },
+              {
+                text: t("tasks.saveLocallyOnly"),
+                onPress: () =>
+                  void run((config) =>
+                    api.updateTask(config, task.id, { status: next, force_local: true })
+                  , {
+                    itemId: task.id,
+                    suppressErrorToast: true,
+                    onSuccess: (updated) => {
+                      if (updated) {
+                        queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+                          patchItemInList(old, task.id, updated as Task)
+                        );
+                        if (isLocalOnlyPayload(updated)) {
+                          showToast(formatLocalOnlyWarning(updated, t), "error");
+                        }
+                      }
+                    },
+                  }),
+              },
+            ]);
+            return;
+          }
           if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
           if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-          showToast(t(taskUpdateErrorFlash(task, readApiError(err))), "error");
+          showToast(t(taskUpdateErrorFlash(task, msg)), "error");
         },
         onSuccess: (updated) => {
           if (updated) {
@@ -321,7 +375,7 @@ export default function TasksScreen() {
               patchTaskInHome(old, task.id, updated as Task)
             );
             if (isLocalOnlyPayload(updated)) {
-              showToast(t(taskLocalOnlyWarningFlash(updated)), "error");
+              showToast(formatLocalOnlyWarning(updated, t), "error");
             }
           }
         },
