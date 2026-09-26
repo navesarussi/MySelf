@@ -44,6 +44,9 @@ jobs:
       - name: Install mobile dependencies
         run: npm ci --prefix mobile
 
+      - name: Check for merge conflict markers
+        run: npx tsx scripts/ci/check-conflict-markers.ts
+
       - name: Run verify
         run: npm run verify
 
