@@ -1,10 +1,12 @@
 import type { Task, TaskSource } from "@/lib/types";
+import { ApiError } from "./api/client";
 
 type TaskMutationPayload = {
   local_only?: boolean;
   warning?: string;
   source?: TaskSource;
   error?: string;
+  user_message_he?: string;
 };
 
 function isReconnectError(code?: string): boolean {
@@ -16,6 +18,22 @@ function isReconnectError(code?: string): boolean {
     code === "missing_refresh_token" ||
     code.startsWith("token_refresh_failed")
   );
+}
+
+export function readApiError(err: unknown): string | undefined {
+  if (err instanceof ApiError) {
+    if (err.userMessageHe) return err.userMessageHe;
+    return err.message || undefined;
+  }
+  if (err && typeof err === "object" && "message" in err) {
+    const message = String((err as { message: unknown }).message);
+    return message || undefined;
+  }
+  return undefined;
+}
+
+export function isLocalOnlyAllowed(err: unknown): boolean {
+  return err instanceof ApiError && err.localOnlyAllowed === true;
 }
 
 export function taskUpdateErrorFlash(task: Task, apiError?: string): string {
@@ -44,6 +62,7 @@ export function taskDeleteErrorFlash(task: Task, apiError?: string): string {
 }
 
 export function taskLocalOnlyWarningFlash(payload: TaskMutationPayload): string {
+  if (payload.user_message_he) return payload.user_message_he;
   const source = payload.source ?? "manual";
   if (payload.warning === "external_missing_ids") return "flash.taskLocalOnlyResync";
   return taskReconnectFlash(source);
@@ -54,14 +73,6 @@ function taskReconnectFlash(source: TaskSource): string {
   if (source === "monday") return "flash.taskReconnectMonday";
   if (source === "github") return "flash.taskReconnectGithub";
   return "flash.taskReconnectGeneric";
-}
-
-export function readApiError(err: unknown): string | undefined {
-  if (err && typeof err === "object" && "message" in err) {
-    const message = String((err as { message: unknown }).message);
-    return message || undefined;
-  }
-  return undefined;
 }
 
 export function isLocalOnlyPayload(value: unknown): value is TaskMutationPayload & { local_only: true } {

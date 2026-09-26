@@ -1,6 +1,6 @@
 export type TaskSourceId = "google_tasks" | "monday" | "github";
 
-export type StatusLabelOption = { label: string; is_done?: boolean };
+export type StatusLabelOption = { label: string; index?: number; is_done?: boolean };
 
 export type ExternalTaskDraft = {
   externalId: string;
@@ -18,12 +18,14 @@ export type ExternalTaskDraft = {
     account_name?: string;
     statusColumnId?: string;
     statusLabel?: string;
+    statusLabelIndex?: number;
     statusLabels?: StatusLabelOption[];
   };
 };
 
 export type TaskWritebackOpts = {
   statusLabel?: string | null;
+  statusLabelIndex?: number | null;
   statusLabels?: StatusLabelOption[];
   statusColumnId?: string | null;
 };

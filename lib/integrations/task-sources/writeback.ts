@@ -28,6 +28,7 @@ export async function applyExternalStatusChange(task: Task, nextStatus: TaskStat
           statusLabels: mondayLabels,
           statusColumnId: task.external_meta?.statusColumnId,
           statusLabel: task.external_meta?.statusLabel,
+          statusLabelIndex: task.external_meta?.statusLabelIndex,
         }
       : undefined;
 

@@ -136,7 +136,9 @@ export type TaskExternalMeta = {
   account_name?: string;
   statusColumnId?: string;
   statusLabel?: string;
-  statusLabels?: { label: string; is_done?: boolean }[];
+  /** Monday label id — stable for API status updates. */
+  statusLabelIndex?: number;
+  statusLabels?: { label: string; index?: number; is_done?: boolean }[];
 };
 
 export type Task = {
@@ -155,6 +157,7 @@ export type Task = {
   external_list_id: string | null;
   external_meta: TaskExternalMeta;
   synced_at: string | null;
+  hidden_at?: string | null;
   created_at: string;
   updated_at: string;
 };

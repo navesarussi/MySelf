@@ -14,6 +14,7 @@ export type MondayStatusValue = {
   label: string | null;
   is_done: boolean | null;
   text?: string | null;
+  index?: number | null;
 };
 
 export type MondayDateValue = {
@@ -28,6 +29,7 @@ export type MondayColumnValue = {
   label?: string | null;
   is_done?: boolean | null;
   date?: string | null;
+  index?: number | null;
 };
 
 export type MondayColumn = {
@@ -40,10 +42,16 @@ export type MondayColumn = {
 export type MondayItem = {
   id: string;
   name: string;
+  board?: { id: string } | null;
   column_values?: MondayColumnValue[];
 };
 
-export type MondayStatusLabelOption = { label: string; is_done?: boolean };
+export type MondayStatusLabelOption = {
+  label: string;
+  /** Label id from board settings — stable for API updates. */
+  index?: number;
+  is_done?: boolean;
+};
 
 export type MondayMapContext = {
   accountKey: string;
@@ -53,5 +61,13 @@ export type MondayMapContext = {
   boardTitle: string;
   statusColumnId: string | null;
   peopleColumnId: string | null;
+  statusLabels: MondayStatusLabelOption[];
+};
+
+export type MondayItemWritebackContext = {
+  boardId: string;
+  statusColumnId: string | null;
+  statusLabelIndex: number | null;
+  statusLabel: string | null;
   statusLabels: MondayStatusLabelOption[];
 };

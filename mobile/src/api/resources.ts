@@ -165,10 +165,33 @@ export const api = {
   createTask: (c: ApiConfig, body: Partial<Task>) =>
     apiFetch<Task>(c, "/tasks", { method: "POST", body }),
   task: (c: ApiConfig, id: string) => apiFetch<Task>(c, `/tasks/${id}`),
-  updateTask: (c: ApiConfig, id: string, body: Partial<Task>) =>
-    apiFetch<Task>(c, `/tasks/${id}`, { method: "PATCH", body }),
-  deleteTask: (c: ApiConfig, id: string) =>
-    apiFetch<{ ok: boolean }>(c, `/tasks/${id}`, { method: "DELETE" }),
+  updateTask: (
+    c: ApiConfig,
+    id: string,
+    body: Partial<Task> & {
+      monday_status_index?: number;
+      hide_locally?: boolean;
+      force_local?: boolean;
+      external_list_id?: string;
+    }
+  ) => apiFetch<Task>(c, `/tasks/${id}`, { method: "PATCH", body }),
+  copyTask: (c: ApiConfig, id: string, body: { project_id: string }) =>
+    apiFetch<Task>(c, `/tasks/${id}/copy`, { method: "POST", body }),
+  deleteTask: (
+    c: ApiConfig,
+    id: string,
+    opts?: { forceLocal?: boolean; hideLocally?: boolean }
+  ) => {
+    const sp = new URLSearchParams();
+    if (opts?.forceLocal) sp.set("force_local", "1");
+    if (opts?.hideLocally) sp.set("hide_locally", "1");
+    const qs = sp.toString();
+    return apiFetch<{ ok: boolean; local_only?: boolean; user_message_he?: string }>(
+      c,
+      `/tasks/${id}${qs ? `?${qs}` : ""}`,
+      { method: "DELETE" }
+    );
+  },
 
   habits: (c: ApiConfig) => apiFetch<Habit[]>(c, "/habits"),
   createHabit: (c: ApiConfig, body: Partial<Habit>) =>

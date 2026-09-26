@@ -82,7 +82,7 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const db = await userDb();
   // Rebuilt per query: a Supabase builder cannot be reused once awaited.
   const filtered = () => {
-    let query = db.from("tasks").select(TASK_SELECT);
+    let query = db.from("tasks").select(TASK_SELECT).is("hidden_at", null);
     if (project) query = query.eq("project_id", project);
     if (status) {
       const list = status
