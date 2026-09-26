@@ -13,7 +13,17 @@ export function pxPerDay(pxPerYear: number) {
   return pxPerYear / 365.25;
 }
 
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Epoch ms for a stored date or timestamp. A bare `YYYY-MM-DD` is the start of
+ * that day on this device, like the axis ticks (`new Date(y, m, d)`). JS parses
+ * a bare date as UTC midnight, which put period edges and the today marker
+ * 2–3 hours off the day lines in Israel — visible at day and hour zoom.
+ */
 export function toTime(iso: string) {
+  const m = DATE_ONLY.exec(iso);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
   return new Date(iso).getTime();
 }
 
@@ -174,8 +184,16 @@ export function formatHeDate(iso: string) {
   return new Date(iso).toLocaleDateString("he-IL");
 }
 
-/** Adaptive axis ticks: years → months → days → hours based on zoom density. */
-export type TimelineTick = { x: number; label: string; key: string; major?: boolean };
+/**
+ * Adaptive axis ticks: years → months → days → hours based on zoom density.
+ *
+ * `x` is the boundary the tick line is drawn at (Jan 1, the 1st, midnight, the
+ * hour). `labelX` is where its label sits: for a unit of time (a year, month or
+ * day) that is the middle of the unit, so an event in December 2020 sits under
+ * "2020" rather than next to the "2021" line. Hour labels name an instant and
+ * sit on their line.
+ */
+export type TimelineTick = { x: number; labelX: number; label: string; key: string; major?: boolean };
 
 export function timelineTicks(
   viewMin: number,
@@ -188,13 +206,17 @@ export function timelineTicks(
   const pph = ppd / 24;
   const pxPerYear = plotW / (span / YEAR_MS);
 
+  // Each unit switches in as soon as its labels fit (a month name is ~30px, a
+  // day number ~16px, "14:00" ~34px). The month view used to need 2.5px per
+  // day, so on a phone it showed only years until the view was ~4 months wide.
   let ticks: TimelineTick[];
-  if (pph >= 28) ticks = hourTicks(viewMin, viewMax, plotW, tickLocale);
-  else if (ppd >= 18) ticks = dayTicks(viewMin, viewMax, plotW, tickLocale);
-  else if (ppd >= 2.5) ticks = monthTicks(viewMin, viewMax, plotW, tickLocale);
+  if (pph >= 8) ticks = hourTicks(viewMin, viewMax, plotW, tickLocale);
+  else if (ppd >= 3) ticks = dayTicks(viewMin, viewMax, plotW, tickLocale);
+  else if (ppd >= 0.2) ticks = monthTicks(viewMin, viewMax, plotW, tickLocale);
   else {
     ticks = yearTicks(viewMin, viewMax, plotW).map((t) => ({
       x: t.x,
+      labelX: xFor(new Date(t.year, 6, 2).getTime(), viewMin, viewMax, plotW),
       label: String(t.year),
       key: `y-${t.year}`,
       major: true,
@@ -221,7 +243,6 @@ function hourTicks(min: number, max: number, plotW: number, tickLocale = "he-IL"
   if (pph < 40) step = 2;
   if (pph < 22) step = 3;
   if (pph < 14) step = 6;
-  if (pph < 8) step = 12;
 
   for (let t = start.getTime(); t <= end; t += step * HOUR_MS) {
     if (t < min - HOUR_MS || t > max + HOUR_MS) continue;
@@ -230,7 +251,8 @@ function hourTicks(min: number, max: number, plotW: number, tickLocale = "he-IL"
     const label = major
       ? d.toLocaleDateString(tickLocale, { day: "numeric", month: "short" })
       : `${String(d.getHours()).padStart(2, "0")}:00`;
-    ticks.push({ x: xFor(t, min, max, plotW), label, key: `h-${t}`, major });
+    const x = xFor(t, min, max, plotW);
+    ticks.push({ x, labelX: x, label, key: `h-${t}`, major });
   }
   return ticks;
 }
@@ -243,20 +265,25 @@ function dayTicks(min: number, max: number, plotW: number, tickLocale = "he-IL")
   const ppd = plotW / ((max - min) / DAY_MS);
 
   let step = 1;
-  if (ppd < 40) step = 2;
-  if (ppd < 22) step = 7;
-  if (ppd < 12) step = 14;
+  if (ppd < 24) step = 2;
+  if (ppd < 12) step = 7;
+  if (ppd < 5) step = 14;
 
   for (let t = start.getTime(); t <= end; t += step * DAY_MS) {
     if (t < min - DAY_MS || t > max + DAY_MS) continue;
     const d = new Date(t);
     const major = d.getDate() === 1;
-    const label = d.toLocaleDateString(tickLocale, {
-      day: "numeric",
-      month: major ? "short" : undefined,
-      year: major ? "numeric" : undefined,
+    const label = major
+      ? d.toLocaleDateString(tickLocale, { day: "numeric", month: "short" })
+      : String(d.getDate());
+    const noon = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).getTime();
+    ticks.push({
+      x: xFor(t, min, max, plotW),
+      labelX: xFor(noon, min, max, plotW),
+      label,
+      key: `d-${t}`,
+      major,
     });
-    ticks.push({ x: xFor(t, min, max, plotW), label, key: `d-${t}`, major });
   }
   return ticks;
 }
@@ -265,12 +292,13 @@ function monthTicks(min: number, max: number, plotW: number, tickLocale = "he-IL
   const ticks: TimelineTick[] = [];
   const minD = new Date(min);
   const maxD = new Date(max);
-  const start = new Date(minD.getFullYear(), minD.getMonth(), 1);
   const ppd = plotW / ((max - min) / DAY_MS);
 
   let step = 1;
-  if (ppd < 1.2) step = 3;
-  if (ppd < 0.5) step = 6;
+  if (ppd < 1.4) step = 3;
+  if (ppd < 0.45) step = 6;
+  // Align to the step (quarters, halves) so January — the year label — is always a tick.
+  const start = new Date(minD.getFullYear(), minD.getMonth() - (minD.getMonth() % step), 1);
 
   for (let y = start.getFullYear(), m = start.getMonth(); ; ) {
     const t = new Date(y, m, 1).getTime();
@@ -278,7 +306,9 @@ function monthTicks(min: number, max: number, plotW: number, tickLocale = "he-IL
     if (t >= min - DAY_MS) {
       ticks.push({
         x: xFor(t, min, max, plotW),
-        label: new Date(y, m, 1).toLocaleDateString(tickLocale, { month: "short", year: "numeric" }),
+        labelX: xFor((t + new Date(y, m + 1, 1).getTime()) / 2, min, max, plotW),
+        // January names the year; other months their short name.
+        label: m === 0 ? String(y) : new Date(y, m, 1).toLocaleDateString(tickLocale, { month: "short" }),
         key: `m-${y}-${m}`,
         major: m === 0,
       });

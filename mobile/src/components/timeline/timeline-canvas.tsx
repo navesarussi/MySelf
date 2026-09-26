@@ -1,7 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  Easing,
   Platform,
   Pressable,
   StyleSheet,
@@ -43,7 +42,9 @@ import {
   clusterEvents,
   clusterZoomTarget,
   dedupeEvents,
+  densityBins,
   stablePeriodLanes,
+  timeWindow,
   visibleLabelSegment,
   type TimelineCluster,
 } from "@/lib/timeline-engine";
@@ -54,12 +55,26 @@ import type { TimelineEvent } from "@/lib/types";
 
 const HOUR_MS = 60 * 60 * 1000;
 const EVENT_LANE_H = 30;
-const CLUSTER_GAP_PX = 48;
+/** Space between the axis and the first label lane. */
+const LABEL_TOP_GAP = 16;
+/** Label lanes the layout reserves when centering the board vertically. The
+ *  axis position no longer depends on how many lanes the current zoom needs —
+ *  it used to, so the whole board bobbed up and down while zooming. */
+const RESERVED_LABEL_LANES = 3;
+/** Width of one density-strip column. */
+const DENSITY_BIN_PX = 4;
+const DENSITY_MAX_H = 9;
+const CLUSTER_GAP_PX = 44;
 const LABEL_GAP_PX = 120;
 const MIN_SPAN_MS = 3 * HOUR_MS;
 const MILESTONE_CATEGORY = "אבן דרך";
 
 type Win = { min: number; max: number };
+
+/** Events you entered or marked as milestones, as opposed to calendar entries. */
+function isFeaturedEvent(ev: TimelineEvent) {
+  return ev.source !== "google_calendar" || ev.category === MILESTONE_CATEGORY;
+}
 
 function haptic(kind: "select" | "light") {
   if (Platform.OS === "web") return;
@@ -97,6 +112,8 @@ export function TimelineCanvas({
 
   const today = todayIso();
   const deduped = useMemo(() => dedupeEvents(events), [events]);
+  // dedupeEvents sorts by time, so this is an ascending index for binary search.
+  const times = useMemo(() => deduped.events.map(eventDateTime), [deduped.events]);
   const bounds = useMemo(() => timelineBounds(deduped.events, periods), [deduped.events, periods]);
   const [view, setView] = useState<Win>(() => ({ min: bounds.min, max: bounds.max }));
   const deferredView = useDeferredValue(view);
@@ -196,10 +213,10 @@ export function TimelineCanvas({
   const goToToday = useCallback(() => {
     const { min, max } = viewRef.current;
     const span = max - min;
-    const center = toTime(today) + 12 * HOUR_MS;
+    const center = Date.now();
     animateViewTo(clampView(center - span / 2, center + span / 2));
     haptic("light");
-  }, [animateViewTo, clampView, today]);
+  }, [animateViewTo, clampView]);
 
   const openCluster = useCallback(
     (cluster: TimelineCluster) => {
@@ -220,6 +237,8 @@ export function TimelineCanvas({
     },
     [animateViewTo, clampView, onClusterPress, onEventPress]
   );
+
+  const eventsLabel = useCallback((n: number) => t("timeline.eventsCount", { count: n }), [t]);
 
   // --- Pan (native-driver translate during drag, commit + momentum on release) ---
   const panRef = useRef(null);
@@ -295,41 +314,73 @@ export function TimelineCanvas({
   const tracksH = tracksHeight(laneCount);
   const intrinsicAxisY = axisLineTop(tracksH);
 
-  const zoomVisibleEvents = useMemo(
-    () => deduped.events.filter((ev) => isEventVisibleAtZoom(ev.min_zoom, span)),
-    [deduped.events, span]
-  );
+  const zoomLevel = spanToZoomLevel(span);
 
+  // Only events in the rendered window (the view plus one span either side for
+  // panning) are clustered — a binary search, not a pass over every event.
+  const windowEvents = useMemo(() => {
+    const { start, end } = timeWindow(times, padMin, padMax);
+    return deduped.events.slice(start, end);
+  }, [times, deduped.events, padMin, padMax]);
+
+  // Your own events and milestones are clustered apart from calendar entries,
+  // so a busy calendar never swallows them into a count chip.
   const clusters = useMemo(() => {
     if (!plotW) return [];
-    return clusterEvents(
-      zoomVisibleEvents,
-      deferredView.min,
-      deferredView.max,
-      plotW,
-      CLUSTER_GAP_PX
-    ).filter((cl) => cl.x >= -plotW && cl.x <= plotW * 2);
-  }, [zoomVisibleEvents, deferredView.min, deferredView.max, plotW]);
+    const featured: TimelineEvent[] = [];
+    const calendar: TimelineEvent[] = [];
+    for (const ev of windowEvents) {
+      if (!isEventVisibleAtZoom(ev.min_zoom, span)) continue;
+      (isFeaturedEvent(ev) ? featured : calendar).push(ev);
+    }
+    const make = (list: TimelineEvent[]) =>
+      clusterEvents(list, deferredView.min, deferredView.max, plotW, CLUSTER_GAP_PX);
+    // Calendar first, so featured markers draw on top where they meet.
+    return [...make(calendar), ...make(featured)];
+    // span only matters through the zoom level it maps to.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowEvents, zoomLevel, deferredView.min, deferredView.max, plotW]);
 
-  const { lanes: clusterLanes, laneCount: clusterLaneCount } = useMemo(
-    () => assignClusterLanes(clusters, LABEL_GAP_PX),
+  // Every event — including the ones too detailed for this zoom — as a
+  // density strip under the axis, so busy stretches read at a glance.
+  const density = useMemo(() => {
+    if (!plotW) return null;
+    const bins = Math.ceil((plotW * 3) / DENSITY_BIN_PX);
+    const counts = densityBins(times, padMin, padMax, bins);
+    let max = 0;
+    for (const n of counts) if (n > max) max = n;
+    return max > 0 ? { counts, max } : null;
+  }, [times, padMin, padMax, plotW]);
+
+  const { lanes: clusterLanes } = useMemo(
+    () =>
+      assignClusterLanes(
+        [...clusters].sort((a, b) => a.x - b.x),
+        LABEL_GAP_PX,
+        (cl) => cl.events.every(isFeaturedEvent)
+      ),
     [clusters]
   );
 
-  const intrinsicH = plotBandHeight(tracksH) + clusterLaneCount * EVENT_LANE_H + 16;
+  const intrinsicH = intrinsicAxisY + LABEL_TOP_GAP + RESERVED_LABEL_LANES * EVENT_LANE_H + 12;
   const topPad = Math.max((height - intrinsicH) / 2, 8);
   const axisY = topPad + intrinsicAxisY;
+  // Lanes that fit under the axis; clusters in deeper lanes keep their dot and
+  // drop the label instead of spilling out of the board.
+  const labelLanes = Math.max(Math.floor((height - axisY - LABEL_TOP_GAP - 8) / EVENT_LANE_H), 0);
 
   // Ticks generated over a 3-span overscan window so edges stay populated mid-drag.
   const ticks = useMemo(() => {
     if (!plotW) return [];
-    return timelineTicks(padMin, padMax, plotW * 3, localeTag).map((tk) => ({ ...tk, x: tk.x - plotW }));
+    return timelineTicks(padMin, padMax, plotW * 3, localeTag).map((tk) => ({
+      ...tk,
+      x: tk.x - plotW,
+      labelX: tk.labelX - plotW,
+    }));
   }, [padMin, padMax, plotW, localeTag]);
 
-  const todayX = plotW
-    ? xFor(toTime(today) + 12 * HOUR_MS, deferredView.min, deferredView.max, plotW)
-    : -1;
-  const zoomLevel = spanToZoomLevel(span);
+  // "Now", not noon of today: at hour zoom the marker is read against the hour lines.
+  const nowX = plotW ? xFor(Date.now(), deferredView.min, deferredView.max, plotW) : -1;
   const zoomLabel =
     zoomLevel === "years"
       ? t("common.years")
@@ -376,6 +427,11 @@ export function TimelineCanvas({
             <Animated.View
               onLayout={onLayout}
               style={{
+                // Time runs left to right whatever the app's direction. Under
+                // RTL, iOS mirrored every absolute `left` while the pan, pinch
+                // and tap math stayed left-to-right: a drag snapped the other
+                // way on release and pinch zoomed around the mirrored point.
+                direction: "ltr",
                 height,
                 borderRadius: fullscreen ? 0 : tokens.radius,
                 borderWidth: fullscreen ? 0 : 1,
@@ -405,7 +461,7 @@ export function TimelineCanvas({
                               top: 0,
                               bottom: 0,
                               width: StyleSheet.hairlineWidth,
-                              backgroundColor: c.border + "66",
+                              backgroundColor: c.border + "55",
                             }}
                           />
                         ))}
@@ -477,79 +533,121 @@ export function TimelineCanvas({
                           left: -plotW,
                           right: -plotW,
                           top: axisY,
-                          height: 2,
-                          backgroundColor: c.border,
+                          height: 1.5,
+                          backgroundColor: c.muted + "88",
                         }}
                       />
 
-                      {/* Today glow line */}
-                      {todayX >= -plotW && todayX <= plotW * 2 ? (
+                      {/* Density strip: every event, including those too detailed for this zoom */}
+                      {density
+                        ? density.counts.map((n, i) =>
+                            n === 0 ? null : (
+                              <View
+                                key={`dn-${i}`}
+                                pointerEvents="none"
+                                style={{
+                                  position: "absolute",
+                                  left: i * DENSITY_BIN_PX - plotW,
+                                  width: DENSITY_BIN_PX - 1,
+                                  top: axisY + 3,
+                                  height: 2 + Math.sqrt(n / density.max) * DENSITY_MAX_H,
+                                  borderBottomLeftRadius: 1,
+                                  borderBottomRightRadius: 1,
+                                  backgroundColor: c.accent,
+                                  opacity: 0.18 + 0.42 * Math.sqrt(n / density.max),
+                                }}
+                              />
+                            )
+                          )
+                        : null}
+
+                      {/* Ticks: line at the boundary, label centered in its unit */}
+                      {ticks.map((tick) => (
+                        <React.Fragment key={tick.key}>
+                          <View
+                            pointerEvents="none"
+                            style={{
+                              position: "absolute",
+                              left: tick.x - StyleSheet.hairlineWidth,
+                              top: axisY - (tick.major ? 9 : 5),
+                              width: tick.major ? 1.5 : 1,
+                              height: tick.major ? 9 : 5,
+                              backgroundColor: tick.major ? c.muted : c.border,
+                            }}
+                          />
+                          <View
+                            pointerEvents="none"
+                            style={{ position: "absolute", left: tick.labelX - 44, width: 88, top: axisY - 26, alignItems: "center" }}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={{
+                                color: tick.major ? c.ink : c.muted,
+                                fontSize: tick.major ? 11 : 10,
+                                fontWeight: tick.major ? "700" : "500",
+                                fontVariant: ["tabular-nums"],
+                              }}
+                            >
+                              {tick.label}
+                            </Text>
+                          </View>
+                        </React.Fragment>
+                      ))}
+
+                      {/* Now marker */}
+                      {nowX >= -plotW && nowX <= plotW * 2 ? (
                         <View
                           pointerEvents="none"
-                          style={{ position: "absolute", left: todayX - 8, top: 0, bottom: 0, width: 16, alignItems: "center" }}
+                          style={{ position: "absolute", left: nowX - 30, width: 60, top: 0, bottom: 0, alignItems: "center" }}
                         >
-                          <LinearGradient
-                            colors={[c.accent2 + "00", c.accent2 + "44", c.accent2 + "00"]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
+                          <View style={{ position: "absolute", top: 22, bottom: 0, width: 1.5, backgroundColor: c.accent2 }} />
+                          <View
+                            style={{
+                              position: "absolute",
+                              top: axisY - 4,
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: c.accent2,
+                              borderWidth: 1.5,
+                              borderColor: c.bg,
+                            }}
                           />
-                          <View style={{ width: 2, flex: 1, backgroundColor: c.accent2 }} />
-                          <View style={{ position: "absolute", top: axisY - 5, width: 10, height: 10, borderRadius: 999, backgroundColor: c.accent2 }} />
                           <View
                             style={{
                               position: "absolute",
                               top: 4,
-                              paddingHorizontal: 6,
+                              paddingHorizontal: 7,
                               paddingVertical: 2,
                               borderRadius: 999,
-                              backgroundColor: c.accent2 + "26",
-                              borderWidth: 1,
-                              borderColor: c.accent2 + "66",
+                              backgroundColor: c.accent2,
                             }}
                           >
-                            <Text style={{ color: c.accent2, fontSize: 9, fontWeight: "700" }}>
-                              {t("timeline.today")}
-                            </Text>
+                            <Text style={{ color: c.bg, fontSize: 10, fontWeight: "800" }}>{t("timeline.today")}</Text>
                           </View>
                         </View>
                       ) : null}
 
-                      {/* Ticks */}
-                      {ticks.map((tick) => (
-                        <View
-                          key={tick.key}
-                          pointerEvents="none"
-                          style={{ position: "absolute", left: tick.x - 40, width: 80, top: axisY - 26, alignItems: "center" }}
-                        >
-                          <Text
-                            numberOfLines={1}
-                            style={{
-                              color: tick.major ? c.ink : c.muted,
-                              fontSize: tick.major ? 10 : 9,
-                              fontWeight: tick.major ? "700" : "400",
-                            }}
-                          >
-                            {tick.label}
-                          </Text>
-                          <View style={{ width: 1, height: tick.major ? 12 : 6, backgroundColor: c.border, marginTop: 2 }} />
-                        </View>
-                      ))}
-
                       {/* Event clusters */}
-                      {clusters.map((cluster) => (
-                        <ClusterMarker
-                          key={cluster.key}
-                          cluster={cluster}
-                          duplicates={deduped.duplicates}
-                          axisY={axisY}
-                          labelTop={axisY + 16 + (clusterLanes.get(cluster.key) ?? 0) * EVENT_LANE_H}
-                          localeTag={localeTag}
-                          color={c}
-                          eventsLabel={(n) => t("timeline.eventsCount", { count: n })}
-                          onPress={() => openCluster(cluster)}
-                        />
-                      ))}
+                      {clusters.map((cluster) => {
+                        const lane = clusterLanes.get(cluster.key) ?? 0;
+                        return (
+                          <ClusterMarker
+                            key={cluster.key}
+                            cluster={cluster}
+                            dupCount={cluster.events.length === 1 ? (deduped.duplicates.get(cluster.events[0].id) ?? 0) : 0}
+                            axisY={axisY}
+                            labelTop={axisY + LABEL_TOP_GAP + lane * EVENT_LANE_H}
+                            showLabel={lane < labelLanes}
+                            showTime={zoomLevel === "days" || zoomLevel === "hours"}
+                            localeTag={localeTag}
+                            color={c}
+                            eventsLabel={eventsLabel}
+                            onPressCluster={openCluster}
+                            plotW={plotW}
+                          />
+                        );
+                      })}
                     </>
                   ) : null}
                 </Animated.View>
@@ -566,7 +664,7 @@ export function TimelineCanvas({
         periods={periods}
         periodLanes={lanes}
         laneCount={laneCount}
-        events={deduped.events}
+        times={times}
         today={today}
         onSeek={(next) => {
           userMovedRef.current = true;
@@ -615,146 +713,251 @@ function ControlBtn({
 }
 
 /**
- * One marker per cluster: a dot (or count chip for multi-event clusters) on the
- * axis, a hairline connector, and a single label block in its collision-free
- * lane. Duplicate rows show once with a ×N badge.
+ * One marker per cluster: a dot (or a count chip for a group) on the axis, a
+ * hairline connector, and a label in its collision-free lane. Duplicate rows
+ * show once with a ×N badge.
+ *
+ * Props are stable across re-renders (the press handler takes the cluster), so
+ * memo holds while the board re-renders on every zoom frame. Markers mount
+ * without an entrance animation: clusters regroup as the zoom changes, and a
+ * pop-in on each regroup read as flicker.
  */
 const ClusterMarker = React.memo(function ClusterMarker({
   cluster,
-  duplicates,
+  dupCount,
   axisY,
   labelTop,
+  showLabel,
+  showTime,
   localeTag,
   color,
   eventsLabel,
-  onPress,
+  onPressCluster,
+  plotW,
 }: {
+  plotW: number;
   cluster: TimelineCluster;
-  duplicates: Map<string, number>;
+  dupCount: number;
   axisY: number;
   labelTop: number;
+  showLabel: boolean;
+  showTime: boolean;
   localeTag: string;
   color: ReturnType<typeof useColors>;
   eventsLabel: (n: number) => string;
-  onPress: () => void;
+  onPressCluster: (cluster: TimelineCluster) => void;
 }) {
-  const appear = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
-  const multi = cluster.events.length > 1;
+  const count = cluster.events.length;
+  const multi = count > 1;
   const first = cluster.events[0];
   const isMilestone = !multi && first.category === MILESTONE_CATEGORY;
-  const isGoogle = !multi && first.source === "google_calendar";
-  const dotColor = multi ? color.accent : isMilestone || isGoogle ? color.accent2 : color.accent;
-  const dupCount = multi ? 0 : (duplicates.get(first.id) ?? 0);
-
-  useEffect(() => {
-    Animated.timing(appear, {
-      toValue: 1,
-      duration: 200,
-      easing: Easing.out(Easing.back(1.6)),
-      useNativeDriver: true,
-    }).start();
-  }, [appear]);
-
-  useEffect(() => {
-    if (!isMilestone) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [isMilestone, pulse]);
-
-  const dotSize = multi ? 20 : isMilestone ? 14 : 10;
+  const isManual = !multi && first.source !== "google_calendar";
+  const onPress = () => onPressCluster(cluster);
   const x = cluster.x;
 
-  const dateLabel = multi
-    ? `${new Date(cluster.timeMin).toLocaleDateString(localeTag, { month: "numeric", day: "numeric" })} – ${new Date(cluster.timeMax).toLocaleDateString(localeTag, { year: "2-digit", month: "numeric", day: "numeric" })}`
-    : new Date(eventDateTime(first)).toLocaleDateString(localeTag, {
-        year: "2-digit",
-        month: "numeric",
-        day: "numeric",
-      });
+  const date = (ms: number, withYear: boolean) =>
+    new Date(ms).toLocaleDateString(localeTag, {
+      day: "numeric",
+      month: "numeric",
+      ...(withYear ? { year: "2-digit" as const } : {}),
+    });
+  const sub = multi
+    ? `${date(cluster.timeMin, false)} – ${date(cluster.timeMax, true)}`
+    : showTime && first.event_time
+      ? `${first.event_time.slice(0, 5)} · ${date(eventDateTime(first), false)}`
+      : date(eventDateTime(first), true);
+
+  // Group chip grows with its digits; single events are dots, milestones ringed.
+  const chipW = multi ? Math.max(20, 10 + String(count).length * 7) : 0;
+  const dot = isMilestone ? 12 : 9;
+  const fill = multi ? color.accent : isMilestone ? color.accent2 : isManual ? color.ink : color.accent;
 
   return (
     <>
-      {/* Connector from axis to label lane */}
-      <View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          left: x - StyleSheet.hairlineWidth,
-          top: axisY + 6,
-          height: Math.max(labelTop - axisY - 7, 0),
-          width: StyleSheet.hairlineWidth * 2,
-          backgroundColor: color.border,
-        }}
-      />
+      {showLabel ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: x - 0.5,
+            top: axisY + 5,
+            height: Math.max(labelTop - axisY - 6, 0),
+            width: 1,
+            backgroundColor: color.border,
+          }}
+        />
+      ) : null}
 
-      <Animated.View
+      <Pressable
+        onPress={onPress}
+        hitSlop={12}
         style={{
           position: "absolute",
-          left: x - dotSize / 2,
-          top: axisY - dotSize / 2 + 1,
-          opacity: appear,
-          transform: [{ scale: appear }],
+          left: x - (multi ? chipW / 2 : dot / 2),
+          top: axisY - (multi ? 10 : dot / 2) + 0.75,
         }}
       >
-        {isMilestone ? (
-          <Animated.View
-            style={{
-              position: "absolute",
-              left: -6,
-              top: -6,
-              width: dotSize + 12,
-              height: dotSize + 12,
-              borderRadius: 999,
-              backgroundColor: color.accent2,
-              opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0] }),
-              transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.8] }) }],
-            }}
-          />
-        ) : null}
-        <Pressable onPress={onPress} hitSlop={12}>
+        {multi ? (
           <View
             style={{
-              width: dotSize,
-              height: dotSize,
-              borderRadius: 999,
-              backgroundColor: multi ? color.accent : dotColor,
+              width: chipW,
+              height: 20,
+              borderRadius: 10,
+              backgroundColor: fill,
               borderWidth: 2,
               borderColor: color.bg,
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            {multi ? (
-              <Text style={{ color: color.bg, fontSize: 10, fontWeight: "800" }}>{cluster.events.length}</Text>
-            ) : null}
+            <Text style={{ color: color.bg, fontSize: 10, fontWeight: "800", fontVariant: ["tabular-nums"] }}>
+              {count}
+            </Text>
           </View>
-        </Pressable>
-      </Animated.View>
+        ) : (
+          <View
+            style={{
+              width: dot,
+              height: dot,
+              borderRadius: dot / 2,
+              backgroundColor: fill,
+              borderWidth: isMilestone ? 2.5 : 1.5,
+              borderColor: isMilestone ? color.accent2 + "55" : color.bg,
+            }}
+          />
+        )}
+      </Pressable>
 
-      <Animated.View style={{ position: "absolute", left: x - 56, top: labelTop, width: 112, opacity: appear }}>
-        <Pressable onPress={onPress}>
+      {showLabel ? (
+        <Pressable
+          onPress={onPress}
+          style={{
+            position: "absolute",
+            // Near an edge the label slides inward (its connector still marks
+            // the exact date) instead of being cut off by the board.
+            left: x >= 0 && x <= plotW ? Math.min(Math.max(x - 58, 2), plotW - 118) : x - 58,
+            top: labelTop,
+            width: 116,
+          }}
+        >
           <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 3 }}>
             <Text
               numberOfLines={1}
-              style={{ color: color.ink, fontSize: 10.5, fontWeight: "600", textAlign: "center", flexShrink: 1 }}
+              style={{
+                color: color.ink,
+                fontSize: 11,
+                fontWeight: isMilestone ? "800" : "600",
+                textAlign: "center",
+                flexShrink: 1,
+              }}
             >
-              {multi ? eventsLabel(cluster.events.length) : displayTitle(first)}
+              {multi ? eventsLabel(count) : displayTitle(first)}
             </Text>
             {dupCount > 1 ? (
               <Text style={{ color: color.muted, fontSize: 9, fontWeight: "700" }}>×{dupCount}</Text>
             ) : null}
           </View>
-          <Text style={{ color: color.muted, fontSize: 9, textAlign: "center" }}>{dateLabel}</Text>
+          <Text style={{ color: color.muted, fontSize: 9.5, textAlign: "center", fontVariant: ["tabular-nums"] }}>
+            {sub}
+          </Text>
         </Pressable>
-      </Animated.View>
+      ) : null}
     </>
+  );
+});
+
+const MINIMAP_BIN_PX = 3;
+
+/**
+ * The minimap's fixed layer: period strips, an event-density histogram and the
+ * today tick. It depends only on the data and the track width, so it renders
+ * once and not on every frame of a zoom or drag. (It used to draw one view per
+ * event — 4,000 of them — and redraw them all on every frame.)
+ */
+const MinimapStatic = React.memo(function MinimapStatic({
+  trackW,
+  bounds,
+  periods,
+  periodLanes,
+  laneCount,
+  times,
+  today,
+  color,
+}: {
+  trackW: number;
+  bounds: { min: number; max: number };
+  periods: LifePeriod[];
+  periodLanes: Map<string, number>;
+  laneCount: number;
+  times: readonly number[];
+  today: string;
+  color: ReturnType<typeof useColors>;
+}) {
+  const fullSpan = Math.max(bounds.max - bounds.min, 1);
+  const laneRows = Math.min(laneCount, 4);
+  const stripH = 3;
+  const stripsTop = 5;
+  const bins = useMemo(() => {
+    const n = Math.max(Math.floor(trackW / MINIMAP_BIN_PX), 1);
+    const counts = densityBins(times, bounds.min, bounds.max, n);
+    let max = 0;
+    for (const c of counts) if (c > max) max = c;
+    return { counts, max };
+  }, [times, bounds.min, bounds.max, trackW]);
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {periods.map((p) => {
+        const lane = periodLanes.get(p.id);
+        if (lane === undefined || lane >= laneRows) return null;
+        const left = ((toTime(p.start_date) - bounds.min) / fullSpan) * trackW;
+        const right = ((toTime(p.end_date || today) - bounds.min) / fullSpan) * trackW;
+        return (
+          <View
+            key={p.id}
+            style={{
+              position: "absolute",
+              left: Math.max(left, 0),
+              width: Math.max(Math.min(right, trackW) - Math.max(left, 0), 2),
+              top: stripsTop + lane * (stripH + 1),
+              height: stripH,
+              borderRadius: 2,
+              backgroundColor: p.color + "AA",
+            }}
+          />
+        );
+      })}
+
+      {bins.max > 0
+        ? bins.counts.map((n, i) =>
+            n === 0 ? null : (
+              <View
+                key={i}
+                style={{
+                  position: "absolute",
+                  left: i * MINIMAP_BIN_PX,
+                  width: MINIMAP_BIN_PX - 1,
+                  bottom: 4,
+                  height: 2 + Math.sqrt(n / bins.max) * 12,
+                  backgroundColor: color.muted,
+                  opacity: 0.35 + 0.5 * Math.sqrt(n / bins.max),
+                }}
+              />
+            )
+          )
+        : null}
+
+      <View
+        style={{
+          position: "absolute",
+          left: ((toTime(today) - bounds.min) / fullSpan) * trackW,
+          top: 2,
+          bottom: 2,
+          width: 1.5,
+          backgroundColor: color.accent2,
+        }}
+      />
+    </View>
   );
 });
 
@@ -764,7 +967,7 @@ function Minimap({
   periods,
   periodLanes,
   laneCount,
-  events,
+  times,
   today,
   onSeek,
   color,
@@ -774,7 +977,7 @@ function Minimap({
   periods: LifePeriod[];
   periodLanes: Map<string, number>;
   laneCount: number;
-  events: TimelineEvent[];
+  times: readonly number[];
   today: string;
   onSeek: (v: Win) => void;
   color: ReturnType<typeof useColors>;
@@ -789,10 +992,6 @@ function Minimap({
 
   const winLeft = ((view.min - bounds.min) / fullSpan) * trackW;
   const winWidth = Math.max(((view.max - view.min) / fullSpan) * trackW, 14);
-
-  const laneRows = Math.min(laneCount, 4);
-  const stripH = 3;
-  const stripsTop = 5;
 
   const onGestureEvent = useCallback(
     (e: PanGestureHandlerGestureEvent) => {
@@ -824,6 +1023,7 @@ function Minimap({
       <View
         onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
         style={{
+          direction: "ltr",
           height: 40,
           marginTop: 8,
           borderRadius: tokens.radiusSm,
@@ -832,62 +1032,16 @@ function Minimap({
           justifyContent: "center",
         }}
       >
-        {/* Period strips (same stable lanes as the board, compressed) */}
-        {trackW > 0
-          ? periods.map((p) => {
-              const lane = periodLanes.get(p.id);
-              if (lane === undefined || lane >= laneRows) return null;
-              const left = ((toTime(p.start_date) - bounds.min) / fullSpan) * trackW;
-              const right = ((toTime(p.end_date || today) - bounds.min) / fullSpan) * trackW;
-              return (
-                <View
-                  key={p.id}
-                  pointerEvents="none"
-                  style={{
-                    position: "absolute",
-                    left: Math.max(left, 0),
-                    width: Math.max(Math.min(right, trackW) - Math.max(left, 0), 2),
-                    top: stripsTop + lane * (stripH + 1),
-                    height: stripH,
-                    borderRadius: 2,
-                    backgroundColor: p.color + "AA",
-                  }}
-                />
-              );
-            })
-          : null}
-
-        {/* Event density dots */}
-        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 26, height: 3 }}>
-          {trackW > 0
-            ? events.map((ev) => (
-                <View
-                  key={ev.id}
-                  style={{
-                    position: "absolute",
-                    left: ((eventDateTime(ev) - bounds.min) / fullSpan) * trackW - 1,
-                    width: 2,
-                    height: 3,
-                    borderRadius: 1,
-                    backgroundColor: color.muted,
-                  }}
-                />
-              ))
-            : null}
-        </View>
-
-        {/* Today tick */}
         {trackW > 0 ? (
-          <View
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              left: ((toTime(today) - bounds.min) / fullSpan) * trackW,
-              top: 2,
-              bottom: 2,
-              width: 1.5,
-              backgroundColor: color.accent2,
-            }}
+          <MinimapStatic
+            trackW={trackW}
+            bounds={bounds}
+            periods={periods}
+            periodLanes={periodLanes}
+            laneCount={laneCount}
+            times={times}
+            today={today}
+            color={color}
           />
         ) : null}
 
@@ -900,7 +1054,7 @@ function Minimap({
               top: 2,
               bottom: 2,
               borderRadius: 6,
-              backgroundColor: color.accent + "33",
+              backgroundColor: color.accent + "26",
               borderWidth: 1.5,
               borderColor: color.accent,
             }}

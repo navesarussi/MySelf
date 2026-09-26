@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  densityBins,
+  lowerBound,
+  timeWindow,
   assignClusterLanes,
   clampSpanX,
   clusterEvents,
@@ -9,7 +12,7 @@ import {
   stablePeriodLanes,
   visibleLabelSegment,
 } from "../timeline-engine";
-import { toTime, eventDateTime } from "../timeline-layout";
+import { toTime, eventDateTime, xFor } from "../timeline-layout";
 import type { LifePeriod } from "../life-periods";
 import type { TimelineEvent } from "../types";
 
@@ -202,5 +205,70 @@ describe("visibleLabelSegment", () => {
     assert.ok(seg);
     assert.equal(seg!.left, 108);
     assert.equal(seg!.left + seg!.width, 292);
+  });
+});
+
+describe("time index", () => {
+  const times = [10, 20, 20, 30, 40];
+
+  it("lowerBound finds the first time at or after t", () => {
+    assert.equal(lowerBound(times, 0), 0);
+    assert.equal(lowerBound(times, 20), 1);
+    assert.equal(lowerBound(times, 21), 3);
+    assert.equal(lowerBound(times, 99), 5);
+  });
+
+  it("timeWindow is half-open [min, max)", () => {
+    assert.deepEqual(timeWindow(times, 20, 40), { start: 1, end: 4 });
+  });
+
+  it("densityBins counts only events inside the window", () => {
+    assert.deepEqual(densityBins(times, 10, 50, 4), [1, 2, 1, 1]);
+    assert.deepEqual(densityBins(times, 15, 35, 2), [2, 1]);
+    assert.deepEqual(densityBins(times, 50, 60, 3), [0, 0, 0]);
+  });
+});
+
+describe("clusterEvents precision", () => {
+  it("never chains a steady run of events into one wide cluster", () => {
+    // One event every 10 days for a year, on a 360px-wide year: markers ~10px apart.
+    const events = dedupeEvents(
+      Array.from({ length: 36 }, (_, i) => {
+        const d = new Date(2026, 0, 1 + i * 10);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return ev({ id: `e${i}`, event_date: iso });
+      })
+    ).events;
+    const viewMin = toTime("2026-01-01");
+    const viewMax = toTime("2027-01-01");
+    const clusters = clusterEvents(events, viewMin, viewMax, 360, 44);
+    assert.ok(clusters.length >= 4, `expected several clusters, got ${clusters.length}`);
+    const msPerPx = (viewMax - viewMin) / 360;
+    for (const c of clusters) {
+      // A cluster covers at most ~two buckets (one merge), each under 44px·√2.
+      assert.ok((c.timeMax - c.timeMin) / msPerPx < 44 * Math.SQRT2 * 2 + 1);
+      // Its marker sits among its members.
+      const x = c.x;
+      assert.ok(x >= xFor(c.timeMin, viewMin, viewMax, 360) - 0.5 && x <= xFor(c.timeMax, viewMin, viewMax, 360) + 0.5);
+    }
+  });
+
+  it("keeps the same grouping for a small zoom change", () => {
+    const events = dedupeEvents(
+      Array.from({ length: 20 }, (_, i) => ev({ id: `e${i}`, event_date: `2026-0${1 + Math.floor(i / 4)}-1${i % 4}` }))
+    ).events;
+    const a = clusterEvents(events, toTime("2026-01-01"), toTime("2027-01-01"), 360, 44);
+    const b = clusterEvents(events, toTime("2026-01-01"), toTime("2026-12-28"), 360, 44);
+    assert.deepEqual(a.map((c) => c.events.length), b.map((c) => c.events.length));
+  });
+});
+
+describe("assignClusterLanes priority", () => {
+  it("gives priority clusters the first lanes", () => {
+    const mk = (key: string, x: number) => ({ key, x, timeMin: 0, timeMax: 0, events: [] });
+    const clusters = [mk("cal", 100), mk("milestone", 120)];
+    const { lanes } = assignClusterLanes(clusters, 96, (c) => c.key === "milestone");
+    assert.equal(lanes.get("milestone"), 0);
+    assert.equal(lanes.get("cal"), 1);
   });
 });

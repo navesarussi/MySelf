@@ -9,6 +9,7 @@ import {
   periodIntersectsView,
   TRACKS_PAD_TOP,
   tracksHeight,
+  timelineTicks,
   toTime,
 } from "../timeline-layout";
 import type { LifePeriod } from "../life-periods";
@@ -117,5 +118,41 @@ describe("assignVisiblePeriodLanes", () => {
 
     assert.ok(lowestBottom + LANE_GAP <= axisTop);
     assert.equal(lanes.has("4"), true);
+  });
+});
+
+describe("toTime and tick placement are local-day accurate", () => {
+  it("parses a bare date as local midnight, like the tick lines", () => {
+    assert.equal(toTime("2026-09-26"), new Date(2026, 8, 26).getTime());
+  });
+
+  it("centers a year label inside its year, not on the Jan 1 line", () => {
+    const min = new Date(2015, 0, 1).getTime();
+    const max = new Date(2027, 0, 1).getTime();
+    const ticks = timelineTicks(min, max, 400);
+    const y2020 = ticks.find((t) => t.label === "2020")!;
+    const jan1 = ((new Date(2020, 0, 1).getTime() - min) / (max - min)) * 400;
+    const midYear = ((new Date(2020, 6, 2).getTime() - min) / (max - min)) * 400;
+    assert.ok(Math.abs(y2020.x - jan1) < 0.5, "tick line on Jan 1");
+    assert.ok(Math.abs(y2020.labelX - midYear) < 0.5, "label mid-year");
+  });
+
+  it("switches to month labels once a month name fits", () => {
+    const min = new Date(2020, 0, 1).getTime();
+    const max = new Date(2021, 6, 1).getTime();
+    const labels = timelineTicks(min, max, 360, "en-US").map((t) => t.label);
+    assert.ok(labels.includes("2021"), "January names the year");
+    assert.ok(labels.some((l) => /^[A-Z][a-z]{2}$/.test(l)), `month names present: ${labels.join(",")}`);
+  });
+
+});
+
+describe("month ticks at coarse steps", () => {
+  it("align to January so the year label always appears", () => {
+    const min = new Date(2019, 5, 10).getTime();
+    const max = new Date(2025, 5, 10).getTime();
+    const ticks = timelineTicks(min, max, 900, "en-US");
+    const labels = ticks.map((t) => t.label);
+    assert.ok(labels.includes("2021") && labels.includes("2022"), labels.join(","));
   });
 });

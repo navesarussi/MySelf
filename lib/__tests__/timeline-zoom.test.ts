@@ -22,19 +22,24 @@ describe("isEventVisibleAtZoom", () => {
     assert.equal(isEventVisibleAtZoom("years", 12 * HOUR_MS), true);
   });
 
-  it("hides day-level events until day zoom", () => {
+  it("shows manual (months) events on the overview", () => {
+    assert.equal(isEventVisibleAtZoom("months", 10 * YEAR_MS), true);
+  });
+
+  it("shows all-day (days) events from the month view", () => {
     assert.equal(isEventVisibleAtZoom("days", 10 * YEAR_MS), false);
-    assert.equal(isEventVisibleAtZoom("days", 10 * DAY_MS), true);
+    assert.equal(isEventVisibleAtZoom("days", 18 * 30 * DAY_MS), true);
     assert.equal(isEventVisibleAtZoom("days", 12 * HOUR_MS), true);
   });
 
-  it("hides hour-level events until hour zoom", () => {
-    assert.equal(isEventVisibleAtZoom("hours", 10 * DAY_MS), false);
+  it("shows timed (hours) events from the day view, not the month view", () => {
+    assert.equal(isEventVisibleAtZoom("hours", 18 * 30 * DAY_MS), false);
+    assert.equal(isEventVisibleAtZoom("hours", 10 * DAY_MS), true);
     assert.equal(isEventVisibleAtZoom("hours", 12 * HOUR_MS), true);
   });
 
   it("defaults missing min_zoom to months", () => {
-    assert.equal(isEventVisibleAtZoom(undefined, 10 * YEAR_MS), false);
+    assert.equal(isEventVisibleAtZoom(undefined, 10 * YEAR_MS), true);
     assert.equal(isEventVisibleAtZoom(null, 18 * 30 * DAY_MS), true);
   });
 });
