@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { ApiError } from "../api/client";
 import type { Task } from "@/lib/types";
 import {
+  formatLocalOnlyWarning,
   isLocalOnlyAllowed,
   readApiError,
   taskDeleteErrorFlash,
@@ -65,6 +66,25 @@ describe("task error flash keys", () => {
         user_message_he: "הודעה מותאמת",
       }),
       "הודעה מותאמת"
+    );
+  });
+
+  it("uses Hebrew user_message_he directly in formatLocalOnlyWarning", () => {
+    const text = formatLocalOnlyWarning(
+      { local_only: true, user_message_he: "אין הרשאה לעדכן" },
+      (k) => `t:${k}`
+    );
+    assert.equal(text, "אין הרשאה לעדכן");
+  });
+
+  it("maps monday permission to dedicated flash key", () => {
+    assert.equal(
+      taskLocalOnlyWarningFlash({ local_only: true, warning: "monday_permission_denied", source: "monday" }),
+      "flash.taskMondayPermissionDenied"
+    );
+    assert.equal(
+      taskUpdateErrorFlash(task("monday"), "monday_permission_denied"),
+      "flash.taskMondayPermissionDenied"
     );
   });
 

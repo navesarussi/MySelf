@@ -3,6 +3,7 @@ import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { resolveExternalListId } from "./resolve-list-id";
 import { applyExternalStatusChange } from "./writeback";
 import {
+  classifyWritebackError,
   pickPreferredWritebackError,
   shouldSkipMondayArchiveFallback,
   WritebackError,
@@ -21,9 +22,9 @@ import {
   archiveByExternalId,
 } from "./monday/status";
 import { parseMondayExternalId } from "./monday/ids";
-import { getMondayAccessToken } from "./monday/status";
+import { getMondayAccessToken, mutateMondayStatusColumn } from "./monday/status";
 import { fetchMondayItemWritebackContext } from "./monday/fetch";
-import { mondayGraphql, MondayGraphqlError } from "./monday/graphql";
+import { assertMondayWriteScope } from "./monday/scopes";
 
 export type ExternalTaskFieldPatch = {
   title?: string;
@@ -51,35 +52,31 @@ async function writeMondayStatusIndex(
 ): Promise<void> {
   if (!task.external_id) throw new WritebackError("external_missing_ids", "external_missing_ids", true);
   const { accountKey, itemId } = parseMondayExternalId(task.external_id);
+  await assertMondayWriteScope(accountKey);
   const token = await getMondayAccessToken(accountKey);
   const listId = resolveExternalListId(task);
   const ctx = await fetchMondayItemWritebackContext(token, itemId, listId);
   if (!ctx?.statusColumnId) throw new WritebackError("monday_no_status_column", "monday_no_status_column", true);
 
+  const labelText =
+    task.external_meta?.statusLabels?.find((l) => l.index === labelIndex)?.label ?? null;
+
   try {
-    await mondayGraphql(
+    await mutateMondayStatusColumn(
       token,
-      `mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: String!) {
-        change_simple_column_value(
-          board_id: $boardId
-          item_id: $itemId
-          column_id: $columnId
-          value: $value
-        ) { id }
-      }`,
-      {
-        boardId: ctx.boardId,
-        itemId,
-        columnId: ctx.statusColumnId,
-        value: String(labelIndex),
-      }
+      ctx.boardId,
+      itemId,
+      ctx.statusColumnId,
+      labelIndex,
+      labelText
     );
   } catch (err) {
-    reportIntegrationError("monday", err, {
-      route: "task-patch",
-      userAction: "monday_status_index",
-      upstreamBody: err instanceof MondayGraphqlError ? err.body : undefined,
-    });
+    if (!classifyWritebackError(err).localOnlyAllowed) {
+      reportIntegrationError("monday", err, {
+        route: "task-patch",
+        userAction: "monday_status_index",
+      });
+    }
     throw err;
   }
 }

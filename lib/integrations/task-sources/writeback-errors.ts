@@ -40,7 +40,24 @@ export class WritebackError extends Error {
 function mondayMessageFromGraphql(err: MondayGraphqlError): WritebackError {
   const joined = err.graphqlMessages.join(" ").toLowerCase();
   const body = err.body.toLowerCase();
+  const codes = err.graphqlCodes.map((c) => c.toLowerCase());
 
+  if (
+    codes.includes("userunauthorizedexception") ||
+    err.graphqlStatusCodes.includes(403) ||
+    err.status === 403 ||
+    joined.includes("not authorized") ||
+    joined.includes("unauthorized") ||
+    joined.includes("permission") ||
+    joined.includes("insufficient")
+  ) {
+    return new WritebackError(
+      "monday_permission_denied",
+      err.message,
+      true,
+      "אין הרשאה לעדכן פריט זה ב-Monday"
+    );
+  }
   if (
     joined.includes("item not found") ||
     joined.includes("could not find item") ||
@@ -63,20 +80,6 @@ function mondayMessageFromGraphql(err: MondayGraphqlError): WritebackError {
       err.message,
       true,
       "אין גישה ללוח Monday — בדוק שהלוח נבחר בהגדרות"
-    );
-  }
-  if (
-    err.status === 403 ||
-    joined.includes("not authorized") ||
-    joined.includes("unauthorized") ||
-    joined.includes("permission") ||
-    joined.includes("insufficient")
-  ) {
-    return new WritebackError(
-      "monday_permission_denied",
-      err.message,
-      true,
-      "אין הרשאה לעדכן פריט זה ב-Monday"
     );
   }
   if (joined.includes("column") && joined.includes("not found")) {
@@ -151,6 +154,14 @@ export function classifyWritebackError(err: unknown): WritebackError {
       msg,
       true,
       "האינטגרציה מנותקת — התחבר מחדש בהגדרות"
+    );
+  }
+  if (msg === "monday_missing_write_scope") {
+    return new WritebackError(
+      "integration_auth_failed",
+      msg,
+      true,
+      "חסרה הרשאת כתיבה ל-Monday — התחבר מחדש בהגדרות"
     );
   }
   if (msg === "missing_refresh_token" || msg.startsWith("token_refresh_failed")) {

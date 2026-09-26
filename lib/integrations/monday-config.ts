@@ -1,8 +1,9 @@
 export const MONDAY_PROVIDER = "monday";
 
-/** Scopes requested only if the Monday app has them enabled.
- * Prefer omitting `scope` in the authorize URL so Monday uses the app's
- * configured list (avoids invalid_scope when a scope isn't toggled on). */
+/** Scopes the Monday app should have enabled in Developer Center (boards:write required for complete/reopen).
+ * We omit `scope` on the authorize URL so Monday grants whatever the app config lists — requesting
+ * scopes not toggled in Developer Center returns invalid_scope. Persisted oauth_scope from token
+ * exchange is checked before writeback; missing boards:write → reconnect prompt. */
 export const MONDAY_SCOPES = [
   "me:read",
   "account:read",
