@@ -32,6 +32,9 @@ import {
 } from "../../src/components/ui";
 import { FormModal } from "../../src/components/form-modal";
 import type { ContentEntry } from "@/lib/types";
+
+/** Stable while loading, so the category memo does not rerun every render. */
+const NO_ENTRIES: ContentEntry[] = [];
 import { ALL_FILTER } from "@/lib/i18n/types";
 
 type FormState = {
@@ -84,7 +87,7 @@ export default function LibraryScreen() {
     }
   }, [params.add, router]);
 
-  const entries = entriesQ.data ?? [];
+  const entries = entriesQ.data ?? NO_ENTRIES;
   const categories = useMemo(
     () => Array.from(new Set(entries.map((e) => e.category))).sort(),
     [entries]
@@ -248,7 +251,7 @@ export default function LibraryScreen() {
         </Card>
       );
     },
-    [expanded, c, textStart, writingDirection, t, tokens.press, isPending, removeEntry, openEdit]
+    [expanded, c, textStart, writingDirection, t, isPending, removeEntry, openEdit]
   );
 
   const keyExtractor = useCallback((item: ContentEntry) => item.id, []);

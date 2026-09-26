@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { api, type HomePayload } from "../../src/api/resources";
-import { todayLocalISO } from "../../src/hooks";
+import { todayLocalISO, useTodayDate } from "../../src/hooks";
 import { useHabitActions } from "../../src/hooks/use-habit-actions";
 import { useI18n } from "../../src/i18n";
 import { useApiQuery, useApiMutation, queryKeys, queryClient, patchTaskInHome, patchRelationshipInHome } from "../../src/query";
@@ -48,7 +48,7 @@ export default function HomeScreen() {
   const [viewingHabitId, setViewingHabitId] = useState<string | null>(null);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const today = todayISO();
-  const todayDate = new Date();
+  const todayDate = useTodayDate();
   const uniqueHabits = useMemo(() => dedupeHabits(data?.habits ?? [], today), [data?.habits, today]);
   const habitsPendingToday = useMemo(
     () => sortHabitsByReportUrgency(uniqueHabits).filter((h) => isAwaitingReport(h)),

@@ -87,7 +87,7 @@ export function HabitHistoryTable({
   const c = useColors();
   const { textStart, writingDirection } = useLayoutDir();
   const [reportedExpanded, setReportedExpanded] = useState(false);
-  const safeDays = Array.isArray(days) ? days : [];
+  const safeDays = useMemo(() => (Array.isArray(days) ? days : []), [days]);
 
   const { missed, reported, other } = useMemo(() => partitionHabitHistory(safeDays), [safeDays]);
 

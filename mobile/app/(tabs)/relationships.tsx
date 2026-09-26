@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Contacts from "expo-contacts";
 import { differenceInCalendarDays } from "date-fns";
 import { api, type HomePayload } from "../../src/api/resources";
-import { todayLocalISO } from "../../src/hooks";
+import { todayLocalISO, useTodayDate } from "../../src/hooks";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
@@ -37,7 +37,7 @@ import { FormModal } from "../../src/components/form-modal";
 import { RelationshipCard } from "../../src/components/relationship-card";
 import { whatsappUrl } from "@/lib/integrations/phone";
 import { mapDeviceContact } from "@/lib/device-contact-map";
-import type { Relationship } from "@/lib/types";
+import type { Project, Relationship } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
 
 type FormState = {
@@ -53,6 +53,9 @@ type FormState = {
 };
 
 const DEFAULT_CADENCE_DAYS = "7";
+/** Stable fallbacks while loading, so memos keyed on these do not rerun every render. */
+const NO_RELATIONSHIPS: Relationship[] = [];
+const NO_PROJECTS: Project[] = [];
 
 const emptyForm = (projectId: string): FormState => ({
   name: "",
@@ -100,7 +103,7 @@ export default function RelationshipsScreen() {
 
   const relQ = useApiQuery(queryKeys.relationships, api.relationships);
   const projectsQ = useApiQuery(queryKeys.projects, api.projects);
-  const projects = projectsQ.data ?? [];
+  const projects = projectsQ.data ?? NO_PROJECTS;
   const defaultProjectId = useMemo(
     () => projects.find((p) => p.name === "כללי")?.id ?? projects[0]?.id ?? "",
     [projects]
@@ -143,8 +146,8 @@ export default function RelationshipsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.add, defaultProjectId, router]);
 
-  const today = new Date();
-  const relationships = relQ.data ?? [];
+  const today = useTodayDate();
+  const relationships = relQ.data ?? NO_RELATIONSHIPS;
   const groups = useMemo(
     () => Array.from(new Set(relationships.map((r) => r.group_name).filter((g): g is string => !!g))).sort(),
     [relationships]
@@ -161,8 +164,7 @@ export default function RelationshipsScreen() {
       const bd = daysSince(b, today) ?? Number.MAX_SAFE_INTEGER;
       return bd - ad;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relationships, groupFilter]);
+  }, [relationships, groupFilter, today]);
 
   const contactedToday = useCallback(
     async (r: Relationship) => {
