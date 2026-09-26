@@ -16,7 +16,7 @@ build:
         working_directory: ./ios
     - eas/configure_eas_update:
         inputs:
-          throw_if_not_configured: false
+          throw_if_not_configured: true
     - eas/configure_ios_credentials:
         id: configure_ios_credentials
     - eas/configure_ios_version:

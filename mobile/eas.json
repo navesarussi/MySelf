@@ -16,10 +16,16 @@
     },
     "production": {
       "autoIncrement": true,
+      "channel": "production",
       "config": "production.yml",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://myselfapp.xyz"
       }
+    }
+  },
+  "update": {
+    "production": {
+      "channel": "production"
     }
   },
   "submit": {

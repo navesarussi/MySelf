@@ -2,7 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "2.7.2",
+    "version": "2.7.3",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -70,6 +70,15 @@
       ],
       "@bacons/apple-targets"
     ],
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6f81d110-b64f-4339-8dc2-2c93ae180fe8",
+      "enabled": true,
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
+    },
     "experiments": {
       "typedRoutes": false
     },
