@@ -304,6 +304,14 @@ export default function FinanceScreen() {
     return result != null;
   };
 
+  const splitVariableTxn = async (
+    id: string,
+    parts: Array<{ amount: number; category: string | null; expense_type: string | null; kind: string }>
+  ): Promise<boolean> => {
+    const result = await run((cfg) => api.splitFinanceTransaction(cfg, id, parts), { onSuccess: invalidateFinance });
+    return result != null;
+  };
+
   const deleteVariableTxn = async (id: string): Promise<boolean> => {
     const result = await run((cfg) => api.deleteFinanceTransaction(cfg, id), { onSuccess: invalidateFinance });
     if (result != null) {
@@ -459,6 +467,7 @@ export default function FinanceScreen() {
                   categories={categories}
                   onSaveTxn={saveVariableTxn}
                   onDeleteTxn={deleteVariableTxn}
+                  onSplitTxn={splitVariableTxn}
                 />
               );
             }

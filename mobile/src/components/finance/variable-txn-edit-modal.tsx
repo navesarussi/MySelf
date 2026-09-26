@@ -11,6 +11,7 @@ import { CategoryPicker } from "./category-picker";
 import { RememberRuleToggle } from "./categorize-controls";
 import { MoneyItemTypeChips } from "./money-item-type-chips";
 import { TxnDateTimeFields } from "./txn-datetime-fields";
+import { SplitTxnEditor } from "./split-txn-editor";
 
 export function VariableTxnEditModal({
   visible,
@@ -19,6 +20,7 @@ export function VariableTxnEditModal({
   onClose,
   onSave,
   onDelete,
+  onSplit,
 }: {
   visible: boolean;
   txn: VariableTxnItem;
@@ -38,6 +40,7 @@ export function VariableTxnEditModal({
     is_internal?: boolean;
   }) => Promise<boolean>;
   onDelete: () => Promise<boolean>;
+  onSplit?: (parts: Array<{ amount: number; category: string | null; expense_type: string | null; kind: string }>) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   const c = useColors();
@@ -100,6 +103,9 @@ export function VariableTxnEditModal({
                 {internal ? t("finance.markedInternal") : t("finance.markInternal")}
               </Text>
             </Pressable>
+            {onSplit ? (
+              <SplitTxnEditor totalAmount={txn.amount} categories={categories} onSave={onSplit} />
+            ) : null}
             <View style={{ marginTop: 16, gap: 8 }}>
               <Btn
                 label={saving ? t("common.saving") : t("common.save")}

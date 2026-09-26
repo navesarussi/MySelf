@@ -810,6 +810,8 @@ export const messages = {
       manageCategories: "ניהול קטגוריות",
       renameCategory: "שם קטגוריה",
       categoryWeeklyBudget: "תקציב שבועי לקטגוריה (אופציונלי)",
+      splitTxn: "פיצול תנועה",
+      addSplitPart: "הוסף חלק",
     },
     projects: {
       title: "פרויקטים",
@@ -1974,6 +1976,8 @@ export const messages = {
       manageCategories: "Manage categories",
       renameCategory: "Category name",
       categoryWeeklyBudget: "Weekly budget for category (optional)",
+      splitTxn: "Split transaction",
+      addSplitPart: "Add part",
     },
     projects: {
       title: "Projects",

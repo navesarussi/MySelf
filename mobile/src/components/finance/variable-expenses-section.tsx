@@ -20,6 +20,7 @@ export function VariableExpensesSection({
   categories,
   onSaveTxn,
   onDeleteTxn,
+  onSplitTxn,
 }: {
   groups: VariableCategoryGroup[];
   loading?: boolean;
@@ -43,6 +44,7 @@ export function VariableExpensesSection({
     is_internal?: boolean;
   }) => Promise<boolean>;
   onDeleteTxn: (id: string) => Promise<boolean>;
+  onSplitTxn?: (id: string, parts: Array<{ amount: number; category: string | null; expense_type: string | null; kind: string }>) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   const c = useColors();
@@ -133,6 +135,10 @@ export function VariableExpensesSection({
             if (ok) setEditTxnId(null);
             return ok;
           })}
+          onSplit={onSplitTxn ? (parts) => onSplitTxn(editTxn.id, parts).then((ok) => {
+            if (ok) setEditTxnId(null);
+            return ok;
+          }) : undefined}
         />
       ) : null}
     </View>
