@@ -102,8 +102,12 @@ export function TimelineCanvas({
   const deferredView = useDeferredValue(view);
   const [plotW, setPlotW] = useState(0);
 
-  // Re-fit when the underlying data range changes.
+  // Follow the data range (first load, a sync that adds older or later events)
+  // until the user moves the view. Re-fitting after that threw away their
+  // zoom and position whenever a background refresh changed the range.
+  const userMovedRef = useRef(false);
   useEffect(() => {
+    if (userMovedRef.current) return;
     setView({ min: bounds.min, max: bounds.max });
   }, [bounds.min, bounds.max]);
 
@@ -151,6 +155,7 @@ export function TimelineCanvas({
 
   const animateViewTo = useCallback(
     (target: Win, duration = 300) => {
+      userMovedRef.current = true;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       const start = viewRef.current;
       const t0 = Date.now();
@@ -183,6 +188,8 @@ export function TimelineCanvas({
 
   const fitAll = useCallback(() => {
     animateViewTo({ min: bounds.min, max: bounds.max });
+    // Fitting everything means "follow the data" again.
+    userMovedRef.current = false;
     haptic("light");
   }, [animateViewTo, bounds.min, bounds.max]);
 
@@ -232,6 +239,7 @@ export function TimelineCanvas({
         const dtMove = (translationX / w) * span;
         panX.setValue(0);
         const committed = clampView(viewRef.current.min - dtMove, viewRef.current.max - dtMove);
+        userMovedRef.current = true;
         setView(committed);
         if (Math.abs(velocityX) > 250) {
           const dtVel = (velocityX / w) * span * 0.28;
@@ -259,6 +267,7 @@ export function TimelineCanvas({
       const focus = start.min + startSpan * anchor;
       const nextSpan = startSpan / Math.max(scale, 0.05);
       const next = clampView(focus - nextSpan * anchor, focus + nextSpan * (1 - anchor));
+      userMovedRef.current = true;
       setView(next);
       maybeHaptic(next);
     },
@@ -559,7 +568,10 @@ export function TimelineCanvas({
         laneCount={laneCount}
         events={deduped.events}
         today={today}
-        onSeek={(next) => setView(clampView(next.min, next.max))}
+        onSeek={(next) => {
+          userMovedRef.current = true;
+          setView(clampView(next.min, next.max));
+        }}
         color={c}
       />
 

@@ -10,8 +10,10 @@ import type { LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
 
 /** Inline timeline on the main screen: the cinematic gesture canvas plus a
- *  button to open the immersive full-screen (landscape-capable) view. */
-export function TimelineVisual({
+ *  button to open the immersive full-screen (landscape-capable) view.
+ *  Memoized: the timeline screen re-renders on every keystroke in its forms,
+ *  and the canvas should not re-render with it. */
+export const TimelineVisual = React.memo(function TimelineVisual({
   events,
   periods,
   onEventPress,
@@ -63,4 +65,4 @@ export function TimelineVisual({
       />
     </View>
   );
-}
+});

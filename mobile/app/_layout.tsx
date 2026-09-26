@@ -3,7 +3,7 @@
  * Do not add website-parity work from here; shared API lives under app/api + lib.
  */
 import "react-native-gesture-handler";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { AppState, Platform } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -15,7 +15,7 @@ import { AntDesign, Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
 import { SessionProvider, useSession } from "../src/session";
 import type { HomePayload } from "../src/api/resources";
-import { queryKeys } from "../src/query";
+import { clearAccountCaches, queryKeys } from "../src/query";
 import { syncWidgetSnapshot, useWidgetHomeQuerySync } from "../src/widget/sync-widget-snapshot";
 import { setAppVersion } from "../src/api/client";
 import { getAppVersion } from "../src/version";
@@ -34,6 +34,23 @@ SplashScreen.preventAutoHideAsync();
 // Identify this build to version-gated endpoints (see lib/api/client-version.ts).
 // Set once at module load, not per-request: the version is fixed for the process.
 setAppVersion(getAppVersion());
+
+/** Signing out forgets the account's cached data, so the next account to sign
+ *  in on this device never sees it. Only on a real sign-out: the token is also
+ *  null while the session is still loading at launch. */
+function useClearCachesOnSignOut() {
+  const { token } = useSession();
+  const hadToken = useRef(false);
+  useEffect(() => {
+    if (token) {
+      hadToken.current = true;
+      return;
+    }
+    if (!hadToken.current) return;
+    hadToken.current = false;
+    void clearAccountCaches();
+  }, [token]);
+}
 
 function useWidgetSnapshotLifecycle() {
   const { token } = useSession();
@@ -61,6 +78,7 @@ function AppStack() {
   const { t } = useI18n();
   usePushNotifications();
   useWidgetSnapshotLifecycle();
+  useClearCachesOnSignOut();
 
   return (
     <>
