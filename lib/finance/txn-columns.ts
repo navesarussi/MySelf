@@ -1,6 +1,6 @@
-/** Columns for cashflow aggregation — no full row hydration. */
+/** Columns for cashflow aggregation — includes fields for month-net expense typing. */
 export const TXN_CASHFLOW_COLUMNS =
-  "txn_date, amount, kind, category, needs_categorization, is_internal";
+  "id, txn_date, amount, kind, category, needs_categorization, is_internal, merchant, description, expense_type";
 
 /** Columns for transaction list cards (finance screen, categorize). */
 export const TXN_LIST_COLUMNS =

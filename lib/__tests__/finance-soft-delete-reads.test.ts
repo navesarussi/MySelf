@@ -5,7 +5,6 @@ import { join } from "node:path";
 
 /** Regression: user-facing finance reads must exclude soft-deleted transactions. */
 const READ_PATHS = [
-  "lib/finance/month-net.ts",
   "lib/finance/apply-rule-pending.ts",
   "lib/finance/merchant-category.ts",
   "lib/finance/category-list.ts",

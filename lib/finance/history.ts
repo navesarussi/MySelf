@@ -1,4 +1,6 @@
 import { summarizeCashflow, type CashflowRow, type CategorySpend } from "@/lib/finance/cashflow";
+import type { MonthNetSplit } from "@/lib/finance/month-net";
+import type { MerchantRule } from "@/lib/finance/merchant-rules";
 import { buildHistoryTrends, type HistoryTrends } from "@/lib/finance/history-trends";
 import { round2 } from "@/lib/finance/money";
 
@@ -116,10 +118,14 @@ export function buildFinanceHistory(input: {
   months: number;
   transactions: readonly CashflowRow[];
   planSeeds: readonly HistoryPlanSeed[];
+  rulesMap?: Map<string, MerchantRule>;
+  splitsByParentId?: ReadonlyMap<string, readonly MonthNetSplit[]>;
 }): FinanceHistory {
   const keys = monthKeysEndingAt(input.endMonth, input.months);
   const seedByMonth = new Map(input.planSeeds.map((s) => [s.month, s]));
-  const summaries = keys.map((month) => summarizeCashflow(input.transactions, month));
+  const summaries = keys.map((month) =>
+    summarizeCashflow(input.transactions, month, input.rulesMap, input.splitsByParentId)
+  );
 
   const rows: HistoryMonthRow[] = summaries.map((summary, i) => {
     const prev = i > 0 ? summaries[i - 1] : null;

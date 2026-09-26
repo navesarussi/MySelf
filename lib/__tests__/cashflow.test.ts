@@ -51,6 +51,27 @@ describe("summarizeCashflow", () => {
     assert.equal(summary.by_category[0].amount, 150);
   });
 
+  it("excludes savings from expense and net totals", () => {
+    const summary = summarizeCashflow(
+      [
+        txn({ txn_date: "2026-09-01", amount: 1000, kind: "income" }),
+        txn({ txn_date: "2026-09-02", amount: 400, kind: "expense", category: "מזון" }),
+        txn({
+          txn_date: "2026-09-03",
+          amount: 200,
+          kind: "expense",
+          category: "חיסכון",
+          expense_type: "savings",
+        }),
+      ],
+      "2026-09"
+    );
+    assert.equal(summary.income, 1000);
+    assert.equal(summary.expense, 400);
+    assert.equal(summary.net, 600);
+    assert.equal(summary.by_category.length, 1);
+  });
+
   it("strictly filters out internal transactions", () => {
     const summary = summarizeCashflow(
       [

@@ -13,6 +13,7 @@ import { inferredCategory, inferTxnKind, shouldSkipCategorizationPrompt } from "
 import type { FinanceSource } from "@/lib/finance/external-key";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
 import { reconcileMonthTransactions } from "@/lib/finance/reconcile";
+import { fetchSplitsByParentIds } from "@/lib/finance/month-net";
 import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
 
 /** Bank/card sync and import sources — kind is authoritative from the feed. */
@@ -180,8 +181,11 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
   let lines = (lineRows ?? []).map((r) => rowToLine(r as Record<string, unknown>));
   lines = await ensureTemplateLines(planId!, lines);
 
-  const rulesMap = await fetchMerchantRulesMap();
-  return buildMonthPlanView(month, planId!, lines, txns, rulesMap, weeklyOverride);
+  const [rulesMap, splitsByParentId] = await Promise.all([
+    fetchMerchantRulesMap(),
+    fetchSplitsByParentIds(txns.map((t) => t.id)),
+  ]);
+  return buildMonthPlanView(month, planId!, lines, txns, rulesMap, weeklyOverride, splitsByParentId);
 }
 
 async function ensurePlanRow(month: string): Promise<PlanMeta> {
