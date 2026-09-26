@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, readJson, str, denyUnlessPrimary } from "@/lib/api/auth";
 import { decideCalibration, listParamSets, proposeCalibration, type BacktestPreset } from "@/lib/trading/service";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 300;
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
   try {
@@ -12,10 +13,10 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});
 
 /** { action: "propose", preset, years } | { action: "approve" | "reject", id, confirm: true } */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
   const body = await readJson(req);
@@ -33,4 +34,4 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "calibration_failed" }, { status: 409 });
   }
-}
+});

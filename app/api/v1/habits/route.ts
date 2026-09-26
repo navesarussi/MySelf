@@ -6,13 +6,14 @@ import { badRequest, conflict, dbError, isApiAuthorized, optStr, readJson, str, 
 import { dedupeHabits } from "@/lib/habit-stats";
 import { isUniqueViolation } from "@/lib/data-integrity";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function revalidateHabitPaths() {
   revalidatePath("/habits");
   revalidatePath("/");
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await (await userDb())
     .from("habits")
@@ -26,9 +27,9 @@ export async function GET(req: NextRequest) {
   const unique = dedupeHabits(rows);
   scheduleDataIntegrityCleanup(unique.length < rows.length);
   return NextResponse.json(unique);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const name = str(body.name);
@@ -48,4 +49,4 @@ export async function POST(req: NextRequest) {
   if (error) return isUniqueViolation(error) ? conflict("habit_duplicate") : dbError();
   revalidateHabitPaths();
   return NextResponse.json(data, { status: 201 });
-}
+});

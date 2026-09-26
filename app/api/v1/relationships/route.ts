@@ -4,6 +4,7 @@ import { userDb } from "@/lib/db/user-db";
 import { normalizePhone } from "@/lib/integrations/phone";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized, projectWriteError } from "@/lib/api/auth";
 import type { Relationship } from "@/lib/types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type RelRow = Relationship & { projects: { name: string } | null };
 
@@ -13,7 +14,7 @@ function revalidateRelationshipPaths() {
   revalidatePath("/");
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await (await userDb())
     .from("relationships")
@@ -26,9 +27,9 @@ export async function GET(req: NextRequest) {
     projects: undefined,
   }));
   return NextResponse.json(relationships);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const name = str(body.name);
@@ -68,4 +69,4 @@ export async function POST(req: NextRequest) {
   }
   revalidateRelationshipPaths();
   return NextResponse.json(data, { status: 201 });
-}
+});

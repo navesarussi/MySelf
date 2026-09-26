@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hasValidSession, sessionIdentity, unauthorized } from "@/lib/api/auth";
 import { makeSessionToken, sessionNeedsRefresh } from "@/lib/auth";
 import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /**
  * Session probe — the app calls this on launch and after sign-in.
@@ -12,7 +13,7 @@ import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
  * regular use never sees an expiry, while a device that stops checking in
  * loses access on schedule — which is the point of having an expiry at all.
  */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await hasValidSession(req))) return unauthorized();
 
   const identity = await sessionIdentity(req);
@@ -34,4 +35,4 @@ export async function GET(req: NextRequest) {
     expires_at: new Date(identity.exp * 1000).toISOString(),
     ...(refreshed ? { token: refreshed } : {}),
   });
-}
+});

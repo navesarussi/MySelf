@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, notFound, readJson, str, unauthorized } from "@/lib/api/auth";
 import { normalizeCategory } from "@/lib/finance/category-list";
 import { deleteMerchantRule, updateMerchantRuleById } from "@/lib/finance/merchant-rules";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await ctx.params;
   const body = await readJson(req);
@@ -49,9 +50,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     console.error("[finance/merchant-rules PATCH]", err);
     return dbError();
   }
-}
+});
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export const DELETE = withRouteHandler(async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(_req))) return unauthorized();
   const { id } = await ctx.params;
   try {
@@ -61,4 +62,4 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     console.error("[finance/merchant-rules DELETE]", err);
     return dbError();
   }
-}
+});

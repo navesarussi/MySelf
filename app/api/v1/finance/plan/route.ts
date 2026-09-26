@@ -3,12 +3,13 @@ import { badRequest, dbError, isApiAuthorized, readJson, unauthorized } from "@/
 import { getOrCreateMonthPlan, updateWeeklyBudgetOverride } from "@/lib/finance/plan-store";
 import { normalizeWeeklyPace } from "@/lib/finance/weekly";
 import type { MonthPlanView } from "@/lib/finance/plan-types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function normalizePlanResponse(plan: MonthPlanView): MonthPlanView {
   return { ...plan, weekly_pace: normalizeWeeklyPace(plan.weekly_pace) };
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const month = req.nextUrl.searchParams.get("month");
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return badRequest("invalid_month");
@@ -20,9 +21,9 @@ export async function GET(req: NextRequest) {
     console.error("[finance/plan GET]", err);
     return dbError();
   }
-}
+});
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const month = req.nextUrl.searchParams.get("month");
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return badRequest("invalid_month");
@@ -50,4 +51,4 @@ export async function PATCH(req: NextRequest) {
     console.error("[finance/plan PATCH]", err);
     return dbError();
   }
-}
+});

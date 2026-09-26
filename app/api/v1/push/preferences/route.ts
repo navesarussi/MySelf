@@ -5,19 +5,20 @@ import {
   readJson,
   unauthorized,
 } from "@/lib/api/auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
   type NotificationPreferencesPatch,
 } from "@/lib/push/preferences";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const prefs = await getNotificationPreferences();
   return NextResponse.json(prefs);
-}
+});
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const patch: NotificationPreferencesPatch = {};
@@ -46,4 +47,4 @@ export async function PATCH(req: NextRequest) {
     }
     return NextResponse.json({ error: code }, { status: 500 });
   }
-}
+});

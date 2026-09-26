@@ -1,5 +1,6 @@
 import React from "react";
 import { Text, View } from "react-native";
+import { reportClientError } from "../error-reporting";
 import { useI18n } from "../i18n";
 import { useLayoutDir } from "../layout-dir";
 import { useColors, tokens } from "../theme";
@@ -22,6 +23,13 @@ function logBoundaryError(name: string | undefined, error: Error, info: React.Er
   if (info.componentStack) {
     console.error(`${label} component stack`, info.componentStack);
   }
+  reportClientError({
+    name: error.name,
+    message: error.message,
+    stack: [error.stack, info.componentStack].filter(Boolean).join("\n"),
+    screen: name,
+    userAction: "error_boundary",
+  });
 }
 
 export class ErrorBoundary extends React.Component<BoundaryProps, State> {

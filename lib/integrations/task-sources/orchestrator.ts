@@ -15,6 +15,7 @@ import {
 } from "../tokens";
 import { buildExternalTaskUpsert, dedupeDraftsByExternalId, idsToMarkDone } from "./merge";
 import { MONDAY_PROVIDER } from "../monday-config";
+import { reportIntegrationError } from "@/lib/error-reporting";
 
 const BATCH_SIZE = 100;
 
@@ -279,6 +280,7 @@ export async function syncAllTaskSources(): Promise<
     try {
       results[id] = await syncTaskSource(id);
     } catch (err) {
+      reportIntegrationError(id, err, { userAction: "syncAllTaskSources" });
       results[id] = {
         imported: 0,
         markedDone: 0,

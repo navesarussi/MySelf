@@ -6,9 +6,10 @@ import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
 import { currentUserId } from "@/lib/db/current-user";
 import { runAsUser } from "@/lib/db/user-context";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Manual calendar sync from the app — same behavior as the web's manual sync. */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const token = await getIntegrationToken(GOOGLE_PROVIDER);
@@ -34,4 +35,4 @@ export async function POST(req: NextRequest) {
   }));
 
   return NextResponse.json({ ok: true, started: true });
-}
+});

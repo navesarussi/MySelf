@@ -3,8 +3,9 @@ import { isApiAuthorized, unauthorized, dbError } from "@/lib/api/auth";
 import { GITHUB_PROVIDER } from "@/lib/integrations/github-config";
 import { getIntegrationToken } from "@/lib/integrations/tokens";
 import { createGithubProvider } from "@/lib/integrations/task-sources/github/provider";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const token = await getIntegrationToken(GITHUB_PROVIDER);
@@ -21,4 +22,4 @@ export async function GET(req: NextRequest) {
     console.error("[github-repos]", message);
     return dbError(message);
   }
-}
+});

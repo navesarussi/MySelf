@@ -4,13 +4,14 @@ import { userDb } from "@/lib/db/user-db";
 import { badRequest, conflict, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, isUniqueViolation } from "@/lib/data-integrity";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function revalidateGoalPaths() {
   revalidatePath("/goals");
   revalidatePath("/");
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await (await userDb())
     .from("goals")
@@ -21,9 +22,9 @@ export async function GET(req: NextRequest) {
   const unique = dedupeGoals(rows);
   scheduleDataIntegrityCleanup(unique.length < rows.length);
   return NextResponse.json(unique);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const title = str(body.title);
@@ -43,4 +44,4 @@ export async function POST(req: NextRequest) {
   if (error) return isUniqueViolation(error) ? conflict("goal_duplicate") : dbError();
   revalidateGoalPaths();
   return NextResponse.json(data, { status: 201 });
-}
+});

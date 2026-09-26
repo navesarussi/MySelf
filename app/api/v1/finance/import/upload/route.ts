@@ -3,16 +3,18 @@ import { badRequest, isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { financeImportUserId } from "@/lib/api/finance-import-user";
 import { FinanceImportLayerError, runFinanceImport } from "@/lib/finance/import/run-import";
 import type { FinanceImportSource } from "@/lib/finance/import/types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const SOURCE_HINTS = new Set<FinanceImportSource>(["leumi", "cal", "max", "excel", "manual"]);
 const MAX_BYTES = 12 * 1024 * 1024;
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
-  let form: FormData;
+  type UploadForm = { get(name: string): FormDataEntryValue | null };
+  let form: UploadForm;
   try {
-    form = await req.formData();
+    form = (await req.formData()) as unknown as UploadForm;
   } catch {
     return badRequest("invalid_form_data");
   }
@@ -50,4 +52,4 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "import_failed";
     return badRequest(msg);
   }
-}
+});

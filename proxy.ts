@@ -45,7 +45,7 @@ export async function proxy(req: NextRequest) {
     const cors = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Maintainer-Test",
       "Access-Control-Max-Age": "86400",
     };
     if (req.method === "OPTIONS") {
@@ -53,6 +53,13 @@ export async function proxy(req: NextRequest) {
     }
     const authHeader = req.headers.get("authorization");
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+
+    // Client error reports — session optional; route handler rate-limits anonymous IPs.
+    if (pathname === "/api/v1/client-errors" && req.method === "POST") {
+      const res = NextResponse.next();
+      for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
+      return res;
+    }
 
     // iOS Shortcut + GitHub Actions Leumi sync (no session cookie).
     if (pathname === "/api/v1/finance/ingest" && req.method === "POST") {

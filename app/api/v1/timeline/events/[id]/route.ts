@@ -4,10 +4,11 @@ import { userDb } from "@/lib/db/user-db";
 import { parseMinZoom } from "@/lib/timeline-zoom";
 import { badRequest, dbError, isApiAuthorized, notFound, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { TimelineEvent } from "@/lib/types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export const GET = withRouteHandler(async function GET(_req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(_req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -22,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (error) return dbError();
   if (!data) return notFound();
   return NextResponse.json(data as TimelineEvent);
-}
+});
 
 function revalidateTimelinePaths() {
   revalidatePath("/timeline");
@@ -31,7 +32,7 @@ function revalidateTimelinePaths() {
 
 /** Same rules as the web: edits to Google-synced events become overrides;
  *  manual events are edited in place. */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   const body = await readJson(req);
@@ -76,10 +77,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (error) return dbError();
   revalidateTimelinePaths();
   return NextResponse.json(data);
-}
+});
 
 /** Manual events are deleted; Google-synced events are hidden (like the web). */
-export async function DELETE(req: NextRequest, { params }: Params) {
+export const DELETE = withRouteHandler(async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -102,4 +103,4 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (error) return dbError();
   revalidateTimelinePaths();
   return NextResponse.json({ ok: true, hidden: existing?.source === "google_calendar" });
-}
+});

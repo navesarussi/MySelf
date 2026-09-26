@@ -3,8 +3,9 @@ import { isApiAuthorized, unauthorized, dbError } from "@/lib/api/auth";
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import { getIntegrationToken } from "@/lib/integrations/tokens";
 import { createMondayProvider } from "@/lib/integrations/task-sources/monday/provider";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const accountKey = req.nextUrl.searchParams.get("account_key");
@@ -26,4 +27,4 @@ export async function GET(req: NextRequest) {
     console.error("[monday-boards]", message);
     return dbError(message);
   }
-}
+});

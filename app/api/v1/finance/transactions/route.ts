@@ -6,8 +6,9 @@ import { loadCategoryHistory } from "@/lib/finance/merchant-category";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
 import { suggestForTxn } from "@/lib/finance/suggest-txn";
 import { TXN_LIST_COLUMNS } from "@/lib/finance/txn-columns";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const sp = req.nextUrl.searchParams;
   const month = sp.get("month");
@@ -43,4 +44,4 @@ export async function GET(req: NextRequest) {
   });
   if (includeTotal) return NextResponse.json({ items, total: count ?? items.length });
   return NextResponse.json(items);
-}
+});

@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, notFound, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { TimelineEventLinkKind } from "@/lib/types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type Params = { params: Promise<{ id: string }> };
 
 const LINK_KINDS: TimelineEventLinkKind[] = ["image", "note", "link"];
 
-export async function GET(req: NextRequest, { params }: Params) {
+export const GET = withRouteHandler(async function GET(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -20,9 +21,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     .order("created_at", { ascending: true });
   if (error) return dbError();
   return NextResponse.json(data ?? []);
-}
+});
 
-export async function POST(req: NextRequest, { params }: Params) {
+export const POST = withRouteHandler(async function POST(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -51,4 +52,4 @@ export async function POST(req: NextRequest, { params }: Params) {
     .single();
   if (error) return dbError();
   return NextResponse.json(data, { status: 201 });
-}
+});

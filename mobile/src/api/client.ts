@@ -46,6 +46,16 @@ export async function apiFetch<T>(
       data && typeof data === "object" && "error" in data
         ? String((data as { error: unknown }).error)
         : `http_${res.status}`;
+    void import("../error-reporting").then(({ reportClientError }) =>
+      reportClientError({
+        message,
+        name: "ApiError",
+        route: path,
+        httpStatus: res.status,
+        userAction: `${init?.method ?? "GET"} ${path}`,
+        upstreamBody: data,
+      })
+    );
     throw new ApiError(res.status, message);
   }
   return data as T;

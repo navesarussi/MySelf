@@ -4,10 +4,11 @@ import { buildHabitHistoryGrid } from "@/lib/habit-history";
 import { loadHabitReports } from "@/lib/habit-reports-store";
 import { userDb } from "@/lib/db/user-db";
 import type { Habit } from "@/lib/types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(req: NextRequest, { params }: Params) {
+export const GET = withRouteHandler(async function GET(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -21,4 +22,4 @@ export async function GET(req: NextRequest, { params }: Params) {
   const grid = buildHabitHistoryGrid(habit, reports, new Date(), days);
 
   return NextResponse.json({ reports, grid });
-}
+});

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 import { addPlanLine } from "@/lib/finance/plan-store";
 import type { PlanLineType } from "@/lib/finance/expense-type";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const LINE_TYPES = new Set<PlanLineType>(["income", "fixed", "variable", "planned", "savings"]);
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const month = str(body.month);
@@ -26,4 +27,4 @@ export async function POST(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});

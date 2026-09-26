@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { data, error } = await (await userDb())
     .from("life_periods")
@@ -11,9 +12,9 @@ export async function GET(req: NextRequest) {
     .order("sort_order", { ascending: true });
   if (error) return dbError();
   return NextResponse.json(data || []);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const title = str(body.title);
@@ -35,4 +36,4 @@ export async function POST(req: NextRequest) {
   if (error) return dbError();
   revalidatePath("/timeline");
   return NextResponse.json(data, { status: 201 });
-}
+});

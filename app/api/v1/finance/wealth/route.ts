@@ -3,11 +3,12 @@ import { badRequest, dbError, isApiAuthorized, readJson, unauthorized } from "@/
 import { parseWealthImportText } from "@/lib/finance/har-bituach-parse";
 import { getWealthSummary, importWealthItems, upsertWealthItem } from "@/lib/finance/wealth-store";
 import type { WealthCategory, WealthSource } from "@/lib/finance/wealth-types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const CATEGORIES = new Set<WealthCategory>(["pension", "insurance", "investment", "property", "other"]);
 const SOURCES = new Set<WealthSource>(["manual", "cover_import", "har_bituach", "agent"]);
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   try {
     const summary = await getWealthSummary();
@@ -15,9 +16,9 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
 
@@ -64,4 +65,4 @@ export async function POST(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
 import { normalizeReportTime } from "@/lib/habit-stats";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,7 +15,7 @@ function revalidateHabitPaths() {
 const num = (v: unknown) => Math.max(0, Number(v ?? 0) || 0);
 
 /** Mirrors updateHabit: full edit of a habit, including manual stat fixes. */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   const body = await readJson(req);
@@ -41,9 +42,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (error) return dbError();
   revalidateHabitPaths();
   return NextResponse.json(data);
-}
+});
 
-export async function DELETE(req: NextRequest, { params }: Params) {
+export const DELETE = withRouteHandler(async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -51,4 +52,4 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (error) return dbError();
   revalidateHabitPaths();
   return NextResponse.json({ ok: true });
-}
+});

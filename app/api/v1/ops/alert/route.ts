@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, denyUnlessPrimary, readJson } from "@/lib/api/auth";
 import { sendOpsAlert } from "@/lib/ops/alert";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /**
  * POST { title, body, ref } — push an operator alert to the primary account.
@@ -9,7 +10,7 @@ import { sendOpsAlert } from "@/lib/ops/alert";
  * under /api/v1 so it takes the same session token the smoke test already
  * minted, and is primary-only: a guest account must not page the operator.
  */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
 
@@ -21,4 +22,4 @@ export async function POST(req: NextRequest) {
 
   const result = await sendOpsAlert({ title, body, ref: `ops:${ref}` });
   return NextResponse.json({ ok: result !== null, result });
-}
+});

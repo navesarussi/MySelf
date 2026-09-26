@@ -7,6 +7,7 @@ import {
   updateTokenSettings,
 } from "@/lib/integrations/tokens";
 import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type PullCompleted = "none" | "recent" | "all";
 const PULL_COMPLETED_VALUES: PullCompleted[] = ["none", "recent", "all"];
@@ -20,7 +21,7 @@ function isPullCompleted(value: unknown): value is PullCompleted {
   return typeof value === "string" && PULL_COMPLETED_VALUES.includes(value as PullCompleted);
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   try {
@@ -34,9 +35,9 @@ export async function GET(req: NextRequest) {
     console.error("[google-tasks-settings-get]", message);
     return dbError(message);
   }
-}
+});
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const body = await readJson(req);
@@ -82,4 +83,4 @@ export async function PATCH(req: NextRequest) {
     console.error("[google-tasks-settings-patch]", message);
     return dbError(message);
   }
-}
+});

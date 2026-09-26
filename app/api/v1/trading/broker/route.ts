@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { getBrokerStatus } from "@/lib/trading/service";
 import { getSettings } from "@/lib/trading/store";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 30;
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   try {
     const settings = await getSettings();
@@ -13,4 +14,4 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "broker_failed" }, { status: 500 });
   }
-}
+});

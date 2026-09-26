@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, readJson, denyUnlessPrimary } from "@/lib/api/auth";
 import { executeCommand, parseCommand } from "@/lib/trading/service";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 60;
 
 /** Live controls. Every destructive action requires `confirm: true` from the client. */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
   const body = await readJson(req);
@@ -18,4 +19,4 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "command_failed" }, { status: 409 });
   }
-}
+});

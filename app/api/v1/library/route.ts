@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 import { previewContentBody } from "@/lib/content-preview";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const parseTags = (v: unknown) =>
   Array.isArray(v)
@@ -12,7 +13,7 @@ const parseTags = (v: unknown) =>
         .map((t) => t.trim())
         .filter(Boolean);
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const sp = req.nextUrl.searchParams;
   const q = (sp.get("q") || "").trim();
@@ -35,9 +36,9 @@ export async function GET(req: NextRequest) {
     body: previewContentBody((row as { body?: string | null }).body),
   }));
   return NextResponse.json(rows);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const title = str(body.title);
@@ -57,4 +58,4 @@ export async function POST(req: NextRequest) {
   if (error) return dbError();
   revalidatePath("/library");
   return NextResponse.json(data, { status: 201 });
-}
+});

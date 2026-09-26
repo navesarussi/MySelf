@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 import { normalizeCategory } from "@/lib/finance/category-list";
 import { fetchMerchantRules, upsertMerchantRule, type MerchantRuleInput } from "@/lib/finance/merchant-rules";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function parseRuleBody(body: Record<string, unknown>): MerchantRuleInput {
   const merchant_key = str(body.merchant_key);
@@ -29,7 +30,7 @@ function parseRuleBody(body: Record<string, unknown>): MerchantRuleInput {
   };
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   try {
     const rules = await fetchMerchantRules();
@@ -38,9 +39,9 @@ export async function GET(req: NextRequest) {
     console.error("[finance/merchant-rules GET]", err);
     return dbError();
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   try {
@@ -54,4 +55,4 @@ export async function POST(req: NextRequest) {
     console.error("[finance/merchant-rules POST]", err);
     return dbError();
   }
-}
+});

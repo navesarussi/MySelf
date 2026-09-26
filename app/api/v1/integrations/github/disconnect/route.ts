@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, dbError, unauthorized } from "@/lib/api/auth";
 import { GITHUB_PROVIDER } from "@/lib/integrations/github-config";
 import { userDb } from "@/lib/db/user-db";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withRouteHandler(async function DELETE(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const { error } = await (await userDb())
@@ -15,8 +16,8 @@ export async function DELETE(req: NextRequest) {
   if (error) return dbError("disconnect_failed");
 
   return NextResponse.json({ success: true });
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   return DELETE(req);
-}
+});

@@ -6,6 +6,7 @@ import { mintOAuthState } from "@/lib/integrations/oauth-state-token";
 import { isAllowedAppRedirect } from "@/lib/integrations/mobile-redirect";
 import { githubAuthUrl } from "@/lib/integrations/task-sources/github/client";
 import { githubConfigured } from "@/lib/integrations/github-config";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const APP_REDIRECT_COOKIE = "github_oauth_app_redirect";
 
@@ -17,7 +18,7 @@ const cookieOpts = {
   maxAge: 600,
 };
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   // The integration's tokens are stored for the account that starts this flow,
   // so it must name one — proxy.ts lets non-/api/v1 routes through and leaves
   // the check to the handler.
@@ -42,4 +43,4 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.redirect(githubAuthUrl(state));
-}
+});

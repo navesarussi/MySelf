@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/api/cron-auth";
 import { dbError } from "@/lib/api/auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 import {
   DEFAULT_GATE_EVAL_DAYS,
   DEFAULT_GATE_EVAL_LIMIT,
@@ -47,11 +48,11 @@ async function handleEval(req: NextRequest) {
 }
 
 /** Manual / external scheduler trigger. */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   return handleEval(req);
-}
+});
 
 /** Vercel Cron-compatible GET (add to vercel.json when plan allows another daily slot). */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   return handleEval(req);
-}
+});

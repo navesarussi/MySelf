@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, notFound, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,7 +12,7 @@ function revalidateGoalPaths() {
 }
 
 /** PATCH {toggle_status:true} flips active/done; otherwise edits fields. */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   const body = await readJson(req);
@@ -49,9 +50,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (error) return dbError();
   revalidateGoalPaths();
   return NextResponse.json(data);
-}
+});
 
-export async function DELETE(req: NextRequest, { params }: Params) {
+export const DELETE = withRouteHandler(async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -59,4 +60,4 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (error) return dbError();
   revalidateGoalPaths();
   return NextResponse.json({ ok: true });
-}
+});

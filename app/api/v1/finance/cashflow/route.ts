@@ -3,6 +3,7 @@ import { badRequest, dbError, isApiAuthorized, unauthorized } from "@/lib/api/au
 import { summarizeCashflow, type CashflowRow } from "@/lib/finance/cashflow";
 import { TXN_CASHFLOW_COLUMNS } from "@/lib/finance/txn-columns";
 import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function rowToCashflow(row: Record<string, unknown>): CashflowRow {
   return {
@@ -15,7 +16,7 @@ function rowToCashflow(row: Record<string, unknown>): CashflowRow {
   };
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const month = req.nextUrl.searchParams.get("month");
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return badRequest("invalid_month");
@@ -26,4 +27,4 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});

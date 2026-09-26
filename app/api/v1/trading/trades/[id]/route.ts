@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbError, notFound, readJson, denyUnlessPrimary } from "@/lib/api/auth";
 import { getTradeDetail, patchTradeJournal } from "@/lib/trading/service";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(req: NextRequest, ctx: Ctx) {
+export const GET = withRouteHandler(async function GET(req: NextRequest, ctx: Ctx) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
   const { id } = await ctx.params;
@@ -14,10 +15,10 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   } catch {
     return dbError();
   }
-}
+});
 
 /** Journal fields only — lifecycle/price fields are owned by the engine. */
-export async function PATCH(req: NextRequest, ctx: Ctx) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, ctx: Ctx) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
   const { id } = await ctx.params;
@@ -33,4 +34,4 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   } catch {
     return dbError();
   }
-}
+});

@@ -7,6 +7,7 @@ import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-clea
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { TASK_SELECT, TaskJoin, previewNotes, projectNameFromJoin } from "@/lib/api/tasks";
 import { clientVersionAtLeast } from "@/lib/api/client-version";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 // The app version that first sends `notes_truncated` and knows to fetch
 // GET /tasks/:id before editing. An older native build still running an
@@ -63,7 +64,7 @@ function sortTasks(tasks: Task[], sort: string | null): Task[] {
   return list;
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const sp = req.nextUrl.searchParams;
   const project = sp.get("project");
@@ -150,9 +151,9 @@ export async function GET(req: NextRequest) {
   const rawCount = rows.length;
   scheduleDataIntegrityCleanup(sorted.length < rawCount);
   return NextResponse.json(sorted);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const title = str(body.title);
@@ -176,4 +177,4 @@ export async function POST(req: NextRequest) {
   if (error) return projectWriteError(error);
   revalidateTaskPaths();
   return NextResponse.json(data, { status: 201 });
-}
+});

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { buildFinanceForecast } from "@/lib/finance/forecast";
 import { getOrCreateMonthPlan } from "@/lib/finance/plan-store";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const month = req.nextUrl.searchParams.get("month");
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return badRequest("invalid_month");
@@ -15,4 +16,4 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});

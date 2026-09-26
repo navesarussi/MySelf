@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import { deleteIntegrationToken, getIntegrationToken } from "@/lib/integrations/tokens";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const body = (await req.json()) as { account_key?: string };
@@ -19,4 +20,4 @@ export async function POST(req: NextRequest) {
 
   await deleteIntegrationToken(MONDAY_PROVIDER, accountKey);
   return NextResponse.json({ ok: true });
-}
+});

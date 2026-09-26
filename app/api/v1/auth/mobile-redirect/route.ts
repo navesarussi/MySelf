@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sessionIdentity, unauthorized } from "@/lib/api/auth";
 import { makeSessionToken } from "@/lib/auth";
 import { appendTokenToRedirect, isAllowedAppRedirect } from "@/lib/integrations/mobile-redirect";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Final hop of the mobile Google sign-in flow.
  *
@@ -11,7 +12,7 @@ import { appendTokenToRedirect, isAllowedAppRedirect } from "@/lib/integrations/
  *  scheme (exp:// in Expo Go, myself:// in production builds). */
 const DEFAULT_SCHEME = "myself://auth";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return unauthorized();
   // The token handed to the app names the account, so this hop needs the
@@ -33,4 +34,4 @@ export async function GET(req: NextRequest) {
       : appendTokenToRedirect(DEFAULT_SCHEME, token);
 
   return NextResponse.redirect(target);
-}
+});

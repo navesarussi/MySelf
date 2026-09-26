@@ -10,6 +10,7 @@ import { mapAgentErrorCode } from "@/lib/agent/whatsapp-outbound";
 import { sendWhatsAppDig } from "@/lib/whatsapp/client";
 import { isCronAuthorized } from "@/lib/api/cron-auth";
 import { forEachAccount } from "@/lib/db/accounts";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 60;
 
@@ -98,7 +99,7 @@ async function motivateAccount(): Promise<Record<string, unknown>> {
  * Jerusalem across IST/IDT. Dig only when Jerusalem hour ∈ dig_hours.
  * (Hobby plan rejects comma-hour expressions; use separate entries in vercel.json.)
  */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -109,4 +110,4 @@ export async function GET(req: NextRequest) {
   }
   const ok = accounts.every((run) => run.ok && run.result.ok !== false && !run.result.error);
   return NextResponse.json({ ok, accounts }, { status: ok ? 200 : 500 });
-}
+});

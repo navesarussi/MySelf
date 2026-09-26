@@ -7,6 +7,7 @@ import { applyExternalStatusChange } from "@/lib/integrations/task-sources/write
 import { classifyWritebackError } from "@/lib/integrations/task-sources/writeback-errors";
 import { attachTaskSource } from "@/lib/api/task-mutation";
 import { TASK_SELECT, TaskJoin, projectNameFromJoin } from "@/lib/api/tasks";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const PRIORITIES: TaskPriority[] = ["urgent", "high", "medium", "low"];
 const STATUSES: TaskStatus[] = ["open", "in_progress", "stuck", "review", "done"];
@@ -28,7 +29,7 @@ function safeRevalidateTaskPaths() {
 }
 
 /** Full row for one task — the list sends a truncated `notes` preview. */
-export async function GET(req: NextRequest, { params }: Params) {
+export const GET = withRouteHandler(async function GET(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -48,10 +49,10 @@ export async function GET(req: NextRequest, { params }: Params) {
     projects: undefined,
     notes_truncated: false,
   });
-}
+});
 
 /** Partial update: only fields present in the body are written. */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   const body = await readJson(req);
@@ -124,9 +125,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (error) return projectWriteError(error);
   safeRevalidateTaskPaths();
   return NextResponse.json(localOnlyWarning ? { ...data, ...localOnlyWarning } : data);
-}
+});
 
-export async function DELETE(req: NextRequest, { params }: Params) {
+export const DELETE = withRouteHandler(async function DELETE(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   if (!id) return badRequest("id_required");
@@ -183,4 +184,4 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (error) return dbError();
   safeRevalidateTaskPaths();
   return NextResponse.json({ ok: true });
-}
+});

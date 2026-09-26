@@ -7,8 +7,9 @@ import {
 } from "@/lib/api/auth";
 import { deletePushToken, upsertPushToken } from "@/lib/push/tokens";
 import type { PushPlatform } from "@/lib/push/types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const expoPushToken = String(body.expo_push_token ?? "").trim();
@@ -28,9 +29,9 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: code }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withRouteHandler(async function DELETE(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const expoPushToken = String(body.expo_push_token ?? "").trim();
@@ -43,4 +44,4 @@ export async function DELETE(req: NextRequest) {
     const code = err instanceof Error ? err.message : "unregister_failed";
     return NextResponse.json({ error: code }, { status: 500 });
   }
-}
+});
