@@ -21,7 +21,7 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
     ]);
     const monthTxns = monthRows.map(rowToTxn);
     const historyTxns = historyRows.map(rowToTxn);
-    const items = buildFixedExpenseItems(rules, monthTxns, historyTxns);
+    const items = await buildFixedExpenseItems(rules, month, monthTxns, historyTxns);
     return NextResponse.json({ month, items });
   } catch (err) {
     console.error("[finance/fixed-expenses GET]", err);

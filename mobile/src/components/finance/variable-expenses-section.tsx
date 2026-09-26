@@ -32,8 +32,14 @@ export function VariableExpensesSection({
     category: string | null;
     purpose_note: string | null;
     amount?: number;
+    merchant?: string | null;
+    description?: string | null;
+    txn_date?: string;
+    txn_time?: string | null;
+    item_type?: import("@/lib/finance/money-item-type").MoneyItemType;
     expense_type?: "fixed" | "variable" | "savings" | null;
     remember_rule?: boolean;
+    apply_to_all?: boolean;
     is_internal?: boolean;
   }) => Promise<boolean>;
   onDeleteTxn: (id: string) => Promise<boolean>;

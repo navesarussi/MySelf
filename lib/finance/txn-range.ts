@@ -51,6 +51,7 @@ export async function fetchTransactionsInRange(range: DateRange, columns = "*"):
       .select(columns)
       .gte("txn_date", range.start)
       .lt("txn_date", range.end)
+      .is("deleted_at", null)
       .order("id")
       .range(from, to);
     return { data: data as Record<string, unknown>[] | null, error };

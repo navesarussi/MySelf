@@ -37,7 +37,7 @@ function txn(partial: Partial<FinanceTransaction> & Pick<FinanceTransaction, "id
 }
 
 describe("buildFixedExpenseItems", () => {
-  it("includes fixed merchant rules with month actuals", () => {
+  it("includes fixed merchant rules with month actuals", async () => {
     const rules: MerchantRule[] = [
       {
         id: "rule-1",
@@ -53,7 +53,7 @@ describe("buildFixedExpenseItems", () => {
       },
     ];
     const monthTxns = [txn({ id: "t1", amount: 54.9, merchant: "NETFLIX", txn_date: "2026-09-05" })];
-    const items = buildFixedExpenseItems(rules, monthTxns, monthTxns);
+    const items = await buildFixedExpenseItems(rules, "2026-09", monthTxns, monthTxns);
     assert.equal(items.length, 1);
     assert.equal(items[0].name.length > 0, true);
     assert.equal(items[0].planned_amount, 54.9);
@@ -61,9 +61,10 @@ describe("buildFixedExpenseItems", () => {
     assert.equal(items[0].last_charge_date, "2026-09-05");
   });
 
-  it("includes fixed-tagged transactions without a rule", () => {
-    const items = buildFixedExpenseItems(
+  it("includes fixed-tagged transactions without a rule", async () => {
+    const items = await buildFixedExpenseItems(
       [],
+      "2026-09",
       [txn({ id: "t2", merchant: "BITUAH LEUMI", description: "BITUAH LEUMI", amount: 350, category: "בית" })],
       [txn({ id: "t2", merchant: "BITUAH LEUMI", description: "BITUAH LEUMI", amount: 350, category: "בית", txn_date: "2026-08-01" })]
     );

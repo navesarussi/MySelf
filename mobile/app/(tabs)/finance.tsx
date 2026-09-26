@@ -31,6 +31,11 @@ import { RecurringSuggestionsCard } from "../../src/components/finance/recurring
 import { EmptyState, ErrorNote, FinancePlanSkeleton, Row, SectionTitle } from "../../src/components/ui";
 import { ScreenList } from "../../src/components/screen-list";
 import { useFinanceSectionCollapse } from "../../src/hooks/use-finance-section-collapse";
+import { BulkEditBar } from "../../src/components/finance/bulk-edit-bar";
+import { ManualTxnModal, type ManualTxnPatch } from "../../src/components/finance/manual-txn-modal";
+import { CategoryManageModal } from "../../src/components/finance/category-manage-modal";
+import { useToast } from "../../src/toast";
+import type { MoneyItemType } from "@/lib/finance/money-item-type";
 
 const monthKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const shiftMonth = (month: string, delta: number) => {
@@ -51,8 +56,14 @@ export default function FinanceScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ month?: string }>();
   const { run } = useApiMutation();
+  const { show: showToast } = useToast();
   const [month, setMonth] = useState(monthKey());
   const [showTxns, setShowTxns] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showManualAdd, setShowManualAdd] = useState(false);
+  const [showCategoryManage, setShowCategoryManage] = useState(false);
+  const [pendingRestoreId, setPendingRestoreId] = useState<string | null>(null);
   const [showAllUncat, setShowAllUncat] = useState(false);
   const [addType, setAddType] = useState<PlanLineType | null>(null);
   const [weeklySaveError, setWeeklySaveError] = useState<string | null>(null);
@@ -276,8 +287,14 @@ export default function FinanceScreen() {
       category: string | null;
       purpose_note: string | null;
       amount?: number;
+      merchant?: string | null;
+      description?: string | null;
+      txn_date?: string;
+      txn_time?: string | null;
+      item_type?: MoneyItemType;
       expense_type?: "fixed" | "variable" | "savings" | null;
       remember_rule?: boolean;
+      apply_to_all?: boolean;
       is_internal?: boolean;
     }
   ): Promise<boolean> => {
@@ -289,12 +306,84 @@ export default function FinanceScreen() {
 
   const deleteVariableTxn = async (id: string): Promise<boolean> => {
     const result = await run((cfg) => api.deleteFinanceTransaction(cfg, id), { onSuccess: invalidateFinance });
+    if (result != null) {
+      setPendingRestoreId(id);
+      showToast(t("finance.deletedUndo"), "success");
+      setTimeout(() => setPendingRestoreId((cur) => (cur === id ? null : cur)), 5000);
+    }
     return result != null;
   };
 
+  const restoreDeletedTxn = async () => {
+    if (!pendingRestoreId) return;
+    const id = pendingRestoreId;
+    setPendingRestoreId(null);
+    await run((cfg) => api.restoreFinanceTransaction(cfg, id), { onSuccess: invalidateFinance });
+    showToast(t("finance.restored"), "success");
+  };
+
+  const convertFixedToVariable = async (item: FixedExpenseItem): Promise<boolean> => {
+    if (!item.rule_id) return false;
+    const result = await run(
+      (cfg) => api.patchFinanceMerchantRule(cfg, item.rule_id!, { expense_type: "variable", is_active: false }),
+      { onSuccess: invalidateFinance }
+    );
+    return result != null;
+  };
+
+  const unlinkFixedTxn = async (item: FixedExpenseItem, txnId: string): Promise<boolean> => {
+    const result = await run(
+      (cfg) =>
+        api.linkFixedExpenseTxn(cfg, {
+          txn_id: txnId,
+          merchant_key: item.merchant_key,
+          rule_id: item.rule_id ?? undefined,
+          action: "unlink",
+        }),
+      { onSuccess: invalidateFinance }
+    );
+    return result != null;
+  };
+
+  const addManualTxn = async (patch: ManualTxnPatch): Promise<boolean> => {
+    const result = await run((cfg) => api.createFinanceTransaction(cfg, patch), { onSuccess: invalidateFinance });
+    return result != null;
+  };
+
+  const bulkApply = async (patch: { category?: string | null; item_type?: MoneyItemType }): Promise<boolean> => {
+    const result = await run(
+      (cfg) => api.bulkFinanceTransactions(cfg, { ids: selectedIds, ...patch }),
+      { onSuccess: () => { invalidateFinance(); setSelectedIds([]); setSelectionMode(false); } }
+    );
+    return result != null;
+  };
+
+  const bulkDelete = async (): Promise<boolean> => {
+    const result = await run(
+      (cfg) => api.bulkFinanceTransactions(cfg, { ids: selectedIds, delete: true }),
+      { onSuccess: () => { invalidateFinance(); setSelectedIds([]); setSelectionMode(false); } }
+    );
+    return result != null;
+  };
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }, []);
+
   const renderTxn = useCallback(
-    ({ item }: { item: FinanceTransaction }) => <FinanceTxnRow txn={item} onPress={() => openTxn(item)} />,
-    [openTxn]
+    ({ item }: { item: FinanceTransaction }) => (
+      <FinanceTxnRow
+        txn={item}
+        onPress={() => openTxn(item)}
+        selectionMode={selectionMode}
+        selected={selectedIds.includes(item.id)}
+        onToggleSelect={() => {
+          if (!selectionMode) setSelectionMode(true);
+          toggleSelect(item.id);
+        }}
+      />
+    ),
+    [openTxn, selectionMode, selectedIds, toggleSelect]
   );
 
   const headerExtra = (
@@ -310,6 +399,9 @@ export default function FinanceScreen() {
         onLabelPress={isCurrentMonth ? undefined : () => setMonth(current)}
       />
       <FinanceHubLinks />
+      <Pressable onPress={() => setShowCategoryManage(true)} style={{ marginBottom: 8 }}>
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>{t("finance.manageCategories")} ›</Text>
+      </Pressable>
       <FinanceSourcesStrip />
       <RecurringSuggestionsCard month={month} onApplied={refresh} />
       {view ? <FinanceHero view={view} /> : null}
@@ -349,6 +441,8 @@ export default function FinanceScreen() {
                   onSave={saveFixedExpense}
                   onDelete={deleteFixedExpense}
                   onAdd={addFixedExpense}
+                  onConvertToVariable={convertFixedToVariable}
+                  onUnlinkTxn={unlinkFixedTxn}
                 />
               );
             }
@@ -383,12 +477,31 @@ export default function FinanceScreen() {
           })
         : null}
       {view?.weeks.length ? <WeekStrip weeks={view.weeks} /> : null}
-      <Pressable onPress={() => setShowTxns((v) => !v)} accessibilityRole="button" style={{ marginVertical: 4 }}>
-        <Row>
-          <SectionTitle>{t("finance.allTransactions")}</SectionTitle>
-          <Ionicons name={showTxns ? "chevron-up" : "chevron-down"} size={18} color={c.muted} />
-        </Row>
-      </Pressable>
+      <Row style={{ marginVertical: 4 }}>
+        <Pressable onPress={() => setShowTxns((v) => !v)} accessibilityRole="button" style={{ flex: 1 }}>
+          <Row>
+            <SectionTitle>{t("finance.allTransactions")}</SectionTitle>
+            <Ionicons name={showTxns ? "chevron-up" : "chevron-down"} size={18} color={c.muted} />
+          </Row>
+        </Pressable>
+        <Pressable onPress={() => setShowManualAdd(true)} hitSlop={8}>
+          <Text style={{ color: c.accent, fontWeight: "600", fontSize: tokens.textXs }}>+ {t("finance.addManualTxn")}</Text>
+        </Pressable>
+      </Row>
+      {showTxns ? (
+        <BulkEditBar
+          selectedCount={selectedIds.length}
+          categories={categories}
+          onCancel={() => { setSelectedIds([]); setSelectionMode(false); }}
+          onApply={bulkApply}
+          onDelete={bulkDelete}
+        />
+      ) : null}
+      {pendingRestoreId ? (
+        <Pressable onPress={() => void restoreDeletedTxn()} style={{ marginBottom: 8 }}>
+          <Text style={{ color: c.accent, fontWeight: "600", textAlign: textStart, writingDirection }}>{t("finance.tapToUndo")}</Text>
+        </Pressable>
+      ) : null}
       {!showTxns ? (
         <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 8, textAlign: textStart, writingDirection }}>
           {t("finance.subtitle")}
@@ -415,6 +528,39 @@ export default function FinanceScreen() {
         {addType ? (
           <AddPlanLineModal visible lineType={addType} onClose={() => setAddType(null)} onSave={(n, a) => void addLine(n, a)} />
         ) : null}
+        <ManualTxnModal
+          visible={showManualAdd}
+          categories={categories}
+          defaultDate={`${month}-01`}
+          onClose={() => setShowManualAdd(false)}
+          onSave={addManualTxn}
+        />
+        <CategoryManageModal
+          visible={showCategoryManage}
+          categories={categories}
+          onClose={() => setShowCategoryManage(false)}
+          onRename={async (from, to) => {
+            const result = await run((cfg) => api.patchFinanceCategories(cfg, { action: "rename", from, to }), {
+              onSuccess: () => {
+                invalidateFinance();
+                void queryClient.invalidateQueries({ queryKey: queryKeys.financeCategories });
+              },
+            });
+            return result != null;
+          }}
+          onUpdate={async (name, default_type, weekly_budget) => {
+            const result = await run(
+              (cfg) => api.patchFinanceCategories(cfg, { action: "update", name, default_type, weekly_budget }),
+              {
+                onSuccess: () => {
+                  invalidateFinance();
+                  void queryClient.invalidateQueries({ queryKey: queryKeys.financeCategories });
+                },
+              }
+            );
+            return result != null;
+          }}
+        />
       </>
     </ScreenErrorBoundary>
   );

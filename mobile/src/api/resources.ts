@@ -435,8 +435,43 @@ export const api = {
       method: "PATCH",
       body,
     }),
-  financeCategories: (c: ApiConfig) =>
-    apiFetch<{ categories: string[] }>(c, "/finance/categories"),
+  financeCategories: async (c: ApiConfig) => {
+    const res = await apiFetch<{
+      categories: Array<string | { name: string; default_type?: string | null; weekly_budget?: number | null }>;
+    }>(c, "/finance/categories");
+    return {
+      categories: res.categories.map((cat) => (typeof cat === "string" ? cat : cat.name)),
+      meta: res.categories.map((cat) =>
+        typeof cat === "string" ? { name: cat, default_type: null, weekly_budget: null, is_builtin: false } : cat
+      ),
+    };
+  },
+  patchFinanceCategories: (
+    c: ApiConfig,
+    body:
+      | { action: "rename"; from: string; to: string }
+      | { action: "merge"; from: string; to: string }
+      | { action: "update"; name: string; default_type?: string | null; weekly_budget?: number | null }
+  ) => apiFetch(c, "/finance/categories", { method: "PATCH", body }),
+  createFinanceTransaction: (
+    c: ApiConfig,
+    body: Record<string, unknown>
+  ) => apiFetch<FinanceTransaction>(c, "/finance/transactions", { method: "POST", body }),
+  bulkFinanceTransactions: (
+    c: ApiConfig,
+    body: { ids: string[]; category?: string | null; item_type?: string; is_internal?: boolean; delete?: boolean }
+  ) => apiFetch<{ updated: string[]; deleted: string[] }>(c, "/finance/transactions/bulk", { method: "POST", body }),
+  restoreFinanceTransaction: (c: ApiConfig, id: string) =>
+    apiFetch<FinanceTransaction>(c, `/finance/transactions/${id}/restore`, { method: "POST" }),
+  splitFinanceTransaction: (
+    c: ApiConfig,
+    id: string,
+    parts: Array<{ amount: number; category?: string | null; expense_type?: string | null; kind?: string; note?: string | null }>
+  ) => apiFetch(c, `/finance/transactions/${id}/split`, { method: "POST", body: { parts } }),
+  linkFixedExpenseTxn: (
+    c: ApiConfig,
+    body: { txn_id: string; merchant_key: string; action: "link" | "unlink"; rule_id?: string }
+  ) => apiFetch<{ ok: boolean }>(c, "/finance/fixed-expenses/link", { method: "POST", body }),
   patchFinancePlanLine: (
     c: ApiConfig,
     lineId: string,
@@ -527,15 +562,23 @@ export const api = {
       category?: string | null;
       purpose_note?: string | null;
       expense_type?: "fixed" | "variable" | "savings" | null;
+      item_type?: "fixed" | "variable" | "income" | "internal";
+      kind?: "income" | "expense";
       remember_rule?: boolean;
+      apply_to_all?: boolean;
       skip?: boolean;
       amount?: number;
       merchant?: string | null;
+      description?: string | null;
       txn_date?: string;
       txn_time?: string | null;
       is_internal?: boolean;
     }
-  ) => apiFetch<FinanceTransaction>(c, `/finance/transactions/${id}`, { method: "PATCH", body }),
+  ) => apiFetch<FinanceTransaction & { applied_ids?: string[]; merchant_applied_ids?: string[] }>(
+    c,
+    `/finance/transactions/${id}`,
+    { method: "PATCH", body }
+  ),
   deleteFinanceTransaction: (c: ApiConfig, id: string) =>
     apiFetch<{ ok: boolean }>(c, `/finance/transactions/${id}`, { method: "DELETE" }),
   financeSourcesStatus: (c: ApiConfig) =>
