@@ -5,7 +5,9 @@ import { api } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
-import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../../src/query";
+import { queryClient, queryKeys, useApiMutation, useApiQuery, useTradingEquity } from "../../src/query";
+import { EquityFreshness } from "../../src/components/trading/equity-freshness";
+import { tradingPnl } from "@/lib/trading/equity-display";
 import { Badge, Btn, Card, EmptyState, ErrorNote, KpiGridSkeleton, Screen, SectionTitle, SkeletonCard, confirmDelete } from "../../src/components/ui";
 import { KpiGrid, SeriesChart } from "../../src/components/trading/charts";
 import { ScreenErrorBoundary } from "../../src/components/error-boundary";
@@ -19,6 +21,7 @@ export default function TradingScreen() {
   const { run } = useApiMutation();
   const router = useRouter();
 
+  const liveEquity = useTradingEquity();
   const overview = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg), { staleTime: 30_000 });
   const triggers = useApiQuery(queryKeys.tradingTriggersFeed, (cfg) => api.tradingTriggers(cfg), { staleTime: 30_000 });
   const events = useApiQuery(queryKeys.tradingEventsFeed, (cfg) => api.tradingEvents(cfg, 30), { staleTime: 30_000 });
@@ -31,6 +34,7 @@ export default function TradingScreen() {
   const refreshing = overview.isFetching || triggers.isFetching || events.isFetching;
 
   const refresh = () => {
+    void liveEquity.refresh();
     void overview.refresh();
     void triggers.refresh();
     void events.refresh();
@@ -40,11 +44,15 @@ export default function TradingScreen() {
     run((cfg) => api.tradingControl(cfg, body), {
       onSuccess: () => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.tradingAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tradingEquity });
         void queryClient.invalidateQueries({ queryKey: queryKeys.home });
       },
     });
 
   const equityValues = useMemo(() => (data?.equity_history ?? []).map((s) => s.equity), [data]);
+  const equitySnap = liveEquity.data;
+  const displayEquity = equitySnap?.equity ?? data?.account.equity;
+  const displayStartingEquity = equitySnap?.starting_equity ?? data?.account.starting_equity;
 
   const alerts = data
     ? [
@@ -94,10 +102,20 @@ export default function TradingScreen() {
 
       <TradingHubLinks />
 
-      {data ? (
+      {liveEquity.visible && equitySnap ? (
+        <View style={{ marginBottom: 6 }}>
+          <EquityFreshness updatedAt={equitySnap.updated_at} dataUpdatedAt={liveEquity.dataUpdatedAt} />
+        </View>
+      ) : null}
+
+      {data && displayEquity != null && displayStartingEquity != null ? (
         <KpiGrid
           items={[
-            { label: t("trading.equity"), value: fmtUsd(data.account.equity), hint: `${fmtSignedUsd(data.account.equity - data.account.starting_equity)}` },
+            {
+              label: t("trading.equity"),
+              value: fmtUsd(displayEquity),
+              hint: fmtSignedUsd(tradingPnl(displayEquity, displayStartingEquity)),
+            },
             { label: t("trading.drawdown"), value: fmtPct(data.account.drawdown_pct), tone: data.account.drawdown_pct > 0.08 ? "warn" : "default", hint: `${t("trading.toKill")} ${fmtPct(data.account.kill_switch_distance_pct)}` },
             { label: t("trading.openRisk"), value: `${data.account.open_risk_r}R`, hint: `max ${data.envelope.MAX_TOTAL_OPEN_RISK_R}R`, tone: data.account.open_risk_r >= 4 ? "warn" : "default" },
             { label: t("trading.pnlDay"), value: fmtR(data.account.r_day), hint: fmtSignedUsd(data.account.pnl_day), tone: data.account.r_day >= 0 ? "good" : "warn" },

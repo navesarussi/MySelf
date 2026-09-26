@@ -15,9 +15,11 @@ import {
 /** Closed-trade shape the equity formula actually needs — satisfied by the lite projection. */
 type ClosedPnl = Pick<TradeRow, "realized_pnl">;
 
-async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
+/** Latest mark for open positions — 1h bar close, then live quote fallback. */
+export async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
   const cache = createBarCache();
   const out = new Map<string, number>();
+  const { livePrice } = await import("./intraday-data");
   await Promise.all(
     [...new Set(trades.map((t) => t.symbol))].map(async (symbol) => {
       const u = universe.find((x) => x.symbol === symbol);
@@ -25,10 +27,15 @@ async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
       try {
         const bars = await cache.get(u, "1h", 6);
         const last = bars.at(-1);
-        if (last) out.set(symbol, last.c);
+        if (last) {
+          out.set(symbol, last.c);
+          return;
+        }
       } catch {
-        /* price unavailable */
+        /* fall through to live quote */
       }
+      const px = await livePrice({ symbol: u.symbol, asset_class: u.asset_class, provider_symbol: u.provider_symbol });
+      if (px) out.set(symbol, px);
     })
   );
   return out;
@@ -68,13 +75,18 @@ export function brokerEquity(raw: unknown): BrokerEquity {
   return { ok: true, equity };
 }
 
-/** Live account equity — same formula as the trading dashboard.
+export type LiveEquityComputation = {
+  equity: number;
+  prices: Map<string, number>;
+};
+
+/** Live account equity with the prices used to mark open positions.
  *
  *  Closed trades come from the lite projection filtered server-side to the
  *  current phase: the full row carries heavy jsonb (sim_state, events, agent
  *  reasoning) that the equity sum never reads, and the unfiltered query walks
  *  every closed trade ever recorded. */
-export async function computeLiveEquity(settings: TradingSettings): Promise<number> {
+export async function computeLiveEquityWithPrices(settings: TradingSettings): Promise<LiveEquityComputation> {
   const [open, closed, universe] = await Promise.all([
     getOpenTrades(),
     getClosedTradesLite(settings.phase_started_at),
@@ -83,7 +95,36 @@ export async function computeLiveEquity(settings: TradingSettings): Promise<numb
   const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
   const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase));
   const prices = await lastPrices(accountOpen, universe);
-  return equityFromTrades(settings, accountOpen, accountClosed, prices);
+  return { equity: equityFromTrades(settings, accountOpen, accountClosed, prices), prices };
+}
+
+/** Live account equity — same formula as the trading dashboard. */
+export async function computeLiveEquity(settings: TradingSettings): Promise<number> {
+  return (await computeLiveEquityWithPrices(settings)).equity;
+}
+
+export type LiveEquitySnapshot = {
+  equity: number;
+  starting_equity: number;
+  peak_equity: number;
+  kill_switch_active: boolean;
+  phase: string;
+  updated_at: string;
+};
+
+/** Canonical live equity payload for Home, Trading, and widgets. */
+export async function getLiveEquitySnapshot(): Promise<LiveEquitySnapshot> {
+  const settings = await getSettings();
+  const equity = await computeLiveEquity(settings);
+  const peak = Math.max(settings.peak_equity, equity);
+  return {
+    equity,
+    starting_equity: settings.starting_equity,
+    peak_equity: peak,
+    kill_switch_active: settings.kill_switch_active,
+    phase: settings.phase,
+    updated_at: new Date().toISOString(),
+  };
 }
 
 /** Settings + live equity in one pass, so callers never fetch trading_settings

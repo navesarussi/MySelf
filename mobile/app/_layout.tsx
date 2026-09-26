@@ -76,11 +76,13 @@ function useWidgetSnapshotLifecycle() {
       if (state === "active" && signedIn) {
         // Refresh home after widget App Intents so KPIs rewrite from the server.
         void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tradingEquity });
         return;
       }
       if (state !== "background" && state !== "inactive") return;
       const home = queryClient.getQueryData<HomePayload>(queryKeys.home) ?? null;
-      void syncWidgetSnapshot({ signedIn, home }).catch(() => {});
+      const tradingEquity = queryClient.getQueryData(queryKeys.tradingEquity) ?? null;
+      void syncWidgetSnapshot({ signedIn, home, tradingEquity }).catch(() => {});
     });
     return () => sub.remove();
   }, [signedIn]);

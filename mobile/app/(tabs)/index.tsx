@@ -3,7 +3,7 @@ import { api, type HomePayload } from "../../src/api/resources";
 import { todayLocalISO, useMinuteNow, useTodayDate } from "../../src/hooks";
 import { useHabitActions } from "../../src/hooks/use-habit-actions";
 import { useI18n } from "../../src/i18n";
-import { useApiQuery, useApiMutation, queryKeys, queryClient, patchTaskInHome, patchRelationshipInHome } from "../../src/query";
+import { useApiQuery, useApiMutation, queryKeys, queryClient, patchTaskInHome, patchRelationshipInHome, useTradingEquity } from "../../src/query";
 import { ErrorNote, HomeScreenSkeleton, Screen } from "../../src/components/ui";
 import { ScreenErrorBoundary, WidgetErrorBoundary } from "../../src/components/error-boundary";
 import { HabitDetailsModal } from "../../src/components/habit-details-modal";
@@ -36,6 +36,7 @@ export default function HomeScreen() {
     staleTime: 0,
     refetchOnMount: "always",
   });
+  const tradingEquity = useTradingEquity();
   const { run, isPending } = useApiMutation();
   const {
     handleCheckIn: habitCheckIn,
@@ -128,12 +129,9 @@ export default function HomeScreen() {
               readyGoals: data.activeGoals.filter((g) => achievabilityScore(g) >= 3).length,
               financeUncategorized: data.financeUncategorizedCount,
               financeNet: data.finance?.net_actual ?? 0,
-              // /api/v1/home carries live equity now, computed with the same
-              // formula the dashboard uses, so the home screen no longer pulls
-              // the whole trading dashboard to read three scalars.
-              tradingEquity: data.trading?.equity ?? null,
-              tradingStartingEquity: data.trading?.starting_equity ?? null,
-              tradingKill: Boolean(data.trading?.kill_switch_active),
+              tradingEquity: tradingEquity.visible ? tradingEquity.data!.equity : null,
+              tradingStartingEquity: tradingEquity.visible ? tradingEquity.data!.starting_equity : null,
+              tradingKill: Boolean(tradingEquity.data?.kill_switch_active),
             }}
           />
           </WidgetErrorBoundary>

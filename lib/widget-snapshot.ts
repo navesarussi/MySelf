@@ -31,6 +31,7 @@ export type WidgetSnapshot = {
     tasksDueSoon: number;
     financeUncategorized: number;
     nextEventLabel: string;
+    tradingEquityLabel?: string;
   };
   urgentHabit: WidgetUrgentHabit | null;
   urgentTask: WidgetUrgentTask | null;
@@ -84,6 +85,7 @@ export function buildWidgetSnapshot(args: {
   signedIn: boolean;
   now: Date;
   home: WidgetHomeInput | null;
+  tradingEquityLabel?: string | null;
 }): WidgetSnapshot {
   const updatedAt = args.now.toISOString();
   if (!args.signedIn || !args.home) {
@@ -150,6 +152,7 @@ export function buildWidgetSnapshot(args: {
       tasksDueSoon,
       financeUncategorized: home.financeUncategorizedCount,
       nextEventLabel: nextEvent ? nextEvent.title : "",
+      ...(args.tradingEquityLabel ? { tradingEquityLabel: args.tradingEquityLabel } : {}),
     },
     urgentHabit,
     urgentTask,

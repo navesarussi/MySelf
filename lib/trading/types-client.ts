@@ -239,6 +239,16 @@ export type BrokerStatus = {
   error: string | null;
 };
 
+/** Live account equity — shared by Home tile, Trading screen, and widgets. */
+export type TradingEquitySnapshot = {
+  equity: number;
+  starting_equity: number;
+  peak_equity: number;
+  kill_switch_active: boolean;
+  phase: string;
+  updated_at: string;
+};
+
 /** Fast dashboard core — positions, KPIs, gate, equity curve (no feed or broker). */
 export type DashboardOverview = {
   settings: TradingSettings;
