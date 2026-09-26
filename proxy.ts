@@ -54,6 +54,13 @@ export async function proxy(req: NextRequest) {
     const authHeader = req.headers.get("authorization");
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
 
+    // Client error reports — session optional; route handler rate-limits anonymous IPs.
+    if (pathname === "/api/v1/client-errors" && req.method === "POST") {
+      const res = NextResponse.next();
+      for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
+      return res;
+    }
+
     // iOS Shortcut + GitHub Actions Leumi sync (no session cookie).
     if (pathname === "/api/v1/finance/ingest" && req.method === "POST") {
       if (matchesAnySecret(authHeader, [process.env.FINANCE_INGEST_TOKEN])) {

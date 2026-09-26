@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
 import { applyHabitReport, loadHabit } from "@/lib/habit-report-service";
 import { badRequest, dbError, isApiAuthorized, notFound, readJson, str, unauthorized } from "@/lib/api/auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -13,7 +14,7 @@ function revalidateHabitPaths() {
 
 /** Daily habit reporting — same rules as the web server actions.
  *  body.type: "check_in" | "fall" | "reset" */
-export async function POST(req: NextRequest, { params }: Params) {
+export const POST = withRouteHandler(async function POST(req: NextRequest, { params }: Params) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await params;
   const body = await readJson(req);
@@ -48,4 +49,4 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
   if (!result.noop) revalidateHabitPaths();
   return NextResponse.json(result.habit);
-}
+});

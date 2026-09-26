@@ -10,6 +10,8 @@ import {
   userFacingAgentError,
 } from "@/lib/agent/whatsapp-outbound";
 import { parseInboundWhatsAppMessage, verifyWhatsAppWebhook } from "@/lib/whatsapp/client";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
+import { reportIntegrationError } from "@/lib/error-reporting";
 
 export const maxDuration = 60;
 
@@ -19,14 +21,14 @@ function webhookOk(body: Record<string, unknown> = { ok: true }) {
 }
 
 /** Meta webhook verification (GET). */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const challenge = verifyWhatsAppWebhook(req.nextUrl.searchParams);
   if (!challenge) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   return new NextResponse(challenge, { status: 200 });
-}
+});
 
 /** Inbound WhatsApp messages (POST) — text + voice notes. */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   let body: unknown;
   try {
     body = await req.json();
@@ -64,6 +66,10 @@ export async function POST(req: NextRequest) {
         await processWhatsAppInbound(inbound);
       } catch (err) {
         const code = mapAgentErrorCode(err);
+        reportIntegrationError("whatsapp", err, {
+          userAction: "processWhatsAppInbound",
+          route: "/api/agent/whatsapp/webhook",
+        });
         console.error("[whatsapp-webhook-after]", code, inbound.messageId);
         await sendWhatsAppReplyOnce(
           inbound.from,
@@ -75,4 +81,4 @@ export async function POST(req: NextRequest) {
 
     return webhookOk({ ok: true, queued: true, messageId: inbound.messageId });
   });
-}
+});

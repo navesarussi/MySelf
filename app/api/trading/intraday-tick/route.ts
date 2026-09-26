@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { bearerToken, isTradingCronAuthorized } from "@/lib/api/cron-auth";
 import { getSupabase } from "@/lib/supabase";
 import { runIntradayTick } from "@/lib/trading/intraday-engine";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 120;
 
@@ -18,14 +19,14 @@ async function isSchedulerAuthorized(req: NextRequest): Promise<boolean> {
 }
 
 /** Intraday (15m setup / 5m entry) tick — pg_cron job `trading-intraday-tick`, 1 minute after every 5m close (1-59/5). */
-async function handle(req: NextRequest) {
+const handle = withRouteHandler(async function handle(req: NextRequest) {
   if (!(await isSchedulerAuthorized(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     return NextResponse.json(await runIntradayTick());
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "intraday_tick_failed" }, { status: 500 });
   }
-}
+});
 
 export const GET = handle;
 export const POST = handle;

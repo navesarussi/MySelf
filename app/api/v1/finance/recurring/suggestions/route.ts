@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { getRecurringSuggestions } from "@/lib/finance/recurring";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const monthParam = req.nextUrl.searchParams.get("month");
@@ -16,4 +17,4 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});

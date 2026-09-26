@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, isApiAuthorized, readJson, unauthorized } from "@/lib/api/auth";
 import { getAgentSettings, updateAgentSettings, type AgentSettingsPatch } from "@/lib/agent/settings";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const settings = await getAgentSettings();
   return NextResponse.json(settings);
-}
+});
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const patch: AgentSettingsPatch = {};
@@ -60,4 +61,4 @@ export async function PATCH(req: NextRequest) {
     if (code === "invalid_phone") return badRequest("invalid_phone");
     return NextResponse.json({ error: code }, { status: 500 });
   }
-}
+});

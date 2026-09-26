@@ -3,6 +3,7 @@ import { isCronAuthorized } from "@/lib/api/cron-auth";
 import { sendOpsAlert } from "@/lib/ops/alert";
 import { runHealthProbes } from "@/lib/ops/health-probes";
 import { formatHealthDigest } from "@/lib/ops/health-rules";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 60;
 
@@ -14,7 +15,7 @@ export const maxDuration = 60;
  * what is broken. Nothing is sent when everything is healthy — the old probe
  * WhatsApp'd the owner every morning regardless, which trained them to ignore it.
  */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -29,4 +30,4 @@ export async function GET(req: NextRequest) {
   });
   console.warn("[agent/health] issues", JSON.stringify(issues));
   return NextResponse.json({ ok: false, issues, alert });
-}
+});

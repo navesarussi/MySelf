@@ -6,6 +6,7 @@ import { isCronAuthorized as isCronRequest } from "@/lib/api/cron-auth";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { forEachAccount } from "@/lib/db/accounts";
 import { syncedToday } from "@/lib/integrations/daily-sync";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Daily cron syncs run inline; the platform default is far too short for them. */
 export const maxDuration = 60;
@@ -59,17 +60,17 @@ async function allAccounts(run: () => Promise<SyncResult>) {
 }
 
 /** Manual sync — runs to completion and returns result. Scheduler: every account. */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (isCronRequest(req)) return allAccounts(() => syncNow("[google-sync]"));
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { status, body } = await syncNow("[google-sync]");
   return NextResponse.json(body, { status });
-}
+});
 
 /** Vercel cron — sync inline, skip accounts already synced today */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!isCronRequest(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   return allAccounts(dailySync);
-}
+});

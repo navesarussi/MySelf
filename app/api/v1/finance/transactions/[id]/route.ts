@@ -26,13 +26,14 @@ import { parseTxnTime } from "@/lib/finance/txn-datetime";
 import { getSupabase } from "@/lib/supabase";
 import { rowToTxn } from "@/lib/finance/ingest";
 import { applyRuleToPending } from "@/lib/finance/apply-rule-pending";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function parseExpenseType(raw: string, fallback: ExpenseType | null): ExpenseType | null {
   if (raw === "fixed" || raw === "variable" || raw === "savings") return raw;
   return fallback;
 }
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export const GET = withRouteHandler(async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(_req))) return unauthorized();
   const { id } = await ctx.params;
 
@@ -69,9 +70,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     suggested_expense_type,
     default_note: rule?.default_note ?? null,
   });
-}
+});
 
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await ctx.params;
   const body = await readJson(req);
@@ -210,12 +211,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     });
   }
   return NextResponse.json({ ...rowToTxn(data as Record<string, unknown>), applied_ids });
-}
+});
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export const DELETE = withRouteHandler(async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(_req))) return unauthorized();
   const { id } = await ctx.params;
   const { error } = await getSupabase().from("finance_transactions").delete().eq("id", id);
   if (error) return dbError();
   return NextResponse.json({ ok: true });
-}
+});

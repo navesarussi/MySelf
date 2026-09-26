@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { badRequest, readJson, unauthorized } from "@/lib/api/auth";
 import { isFinanceIngestAuthorized } from "@/lib/api/finance-auth";
 import { ingestFinanceTransactions, type FinanceIngestInput } from "@/lib/finance/ingest";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function parseTxn(raw: unknown): FinanceIngestInput | null {
   if (!raw || typeof raw !== "object") return null;
@@ -47,7 +48,7 @@ function parseTxn(raw: unknown): FinanceIngestInput | null {
   };
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isFinanceIngestAuthorized(req))) return unauthorized();
   const body = await readJson(req);
 
@@ -71,4 +72,4 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "ingest_failed";
     return badRequest(msg);
   }
-}
+});

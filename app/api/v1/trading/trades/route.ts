@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbError, denyUnlessPrimary } from "@/lib/api/auth";
 import { listTrades, type TradeFilters } from "@/lib/trading/service";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
   const p = req.nextUrl.searchParams;
@@ -19,4 +20,4 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});

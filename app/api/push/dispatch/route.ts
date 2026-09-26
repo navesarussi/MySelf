@@ -8,6 +8,7 @@ import {
 import { jerusalemParts } from "@/lib/push/time";
 import { isCronAuthorized } from "@/lib/api/cron-auth";
 import { forEachAccount } from "@/lib/db/accounts";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 60;
 
@@ -15,7 +16,7 @@ export const maxDuration = 60;
  * Push dispatch cron (Hobby: a few daily slots, not hourly).
  * Relationships/tasks/timeline fire at hour === 8 Jerusalem; habits on each run.
  */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -41,4 +42,4 @@ export async function GET(req: NextRequest) {
   }
   const ok = accounts.every((run) => run.ok);
   return NextResponse.json({ ok, dayKey, hour, accounts }, { status: ok ? 200 : 500 });
-}
+});

@@ -13,6 +13,7 @@ import { formatUrgentFinanceLabel } from "@/lib/widget-snapshot";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
 import { fetchMonthNetActual } from "@/lib/finance/month-net";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Rows sampled for the average-close-days KPI. Ordered by updated_at so the
  *  sample is the most recent N and the number is stable between loads — an
@@ -45,7 +46,7 @@ function projectNameFromJoin(projects: TaskJoin["projects"]): string | undefined
 
 /** Everything the home dashboard needs, mirroring app/page.tsx. Habit/streak
  *  math happens client-side with the shared lib/habit-stats helpers. */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const supabase = getSupabase();
   const db = await userDb();
@@ -219,4 +220,4 @@ export async function GET(req: NextRequest) {
       tradingRes?.liveEquity ?? null
     ),
   });
-}
+});

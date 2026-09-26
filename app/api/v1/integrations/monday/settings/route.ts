@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import { getIntegrationToken, getTokenSettings, updateTokenSettings } from "@/lib/integrations/tokens";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type MondaySettings = {
   selected_list_ids?: string[];
@@ -10,7 +11,7 @@ type MondaySettings = {
   pull_completed?: string;
 };
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const body = (await req.json()) as {
@@ -39,4 +40,4 @@ export async function PATCH(req: NextRequest) {
   );
 
   return NextResponse.json({ ok: true });
-}
+});

@@ -7,6 +7,7 @@ import { fetchAllRowsParallel } from "@/lib/db/paginate";
 import { parseTimelineCursor } from "@/lib/timeline-pagination";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { TimelineEvent } from "@/lib/types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function revalidateTimelinePaths() {
   revalidatePath("/timeline");
@@ -24,7 +25,7 @@ function revalidateTimelinePaths() {
  * all of them. `nextCursor` is always null, which is also correct for app
  * builds that still walk pages; `cursor` is still honored for them.
  */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const cursorRaw = req.nextUrl.searchParams.get("cursor");
   const cursor = cursorRaw ? parseTimelineCursor(cursorRaw) : null;
@@ -51,9 +52,9 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const event_date = str(body.event_date);
@@ -76,4 +77,4 @@ export async function POST(req: NextRequest) {
   if (error) return dbError();
   revalidateTimelinePaths();
   return NextResponse.json(data, { status: 201 });
-}
+});

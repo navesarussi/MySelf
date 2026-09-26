@@ -24,6 +24,11 @@ import { I18nProvider, useI18n } from "../src/i18n";
 import { NavPrefsProvider } from "../src/nav-prefs";
 import { ToastProvider } from "../src/toast";
 import { ErrorBoundary } from "../src/components/error-boundary";
+import {
+  flushQueue,
+  installGlobalErrorHandlers,
+  setErrorReportingConfig,
+} from "../src/error-reporting";
 import { usePushNotifications } from "../src/push/use-push";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { queryClient } from "../src/query/client";
@@ -34,6 +39,7 @@ SplashScreen.preventAutoHideAsync();
 // Identify this build to version-gated endpoints (see lib/api/client-version.ts).
 // Set once at module load, not per-request: the version is fixed for the process.
 setAppVersion(getAppVersion());
+installGlobalErrorHandlers();
 
 /** Signing out forgets the account's cached data, so the next account to sign
  *  in on this device never sees it. Only on a real sign-out: the token is also
@@ -50,6 +56,14 @@ function useClearCachesOnSignOut() {
     hadToken.current = false;
     void clearAccountCaches();
   }, [token]);
+}
+
+function useErrorReportingLifecycle() {
+  const { token, serverUrl } = useSession();
+  useEffect(() => {
+    setErrorReportingConfig({ serverUrl, token: token ?? undefined });
+    if (token) void flushQueue();
+  }, [token, serverUrl]);
 }
 
 function useWidgetSnapshotLifecycle() {
@@ -77,6 +91,7 @@ function AppStack() {
   const { resolved } = useTheme();
   const { t } = useI18n();
   usePushNotifications();
+  useErrorReportingLifecycle();
   useWidgetSnapshotLifecycle();
   useClearCachesOnSignOut();
 

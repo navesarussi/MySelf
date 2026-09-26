@@ -5,8 +5,9 @@ import { rowToTxn } from "@/lib/finance/ingest";
 import { fetchMerchantRules } from "@/lib/finance/merchant-rules";
 import { getRecentMonths } from "@/lib/finance/recurring";
 import { fetchTransactionsInRange, monthsBounds } from "@/lib/finance/txn-range";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const month = req.nextUrl.searchParams.get("month");
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return badRequest("invalid_month");
@@ -26,4 +27,4 @@ export async function GET(req: NextRequest) {
     console.error("[finance/fixed-expenses GET]", err);
     return dbError();
   }
-}
+});

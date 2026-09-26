@@ -7,6 +7,7 @@ import {
   updateTokenSettings,
 } from "@/lib/integrations/tokens";
 import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 type GithubSettings = {
   selected_list_ids: string[];
@@ -14,7 +15,7 @@ type GithubSettings = {
   account_login?: string;
 };
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   try {
@@ -27,9 +28,9 @@ export async function GET(req: NextRequest) {
     console.error("[github-settings-get]", message);
     return dbError(message);
   }
-}
+});
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const body = await readJson(req);
@@ -69,4 +70,4 @@ export async function PATCH(req: NextRequest) {
     console.error("[github-settings-patch]", message);
     return dbError(message);
   }
-}
+});

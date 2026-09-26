@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbError, denyUnlessPrimary } from "@/lib/api/auth";
 import { getCommitteeDualTrackSummary } from "@/lib/trading/committee/store";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Read-only dual-track committee shadow metrics (baseline vs committee). */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
   const days = Number(req.nextUrl.searchParams.get("days") ?? 7);
@@ -13,4 +14,4 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});

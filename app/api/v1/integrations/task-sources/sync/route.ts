@@ -6,6 +6,7 @@ import { syncTaskSource } from "@/lib/integrations/task-sources/orchestrator";
 import { getIntegrationToken, listIntegrationTokens, tryStartSync, setSyncFailed } from "@/lib/integrations/tokens";
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import type { TaskSourceId } from "@/lib/integrations/task-sources/types";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const VALID_PROVIDERS: TaskSourceId[] = ["google_tasks", "monday", "github"];
 
@@ -13,7 +14,7 @@ function isTaskSourceId(value: unknown): value is TaskSourceId {
   return typeof value === "string" && VALID_PROVIDERS.includes(value as TaskSourceId);
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const body = await readJson(req);
@@ -79,4 +80,4 @@ export async function POST(req: NextRequest) {
   }));
 
   return NextResponse.json({ ok: true, started: true, provider: targetProvider });
-}
+});

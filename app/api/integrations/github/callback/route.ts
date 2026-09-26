@@ -11,11 +11,12 @@ import { redirectToAppOrNext } from "@/lib/integrations/oauth-redirect";
 import { setFlashCookie } from "@/lib/flash";
 import { oauthStateAccount } from "@/lib/integrations/oauth-state-token";
 import { runAsUser } from "@/lib/db/user-context";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const APP_REDIRECT_COOKIE = "github_oauth_app_redirect";
 
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const url = req.nextUrl;
   const jar = await cookies();
   const error = url.searchParams.get("error");
@@ -64,4 +65,4 @@ export async function GET(req: NextRequest) {
       return redirectToAppOrNext({ jar, origin: url.origin, next: next || "/settings", appRedirectCookie: APP_REDIRECT_COOKIE });
     }
   });
-}
+});

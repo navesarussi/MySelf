@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, readJson, str, unauthorized, badRequest } from "@/lib/api/auth";
 import { handleCodingTaskRequest } from "@/lib/agent/coding/bridge";
 import { runAgentChat, type AgentImageInput } from "@/lib/agent/run";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function parseImages(body: Record<string, unknown>): AgentImageInput[] {
   const raw = body.images;
@@ -18,7 +19,7 @@ function parseImages(body: Record<string, unknown>): AgentImageInput[] {
 }
 
 /** App chat with optional image attachments (Cover screenshots, etc.). */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const body = await readJson(req);
   const message = str(body.message);
@@ -50,4 +51,4 @@ export async function POST(req: NextRequest) {
     const status = code === "missing_gemini_api_key" ? 503 : 500;
     return NextResponse.json({ error: code }, { status });
   }
-}
+});

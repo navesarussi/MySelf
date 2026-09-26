@@ -3,8 +3,9 @@ import { isApiAuthorized, unauthorized, dbError } from "@/lib/api/auth";
 import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import { listIntegrationTokens } from "@/lib/integrations/tokens";
 import { userDb } from "@/lib/db/user-db";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   try {
@@ -49,4 +50,4 @@ export async function GET(req: NextRequest) {
     console.error("[monday-accounts]", message);
     return dbError(message);
   }
-}
+});

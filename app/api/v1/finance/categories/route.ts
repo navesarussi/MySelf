@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbError, isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { listFinanceCategories } from "@/lib/finance/category-list";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   try {
@@ -11,4 +12,4 @@ export async function GET(req: NextRequest) {
   } catch {
     return dbError();
   }
-}
+});

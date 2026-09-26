@@ -3,9 +3,10 @@ import { userDb } from "@/lib/db/user-db";
 import { GOOGLE_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken } from "@/lib/integrations/tokens";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Same payload as /api/integrations/google/sync/status, but Bearer-friendly. */
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const token = await getIntegrationToken(GOOGLE_PROVIDER);
@@ -25,4 +26,4 @@ export async function GET(req: NextRequest) {
     lastSyncAt: token.last_sync_at,
     eventCount: count ?? 0,
   });
-}
+});

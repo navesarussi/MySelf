@@ -10,6 +10,7 @@ import {
 } from "@/lib/finance/history";
 import { TXN_CASHFLOW_COLUMNS } from "@/lib/finance/txn-columns";
 import { fetchTransactionsInRange, monthsBounds } from "@/lib/finance/txn-range";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function rowToCashflow(row: Record<string, unknown>): CashflowRow {
   return {
@@ -26,7 +27,7 @@ function currentMonthKey(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const months = parseHistoryMonths(req.nextUrl.searchParams.get("months"));
@@ -90,4 +91,4 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json(history);
-}
+});

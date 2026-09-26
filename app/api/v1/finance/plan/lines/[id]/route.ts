@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, notFound, readJson, unauthorized } from "@/lib/api/auth";
 import { deletePlanLine, updatePlanLine } from "@/lib/finance/plan-store";
 import type { PlanLineType } from "@/lib/finance/expense-type";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 const VALID_LINE_TYPES = new Set<PlanLineType>(["income", "fixed", "variable", "planned", "savings"]);
 
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(req))) return unauthorized();
   const { id } = await ctx.params;
   const body = await readJson(req);
@@ -35,9 +36,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (msg === "not_found") return notFound();
     return dbError();
   }
-}
+});
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export const DELETE = withRouteHandler(async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isApiAuthorized(_req))) return unauthorized();
   const { id } = await ctx.params;
   try {
@@ -46,4 +47,4 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   } catch {
     return dbError();
   }
-}
+});

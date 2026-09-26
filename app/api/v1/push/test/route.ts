@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { notifyUser } from "@/lib/push/notify";
 import { jerusalemParts } from "@/lib/push/time";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Authenticated test push — bypasses quiet hours; ref includes timestamp for uniqueness. */
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const { dayKey, hour } = jerusalemParts();
@@ -26,4 +27,4 @@ export async function POST(req: NextRequest) {
     sent: result.result.sent,
     failed: result.result.failed,
   });
-}
+});

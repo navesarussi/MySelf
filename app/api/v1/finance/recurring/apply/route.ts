@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, dbError, isApiAuthorized, readJson, str, unauthorized } from "@/lib/api/auth";
 import { applyRecurringSuggestion } from "@/lib/finance/recurring";
+import { withRouteHandler } from "@/lib/api/with-route-handler";
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
   const body = await readJson(req);
@@ -28,4 +29,4 @@ export async function POST(req: NextRequest) {
     }
     return dbError();
   }
-}
+});
