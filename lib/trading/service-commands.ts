@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import { flattenAtBroker } from "./broker/flatten";
+import { editTradeLevels } from "./trade-edit";
 import { forceClose, realizedR } from "./position";
 import { applyRiskScaleRequest } from "./risk-envelope";
 import { getOpenTrades, getSettings, getUniverse, isAccountTrade, logEvent, setPlaybookStatus, simColumns, updateSettings, updateTrade, type TradeRow } from "./store";
@@ -23,6 +24,7 @@ export type ControlCommand =
   | { action: "set_agent"; enabled: boolean }
   | { action: "set_risk_scale"; value: number }
   | { action: "close_position"; trade_id: string }
+  | { action: "edit_trade"; trade_id: string; stop?: number; target?: number | null }
   | { action: "close_all" }
   | { action: "set_symbol_enabled"; symbol: string; enabled: boolean }
   | { action: "add_calendar_event"; kind: "CPI" | "FOMC" | "EARNINGS" | "TOKEN_UNLOCK" | "OTHER_MACRO"; date: string; symbol?: string | null; note?: string | null }
@@ -163,6 +165,12 @@ export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"
       await audit(`${t.symbol} נסגרה ידנית${approx}`, "warn");
       return { ok: true, message: `${t.symbol} closed${approx}` };
     }
+    case "edit_trade": {
+      const t = await editTradeLevels(cmd.trade_id, { stop: cmd.stop, target: cmd.target });
+      const what = [cmd.stop !== undefined ? `סטופ ${t.sim_state.stop_price.toPrecision(6)}` : null, cmd.target !== undefined ? (cmd.target === null ? "בלי יעד" : `יעד ${t.sim_state.target_price.toPrecision(6)}`) : null].filter(Boolean).join(" · ");
+      await audit(`${t.symbol}: עריכה ידנית — ${what}`, "info");
+      return { ok: true, message: `${t.symbol}: ${what}` };
+    }
     case "close_all": {
       const open = (await getOpenTrades()).filter((t) => isAccountTrade(t, settings.phase));
       const res = await closeTrades(open, "MANUAL");
@@ -238,6 +246,13 @@ export function parseCommand(body: Record<string, unknown>): ControlCommand | nu
       return typeof body.value === "number" && Number.isFinite(body.value) ? { action: a, value: body.value } : null;
     case "close_position":
       return s(body.trade_id) ? { action: a, trade_id: s(body.trade_id) } : null;
+    case "edit_trade": {
+      const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+      const stop = num(body.stop);
+      const target = body.target === null ? null : num(body.target);
+      if (!s(body.trade_id) || (stop === undefined && target === undefined)) return null;
+      return { action: a, trade_id: s(body.trade_id), ...(stop !== undefined ? { stop } : {}), ...(target !== undefined ? { target } : {}) };
+    }
     case "set_symbol_enabled":
       return s(body.symbol) && typeof body.enabled === "boolean" ? { action: a, symbol: s(body.symbol), enabled: body.enabled } : null;
     case "add_calendar_event": {

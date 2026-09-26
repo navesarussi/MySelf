@@ -9,6 +9,7 @@ import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/quer
 import { Badge, Btn, Card, Input, Loading, Screen, SectionTitle } from "../src/components/ui";
 import { CandleChart, KpiGrid, type ChartLevel, type ChartMarker } from "../src/components/trading/charts";
 import { TradingText, useTradeR } from "../src/components/trading/blocks";
+import { TradeManageCard } from "../src/components/trading/trade-manage";
 import { fmtDateTime, fmtDuration, fmtPct, fmtPrice, fmtR, fmtSignedUsd, fmtUsd, rTone } from "@/lib/trading/format";
 
 type TfRead = { trend: string; structure: string; rsi: number | null; adx: number | null; volume_ratio: number | null; squeeze_pct: number | null; bearish_divergence: boolean };
@@ -87,6 +88,8 @@ export default function TradingTradeScreen() {
         {trade.exit_reason ? <Badge label={trade.exit_reason} tone={tone === "warn" ? "warn" : "good"} /> : null}
         {trade.gapped_through_stop ? <Badge label={t("trading.gapped")} tone="warn" /> : null}
       </View>
+
+      {trade.state === "PENDING" || trade.state === "OPEN" || trade.state === "RISK_FREE" ? <TradeManageCard trade={trade} /> : null}
 
       <KpiGrid
         items={[
