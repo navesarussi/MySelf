@@ -1,6 +1,6 @@
 {
   "name": "myself-dashboard",
-  "version": "2.7.3",
+  "version": "2.7.4",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,7 +12,7 @@
     "sync:leumi": "tsx scripts/finance/sync-leumi.ts",
     "sync:max": "tsx scripts/finance/sync-max.ts",
     "sync:cal": "tsx scripts/finance/sync-visa-cal.ts",
-    "test": "node --import tsx --test lib/__tests__/*.test.ts mobile/src/__tests__/*.test.ts",
+    "test": "node --import tsx --test lib/__tests__/*.test.ts mobile/src/__tests__/*.test.ts && npm run test --prefix mobile",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p mobile/tsconfig.json",
     "lint:mobile": "npm run lint --prefix mobile",
     "verify": "npm run typecheck && npm run lint:mobile && npm test"

@@ -30,7 +30,39 @@ describe("smokeEndpoints", () => {
       "/api/v1/habits",
       "/api/v1/goals",
       "/api/v1/finance/plan?month=2026-09",
+      "/api/v1/relationships",
+      "/api/v1/trading/equity",
     ]);
+  });
+});
+
+describe("evaluateSmokeResponse contract checks", () => {
+  it("fails home when legacy trading fields are missing", () => {
+    const body = JSON.stringify({
+      habits: [],
+      habitsPending: 0,
+      habitsOverdue: 0,
+      activeGoals: [],
+      doneGoalsCount: 0,
+      pendingCommitments: [],
+      relationships: [],
+      recentEvents: [],
+      eventsMode: "recent",
+      openTasks: [],
+      projects: [],
+      libraryEntries: [],
+      openTasksCount: 0,
+      inProgressTasksCount: 0,
+      doneTasksCount: 0,
+      avgTaskCloseDays: null,
+      financeUncategorizedCount: 0,
+      urgentFinance: null,
+      finance: { month: "2026-09", net_actual: 0, uncategorized_count: 0 },
+      trading: { equity: 1, starting_equity: 1, kill_switch_active: false },
+    });
+    const failure = evaluateSmokeResponse(200, body, "/api/v1/home") ?? "";
+    assert.ok(failure.startsWith("contract:"));
+    assert.match(failure, /missing_trading_field:phase|trading\.phase/);
   });
 });
 

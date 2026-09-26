@@ -1,11 +1,13 @@
 /**
  * Post-deploy smoke test rules (`scripts/ops/post-deploy-smoke.ts`).
  *
- * A read endpoint passes when it answers 200 with JSON and does not report a
- * `degraded` section. `/api/v1/home` returning `degraded: ["financeNet"]` on
- * every load for two days is the failure this exists to catch: the app still
- * rendered, so nobody noticed.
+ * A read endpoint passes when it answers 200 with JSON, matches the mobile API
+ * contract (when defined), and does not report a non-empty `degraded` section.
+ * `/api/v1/home` returning `degraded: ["financeNet"]` on every load for two days
+ * is the failure this exists to catch: the app still rendered, so nobody noticed.
  */
+
+import { evaluateContractResponse } from "@/lib/api-contracts/validate";
 
 export type SmokeResult = { path: string; status: number; failure: string | null; ms: number };
 
@@ -21,11 +23,13 @@ export function smokeEndpoints(now = new Date()): string[] {
     "/api/v1/habits",
     "/api/v1/goals",
     `/api/v1/finance/plan?month=${smokeMonth(now)}`,
+    "/api/v1/relationships",
+    "/api/v1/trading/equity",
   ];
 }
 
 /** Null when the response is healthy, otherwise a one-line reason. */
-export function evaluateSmokeResponse(status: number, bodyText: string): string | null {
+export function evaluateSmokeResponse(status: number, bodyText: string, path = ""): string | null {
   if (status !== 200) return `http_${status}`;
   let body: unknown;
   try {
@@ -37,6 +41,8 @@ export function evaluateSmokeResponse(status: number, bodyText: string): string 
     const degraded = (body as { degraded?: unknown }).degraded;
     if (Array.isArray(degraded) && degraded.length > 0) return `degraded: ${degraded.join(", ")}`;
   }
+  const contractFailure = path ? evaluateContractResponse(path, status, bodyText) : null;
+  if (contractFailure) return `contract: ${contractFailure}`;
   return null;
 }
 
