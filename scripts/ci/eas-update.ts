@@ -8,10 +8,10 @@
  *   GITHUB_SHA — commit being evaluated (HEAD)
  *   GH_TOKEN / GITHUB_TOKEN — for gh run list (defaults in Actions)
  */
-import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execRun } from "../../lib/ci/exec-run";
 import {
   decideOtaPublish,
   formatSkipInstructions,
@@ -34,11 +34,7 @@ function log(msg: string) {
 }
 
 function run(cmd: string, args: string[], opts: { cwd?: string; inherit?: boolean } = {}) {
-  return execFileSync(cmd, args, {
-    cwd: opts.cwd ?? repoRoot,
-    encoding: "utf8",
-    stdio: opts.inherit ? "inherit" : ["ignore", "pipe", "pipe"],
-  }).trim();
+  return execRun(cmd, args, opts, repoRoot);
 }
 
 function readJsonAtPath<T>(path: string): T {
