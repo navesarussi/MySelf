@@ -12,6 +12,7 @@ import {
 import { financeExternalKey, type FinanceSource } from "@/lib/finance/external-key";
 import {
   cardScopeFromAccount,
+  leumiDedupeScopes,
   stableTxnBaseKey,
   stableTxnExternalKey,
 } from "@/lib/finance/stable-external-key";
@@ -240,15 +241,26 @@ export function prepareIngestRows(
   const prepared: PreparedRow[] = [];
   const seenKeys = new Set<string>();
   const batchCleanKeys = new Set<string>();
+  const seenLeumiContentKeys = new Set<string>();
   const incomingStableOrdinals = new Map<string, number>();
   let duplicatesInBatch = 0;
 
   for (const raw of inputs) {
     let input = applyRules(normalizeInput(raw), rulesMap, history);
 
+    if (input.source === "leumi") {
+      const leumiContentKey = `${input.txn_date}|${stableDedupeAmount(input)}|${input.currency}|${input.description}`;
+      if (seenLeumiContentKeys.has(leumiContentKey)) {
+        duplicatesInBatch += 1;
+        continue;
+      }
+      seenLeumiContentKeys.add(leumiContentKey);
+    }
+
     const cardScope = cardScopeFromAccount({
       account_number: input.account_number,
       card_name: input.card_name,
+      source: input.source,
     });
     const dedupeAmount = stableDedupeAmount(input);
     const stableBase = stableTxnBaseKey({
@@ -264,6 +276,7 @@ export function prepareIngestRows(
       stableBase,
       input.source,
       input.account_number,
+      input.card_name,
       input.currency
     );
     if (incomingOrdinal <= existingCount) {
@@ -440,25 +453,32 @@ function existingStableCount(
   base: string,
   source: string,
   account_number: string | null | undefined,
+  card_name: string | null | undefined,
   currency?: string | null
 ): number {
-  let max = counts.get(base) ?? 0;
   const parts = base.split("|");
-  if (parts.length < 4) return max;
+  if (parts.length < 4) return counts.get(base) ?? 0;
   const date = parts[1];
+  const tail = parts.slice(2).join("|");
+  const scopes =
+    source === "leumi"
+      ? leumiDedupeScopes({ account_number, card_name })
+      : [parts[0]];
   const offsets =
     source === "leumi"
-      ? [-1, 1]
+      ? [-1, 0, 1]
       : (currency ?? "ILS").trim().toUpperCase() !== "ILS"
         ? Array.from({ length: FUZZY_USD_DATE_WINDOW_DAYS * 2 + 1 }, (_, i) => i - FUZZY_USD_DATE_WINDOW_DAYS)
-        : [];
-  for (const offset of offsets) {
-    if (offset === 0) continue;
-    const altDate = shiftIsoDate(date, offset);
-    const altBase = `${parts[0]}|${altDate}|${parts.slice(2).join("|")}`;
-    max = Math.max(max, counts.get(altBase) ?? 0);
+        : [0];
+
+  let max = 0;
+  for (const scope of scopes) {
+    for (const offset of offsets) {
+      const altDate = offset === 0 ? date : shiftIsoDate(date, offset);
+      const altBase = `${scope}|${altDate}|${tail}`;
+      max = Math.max(max, counts.get(altBase) ?? 0);
+    }
   }
-  void account_number;
   return max;
 }
 
@@ -497,16 +517,28 @@ async function loadExistingStableKeyCounts(inputs: FinanceIngestInput[]): Promis
       currency,
       original_amount: row.original_amount != null ? Number(row.original_amount) : null,
     });
-    const base = stableTxnBaseKey({
-      cardScope: cardScopeFromAccount({
-        account_number: row.account_number != null ? String(row.account_number) : null,
-        card_name: row.card_name != null ? String(row.card_name) : null,
-      }),
-      txn_date: String(row.txn_date),
-      amount: dedupeAmount,
-      currency,
-    });
-    counts.set(base, (counts.get(base) ?? 0) + 1);
+    const scopes =
+      row.source === "leumi"
+        ? leumiDedupeScopes({
+            account_number: row.account_number != null ? String(row.account_number) : null,
+            card_name: row.card_name != null ? String(row.card_name) : null,
+          })
+        : [
+            cardScopeFromAccount({
+              account_number: row.account_number != null ? String(row.account_number) : null,
+              card_name: row.card_name != null ? String(row.card_name) : null,
+              source: row.source != null ? String(row.source) : null,
+            }),
+          ];
+    for (const cardScope of scopes) {
+      const base = stableTxnBaseKey({
+        cardScope,
+        txn_date: String(row.txn_date),
+        amount: dedupeAmount,
+        currency,
+      });
+      counts.set(base, (counts.get(base) ?? 0) + 1);
+    }
   }
   return counts;
 }
@@ -593,7 +625,9 @@ async function markLeumiFxDebitsInternal(ids: string[]): Promise<void> {
     .from("finance_transactions")
     .update({ is_internal: true, needs_categorization: false, updated_at: now })
     .in("id", ids)
-    .eq("is_internal", false);
+    .eq("is_internal", false)
+    .is("categorized_at", null)
+    .eq("needs_categorization", true);
   if (error) throw new Error(error.message);
 }
 

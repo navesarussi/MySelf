@@ -12,6 +12,11 @@ describe("stable external keys", () => {
     assert.equal(cardScopeFromAccount({ card_mask: "2853755000-966-01" }), "6601");
   });
 
+  it("uses default scope for Leumi regardless of account number", () => {
+    assert.equal(cardScopeFromAccount({ source: "leumi", account_number: "669-55735/82" }), "default");
+    assert.equal(cardScopeFromAccount({ source: "leumi" }), "default");
+  });
+
   it("uses the same base key regardless of merchant text", () => {
     const base = stableTxnBaseKey({
       cardScope: "6601",

@@ -37,7 +37,13 @@ async function main() {
     const txns = (await fetchTransactionsInRange(monthBounds(month))).map(rowToTxn);
     const result = findReconcilableBatchTransactions(txns);
     const ids = txns
-      .filter((t) => result.reconciledIds.includes(t.id) && !t.is_internal)
+      .filter(
+        (t) =>
+          result.reconciledIds.includes(t.id) &&
+          !t.is_internal &&
+          !t.categorized_at &&
+          t.needs_categorization
+      )
       .map((t) => t.id);
 
     if (!ids.length) continue;
