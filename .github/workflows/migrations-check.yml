@@ -1,0 +1,46 @@
+# Migration checks, shared by Verify and Chat code automerge.
+#
+# - Merged migrations are append-only: a PR may add migration files, not edit
+#   or delete ones already on the base branch (db-migrate applies each file
+#   once, so an edit never reaches the database).
+# - Every migration replays, in order, on an empty Postgres 17 with Supabase's
+#   roles, so a migration that cannot apply fails here instead of in db-apply
+#   after the code that needs it has already deployed.
+name: Migrations check
+
+on:
+  workflow_call:
+
+jobs:
+  migrations:
+    name: Migrations (append-only + replay)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merged migrations are append-only
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          LABELS: ${{ toJson(github.event.pull_request.labels) }}
+        run: scripts/ci/check-migration-edits.sh
+
+      - name: Replay every migration on a fresh database
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: scripts/ci/check-migrations.sh

@@ -65,9 +65,14 @@ jobs:
       - name: Run verify
         run: npm run verify
 
+  migrations:
+    needs: qualify
+    if: needs.qualify.outputs.should_run == 'true'
+    uses: ./.github/workflows/migrations-check.yml
+
   merge:
     name: Squash merge to main
-    needs: [qualify, verify]
+    needs: [qualify, verify, migrations]
     if: needs.qualify.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:

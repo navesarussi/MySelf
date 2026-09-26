@@ -5,6 +5,7 @@ Next.js App Router flat structure (`app/`, `components/`, `lib/`). Server Action
 
 ## Constraints
 - **npm only.** `package-lock.json` is the single lockfile; there is no `yarn.lock` and no `packageManager` field. Adding a dependency without regenerating the lockfile in use is what broke all three finance syncs for a week (`pg` landed in `package.json`, `yarn.lock` was never regenerated, `yarn --frozen-lockfile` then failed every run).
+- **Migrations are append-only and schema-qualified.** Add a new file under `supabase/migrations/`; never edit or delete a merged one (`db-migrate.ts` applies each file once, so an edit never reaches the database). Qualify every table with `myself.` — db-apply runs with `search_path = public`. CI (`migrations-check.yml`) replays every migration on an empty Postgres 17 and blocks edits to merged files; label a PR `migration-edit-ok` only when the merged file never ran anywhere. Data-only fixes that need production rows go in `PROD_DATA_ONLY` in `scripts/ci/check-migrations.sh`.
 - Max ~200 lines per file; split UI sections when needed.
 - Prefer localized changes; no speculative abstractions.
 - Docs in English.
