@@ -68,19 +68,15 @@ describe("monteCarlo kill-switch probability", () => {
    * backtestGate gates on mc_prob_kill <= 0.1, so a drifted constant gates the
    * strategy on a threshold the system does not use.
    */
-  it("uses the risk envelope's kill-switch drawdown, not a fixed 15%", () => {
-    // Losses big enough to breach 15% of equity (≈18%) but not 30%.
-    const rs = Array.from({ length: 40 }, () => -1);
-    const res = monteCarlo(rs, 0.005, 200, 7);
-    const breach15 = 1 - Math.pow(1 - 0.005, 40) >= 0.15;
-    const breach30 = 1 - Math.pow(1 - 0.005, 40) >= 0.3;
-    assert.ok(breach15 && !breach30, "fixture must sit between the two thresholds");
-    assert.equal(
-      RISK_ENVELOPE.MASTER_KILL_SWITCH_DD,
-      0.3,
-      "fixture assumes the current envelope"
-    );
-    assert.equal(res.prob_kill_switch, 0, "must not trip at the retired 15% threshold");
+  it("trips exactly at the risk envelope's kill-switch drawdown, whatever it is set to", () => {
+    const risk = 0.005;
+    // Longest run of −1R losses whose compounded drawdown stays below the envelope's threshold.
+    const n = Math.floor(Math.log(1 - RISK_ENVELOPE.MASTER_KILL_SWITCH_DD) / Math.log(1 - risk));
+    assert.ok(1 - Math.pow(1 - risk, n - 1) < RISK_ENVELOPE.MASTER_KILL_SWITCH_DD, "fixture sits below the threshold");
+    const below = monteCarlo(Array.from({ length: n - 1 }, () => -1), risk, 200, 7);
+    assert.equal(below.prob_kill_switch, 0, "must not trip before the envelope's drawdown");
+    const above = monteCarlo(Array.from({ length: n + 2 }, () => -1), risk, 200, 7);
+    assert.equal(above.prob_kill_switch, 1, "must trip once the envelope's drawdown is breached");
   });
 
   it("does report kills once the envelope drawdown is breached", () => {

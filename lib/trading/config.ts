@@ -5,22 +5,24 @@ import type { AssetClass, UniverseSymbol } from "./types";
  * can change these. Changing them means editing this file and deploying — deliberate
  * friction so risk is never raised in a stressed moment.
  */
-// TESTING PHASE (2026-09-14, paper account only, user-approved "aggressive-controlled"): risk and position
-// caps raised, correlation cap effectively off, halts loosened. Previous values in comments — restore before LIVE.
+// The envelope the daily-trend research was validated under (docs/trading/research-2026-09.md: +0.24R/trade,
+// Sharpe 0.86, max DD 7.3%). It was loosened on 2026-09-14 (2%/10 positions/no correlation cap/−10R halts)
+// only to measure the intraday strategy on paper; that measurement is done and intraday entries are retired
+// (see intraday-scan.ts), so the automatic system runs at the risk its evidence was produced with.
 export const RISK_ENVELOPE = Object.freeze({
-  MAX_RISK_PER_TRADE: Object.freeze({ STOCK: 0.01, CRYPTO_MAJOR: 0.02, CRYPTO_ALT: 0.02 } as Record<AssetClass, number>), // was 0.005 / 0.01
+  MAX_RISK_PER_TRADE: Object.freeze({ STOCK: 0.005, CRYPTO_MAJOR: 0.01, CRYPTO_ALT: 0.01 } as Record<AssetClass, number>),
   MIN_RR_RATIO: 2.0,
-  MAX_CONCURRENT_POSITIONS: 10, // was 5
-  MAX_TOTAL_OPEN_RISK_R: 10, // was 5
-  MAX_CORRELATED_POSITIONS: 10, // was 2
+  MAX_CONCURRENT_POSITIONS: 5,
+  MAX_TOTAL_OPEN_RISK_R: 5,
+  MAX_CORRELATED_POSITIONS: 2,
   /** |ρ| of 60 daily returns above which two symbols count as correlated (cross asset class). */
   CORRELATION_THRESHOLD: 0.7,
-  DAILY_LOSS_HALT_R: -10, // was -3
-  WEEKLY_LOSS_HALT_R: -25, // was -6
+  DAILY_LOSS_HALT_R: -3,
+  WEEKLY_LOSS_HALT_R: -6,
   /** Drawdown from peak equity that trips the master kill switch. */
-  MASTER_KILL_SWITCH_DD: 0.3, // was 0.15
-  /** Max notional per position. Crypto has no leverage at Alpaca, so this caps real risk well below MAX_RISK_PER_TRADE on tight stops. */
-  MAX_ASSET_EXPOSURE: 0.25, // was 0.2
+  MASTER_KILL_SWITCH_DD: 0.15,
+  /** Max notional per position. Crypto has no leverage at Alpaca, so this caps real risk below MAX_RISK_PER_TRADE on tight stops. */
+  MAX_ASSET_EXPOSURE: 0.2,
   /** Allowed agent risk multipliers — the agent can only reduce. */
   AGENT_RISK_MULTIPLIERS: Object.freeze([0, 0.5, 0.75, 1] as const),
 });

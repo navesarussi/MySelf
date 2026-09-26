@@ -45,7 +45,10 @@ from positions that stayed open for days — trend following. So automatic entri
 strategy** (9 years, 458 trades, +0.24R, 95% CI 0.12–0.36), executed at the broker **deterministically**: the
 agent comments but can no longer skip or shrink (its skips lowered out-of-sample expectancy, and when Gemini ran
 out of credits every signal became a SKIP). v2 4h crypto breakout stays off: +0.11R IS (n=54, 23% DD) / +0.65R
-OOS (n=11) with real fees — too thin to run. The main tick is scheduled by pg_cron (`trading-tick`, minutes
+OOS (n=11) with real fees — too thin to run. The risk envelope is back at the values the daily-trend evidence
+was produced with (0.5% stock / 1% crypto risk per trade, 5 positions, 5R open risk, ≤ 2 correlated, −3R day /
+−6R week halts, kill switch at −15%); the 2026-09-14 loosening existed only to measure intraday on paper.
+The main tick is scheduled by pg_cron (`trading-tick`, minutes
 3/18/33/48, same DB token as the intraday job); `trading-tick.yml` is now manual-only so two schedulers never
 run it concurrently.
 
@@ -65,7 +68,7 @@ crons are daily-only; auth token lives in `myself.trading_cron_tokens`). Code: `
 - **Agent = rating only**: every entered trade gets a 1–10 score + short Hebrew paragraph, computed from the trigger
   snapshot (no look-ahead). It never changes entry, size or exits. Analytics → "does the rating predict outcome?"
   (correlation rating↔R, expectancy for ≥7 vs ≤4).
-- **Risk (testing)**: envelope loosened in `config.ts` (2% crypto risk/trade, 10 positions, correlation cap off,
+- **Risk (testing, superseded 2026-09-26 — envelope restored)**: envelope loosened in `config.ts` (2% crypto risk/trade, 10 positions, correlation cap off,
   −10R day / −25R week halts, kill switch at −30%). No leverage for crypto at Alpaca, so the 25% notional cap usually
   binds and real risk per trade is ~0.3–0.5% of equity. No macro/funding vetoes for intraday.
 - **Backtest (90d, 26 coins, `scripts/trading/intraday-backtest.ts`)**: ~8.6 trades/day, gross +0.02R, net −0.25R
