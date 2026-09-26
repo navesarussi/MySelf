@@ -121,10 +121,20 @@ export default function TimelineScreen() {
   type ChronoRow =
     | { key: string; kind: "toggle"; section: "future" | "past"; count: number; open: boolean }
     | { key: string; kind: "label" }
+    | { key: string; kind: "empty" }
     | { key: string; kind: "event"; event: TimelineEvent };
 
+  // Agenda order: today, then what's coming (nearest first), then the past
+  // (most recent first). Future used to come first, so the list ran
+  // tomorrow → 2028 and then jumped back to today, with today buried below
+  // every upcoming event.
   const chronoRows = useMemo(() => {
     const rows: ChronoRow[] = [];
+    rows.push({ key: "today-label", kind: "label" });
+    for (const ev of chronoBuckets.todayEvents) {
+      rows.push({ key: ev.id, kind: "event", event: ev });
+    }
+    if (chronoBuckets.todayEvents.length === 0) rows.push({ key: "today-empty", kind: "empty" });
     rows.push({
       key: "future-toggle",
       kind: "toggle",
@@ -136,10 +146,6 @@ export default function TimelineScreen() {
       for (const ev of chronoBuckets.futureEvents) {
         rows.push({ key: ev.id, kind: "event", event: ev });
       }
-    }
-    rows.push({ key: "today-label", kind: "label" });
-    for (const ev of chronoBuckets.todayEvents) {
-      rows.push({ key: ev.id, kind: "event", event: ev });
     }
     rows.push({
       key: "past-toggle",
@@ -448,6 +454,21 @@ export default function TimelineScreen() {
             }}
           >
             {t("timeline.todaySection")}
+          </Text>
+        );
+      }
+      if (item.kind === "empty") {
+        return (
+          <Text
+            style={{
+              color: c.muted,
+              fontSize: tokens.textSm,
+              textAlign: textStart,
+              writingDirection,
+              marginBottom: 6,
+            }}
+          >
+            {t("timeline.todayEmpty")}
           </Text>
         );
       }
