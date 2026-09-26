@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { FixedExpenseItem } from "@/lib/finance/fixed-expenses";
-import { partitionFixedExpenses } from "@/lib/finance/fixed-expenses";
+import { partitionFixedExpenses } from "@/lib/finance/fixed-expense-dormant";
 import { fmtAmount0, fmtIls0 } from "@/lib/finance/format";
 import { localeTag } from "@/lib/i18n/core";
 import { useI18n } from "../../i18n";
