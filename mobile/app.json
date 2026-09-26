@@ -2,11 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-<<<<<<< HEAD
-    "version": "2.7.1",
-=======
-    "version": "2.6.8",
->>>>>>> 4e617b5 (feat(finance): professional Money tab — merchant display, income breakdown, RTL fixes)
+    "version": "2.7.2",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
