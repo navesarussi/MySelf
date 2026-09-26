@@ -1,6 +1,8 @@
 # Publish JS-only EAS Updates after main pushes when the native fingerprint is
 # unchanged from the last successful TestFlight iOS build (local eas build).
 # Native changes defer to testflight-ios.yml.
+# Squash merges via GITHUB_TOKEN do not fire push workflows; this file is in
+# paths so a post-automerge touch re-triggers OTA (same pattern as db-apply.yml).
 #
 # Required secret: EXPO_TOKEN — https://expo.dev/accounts/saussilberg/settings/access-tokens
 # When missing, the job exits successfully with instructions in the log.
@@ -14,6 +16,7 @@ on:
       - "lib/**"
       - "!lib/**/__tests__/**"
       - "!mobile/**/__tests__/**"
+      - ".github/workflows/eas-update.yml"
   workflow_dispatch:
   workflow_run:
     workflows: ["TestFlight iOS"]
