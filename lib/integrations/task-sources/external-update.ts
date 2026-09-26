@@ -2,7 +2,11 @@ import { reportIntegrationError } from "@/lib/error-reporting";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { resolveExternalListId } from "./resolve-list-id";
 import { applyExternalStatusChange } from "./writeback";
-import { WritebackError } from "./writeback-errors";
+import {
+  pickPreferredWritebackError,
+  shouldSkipMondayArchiveFallback,
+  WritebackError,
+} from "./writeback-errors";
 import {
   getValidGoogleTasksAccessToken,
   patchGoogleTask,
@@ -158,14 +162,13 @@ export async function applyExternalTaskDelete(task: Task): Promise<void> {
     try {
       await completeByExternalId(task.external_id, listId, mondayCache(task));
     } catch (completeErr) {
+      if (shouldSkipMondayArchiveFallback(completeErr)) {
+        throw completeErr;
+      }
       try {
         await archiveByExternalId(task.external_id, listId);
       } catch (archiveErr) {
-        reportIntegrationError("monday", archiveErr, {
-          route: "task-delete",
-          userAction: "archive_fallback",
-        });
-        throw completeErr;
+        throw pickPreferredWritebackError(completeErr, archiveErr);
       }
     }
     return;

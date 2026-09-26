@@ -13,7 +13,10 @@ import {
   projectWriteError,
 } from "@/lib/api/auth";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
-import { classifyWritebackError } from "@/lib/integrations/task-sources/writeback-errors";
+import {
+  classifyWritebackError,
+  MONDAY_DELETE_HIDDEN_MESSAGE_HE,
+} from "@/lib/integrations/task-sources/writeback-errors";
 import { attachTaskSource } from "@/lib/api/task-mutation";
 import { TASK_SELECT, TaskJoin, projectNameFromJoin } from "@/lib/api/tasks";
 import { withRouteHandler } from "@/lib/api/with-route-handler";
@@ -272,6 +275,7 @@ export const DELETE = withRouteHandler(async function DELETE(req: NextRequest, {
   }
 
   let localOnlyWarning: Record<string, unknown> | null = null;
+  let hideAfterWritebackFailure = forceLocal;
 
   if (task.source !== "manual") {
     try {
@@ -281,11 +285,18 @@ export const DELETE = withRouteHandler(async function DELETE(req: NextRequest, {
       if (!classified.localOnlyAllowed && !forceLocal) {
         return writebackFailureResponse(task, err);
       }
+      hideAfterWritebackFailure = true;
+      const userMessageHe =
+        classified.code === "monday_permission_denied" ||
+        classified.code === "external_permission_denied"
+          ? MONDAY_DELETE_HIDDEN_MESSAGE_HE
+          : classified.userMessageHe;
       localOnlyWarning = {
         local_only: true,
         warning: classified.code,
         source: task.source,
-        user_message_he: classified.userMessageHe,
+        user_message_he: userMessageHe,
+        hidden: true,
       };
     }
 
@@ -294,7 +305,7 @@ export const DELETE = withRouteHandler(async function DELETE(req: NextRequest, {
       .from("tasks")
       .update({
         status: "done",
-        hidden_at: forceLocal ? now : null,
+        hidden_at: hideAfterWritebackFailure ? now : null,
         synced_at: localOnlyWarning ? null : now,
         updated_at: now,
       })

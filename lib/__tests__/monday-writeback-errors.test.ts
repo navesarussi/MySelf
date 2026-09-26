@@ -21,6 +21,15 @@ describe("classifyWritebackError Monday GraphQL", () => {
     assert.equal(classified.localOnlyAllowed, true);
   });
 
+  it("classifies User unauthorized to perform action", () => {
+    const err = new MondayGraphqlError(403, "forbidden", [
+      "User unauthorized to perform action",
+    ]);
+    const classified = classifyWritebackError(err);
+    assert.equal(classified.code, "monday_permission_denied");
+    assert.equal(classified.localOnlyAllowed, true);
+  });
+
   it("treats label mismatch as local-only allowed", () => {
     const err = new MondayGraphqlError(200, "body", [
       "Invalid column value for status column",

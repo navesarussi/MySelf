@@ -6,6 +6,7 @@ import {
   isLocalOnlyAllowed,
   readApiError,
   taskDeleteErrorFlash,
+  taskDeleteLocalOnlyFlash,
   taskLocalOnlyWarningFlash,
   taskUpdateErrorFlash,
 } from "../task-errors";
@@ -45,6 +46,26 @@ describe("task error flash keys", () => {
     });
     assert.equal(readApiError(err), "אין הרשאה");
     assert.equal(isLocalOnlyAllowed(err), true);
+  });
+
+  it("maps delete local-only permission to calm hide message", () => {
+    assert.equal(
+      taskDeleteLocalOnlyFlash({
+        local_only: true,
+        warning: "monday_permission_denied",
+        source: "monday",
+      }),
+      "flash.taskDeleteHiddenMonday"
+    );
+    assert.equal(
+      taskDeleteLocalOnlyFlash({
+        local_only: true,
+        warning: "monday_permission_denied",
+        source: "monday",
+        user_message_he: "הודעה מותאמת",
+      }),
+      "הודעה מותאמת"
+    );
   });
 
   it("maps local-only warnings to resync/reconnect copy", () => {
