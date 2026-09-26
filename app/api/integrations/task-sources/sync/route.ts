@@ -5,16 +5,10 @@ import { MONDAY_PROVIDER } from "@/lib/integrations/monday-config";
 import type { TaskSourceId } from "@/lib/integrations/task-sources/types";
 import { isCronAuthorized as isCronRequest } from "@/lib/api/cron-auth";
 import { forEachAccount } from "@/lib/db/accounts";
+import { syncedToday } from "@/lib/integrations/daily-sync";
 
 /** Daily cron syncs run inline; the platform default is far too short for them. */
 export const maxDuration = 60;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function syncedWithinDay(lastSyncAt: string | null | undefined): boolean {
-  if (!lastSyncAt) return false;
-  return Date.now() - new Date(lastSyncAt).getTime() < DAY_MS;
-}
 
 async function shouldSkipDailySync(provider: TaskSourceId): Promise<{ skip: boolean; reason?: string }> {
   if (provider === MONDAY_PROVIDER) {
@@ -23,7 +17,7 @@ async function shouldSkipDailySync(provider: TaskSourceId): Promise<{ skip: bool
     if (accounts.some((a) => a.sync_status === "running")) {
       return { skip: true, reason: "already_running" };
     }
-    if (accounts.every((a) => syncedWithinDay(a.last_sync_at))) {
+    if (accounts.every((a) => syncedToday(a.last_sync_at))) {
       return { skip: true, reason: "synced_today" };
     }
     return { skip: false };
@@ -32,7 +26,7 @@ async function shouldSkipDailySync(provider: TaskSourceId): Promise<{ skip: bool
   const token = await getIntegrationToken(provider);
   if (!token) return { skip: true, reason: "not_connected" };
 
-  if (syncedWithinDay(token.last_sync_at)) {
+  if (syncedToday(token.last_sync_at)) {
     return { skip: true, reason: "synced_today" };
   }
 

@@ -5,11 +5,10 @@ import { getIntegrationToken, tryStartSync } from "@/lib/integrations/tokens";
 import { isCronAuthorized as isCronRequest } from "@/lib/api/cron-auth";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { forEachAccount } from "@/lib/db/accounts";
+import { syncedToday } from "@/lib/integrations/daily-sync";
 
 /** Daily cron syncs run inline; the platform default is far too short for them. */
 export const maxDuration = 60;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 type SyncResult = { status: number; body: Record<string, unknown> };
 
@@ -17,11 +16,8 @@ async function shouldSkipDailySync() {
   const token = await getIntegrationToken(GOOGLE_PROVIDER);
   if (!token) return { skip: true, reason: "not_connected" as const };
 
-  if (token.last_sync_at) {
-    const lastSync = new Date(token.last_sync_at).getTime();
-    if (Date.now() - lastSync < DAY_MS) {
-      return { skip: true, reason: "synced_today" as const };
-    }
+  if (syncedToday(token.last_sync_at)) {
+    return { skip: true, reason: "synced_today" as const };
   }
 
   if (token.sync_status === "running") {
