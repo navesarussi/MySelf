@@ -4,6 +4,7 @@ import { computeFingerprint, normalizeMessage } from "../error-reporting/fingerp
 import { redactUpstreamBody, redactValue } from "../error-reporting/redact";
 import { isNoiseError } from "../error-reporting/noise";
 import { evaluateDedupe, DEDUPE_WINDOW_MS, HOURLY_SEND_CAP } from "../error-reporting/dedupe";
+import { verifyMaintainerTestHeader } from "../error-reporting/maintainer-test";
 import { buildPayload } from "../error-reporting/payload";
 
 describe("error-reporting fingerprint", () => {
@@ -140,6 +141,33 @@ describe("error-reporting dedupe", () => {
     });
     assert.equal(decision.shouldSend, false);
     assert.equal(decision.skipReason, "noise");
+  });
+
+  it("bypasses dedupe and hourly cap for forced test sends", () => {
+    const decision = evaluateDedupe({
+      fingerprint: "abc",
+      now,
+      existing: {
+        count: 9,
+        first_seen: now.toISOString(),
+        last_sent_at: now.toISOString(),
+      },
+      hourlySent: HOURLY_SEND_CAP,
+      noisy: false,
+      forceSend: true,
+    });
+    assert.equal(decision.shouldSend, true);
+  });
+});
+
+describe("error-reporting maintainer test header", () => {
+  it("accepts a matching webhook key", () => {
+    assert.equal(verifyMaintainerTestHeader("secret-key", "secret-key"), true);
+  });
+
+  it("rejects a missing or mismatched key", () => {
+    assert.equal(verifyMaintainerTestHeader(null, "secret-key"), false);
+    assert.equal(verifyMaintainerTestHeader("wrong", "secret-key"), false);
   });
 });
 

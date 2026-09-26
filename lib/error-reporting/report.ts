@@ -1,6 +1,7 @@
 import { getWebhookConfig } from "./config";
 import { isNoisyReport, persistAndDecide } from "./dedupe";
 import { buildPayload } from "./payload";
+import { scheduleErrorReport } from "./schedule";
 import type { ReportErrorInput } from "./types";
 
 const WEBHOOK_TIMEOUT_MS = 2500;
@@ -27,19 +28,22 @@ async function postWebhook(url: string, key: string, body: unknown): Promise<voi
 
 /**
  * Forward a real error to the maintainer webhook. Never throws; never blocks callers.
+ * Work is scheduled with Next.js after() so Vercel keeps the function alive post-response.
  */
 export function reportError(input: ReportErrorInput): void {
-  void reportErrorAsync(input).catch(() => {});
+  scheduleErrorReport(() => reportErrorAsync(input));
 }
 
 export async function reportErrorAsync(input: ReportErrorInput): Promise<void> {
   try {
+    const isTest = input.context?.test === true;
     const draft = buildPayload(input);
-    const noisy = isNoisyReport(input.error, draft);
+    const noisy = isTest ? false : isNoisyReport(input.error, draft);
     const decision = await persistAndDecide({
       fingerprint: draft.fingerprint,
       payload: draft,
       noisy,
+      forceSend: isTest,
     });
 
     if (!decision.shouldSend) return;

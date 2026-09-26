@@ -45,7 +45,7 @@ export async function proxy(req: NextRequest) {
     const cors = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Maintainer-Test",
       "Access-Control-Max-Age": "86400",
     };
     if (req.method === "OPTIONS") {

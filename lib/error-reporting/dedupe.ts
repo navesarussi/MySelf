@@ -24,9 +24,19 @@ export function evaluateDedupe(input: {
   } | null;
   hourlySent: number;
   noisy: boolean;
+  forceSend?: boolean;
 }): DedupeDecision {
   const firstSeen = input.existing?.first_seen ?? input.now.toISOString();
   const occurrenceCount = (input.existing?.count ?? 0) + 1;
+
+  if (input.forceSend) {
+    return {
+      fingerprint: input.fingerprint,
+      shouldSend: true,
+      occurrenceCount,
+      firstSeen,
+    };
+  }
 
   if (input.noisy) {
     return {
@@ -71,6 +81,7 @@ export async function persistAndDecide(input: {
   fingerprint: string;
   payload: ErrorReportPayload;
   noisy: boolean;
+  forceSend?: boolean;
   now?: Date;
 }): Promise<DedupeDecision> {
   const now = input.now ?? new Date();
@@ -94,6 +105,7 @@ export async function persistAndDecide(input: {
     existing,
     hourlySent: hourlySent ?? 0,
     noisy: input.noisy,
+    forceSend: input.forceSend,
   });
 
   const row = {

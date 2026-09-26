@@ -11,9 +11,10 @@ const MAX_BYTES = 12 * 1024 * 1024;
 export const POST = withRouteHandler(async function POST(req: NextRequest) {
   if (!(await isApiAuthorized(req))) return unauthorized();
 
-  let form: FormData;
+  type UploadForm = { get(name: string): FormDataEntryValue | null };
+  let form: UploadForm;
   try {
-    form = await req.formData();
+    form = (await req.formData()) as unknown as UploadForm;
   } catch {
     return badRequest("invalid_form_data");
   }

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, isApiAuthorized, readJson, sessionIdentity, unauthorized } from "@/lib/api/auth";
+import { badRequest, readJson, sessionIdentity, unauthorized } from "@/lib/api/auth";
 import { withRouteHandler } from "@/lib/api/with-route-handler";
 import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
-import { reportError, type ErrorSource } from "@/lib/error-reporting";
+import {
+  getWebhookConfig,
+  MAINTAINER_TEST_HEADER,
+  reportError,
+  verifyMaintainerTestHeader,
+  type ErrorSource,
+} from "@/lib/error-reporting";
 
 const ANON_WINDOW_MS = 60_000;
 const ANON_MAX = 10;
@@ -27,26 +33,37 @@ function pickSource(value: unknown, platform: unknown): ErrorSource {
   return "web";
 }
 
+async function isMaintainerTestRequest(req: NextRequest): Promise<boolean> {
+  const config = await getWebhookConfig();
+  return verifyMaintainerTestHeader(req.headers.get(MAINTAINER_TEST_HEADER), config?.key);
+}
+
 async function handlePost(req: NextRequest) {
   const body = await readJson(req);
   const test = body.test === true;
   const identity = await sessionIdentity(req);
+  const maintainerTest = test ? await isMaintainerTestRequest(req) : false;
 
   if (test) {
-    if (!identity || !(await isPrimaryGoogleEmail(identity.sub))) {
+    if (
+      !maintainerTest &&
+      (!identity || !(await isPrimaryGoogleEmail(identity.sub)))
+    ) {
       return unauthorized();
     }
     reportError({
       source: "server",
-      error: new Error("error_reporting_test"),
+      error: new Error(
+        maintainerTest ? "error_reporting_test_maintainer" : "error_reporting_test"
+      ),
       context: {
         test: true,
-        userId: identity.sub,
-        userAction: "test_report",
+        userId: identity?.sub,
+        userAction: maintainerTest ? "maintainer_header_test" : "primary_session_test",
         route: "/api/v1/client-errors",
       },
     });
-    return NextResponse.json({ ok: true, test: true });
+    return NextResponse.json({ ok: true, test: true, maintainer: maintainerTest });
   }
 
   if (!identity) {

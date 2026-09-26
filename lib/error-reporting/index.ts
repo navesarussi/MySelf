@@ -1,4 +1,6 @@
 export { reportError, reportErrorAsync, reportIntegrationError } from "./report";
+export { scheduleErrorReport } from "./schedule";
+export { MAINTAINER_TEST_HEADER, verifyMaintainerTestHeader } from "./maintainer-test";
 export { computeFingerprint, normalizeMessage, topStackFrame } from "./fingerprint";
 export { redactUpstreamBody, redactValue } from "./redact";
 export { isNoiseError } from "./noise";
