@@ -1,8 +1,8 @@
 import { homeHeroCount } from "./home-kpis";
 import {
+  countOverdueHabits,
   dedupeHabits,
   isAwaitingReport,
-  isReportDue,
   sortHabitsByReportUrgency,
 } from "./habit-stats";
 import { filterDueRelationships } from "./relationships-due";
@@ -111,7 +111,6 @@ export function buildWidgetSnapshot(args: {
   const pending = sortHabitsByReportUrgency(uniqueHabits, today).filter((h) =>
     isAwaitingReport(h, today),
   );
-  const overdue = uniqueHabits.filter((h) => isReportDue(h, today));
   const dueRelationships = filterDueRelationships(home.relationships as Relationship[], today);
   const tasksDueSoon = dueSoonCount(home.openTasks, today);
   const topTask = topPriorityTasks(home.openTasks, 1)[0] ?? null;
@@ -141,7 +140,7 @@ export function buildWidgetSnapshot(args: {
     updatedAt,
     signedIn: true,
     heroCount: homeHeroCount({
-      habitsOverdue: overdue.length,
+      habitsOverdue: countOverdueHabits(uniqueHabits, today),
       dueRelationships: dueRelationships.length,
       tasksDueSoon,
       financeUncategorized: home.financeUncategorizedCount,

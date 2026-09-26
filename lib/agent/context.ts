@@ -1,6 +1,6 @@
 import { userDb } from "@/lib/db/user-db";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
-import { dedupeHabits, effectiveStreak, isReportDue } from "@/lib/habit-stats";
+import { dedupeHabits, effectiveStreak, filterOverdueHabits } from "@/lib/habit-stats";
 import { filterDueRelationships } from "@/lib/relationships-due";
 import { getGmailConnectionStatus } from "@/lib/integrations/gmail/status";
 import { buildGmailDigest } from "@/lib/agent/gmail";
@@ -52,7 +52,7 @@ export async function buildAgentContext(now = new Date(), opts: AgentContextOpti
   const dueRels = filterDueRelationships(relRes.data || [], now);
   const rawEvents = eventsRes.data || [];
 
-  const habitsPending = habits.filter((h: Habit) => isReportDue(h, now));
+  const habitsPending = filterOverdueHabits(habits, now);
 
   const gmail_digest = opts.gmailDigest && gmailStatus.working ? await buildGmailDigest() : null;
 

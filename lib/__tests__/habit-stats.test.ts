@@ -3,10 +3,14 @@ import assert from "node:assert/strict";
 import {
   computeCheckIn,
   computeFall,
+  countOverdueHabits,
   dedupeHabits,
   effectiveStreak,
+  filterOverdueHabits,
   habitNeedsAction,
   habitReportDay,
+  hasExplicitReportTime,
+  isAwaitingReport,
   isFullyReportedForToday,
   isReportDue,
   missedReportDays,
@@ -87,18 +91,34 @@ describe("computeFall", () => {
   });
 });
 
+describe("hasExplicitReportTime", () => {
+  it("treats null and 00:00 as implicit end-of-day", () => {
+    assert.equal(hasExplicitReportTime(null), false);
+    assert.equal(hasExplicitReportTime("00:00"), false);
+    assert.equal(hasExplicitReportTime("00:00:00"), false);
+  });
+
+  it("treats non-midnight times as explicit", () => {
+    assert.equal(hasExplicitReportTime("18:00"), true);
+    assert.equal(hasExplicitReportTime("06:30:00"), true);
+  });
+});
+
 describe("habitReportDay", () => {
-  it("defaults to the current UTC day at report time 00:00", () => {
+  it("defaults to the current Jerusalem day for implicit report time", () => {
+    // 00:30 UTC = 03:30 Jerusalem (July, IDT)
     assert.equal(habitReportDay("00:00", new Date("2026-07-12T00:30:00Z")), "2026-07-12");
-    assert.equal(habitReportDay(null, new Date("2026-07-12T23:59:00Z")), "2026-07-12");
+    assert.equal(habitReportDay(null, new Date("2026-07-12T20:59:00Z")), "2026-07-12");
   });
 
-  it("keeps the previous day before the report time", () => {
-    assert.equal(habitReportDay("06:00", new Date("2026-07-12T05:00:00Z")), "2026-07-11");
+  it("keeps the previous Jerusalem day before the report time", () => {
+    // 05:00 UTC = 08:00 Jerusalem, before 09:00 report time
+    assert.equal(habitReportDay("09:00", new Date("2026-07-12T05:00:00Z")), "2026-07-11");
   });
 
-  it("rolls to the new day once the report time passes", () => {
-    assert.equal(habitReportDay("06:00", new Date("2026-07-12T07:00:00Z")), "2026-07-12");
+  it("rolls to the new day once the Jerusalem report time passes", () => {
+    // 06:00 UTC = 09:00 Jerusalem
+    assert.equal(habitReportDay("09:00", new Date("2026-07-12T06:00:00Z")), "2026-07-12");
   });
 });
 
@@ -111,7 +131,8 @@ describe("normalizeReportTime", () => {
 });
 
 describe("sortHabitsByReportUrgency", () => {
-  const now = new Date("2026-07-13T10:00:00Z"); // 10:00 UTC
+  // 10:00 UTC = 13:00 Jerusalem on 2026-07-13 (IDT)
+  const now = new Date("2026-07-13T10:00:00Z");
 
   it("puts unreported habits before already-reported ones", () => {
     const reported = { ...base, id: "reported", last_checked_on: "2026-07-13", report_time: "00:00" };
@@ -121,8 +142,8 @@ describe("sortHabitsByReportUrgency", () => {
   });
 
   it("orders unreported habits by soonest report-window reset first", () => {
-    const soon = { ...base, id: "soon", last_checked_on: "2026-07-11", report_time: "11:00" }; // resets in 1h
-    const later = { ...base, id: "later", last_checked_on: "2026-07-11", report_time: "20:00" }; // resets in 10h
+    const soon = { ...base, id: "soon", last_checked_on: "2026-07-11", report_time: "14:00" }; // resets in 1h
+    const later = { ...base, id: "later", last_checked_on: "2026-07-11", report_time: "23:00" }; // resets in 10h
     const sorted = sortHabitsByReportUrgency([later, soon], now);
     assert.deepEqual(sorted.map((h) => h.id), ["soon", "later"]);
   });
@@ -153,25 +174,52 @@ describe("sortHabitsByOldestReport", () => {
   });
 });
 
-describe("isReportDue", () => {
-  it("is false before report_time on the calendar day", () => {
+describe("isReportDue / overdue helpers", () => {
+  it("is false before explicit report_time on the active Jerusalem day", () => {
     const habit = { ...base, last_checked_on: "2026-07-11", report_time: "18:00" };
-    assert.equal(isReportDue(habit, new Date("2026-07-13T10:00:00Z")), false);
+    // 14:59 UTC = 17:59 Jerusalem — active report day is still 2026-07-12 until 18:00
+    const now = new Date("2026-07-13T14:59:00Z");
+    assert.equal(isReportDue(habit, now), false);
+    assert.equal(isAwaitingReport(habit, now), true);
   });
 
-  it("is true after report_time when the active day is unchecked", () => {
+  it("is true after explicit report_time when the active day is unchecked", () => {
     const habit = { ...base, last_checked_on: "2026-07-12", report_time: "18:00" };
-    assert.equal(isReportDue(habit, new Date("2026-07-13T19:00:00Z")), true);
+    // 16:00 UTC = 19:00 Jerusalem on 2026-07-13
+    assert.equal(isReportDue(habit, new Date("2026-07-13T16:00:00Z")), true);
   });
 
   it("is false when already checked for the active day", () => {
     const habit = { ...base, last_checked_on: "2026-07-13", report_time: "18:00" };
-    assert.equal(isReportDue(habit, new Date("2026-07-13T19:00:00Z")), false);
+    assert.equal(isReportDue(habit, new Date("2026-07-13T16:00:00Z")), false);
+  });
+
+  it("does not count implicit report_time habits as overdue mid-day", () => {
+    const habit = { ...base, last_checked_on: "2026-07-12", report_time: "00:00" };
+    // 10:00 UTC = 13:00 Jerusalem
+    assert.equal(isAwaitingReport(habit, new Date("2026-07-13T10:00:00Z")), true);
+    assert.equal(isReportDue(habit, new Date("2026-07-13T10:00:00Z")), false);
+  });
+
+  it("counts implicit report_time habits overdue from 23:00 Jerusalem", () => {
+    const habit = { ...base, last_checked_on: "2026-07-12", report_time: null };
+    // 20:30 UTC = 23:30 Jerusalem on 2026-07-13
+    assert.equal(isReportDue(habit, new Date("2026-07-13T20:30:00Z")), true);
+  });
+
+  it("filterOverdueHabits and countOverdueHabits match isReportDue", () => {
+    const overdue = { ...base, id: "late", last_checked_on: "2026-07-12", report_time: "08:00" };
+    const pending = { ...base, id: "open", last_checked_on: "2026-07-12", report_time: "21:00" };
+    const done = { ...base, id: "done", last_checked_on: "2026-07-13", report_time: "08:00" };
+    const now = new Date("2026-07-13T10:00:00Z"); // 13:00 Jerusalem
+    const habits = [overdue, pending, done];
+    assert.deepEqual(filterOverdueHabits(habits, now).map((h) => h.id), ["late"]);
+    assert.equal(countOverdueHabits(habits, now), 1);
   });
 });
 
 describe("habitNeedsAction / isFullyReportedForToday", () => {
-  const now = new Date("2026-07-13T12:00:00Z");
+  const now = new Date("2026-07-13T10:00:00Z");
 
   it("needs action when today's report is missing", () => {
     const habit = { ...base, last_checked_on: "2026-07-12", report_time: "00:00" };
@@ -206,7 +254,7 @@ describe("missedReportDays", () => {
       last_checked_on: "2026-07-10",
       report_time: "00:00",
     };
-    assert.deepEqual(missedReportDays(habit, new Date("2026-07-13T12:00:00Z")), [
+    assert.deepEqual(missedReportDays(habit, new Date("2026-07-13T10:00:00Z")), [
       "2026-07-11",
       "2026-07-12",
     ]);

@@ -19,8 +19,8 @@ import {
   dedupeHabits,
   effectiveStreak,
   habitReportDay,
+  filterOverdueHabits,
   isAwaitingReport,
-  isReportDue,
   sortHabitsByReportUrgency,
   todayISO,
 } from "@/lib/habit-stats";
@@ -54,7 +54,7 @@ export default function HomeScreen() {
     () => sortHabitsByReportUrgency(uniqueHabits).filter((h) => isAwaitingReport(h)),
     [uniqueHabits]
   );
-  const habitsOverdueToday = useMemo(() => uniqueHabits.filter((h) => isReportDue(h)), [uniqueHabits]);
+  const habitsOverdueToday = useMemo(() => filterOverdueHabits(uniqueHabits), [uniqueHabits]);
   const dueRelationships = useMemo(
     () => filterDueRelationships((data?.relationships ?? []) as Relationship[], todayDate),
     [data?.relationships, todayDate]
