@@ -112,10 +112,21 @@ export type TimelineCluster = {
 
 /**
  * Group events whose markers would collide at the current zoom into clusters.
- * Events must be sorted by time (dedupeEvents guarantees this). A cluster is
- * closed as soon as the next marker is at least `minGapPx` away from the
- * cluster's last member, so cluster membership only depends on zoom — not on
- * pan position.
+ *
+ * Events fall into fixed buckets of absolute time, `minGapPx` wide at this
+ * zoom, so a cluster never covers more than one bucket and its membership does
+ * not depend on where the view starts (panning never regroups). The bucket
+ * width is rounded up to a half power of two, so small zoom changes during a
+ * pinch keep the same grouping instead of reshuffling every frame. Two
+ * neighbouring clusters that still land closer than `minGapPx` merge once
+ * (pairwise, so merging cannot chain).
+ *
+ * This replaced "join while the next marker is within the gap", which chained:
+ * a steady run of events became one cluster spanning more than a year, drawn at
+ * its midpoint — far from most of its members.
+ *
+ * The marker sits at the members' mean time. Events must be sorted by time
+ * (dedupeEvents guarantees it).
  */
 export function clusterEvents(
   events: TimelineEvent[],
@@ -125,37 +136,51 @@ export function clusterEvents(
   minGapPx = 44
 ): TimelineCluster[] {
   if (!events.length || plotW <= 0 || viewMax <= viewMin) return [];
-  const clusters: TimelineCluster[] = [];
-  let current: { xs: number[]; events: TimelineEvent[]; timeMin: number; timeMax: number } | null =
-    null;
+  const msPerPx = (viewMax - viewMin) / plotW;
+  const bucketMs = Math.pow(2, Math.ceil(Math.log2(minGapPx * msPerPx) * 2) / 2);
 
-  const flush = () => {
-    if (!current) return;
-    const first = current.xs[0];
-    const last = current.xs[current.xs.length - 1];
-    clusters.push({
-      key: current.events[0].id,
-      x: (first + last) / 2,
-      timeMin: current.timeMin,
-      timeMax: current.timeMax,
-      events: current.events,
-    });
-    current = null;
-  };
-
+  type Acc = { bucket: number; events: TimelineEvent[]; sum: number; timeMin: number; timeMax: number };
+  const buckets: Acc[] = [];
   for (const ev of events) {
     const time = eventDateTime(ev);
-    const x = xFor(time, viewMin, viewMax, plotW);
-    if (current && x - current.xs[current.xs.length - 1] < minGapPx) {
-      current.xs.push(x);
-      current.events.push(ev);
-      current.timeMax = time;
+    const bucket = Math.floor(time / bucketMs);
+    const last = buckets[buckets.length - 1];
+    if (last && last.bucket === bucket) {
+      last.events.push(ev);
+      last.sum += time;
+      last.timeMax = time;
     } else {
-      flush();
-      current = { xs: [x], events: [ev], timeMin: time, timeMax: time };
+      buckets.push({ bucket, events: [ev], sum: time, timeMin: time, timeMax: time });
     }
   }
-  flush();
+
+  const toCluster = (acc: Acc): TimelineCluster => ({
+    key: acc.events[0].id,
+    x: xFor(acc.sum / acc.events.length, viewMin, viewMax, plotW),
+    timeMin: acc.timeMin,
+    timeMax: acc.timeMax,
+    events: acc.events,
+  });
+
+  const clusters: TimelineCluster[] = [];
+  for (let i = 0; i < buckets.length; i++) {
+    const cur = toCluster(buckets[i]);
+    const next = buckets[i + 1] ? toCluster(buckets[i + 1]) : null;
+    if (next && next.x - cur.x < minGapPx) {
+      const events2 = [...cur.events, ...next.events];
+      const sum = buckets[i].sum + buckets[i + 1].sum;
+      clusters.push({
+        key: cur.key,
+        x: xFor(sum / events2.length, viewMin, viewMax, plotW),
+        timeMin: cur.timeMin,
+        timeMax: next.timeMax,
+        events: events2,
+      });
+      i++;
+    } else {
+      clusters.push(cur);
+    }
+  }
   return clusters;
 }
 
@@ -167,24 +192,34 @@ export function clusterZoomTarget(cluster: TimelineCluster, minSpanMs = 6 * 60 *
 }
 
 /**
- * Stack clusters into label lanes so adjacent labels never overlap. Same greedy
- * packing as `assignEventLanes` but keyed by cluster and deterministic for
- * pre-sorted input.
+ * Stack clusters into label lanes so adjacent labels never overlap. Clusters
+ * for which `isPriority` is true are placed first, so when only a few lanes fit
+ * under the axis they are the ones that keep their labels. Within each pass
+ * clusters go in x order; deterministic for pre-sorted input.
  */
-export function assignClusterLanes(clusters: TimelineCluster[], minGapPx = 96) {
-  const laneLastX: number[] = [];
+export function assignClusterLanes(
+  clusters: TimelineCluster[],
+  minGapPx = 96,
+  isPriority?: (cluster: TimelineCluster) => boolean
+) {
+  const laneXs: number[][] = [];
   const lanes = new Map<string, number>();
-  for (const cl of clusters) {
-    let lane = laneLastX.findIndex((lx) => cl.x - lx >= minGapPx);
+  const place = (cl: TimelineCluster) => {
+    let lane = laneXs.findIndex((xs) => xs.every((x) => Math.abs(cl.x - x) >= minGapPx));
     if (lane === -1) {
-      lane = laneLastX.length;
-      laneLastX.push(cl.x);
-    } else {
-      laneLastX[lane] = cl.x;
+      lane = laneXs.length;
+      laneXs.push([]);
     }
+    laneXs[lane].push(cl.x);
     lanes.set(cl.key, lane);
+  };
+  if (isPriority) {
+    for (const cl of clusters) if (isPriority(cl)) place(cl);
+    for (const cl of clusters) if (!isPriority(cl)) place(cl);
+  } else {
+    for (const cl of clusters) place(cl);
   }
-  return { lanes, laneCount: Math.max(laneLastX.length, 1) };
+  return { lanes, laneCount: Math.max(laneXs.length, 1) };
 }
 
 // ---------------------------------------------------------------------------
@@ -239,4 +274,41 @@ export function visibleLabelSegment(
   const right = Math.min(barRight - pad, plotW - pad);
   if (right - left < minWidth) return null;
   return { left, width: right - left };
+}
+
+// ---------------------------------------------------------------------------
+// Time index (sorted event times) — window slicing and density
+// ---------------------------------------------------------------------------
+
+/** First index whose time is >= `t` in an ascending array (binary search). */
+export function lowerBound(sortedTimes: readonly number[], t: number): number {
+  let lo = 0;
+  let hi = sortedTimes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (sortedTimes[mid] < t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** Index range [start, end) of the times inside [min, max). */
+export function timeWindow(sortedTimes: readonly number[], min: number, max: number) {
+  return { start: lowerBound(sortedTimes, min), end: lowerBound(sortedTimes, max) };
+}
+
+/**
+ * How many events fall in each of `bins` equal slices of [min, max). Cost is
+ * the events in the window plus one binary search, so it can run on every
+ * zoom frame over thousands of events.
+ */
+export function densityBins(sortedTimes: readonly number[], min: number, max: number, bins: number): number[] {
+  const counts = new Array<number>(Math.max(bins, 0)).fill(0);
+  if (bins <= 0 || max <= min) return counts;
+  const { start, end } = timeWindow(sortedTimes, min, max);
+  const scale = bins / (max - min);
+  for (let i = start; i < end; i++) {
+    counts[Math.min(Math.floor((sortedTimes[i] - min) * scale), bins - 1)]++;
+  }
+  return counts;
 }

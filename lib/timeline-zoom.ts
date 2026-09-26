@@ -29,11 +29,18 @@ export function parseMinZoom(value: string | null | undefined): TimelineZoomLeve
   return DEFAULT_EVENT_MIN_ZOOM;
 }
 
-/** Event is visible when the viewport is zoomed in at least to its min_zoom level. */
+/**
+ * An event appears one zoom level before its `min_zoom`: a timed calendar entry
+ * (`hours`) shows from the day view, an all-day one (`days`) from the month
+ * view, a manual event or milestone (`months`) on the overview. Requiring the
+ * exact level hid 96% of a real timeline (3,846 of 4,000 events were timed)
+ * until the view was narrowed to a single day, so the overview looked empty.
+ * Collisions are handled by clustering, and the density strip shows the rest.
+ */
 export function isEventVisibleAtZoom(
   minZoom: TimelineZoomLevel | null | undefined,
   spanMs: number
 ): boolean {
   const required = parseMinZoom(minZoom);
-  return ZOOM_RANK[spanToZoomLevel(spanMs)] >= ZOOM_RANK[required];
+  return ZOOM_RANK[spanToZoomLevel(spanMs)] >= ZOOM_RANK[required] - 1;
 }
