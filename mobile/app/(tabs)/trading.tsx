@@ -8,7 +8,7 @@ import { useColors, tokens } from "../../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery, useTradingEquity } from "../../src/query";
 import { EquityFreshness } from "../../src/components/trading/equity-freshness";
 import { tradingPnl } from "@/lib/trading/equity-display";
-import { Badge, Btn, Card, EmptyState, ErrorNote, KpiGridSkeleton, Screen, SectionTitle, SkeletonCard, confirmDelete } from "../../src/components/ui";
+import { Badge, Btn, Card, CollapsibleSection, EmptyState, ErrorNote, KpiGridSkeleton, Screen, SkeletonCard, confirmDelete } from "../../src/components/ui";
 import { KpiGrid, SeriesChart } from "../../src/components/trading/charts";
 import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import { PhaseGateCard, PositionCard, TradingHubLinks, TradingText, TriggerCard } from "../../src/components/trading/blocks";
@@ -117,7 +117,12 @@ export default function TradingScreen() {
               hint: fmtSignedUsd(tradingPnl(displayEquity, displayStartingEquity)),
             },
             { label: t("trading.drawdown"), value: fmtPct(data.account.drawdown_pct), tone: data.account.drawdown_pct > 0.08 ? "warn" : "default", hint: `${t("trading.toKill")} ${fmtPct(data.account.kill_switch_distance_pct)}` },
-            { label: t("trading.openRisk"), value: `${data.account.open_risk_r}R`, hint: `max ${data.envelope.MAX_TOTAL_OPEN_RISK_R}R`, tone: data.account.open_risk_r >= 4 ? "warn" : "default" },
+            {
+              label: t("trading.openRisk"),
+              value: fmtPct(data.account.open_risk_pct ?? 0, 1),
+              hint: `max ${fmtPct(data.envelope.ACCOUNT_MAX_OPEN_RISK_PCT ?? 0.08, 0)} · ${positions.length} ${t("trading.positionsShort")}`,
+              tone: (data.account.open_risk_pct ?? 0) >= (data.envelope.ACCOUNT_MAX_OPEN_RISK_PCT ?? 0.08) * 0.75 ? "warn" : "default",
+            },
             { label: t("trading.pnlDay"), value: fmtR(data.account.r_day), hint: fmtSignedUsd(data.account.pnl_day), tone: data.account.r_day >= 0 ? "good" : "warn" },
             { label: t("trading.pnlWeek"), value: fmtR(data.account.r_week), hint: fmtSignedUsd(data.account.pnl_week), tone: data.account.r_week >= 0 ? "good" : "warn" },
             { label: t("trading.pnlMonth"), value: fmtR(data.account.r_month), hint: fmtSignedUsd(data.account.pnl_month), tone: data.account.r_month >= 0 ? "good" : "warn" },
@@ -127,6 +132,7 @@ export default function TradingScreen() {
         <KpiGridSkeleton />
       ) : null}
 
+      <CollapsibleSection id="trading.tab.gate" title={t("trading.phaseGateTitle")} defaultOpen={false} summary={data ? t(`trading.phase_${data.settings.phase}`) : null}>
       {data ? (
         <PhaseGateCard
           gate={data.gate}
@@ -139,8 +145,9 @@ export default function TradingScreen() {
       ) : overview.loading ? (
         <SkeletonCard lines={4} />
       ) : null}
+      </CollapsibleSection>
 
-      <SectionTitle>{t("trading.positions")}</SectionTitle>
+      <CollapsibleSection id="trading.tab.positions" title={t("trading.positions")} summary={data ? String(positions.length) : null}>
       {data ? (
         <>
           <View style={{ ...row, gap: 8, marginBottom: 8 }}>
@@ -165,7 +172,7 @@ export default function TradingScreen() {
           ))}
           {otherPositions.length ? (
             <>
-              <SectionTitle>{t("trading.otherPositions")}</SectionTitle>
+              <TradingText bold>{t("trading.otherPositions")}</TradingText>
               <TradingText muted size={tokens.textXs}>
                 {t("trading.otherPositionsHint")}
               </TradingText>
@@ -185,7 +192,9 @@ export default function TradingScreen() {
           <SkeletonCard lines={3} />
         </>
       ) : null}
+      </CollapsibleSection>
 
+      <CollapsibleSection id="trading.tab.equity" title={t("trading.equityCurve")}>
       {data && equityValues.length > 1 ? (
         <Card>
           <SeriesChart values={equityValues} title={t("trading.equityCurve")} format={(v) => fmtUsd(v)} />
@@ -193,8 +202,9 @@ export default function TradingScreen() {
       ) : overview.loading && !data ? (
         <SkeletonCard lines={1} />
       ) : null}
+      </CollapsibleSection>
 
-      <SectionTitle>{t("trading.triggers")}</SectionTitle>
+      <CollapsibleSection id="trading.tab.triggers" title={t("trading.triggers")} summary={triggers.data ? String(triggerRows.length) : null}>
       {triggers.error && triggers.data == null ? <ErrorNote message={triggers.error} onRetry={() => void triggers.refresh()} /> : null}
       {triggers.data != null ? (
         <>
@@ -209,8 +219,9 @@ export default function TradingScreen() {
           <SkeletonCard lines={3} />
         </>
       ) : null}
+      </CollapsibleSection>
 
-      <SectionTitle>{t("trading.events")}</SectionTitle>
+      <CollapsibleSection id="trading.tab.events" title={t("trading.events")} defaultOpen={false}>
       {events.error && events.data == null ? <ErrorNote message={events.error} onRetry={() => void events.refresh()} /> : null}
       {events.data != null ? (
         <Card>
@@ -229,6 +240,7 @@ export default function TradingScreen() {
       ) : events.loading ? (
         <SkeletonCard lines={4} />
       ) : null}
+      </CollapsibleSection>
     </Screen>
     </ScreenErrorBoundary>
   );
