@@ -32,10 +32,34 @@ async function check(base: string, token: string, path: string): Promise<SmokeRe
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const text = await res.text();
-    return { path, status: res.status, failure: evaluateSmokeResponse(res.status, text), ms: Date.now() - started };
+    return { path, status: res.status, failure: evaluateSmokeResponse(res.status, text, path), ms: Date.now() - started };
   } catch (err) {
     const failure = err instanceof Error && err.name === "TimeoutError" ? `timeout_${TIMEOUT_MS / 1000}s` : `fetch_error: ${String(err)}`;
     return { path, status: 0, failure, ms: Date.now() - started };
+  }
+}
+
+async function reportContractFailure(base: string, token: string, failures: SmokeResult[]) {
+  const contractFailures = failures.filter((f) => f.failure?.startsWith("contract:"));
+  if (contractFailures.length === 0) return;
+  const lines = contractFailures.map((f) => `${f.path}: ${f.failure}`);
+  try {
+    const res = await fetch(`${base}/api/v1/client-errors`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "cron",
+        name: "PostDeploySmokeContractFailure",
+        message: `Smoke contract violations:\n${lines.join("\n")}`,
+        route: "/api/v1/client-errors",
+        userAction: "post_deploy_smoke",
+        appVersion: process.env.GITHUB_SHA?.slice(0, 7) ?? "unknown",
+      }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    console.log(`client-errors: HTTP ${res.status} ${await res.text()}`);
+  } catch (err) {
+    console.error("client-errors: could not report contract failure", err);
   }
 }
 
@@ -67,6 +91,7 @@ async function main() {
 
   const failures = results.filter((r) => r.failure);
   if (failures.length === 0) return;
+  await reportContractFailure(base, token, failures);
   await alert(base, token, failures);
   process.exit(1);
 }
