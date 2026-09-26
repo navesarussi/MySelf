@@ -1,3 +1,4 @@
+import { enrichMerchantRuleForDisplay } from "@/lib/finance/merchant-display";
 import { getSupabase } from "@/lib/supabase";
 import {
   legacyNormalizeMerchantKey,
@@ -22,7 +23,7 @@ export async function fetchMerchantRules(): Promise<MerchantRule[]> {
     .select("*")
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []) as MerchantRule[];
+  return ((data ?? []) as MerchantRule[]).map(enrichMerchantRuleForDisplay);
 }
 
 export async function fetchMerchantRulesMap(): Promise<Map<string, MerchantRule>> {

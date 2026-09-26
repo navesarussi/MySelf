@@ -1,86 +1,95 @@
 /**
- * Re-normalize finance_merchant_rules display names and soft-archive dormant fixed rules.
+ * Re-normalize finance_merchant_rules display_name only (never merchant_key).
  *
- * Usage: tsx scripts/finance/normalize-merchant-display.ts [--dry-run]
+ * Usage:
+ *   tsx scripts/finance/normalize-merchant-display.ts            # dry-run (default)
+ *   tsx scripts/finance/normalize-merchant-display.ts --apply    # write to DB
  */
+import { normalizeStoredDisplayName } from "@/lib/finance/merchant-display";
 import { getSupabase } from "@/lib/supabase";
-import { normalizeStoredMerchantFields } from "@/lib/finance/merchant-display";
-import { normalizeMerchantKey } from "@/lib/finance/merchant-rules-client";
-import { round2 } from "@/lib/finance/money";
 
-const dryRun = process.argv.includes("--dry-run");
+const apply = process.argv.includes("--apply");
 
 type RuleRow = {
   id: string;
   merchant_key: string;
   display_name: string | null;
-  expense_type: string | null;
-  is_active: boolean;
 };
+
+type PlannedUpdate = {
+  id: string;
+  merchant_key: string;
+  display_before: string;
+  display_after: string;
+};
+
+function pad(s: string, width: number): string {
+  if (s.length >= width) return s.slice(0, width - 1) + "…";
+  return s + " ".repeat(width - s.length);
+}
 
 async function main() {
   const { data: rules, error } = await getSupabase()
     .from("finance_merchant_rules")
-    .select("id, merchant_key, display_name, expense_type, is_active");
+    .select("id, merchant_key, display_name");
   if (error) throw new Error(error.message);
 
-  let renamed = 0;
-  let archived = 0;
+  const updates: PlannedUpdate[] = [];
 
   for (const rule of (rules ?? []) as RuleRow[]) {
-    const normalized = normalizeStoredMerchantFields({
+    const { display_name } = normalizeStoredDisplayName({
       merchant_key: rule.merchant_key,
       display_name: rule.display_name,
     });
-    const keyChanged = normalized.merchant_key !== normalizeMerchantKey(rule.merchant_key);
-    const displayChanged = (normalized.display_name ?? "") !== (rule.display_name ?? "").trim();
+    const before = (rule.display_name ?? "").trim();
+    const after = (display_name ?? "").trim();
+    if (before === after) continue;
 
-    if (keyChanged || displayChanged) {
-      renamed++;
-      if (!dryRun) {
-        const { error: upErr } = await getSupabase()
-          .from("finance_merchant_rules")
-          .update({
-            merchant_key: normalized.merchant_key,
-            display_name: normalized.display_name,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", rule.id);
-        if (upErr) throw new Error(upErr.message);
-      }
-    }
-
-    if (rule.expense_type !== "fixed" || !rule.is_active) continue;
-
-    const keys = [normalized.merchant_key, rule.merchant_key].filter(Boolean);
-    const { data: txns } = await getSupabase()
-      .from("finance_transactions")
-      .select("amount, merchant, description")
-      .eq("kind", "expense")
-      .is("deleted_at", null)
-      .gt("amount", 0)
-      .order("txn_date", { ascending: false })
-      .limit(200);
-
-    const hasCharge = (txns ?? []).some((t) => {
-      const m = (t.merchant ?? t.description ?? "").toLowerCase();
-      return keys.some((k) => k && m.includes(k.split(" ")[0]?.slice(0, 4) ?? ""));
+    updates.push({
+      id: rule.id,
+      merchant_key: rule.merchant_key,
+      display_before: before || "(null)",
+      display_after: after || "(null)",
     });
-
-    if (!hasCharge && rule.is_active) {
-      archived++;
-      if (!dryRun) {
-        await getSupabase()
-          .from("finance_merchant_rules")
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq("id", rule.id);
-      }
-    }
   }
 
   console.log(
-    `${dryRun ? "[dry-run] " : ""}Normalized ${renamed} merchant rule(s); archived ${archived} dormant fixed rule(s).`
+    `${apply ? "[apply] " : "[dry-run] "}${updates.length} of ${(rules ?? []).length} rule(s) would update display_name.\n`
   );
+
+  if (updates.length > 0) {
+    console.log(`${pad("merchant_key", 36)} ${pad("display_before", 40)} display_after`);
+    console.log("-".repeat(120));
+    for (const u of updates) {
+      console.log(`${pad(u.merchant_key, 36)} ${pad(u.display_before, 40)} ${u.display_after}`);
+    }
+    console.log("");
+  }
+
+  if (!apply) {
+    console.log("No changes written. Re-run with --apply to persist.");
+    return;
+  }
+
+  if (updates.length === 0) {
+    console.log("Nothing to apply.");
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const payload = updates.map((u) => ({
+    id: u.id,
+    merchant_key: u.merchant_key,
+    display_name: u.display_after === "(null)" ? null : u.display_after,
+    updated_at: now,
+  }));
+
+  const { error: upErr } = await getSupabase()
+    .from("finance_merchant_rules")
+    .upsert(payload, { onConflict: "id" });
+  if (upErr) throw new Error(upErr.message);
+
+  console.log(`Applied ${updates.length} display_name update(s) atomically.`);
 }
 
 main().catch((err) => {

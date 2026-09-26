@@ -35,8 +35,8 @@ describe("isDormantFixedExpense", () => {
     assert.equal(isDormantFixedExpense(item({ last_charge_amount: 100, last_charge_date: "2026-08-01" })), false);
   });
 
-  it("keeps active items with planned amount even without charges yet", () => {
-    assert.equal(isDormantFixedExpense(item({ planned_amount: 99, is_active: true })), false);
+  it("hides active items with planned amount but no transaction charges", () => {
+    assert.equal(isDormantFixedExpense(item({ planned_amount: 99, is_active: true })), true);
   });
 });
 
