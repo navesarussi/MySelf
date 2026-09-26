@@ -36,6 +36,8 @@ export function FixedExpensesSection({
   onSave,
   onDelete,
   onAdd,
+  onConvertToVariable,
+  onUnlinkTxn,
 }: {
   items: FixedExpenseItem[];
   loading?: boolean;
@@ -47,6 +49,8 @@ export function FixedExpensesSection({
   onSave: (item: FixedExpenseItem, patch: FixedExpensePatch) => Promise<boolean>;
   onDelete: (item: FixedExpenseItem) => Promise<boolean>;
   onAdd: (patch: FixedExpensePatch) => Promise<boolean>;
+  onConvertToVariable?: (item: FixedExpenseItem) => Promise<boolean>;
+  onUnlinkTxn?: (item: FixedExpenseItem, txnId: string) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   const c = useColors();
@@ -169,6 +173,24 @@ export function FixedExpensesSection({
                     setSaving(false);
                   }
                 }
+              : undefined
+          }
+          onConvertToVariable={
+            editItem !== "new" && editItem.rule_id && onConvertToVariable
+              ? async () => {
+                  setSaving(true);
+                  try {
+                    const ok = await onConvertToVariable(editItem);
+                    if (ok) setEditItem(null);
+                  } finally {
+                    setSaving(false);
+                  }
+                }
+              : undefined
+          }
+          onUnlinkTxn={
+            editItem !== "new" && onUnlinkTxn
+              ? async (txnId) => { await onUnlinkTxn(editItem, txnId); }
               : undefined
           }
         />

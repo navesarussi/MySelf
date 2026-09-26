@@ -1,7 +1,15 @@
 import { recurringMerchantGroupKey, typicalChargeAmount } from "@/lib/finance/cal-duplicate";
+import {
+  fetchUnlinkedTxnIds,
+  matchedTxnsForFixed,
+  txnMatchesFixedKey,
+  type MatchedTxn,
+} from "@/lib/finance/fixed-expense-links";
 import { formatMerchantLabel, normalizeMerchantKey, type MerchantRule } from "@/lib/finance/merchant-rules-client";
 import { round2 } from "@/lib/finance/money";
 import type { FinanceTransaction } from "@/lib/finance/types";
+
+export type { MatchedTxn };
 
 export type FixedExpenseFrequency = "monthly" | "weekly" | "yearly";
 
@@ -19,6 +27,7 @@ export type FixedExpenseItem = {
   last_charge_amount: number | null;
   default_note: string | null;
   is_active: boolean;
+  matched_transactions?: MatchedTxn[];
 };
 
 function inferChargeDay(dates: string[]): number | null {
@@ -29,22 +38,20 @@ function inferChargeDay(dates: string[]): number | null {
   return days[Math.floor(days.length / 2)];
 }
 
-function fixedTxnsForKey(txns: FinanceTransaction[], key: string): FinanceTransaction[] {
-  return txns.filter((t) => {
-    if (t.kind !== "expense" || t.is_internal) return false;
-    const groupKey = recurringMerchantGroupKey(t);
-    return groupKey === key || normalizeMerchantKey(t.merchant) === key || normalizeMerchantKey(t.description) === key;
-  });
+function fixedTxnsForKey(txns: FinanceTransaction[], key: string, unlinked: Set<string>): FinanceTransaction[] {
+  return txns.filter((t) => txnMatchesFixedKey(t, key, unlinked));
 }
 
 function buildFromRule(
   rule: MerchantRule,
+  month: string,
   monthTxns: FinanceTransaction[],
-  historyTxns: FinanceTransaction[]
+  historyTxns: FinanceTransaction[],
+  unlinked: Set<string>
 ): FixedExpenseItem {
   const key = normalizeMerchantKey(rule.merchant_key);
-  const monthMatches = fixedTxnsForKey(monthTxns, key);
-  const historyMatches = fixedTxnsForKey(historyTxns, key);
+  const monthMatches = fixedTxnsForKey(monthTxns, key, unlinked);
+  const historyMatches = fixedTxnsForKey(historyTxns, key, unlinked);
   const actual_amount = round2(monthMatches.reduce((s, t) => s + t.amount, 0));
   const sortedHistory = [...historyMatches].sort((a, b) => b.txn_date.localeCompare(a.txn_date));
   const last = sortedHistory[0] ?? null;
@@ -70,12 +77,19 @@ function buildFromRule(
     last_charge_amount: last ? round2(last.amount) : null,
     default_note: rule.default_note,
     is_active: rule.is_active !== false,
+    matched_transactions: matchedTxnsForFixed(key, month, monthTxns, unlinked),
   };
 }
 
-function buildFromTxnGroup(key: string, monthTxns: FinanceTransaction[], historyTxns: FinanceTransaction[]): FixedExpenseItem {
-  const monthMatches = fixedTxnsForKey(monthTxns, key);
-  const historyMatches = fixedTxnsForKey(historyTxns, key);
+function buildFromTxnGroup(
+  key: string,
+  month: string,
+  monthTxns: FinanceTransaction[],
+  historyTxns: FinanceTransaction[],
+  unlinked: Set<string>
+): FixedExpenseItem {
+  const monthMatches = fixedTxnsForKey(monthTxns, key, unlinked);
+  const historyMatches = fixedTxnsForKey(historyTxns, key, unlinked);
   const sortedHistory = [...historyMatches].sort((a, b) => b.txn_date.localeCompare(a.txn_date));
   const last = sortedHistory[0] ?? null;
   const label = formatMerchantLabel(
@@ -98,6 +112,7 @@ function buildFromTxnGroup(key: string, monthTxns: FinanceTransaction[], history
     last_charge_amount: last ? round2(last.amount) : null,
     default_note: null,
     is_active: true,
+    matched_transactions: matchedTxnsForFixed(key, month, monthTxns, unlinked),
   };
 }
 
@@ -110,20 +125,27 @@ function pickPreferredLabel(monthTxns: FinanceTransaction[], historyTxns: Financ
 }
 
 /** Build itemized fixed/recurring expenses for a month. */
-export function buildFixedExpenseItems(
+export async function buildFixedExpenseItems(
   rules: MerchantRule[],
+  month: string,
   monthTxns: FinanceTransaction[],
   historyTxns: FinanceTransaction[] = monthTxns
-): FixedExpenseItem[] {
+): Promise<FixedExpenseItem[]> {
   const fixedRules = rules.filter((r) => r.expense_type === "fixed" && r.kind !== "income");
   const seen = new Set<string>();
   const items: FixedExpenseItem[] = [];
+  const unlinkedByKey = new Map<string, Set<string>>();
+
+  async function unlinkedFor(key: string): Promise<Set<string>> {
+    if (!unlinkedByKey.has(key)) unlinkedByKey.set(key, await fetchUnlinkedTxnIds(key));
+    return unlinkedByKey.get(key)!;
+  }
 
   for (const rule of fixedRules) {
     const key = normalizeMerchantKey(rule.merchant_key);
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    items.push(buildFromRule(rule, monthTxns, historyTxns));
+    items.push(buildFromRule(rule, month, monthTxns, historyTxns, await unlinkedFor(key)));
   }
 
   for (const t of monthTxns) {
@@ -131,7 +153,7 @@ export function buildFixedExpenseItems(
     const key = recurringMerchantGroupKey(t);
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    items.push(buildFromTxnGroup(key, monthTxns, historyTxns));
+    items.push(buildFromTxnGroup(key, month, monthTxns, historyTxns, await unlinkedFor(key)));
   }
 
   return items.sort((a, b) => a.name.localeCompare(b.name, "he"));
