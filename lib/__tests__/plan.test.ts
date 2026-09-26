@@ -99,7 +99,58 @@ describe("buildMonthPlanView", () => {
     );
     assert.equal(view.totals.actual_income, 8000);
     assert.equal(view.sections.variable.actual_total, 300);
+    assert.equal(view.totals.net_actual, 7700);
     assert.equal(view.weeks.length >= 4, true);
+  });
+
+  it("net_actual excludes savings via shared month-net helper", () => {
+    const lines: PlanLineRow[] = [
+      {
+        id: "1",
+        plan_id: "p",
+        line_type: "income",
+        name: "הכנסות",
+        category: null,
+        planned_amount: 5000,
+        sort_order: 0,
+      },
+      {
+        id: "2",
+        plan_id: "p",
+        line_type: "variable",
+        name: "מזון",
+        category: "מזון",
+        planned_amount: 1000,
+        sort_order: 1,
+      },
+      {
+        id: "3",
+        plan_id: "p",
+        line_type: "savings",
+        name: "חיסכון",
+        category: null,
+        planned_amount: 500,
+        sort_order: 2,
+      },
+    ];
+    const view = buildMonthPlanView(
+      "2026-09",
+      "p",
+      lines,
+      [
+        txn({ txn_date: "2026-09-01", amount: 5000, kind: "income" }),
+        txn({ txn_date: "2026-09-02", amount: 800, kind: "expense", category: "מזון" }),
+        txn({
+          txn_date: "2026-09-03",
+          amount: 1200,
+          kind: "expense",
+          category: "חיסכון",
+          expense_type: "savings",
+        }),
+      ]
+    );
+    assert.equal(view.totals.net_actual, 4200);
+    assert.equal(view.sections.savings.actual_total, 1200);
   });
 });
 

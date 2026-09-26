@@ -8,18 +8,27 @@ import {
   parseHistoryMonths,
   type HistoryPlanSeed,
 } from "@/lib/finance/history";
+import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
+import { fetchSplitsByParentIds } from "@/lib/finance/month-net";
 import { TXN_CASHFLOW_COLUMNS } from "@/lib/finance/txn-columns";
 import { fetchTransactionsInRange, monthsBounds } from "@/lib/finance/txn-range";
 import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 function rowToCashflow(row: Record<string, unknown>): CashflowRow {
   return {
+    id: row.id != null ? String(row.id) : undefined,
     txn_date: String(row.txn_date),
     amount: Number(row.amount),
     kind: row.kind as CashflowRow["kind"],
     category: row.category != null ? String(row.category) : null,
     needs_categorization: Boolean(row.needs_categorization),
     is_internal: Boolean(row.is_internal),
+    merchant: row.merchant != null ? String(row.merchant) : null,
+    description: row.description != null ? String(row.description) : null,
+    expense_type:
+      row.expense_type === "fixed" || row.expense_type === "variable" || row.expense_type === "savings"
+        ? row.expense_type
+        : null,
   };
 }
 
@@ -42,8 +51,12 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
   // Up to 24 months of transactions — by far the most likely of these reads to
   // pass the row cap, and every figure on the screen is derived from them.
   let txnRows: Record<string, unknown>[];
+  let rulesMap;
   try {
-    txnRows = await fetchTransactionsInRange(monthsBounds(keys), TXN_CASHFLOW_COLUMNS);
+    [txnRows, rulesMap] = await Promise.all([
+      fetchTransactionsInRange(monthsBounds(keys), TXN_CASHFLOW_COLUMNS),
+      fetchMerchantRulesMap(),
+    ]);
   } catch {
     return dbError();
   }
@@ -83,11 +96,18 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
     });
   }
 
+  const transactions = (txnRows ?? []).map((r) => rowToCashflow(r as Record<string, unknown>));
+  const splitsByParentId = await fetchSplitsByParentIds(
+    transactions.map((row) => row.id).filter((id): id is string => Boolean(id))
+  );
+
   const history = buildFinanceHistory({
     endMonth,
     months,
-    transactions: (txnRows ?? []).map((r) => rowToCashflow(r as Record<string, unknown>)),
+    transactions,
     planSeeds: seeds,
+    rulesMap,
+    splitsByParentId,
   });
 
   return NextResponse.json(history);
