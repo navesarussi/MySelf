@@ -20,6 +20,9 @@ import {
 import { TxnDateTimeFields } from "../src/components/finance/txn-datetime-fields";
 import { expenseTypeForCategory } from "@/lib/finance/categorize-client";
 
+/** Stable when nothing is cached, so the queue-index memo does not rerun every render. */
+const EMPTY_QUEUE: UncategorizedTxn[] = [];
+
 export default function FinanceCategorizeScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { t } = useI18n();
@@ -39,7 +42,7 @@ export default function FinanceCategorizeScreen() {
   const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const queue = queryClient.getQueryData<UncategorizedTxn[]>(queryKeys.financeUncategorized) ?? [];
+  const queue = queryClient.getQueryData<UncategorizedTxn[]>(queryKeys.financeUncategorized) ?? EMPTY_QUEUE;
   const queueIndex = useMemo(() => queue.findIndex((row) => row.id === id), [queue, id]);
   const queueLabel =
     queue.length > 1 && queueIndex >= 0

@@ -43,7 +43,7 @@ import {
   TasksFilterBar,
   type TasksFilterState,
 } from "../../src/components/tasks-filter-bar";
-import type { Task, TaskExternalMeta, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
+import type { Project, Task, TaskExternalMeta, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
 import { useColors, tokens } from "../../src/theme";
 import { useToast } from "../../src/toast";
@@ -54,6 +54,9 @@ import {
   taskLocalOnlyWarningFlash,
   taskUpdateErrorFlash,
 } from "../../src/task-errors";
+
+/** Stable while loading, so the default-project memo does not rerun every render. */
+const NO_PROJECTS: Project[] = [];
 
 type FormState = {
   id?: string;
@@ -125,7 +128,7 @@ export default function TasksScreen() {
   const projectsQ = useApiQuery(queryKeys.projects, api.projects);
   const tasksQ = useApiQuery(tasksQueryKey, (config) => api.tasks(config, activeParams));
 
-  const projects = projectsQ.data ?? [];
+  const projects = projectsQ.data ?? NO_PROJECTS;
   const defaultProjectId = useMemo(
     () => projects.find((p) => p.name === "אישי")?.id ?? projects[0]?.id ?? "",
     [projects]
@@ -258,7 +261,7 @@ export default function TasksScreen() {
         },
       });
     },
-    [queryClient, tasksQueryKey, run, showToast, t]
+    [tasksQueryKey, run, showToast, t]
   );
 
   const toggleDone = useCallback(
@@ -301,7 +304,7 @@ export default function TasksScreen() {
         },
       });
     },
-    [queryClient, tasksQueryKey, run, showToast, t]
+    [tasksQueryKey, run, showToast, t]
   );
 
   const openEdit = useCallback(

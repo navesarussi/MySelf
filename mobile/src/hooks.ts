@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "./session";
 import { ApiError } from "./api/client";
 import type { ApiConfig } from "./api/client";
@@ -64,3 +64,14 @@ export const todayLocalISO = () => {
   const off = d.getTimezoneOffset();
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 };
+
+/**
+ * Today as one Date object for the whole day. `new Date()` during render is a
+ * new value every render: as a memo dependency or a list-row prop it defeats
+ * memoization (the relationships list re-rendered every card on each
+ * keystroke). Local noon, so calendar-day math matches `new Date()`.
+ */
+export function useTodayDate(): Date {
+  const key = todayLocalISO();
+  return useMemo(() => new Date(`${key}T12:00:00`), [key]);
+}

@@ -30,9 +30,10 @@ export function RecurringSuggestionsCard({
     (cfg) => api.financeRecurringSuggestions(cfg, month)
   );
 
-  const rawSuggestions: RecurringSuggestion[] = data?.suggestions ?? [];
+  const rawSuggestions = data?.suggestions;
   const visible = useMemo(
-    () => dedupeRecurringSuggestions(rawSuggestions).filter((s) => !dismissed[s.merchant_key]),
+    () =>
+      dedupeRecurringSuggestions(rawSuggestions ?? []).filter((s: RecurringSuggestion) => !dismissed[s.merchant_key]),
     [rawSuggestions, dismissed]
   );
 
