@@ -35,6 +35,47 @@ export async function fetchAllRows<T>(
   throw new Error(`paginate: too many pages (over ${MAX_PAGES * pageSize} rows) — is the query ordered?`);
 }
 
+export type CountedPageResult<T> = PageResult<T> & { count?: number | null };
+
+/**
+ * Same result as fetchAllRows, but the pages after the first are fetched in
+ * parallel. The first page is requested with an exact count (the caller passes
+ * `{ count: "exact" }` when `withCount` is true), which says how many pages
+ * remain. For a read that spans several pages on a user-facing request — the
+ * whole timeline is four — this is one round trip plus one, not four in a row.
+ *
+ * Rows that land between the count and the later pages can shift a row across
+ * a page boundary, as with any offset paging; the caller's ORDER BY must be
+ * total (end with a unique column) for pages to be disjoint.
+ */
+export async function fetchAllRowsParallel<T>(
+  page: (from: number, to: number, withCount: boolean) => Promise<CountedPageResult<T>>,
+  pageSize = PAGE_SIZE
+): Promise<T[]> {
+  const first = await page(0, pageSize - 1, true);
+  if (first.error) throw new Error(first.error.message);
+  const firstRows = first.data ?? [];
+  if (firstRows.length < pageSize) return firstRows;
+  // No count: fall back to walking pages in order.
+  if (first.count == null) {
+    const rest = await fetchAllRows((from, to) => page(from + pageSize, to + pageSize, false), pageSize);
+    return [...firstRows, ...rest];
+  }
+  const pageCount = Math.ceil(first.count / pageSize);
+  if (pageCount > MAX_PAGES) {
+    throw new Error(`paginate: too many pages (over ${MAX_PAGES * pageSize} rows)`);
+  }
+  const rest = await Promise.all(
+    Array.from({ length: pageCount - 1 }, async (_, i) => {
+      const from = (i + 1) * pageSize;
+      const { data, error } = await page(from, from + pageSize - 1, false);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    })
+  );
+  return [...firstRows, ...rest.flat()];
+}
+
 /**
  * Split a list of ids into batches for an `.in(column, ids)` filter.
  *
