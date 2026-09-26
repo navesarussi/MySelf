@@ -1,6 +1,10 @@
 {
   "name": "myself-dashboard",
+<<<<<<< HEAD
   "version": "2.7.1",
+=======
+  "version": "2.6.8",
+>>>>>>> 4e617b5 (feat(finance): professional Money tab — merchant display, income breakdown, RTL fixes)
   "private": true,
   "scripts": {
     "dev": "next dev",
