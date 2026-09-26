@@ -4,42 +4,47 @@
  */
 
 import { pickPreferredMerchantLabel } from "@/lib/finance/cal-duplicate";
-import { normalizeHebrewDescription, segmentGluedHebrew } from "@/lib/finance/hebrew-merchant";
+import {
+  expandGluedCategoryLabel,
+  expandLoneCategoryLabel,
+  formatHebrewMerchantRemainder,
+  meaningfulCharCount,
+  stripCategoryAndCardPrefixes,
+  stripCategoryPrefix,
+} from "@/lib/finance/merchant-segment";
 import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
 
-/** Full Cal category names — longest first; only exact matches are stripped. */
-export const CAL_CATEGORY_PREFIXES = [
-  "מזון ומשקאות",
-  "מזון מהיר",
-  "פנאי בילוי",
-  "רכבות חבור",
-  "ריהוט ובית",
-  "ריהוט בית",
-  "עמותות ותר",
-  "ציוד ומשרד",
-  "ביטוח ופינ",
-  "מוצרי און",
-  "מסעדות",
-  "מוסדות",
-  "אנרגיה",
-  "תיירות",
-  "ביטוח",
-] as const;
+export { CAL_GLUED_CATEGORY_PREFIXES as CAL_CATEGORY_PREFIXES } from "@/lib/finance/merchant-segment";
+export { meaningfulCharCount } from "@/lib/finance/merchant-segment";
 
 const CAL_STANDING_ORDER = /^(?:לא\s*)?(?:הוראת\s+קבע\s*)+/iu;
 
 /** Standalone Cal "not standing order" marker — not לאומי / לא הוראת. */
 const CAL_NOT_STANDING = /^לא\s+(?!הוראת\b|ומי\b)/iu;
 
-const COUNTRY_CATEGORY_PREFIX =
-  /^(?:(?:לא\s+)?(?:ארצות\s*הברית|ארה"ב|יפן|ליטואניה|אוסטרליה|קפריסין|ישראל|אירלנד|בריטניה|אירופה|חו"ל))(?:\s+(?:שונות|תיירות|מחשבים|מוצרי(?:\s*און)?|מזון(?:\s*ו(?:משקאות|מהיר)?)?|פנאי(?:\s*בילוי)?|רכב(?:ות(?:\s*חבור)?)?|ריהוט(?:\s*ובית)?|בית|אנרגיה|ביטוח|מסעדות|מוסדות|עמותות(?:\s*ותר)?))?\s*/iu;
+/** Cal category rows prefixed with standalone לא (not standing order). */
+const CAL_NOT_STANDING_CATEGORY = /^לא\s+(?=ביטוח|מוסדות|מזון|מסעדות|אנרגיה|גז|ציוד|ריהוט)/iu;
+
+const FOREIGN_COUNTRY_RULES: Array<{ re: RegExp; label: string }> = [
+  { re: /^אר(?:ה"ב|צות\s*הברית)/u, label: "ארצות הברית" },
+  { re: /^אירלנד/u, label: "אירלנד" },
+  { re: /^בריטניה/u, label: "בריטניה" },
+  { re: /^אירופה/u, label: "אירופה" },
+  { re: /^חו"ל/u, label: 'חו"ל' },
+  { re: /^יפן/u, label: "יפן" },
+  { re: /^ליטואניה/u, label: "ליטואניה" },
+  { re: /^אוסטרליה/u, label: "אוסטרליה" },
+  { re: /^קפריסין/u, label: "קפריסין" },
+  { re: /^ישראל/u, label: "ישראל" },
+];
 
 const LATIN_LOCATION_TAIL =
   /\s+(?:(?:\b(?:abu\s+dhabi|dubai|sydney|melbourne|larnaca|limassol|luxembourg|darlinghurst|ramat\s*gan|tel\s*aviv)\b|\b[a-z]{2,}\s+[a-z]{2,}\b|\b[a-z]{2}\b))(?:\s+\b[a-z]{2}\b)?$/i;
 
+const LEGAL_ENTITY_SUFFIX = /\s+\b(?:pty|ltd|llc|inc|corp|co|gmbh|llp|plc|limited)\.?\b/gi;
+
 type FriendlyRule = { pattern: RegExp; name: string };
 
-/** Known international merchants — match on normalized Latin text. Order matters. */
 const FRIENDLY_MERCHANTS: FriendlyRule[] = [
   { pattern: /google\*?\s*cloud/i, name: "Google Cloud" },
   { pattern: /google\*?\s*play/i, name: "Google Play" },
@@ -65,19 +70,11 @@ const FRIENDLY_MERCHANTS: FriendlyRule[] = [
   { pattern: /^gett\b/i, name: "Gett" },
   { pattern: /^shein\b/i, name: "SHEIN" },
   { pattern: /transportfornsw/i, name: "Transport for NSW" },
+  { pattern: /autogrill/i, name: "Autogrill" },
 ];
 
-function compactHebrew(s: string): string {
-  return s.replace(/[\s"'-]/g, "");
-}
-
-/** Count meaningful letters (Hebrew or Latin), ignoring punctuation and digits. */
-export function meaningfulCharCount(s: string): number {
-  return (s.match(/[\u0590-\u05FFA-Za-z]/g) ?? []).length;
-}
-
-function categoryCompact(cat: string): string {
-  return compactHebrew(cat);
+function stripLeadingStandaloneLo(text: string): string {
+  return text.trim().replace(/^לא\s+(?!הוראת\b|ומי\b)/iu, "");
 }
 
 function stripCalMarkers(text: string): string {
@@ -85,8 +82,8 @@ function stripCalMarkers(text: string): string {
   for (let i = 0; i < 4; i++) {
     const next = s
       .replace(CAL_STANDING_ORDER, "")
+      .replace(CAL_NOT_STANDING_CATEGORY, "")
       .replace(CAL_NOT_STANDING, "")
-      .replace(COUNTRY_CATEGORY_PREFIX, "")
       .trim();
     if (next === s) break;
     s = next;
@@ -94,38 +91,36 @@ function stripCalMarkers(text: string): string {
   return s;
 }
 
-function sliceAfterCompactPrefix(text: string, prefixCompactLen: number): string {
-  let ci = 0;
-  let oi = 0;
-  while (oi < text.length && ci < prefixCompactLen) {
-    if (!/[\s"'-]/.test(text[oi])) ci++;
-    oi++;
+function parseForeignCountryRow(text: string): { country: string; remainder: string } | null {
+  const s = stripLeadingStandaloneLo(text);
+  for (const { re, label } of FOREIGN_COUNTRY_RULES) {
+    const m = s.match(re);
+    if (!m) continue;
+    const remainder = s.slice(m[0].length).trim();
+    if (remainder || s === label) return { country: label, remainder };
   }
-  return text.slice(oi).trim();
+  return null;
 }
 
-/** Strip a full known Cal category prefix (spaced or exactly glued). */
+function formatForeignCountryDisplay(country: string, remainder: string): string {
+  if (!remainder) return country;
+  let inner = stripCategoryAndCardPrefixes(remainder);
+  if (!inner || meaningfulCharCount(inner) < 2) {
+    inner = expandGluedCategoryLabel(remainder);
+  } else {
+    inner = expandGluedCategoryLabel(inner);
+  }
+  if (/[\u0590-\u05FF]/.test(inner)) {
+    inner = formatHebrewMerchantRemainder(inner);
+  }
+  inner = expandLoneCategoryLabel(inner);
+  if (!inner) return country;
+  return `${inner} (${country})`;
+}
+
+/** @deprecated Use stripCategoryPrefix from merchant-segment */
 export function stripFullCategoryPrefix(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) return trimmed;
-
-  for (const cat of CAL_CATEGORY_PREFIXES) {
-    if (trimmed.startsWith(`${cat} `) || trimmed === cat) {
-      const rest = trimmed.slice(cat.length).trim();
-      if (meaningfulCharCount(rest) >= 2) return rest;
-    }
-  }
-
-  const compact = compactHebrew(trimmed);
-  for (const cat of CAL_CATEGORY_PREFIXES) {
-    const catC = categoryCompact(cat);
-    if (!compact.startsWith(catC) || compact.length <= catC.length) continue;
-    const rest = sliceAfterCompactPrefix(trimmed, catC.length);
-    if (meaningfulCharCount(rest) < 2) continue;
-    return rest;
-  }
-
-  return trimmed;
+  return stripCategoryPrefix(text);
 }
 
 function withMinLengthFallback(original: string, result: string): string {
@@ -143,6 +138,14 @@ function friendlyLatinName(text: string): string | null {
   return null;
 }
 
+function stripProcessorPrefix(text: string): string {
+  const m = text.trim().match(/^(?:ms|sq|sp)\s*\*?\s*(\S+)/i);
+  if (!m?.[1]) return text.trim();
+  const word = m[1];
+  if (/^nomads/i.test(word)) return "Nomads";
+  return word;
+}
+
 function stripLatinLocationJunk(text: string): string {
   let s = text.trim();
   for (let i = 0; i < 4; i++) {
@@ -150,6 +153,7 @@ function stripLatinLocationJunk(text: string): string {
       .replace(LATIN_LOCATION_TAIL, "")
       .replace(/\s+\d{4,}(?:\s+[\w.]*)?$/g, "")
       .replace(/\s+(?:www\.[\w.]+|[\w.]+\.(?:com|co|io|us|au|ae|cy|lu))\s*$/i, "")
+      .replace(LEGAL_ENTITY_SUFFIX, "")
       .trim();
     if (next === s) break;
     s = next;
@@ -157,20 +161,35 @@ function stripLatinLocationJunk(text: string): string {
   return s;
 }
 
+function trimTrailingPunctuation(text: string): string {
+  return text.replace(/[\s\-–—,.;:]+$/u, "").trim();
+}
+
+function formatLatinAcronym(text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 1 && /^[a-z0-9]{2,4}$/i.test(words[0]!)) {
+    return words[0]!.toUpperCase();
+  }
+  return text;
+}
+
 function titleLatinFallback(text: string): string {
-  const t = stripLatinLocationJunk(text.trim());
+  let t = stripLatinLocationJunk(stripProcessorPrefix(text.trim()));
+  t = trimTrailingPunctuation(t);
   if (!t) return t;
   const friendly = friendlyLatinName(t);
-  if (friendly) return friendly;
+  if (friendly) return trimTrailingPunctuation(friendly);
   if (!/[A-Za-z]/.test(t)) return t;
-  return t
+  const titled = t
     .split(/\s+/)
     .map((w) => {
       if (/^mcdonald/i.test(w)) return "McDonald's";
       if (/^[A-Z0-9*.,/\\-]+$/.test(w) && w.length <= 4) return w;
+      if (/^\d+$/.test(w)) return w;
       return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
     })
     .join(" ");
+  return trimTrailingPunctuation(formatLatinAcronym(titled));
 }
 
 function isMostlyLatin(text: string): boolean {
@@ -180,14 +199,9 @@ function isMostlyLatin(text: string): boolean {
 }
 
 export type DisplayMerchantOptions = {
-  /** When true, prefer the raw descriptor over friendly mapping (detail sheets). */
   raw?: boolean;
 };
 
-/**
- * Best user-facing merchant label.
- * Strips Cal markers and full category prefixes, maps known merchants, never shrinks below 2 letters.
- */
 export function formatDisplayMerchantName(
   value: string | null | undefined,
   options?: DisplayMerchantOptions
@@ -198,32 +212,40 @@ export function formatDisplayMerchantName(
   if (options?.raw) return formatMerchantLabel(raw);
 
   if (isMostlyLatin(raw)) {
-    const cleaned = stripLatinLocationJunk(raw);
+    const cleaned = stripLatinLocationJunk(stripProcessorPrefix(raw));
     const friendly = friendlyLatinName(cleaned);
-    if (friendly) return friendly;
+    if (friendly) return trimTrailingPunctuation(friendly);
     return titleLatinFallback(cleaned);
   }
 
+  const foreign = parseForeignCountryRow(raw);
+  if (foreign) {
+    return withMinLengthFallback(raw, formatForeignCountryDisplay(foreign.country, foreign.remainder));
+  }
+
   let s = formatMerchantLabel(raw);
+  s = stripLeadingStandaloneLo(s);
   s = stripCalMarkers(s);
-  s = stripFullCategoryPrefix(s);
+
+  const foreignAfterLo = parseForeignCountryRow(s);
+  if (foreignAfterLo) {
+    return withMinLengthFallback(raw, formatForeignCountryDisplay(foreignAfterLo.country, foreignAfterLo.remainder));
+  }
+
+  s = stripCategoryAndCardPrefixes(s);
 
   const latinFriendly = friendlyLatinName(s);
-  if (latinFriendly) return latinFriendly;
+  if (latinFriendly) return trimTrailingPunctuation(latinFriendly);
 
   if (/[\u0590-\u05FF]/.test(s)) {
-    s = normalizeHebrewDescription(s);
-    if (!/\s/.test(s) && meaningfulCharCount(s) >= 4) {
-      const segmented = segmentGluedHebrew(s);
-      if (segmented.includes(" ")) s = segmented;
-    }
+    s = formatHebrewMerchantRemainder(s);
+    s = expandLoneCategoryLabel(s);
     return withMinLengthFallback(raw, s);
   }
 
   return withMinLengthFallback(raw, titleLatinFallback(s));
 }
 
-/** Pick the best display label from merchant + description fields. */
 export function pickDisplayMerchantLabel(
   ...fields: Array<string | null | undefined>
 ): string {
@@ -236,7 +258,6 @@ export function pickDisplayMerchantLabel(
   return "";
 }
 
-/** Compute display_name for a merchant rule row — never changes merchant_key. */
 export function normalizeStoredDisplayName(input: {
   merchant_key: string;
   display_name?: string | null;
@@ -246,10 +267,6 @@ export function normalizeStoredDisplayName(input: {
   return { display_name: formatDisplayMerchantName(source) || null };
 }
 
-/**
- * Migration helper — merchant_key is returned unchanged; only display_name is normalized.
- * @deprecated Prefer normalizeStoredDisplayName — kept for script compatibility.
- */
 export function normalizeStoredMerchantFields(input: {
   merchant_key: string;
   display_name?: string | null;
@@ -259,7 +276,6 @@ export function normalizeStoredMerchantFields(input: {
   return { merchant_key: rawKey, display_name };
 }
 
-/** Attach computed display label to a merchant rule for API responses. */
 export function enrichMerchantRuleForDisplay<T extends { merchant_key: string; display_name?: string | null }>(
   rule: T
 ): T & { display_name: string } {
