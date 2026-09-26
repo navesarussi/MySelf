@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { chunk, fetchAllRows, PAGE_SIZE } from "../db/paginate";
+import { chunk, fetchAllRows, fetchAllRowsParallel, PAGE_SIZE } from "../db/paginate";
 
 type Row = { id: string };
 
@@ -101,5 +101,63 @@ describe("chunk", () => {
     for (const batch of chunk(ids, 200)) {
       assert.ok(batch.length * 2 < PAGE_SIZE, `${batch.length} ids × 2 rows must stay under ${PAGE_SIZE}`);
     }
+  });
+});
+
+describe("fetchAllRowsParallel", () => {
+  const rows = Array.from({ length: PAGE_SIZE * 3 + 5 }, (_, i) => ({ id: `t${i}` }));
+
+  it("returns every row in order, counting only on the first page", async () => {
+    const calls: [number, boolean][] = [];
+    const out = await fetchAllRowsParallel<Row>(async (from, to, withCount) => {
+      calls.push([from, withCount]);
+      return { data: rows.slice(from, to + 1), error: null, count: withCount ? rows.length : null };
+    });
+    assert.deepEqual(out.map((r) => r.id), rows.map((r) => r.id));
+    assert.equal(calls.length, 4);
+    assert.deepEqual(calls.filter(([, c]) => c), [[0, true]]);
+  });
+
+  it("requests the later pages without waiting for each other", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    await fetchAllRowsParallel<Row>(async (from, to, withCount) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight--;
+      return { data: rows.slice(from, to + 1), error: null, count: withCount ? rows.length : null };
+    });
+    assert.equal(peak, 3);
+  });
+
+  it("stops after one request when the first page is short", async () => {
+    let calls = 0;
+    const out = await fetchAllRowsParallel<Row>(async () => {
+      calls++;
+      return { data: rows.slice(0, 10), error: null, count: 10 };
+    });
+    assert.equal(out.length, 10);
+    assert.equal(calls, 1);
+  });
+
+  it("walks pages in order when no count comes back", async () => {
+    const out = await fetchAllRowsParallel<Row>(async (from, to) => ({
+      data: rows.slice(from, to + 1),
+      error: null,
+      count: null,
+    }));
+    assert.equal(out.length, rows.length);
+  });
+
+  it("surfaces a failed page as an error", async () => {
+    await assert.rejects(
+      fetchAllRowsParallel<Row>(async (from, to, withCount) =>
+        from === PAGE_SIZE * 2
+          ? { data: null, error: { message: "boom" } }
+          : { data: rows.slice(from, to + 1), error: null, count: withCount ? rows.length : null }
+      ),
+      /boom/
+    );
   });
 });

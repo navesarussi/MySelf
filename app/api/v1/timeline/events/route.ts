@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { userDb } from "@/lib/db/user-db";
 import { parseMinZoom } from "@/lib/timeline-zoom";
 import { leanTimelineEventForList, TIMELINE_LIST_COLUMNS } from "@/lib/timeline-preview";
-import { fetchAllRows } from "@/lib/db/paginate";
+import { fetchAllRowsParallel } from "@/lib/db/paginate";
 import { parseTimelineCursor } from "@/lib/timeline-pagination";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized } from "@/lib/api/auth";
 import type { TimelineEvent } from "@/lib/types";
@@ -32,10 +32,10 @@ export async function GET(req: NextRequest) {
 
   const db = await userDb();
   try {
-    const rows = await fetchAllRows<TimelineEvent>(async (from, to) => {
+    const rows = await fetchAllRowsParallel<TimelineEvent>(async (from, to, withCount) => {
       let query = db
         .from("timeline_events")
-        .select(TIMELINE_LIST_COLUMNS)
+        .select(TIMELINE_LIST_COLUMNS, withCount ? { count: "exact" } : undefined)
         .is("hidden_at", null)
         .order("event_date", { ascending: false })
         .order("id", { ascending: false });
@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
           `event_date.lt.${cursor.date},and(event_date.eq.${cursor.date},id.lt.${cursor.id})`
         );
       }
-      const { data, error } = await query.range(from, to);
-      return { data: data as TimelineEvent[] | null, error };
+      const { data, error, count } = await query.range(from, to);
+      return { data: data as TimelineEvent[] | null, error, count };
     });
     return NextResponse.json({ events: rows.map(leanTimelineEventForList), nextCursor: null });
   } catch {
