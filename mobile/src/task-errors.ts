@@ -68,6 +68,18 @@ export function taskLocalOnlyWarningFlash(payload: TaskMutationPayload): string 
   return taskReconnectFlash(source);
 }
 
+/** Delete succeeded locally after upstream refused — prefer a calm hide message over generic failure. */
+export function taskDeleteLocalOnlyFlash(payload: TaskMutationPayload): string {
+  if (payload.user_message_he) return payload.user_message_he;
+  if (
+    payload.warning === "monday_permission_denied" ||
+    payload.warning === "external_permission_denied"
+  ) {
+    return "flash.taskDeleteHiddenMonday";
+  }
+  return taskLocalOnlyWarningFlash(payload);
+}
+
 function taskReconnectFlash(source: TaskSource): string {
   if (source === "google_tasks") return "flash.taskReconnectGoogle";
   if (source === "monday") return "flash.taskReconnectMonday";

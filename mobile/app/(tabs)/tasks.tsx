@@ -27,6 +27,7 @@ import {
   isLocalOnlyPayload,
   readApiError,
   taskDeleteErrorFlash,
+  taskDeleteLocalOnlyFlash,
   taskLocalOnlyWarningFlash,
   taskUpdateErrorFlash,
 } from "../../src/task-errors";
@@ -394,6 +395,7 @@ export default function TasksScreen() {
               },
               {
                 text: t("tasks.hideLocally"),
+                style: "default",
                 onPress: () => void performDelete(task, { hideLocally: true }),
               },
             ]);
@@ -404,7 +406,8 @@ export default function TasksScreen() {
         onSuccess: (result) => {
           queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
           if (isLocalOnlyPayload(result)) {
-            showToast(t(taskLocalOnlyWarningFlash(result)), "error");
+            const flash = taskDeleteLocalOnlyFlash(result);
+            showToast(flash.startsWith("flash.") ? t(flash) : flash, "success");
           }
         },
       });

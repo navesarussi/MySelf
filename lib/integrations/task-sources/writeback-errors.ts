@@ -221,3 +221,47 @@ export function isIntegrationAuthError(code: WritebackErrorCode): boolean {
     code === "external_missing_ids"
   );
 }
+
+const EXPECTED_MONDAY_WRITEBACK_CODES: ReadonlySet<WritebackErrorCode> = new Set([
+  "monday_permission_denied",
+  "monday_item_not_found",
+  "monday_board_not_found",
+  "monday_no_status_column",
+  "monday_no_done_label",
+  "monday_no_reopen_label",
+]);
+
+/** Expected Monday failures — log locally but do not spam the live error webhook. */
+export function isExpectedMondayWritebackError(err: unknown): boolean {
+  const classified = classifyWritebackError(err);
+  return classified.localOnlyAllowed && EXPECTED_MONDAY_WRITEBACK_CODES.has(classified.code);
+}
+
+/** Skip archive fallback when complete already failed for a reason archive cannot fix. */
+export function shouldSkipMondayArchiveFallback(completeErr: unknown): boolean {
+  const classified = classifyWritebackError(completeErr);
+  if (!classified.localOnlyAllowed) return false;
+  return (
+    classified.code === "monday_permission_denied" ||
+    classified.code === "monday_item_not_found" ||
+    classified.code === "monday_board_not_found"
+  );
+}
+
+function writebackErrorRank(err: WritebackError): number {
+  if (err.code === "monday_permission_denied" || err.code === "external_permission_denied") {
+    return 0;
+  }
+  if (err.localOnlyAllowed) return 1;
+  return 2;
+}
+
+/** When complete and archive both fail, prefer permission errors over generic failures. */
+export function pickPreferredWritebackError(a: unknown, b: unknown): WritebackError {
+  const ca = classifyWritebackError(a);
+  const cb = classifyWritebackError(b);
+  return writebackErrorRank(ca) <= writebackErrorRank(cb) ? ca : cb;
+}
+
+export const MONDAY_DELETE_HIDDEN_MESSAGE_HE =
+  "אין הרשאה למחוק/לארכב ב-Monday — הסתרנו מהרשימה שלך";

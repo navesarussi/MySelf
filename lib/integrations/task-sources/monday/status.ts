@@ -1,4 +1,5 @@
 import { reportIntegrationError } from "@/lib/error-reporting";
+import { isExpectedMondayWritebackError } from "../writeback-errors";
 import { mondayGraphql, MondayGraphqlError } from "./graphql";
 import { pickDoneLabelIndex, pickReopenLabelIndex } from "./map";
 import type { MondayStatusLabelOption } from "./types";
@@ -39,6 +40,10 @@ async function archiveMondayItem(accessToken: string, itemId: string) {
 }
 
 function reportMondayFailure(action: string, err: unknown, context: Record<string, string>) {
+  if (isExpectedMondayWritebackError(err)) {
+    console.warn("[monday-writeback]", action, err instanceof Error ? err.message : err, context);
+    return;
+  }
   reportIntegrationError("monday", err, {
     route: "task-writeback",
     userAction: action,
