@@ -15,7 +15,11 @@ export async function listFinanceCategories(): Promise<string[]> {
   const seen = new Set<string>(FINANCE_CATEGORIES);
 
   const [txnCats, ruleCats, planCats] = await Promise.all([
-    getSupabase().from("finance_transactions").select("category").not("category", "is", null),
+    getSupabase()
+      .from("finance_transactions")
+      .select("category")
+      .is("deleted_at", null)
+      .not("category", "is", null),
     getSupabase().from("finance_merchant_rules").select("category").not("category", "is", null),
     getSupabase().from("finance_plan_lines").select("category").not("category", "is", null),
   ]);

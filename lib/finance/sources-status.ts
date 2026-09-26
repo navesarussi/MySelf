@@ -45,12 +45,14 @@ async function probeSource(source: FinanceSource): Promise<SourceProbe> {
       .from("finance_transactions")
       .select("created_at", { count: "exact" })
       .eq("source", source)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(1),
     sb
       .from("finance_transactions")
       .select("txn_date")
       .eq("source", source)
+      .is("deleted_at", null)
       .order("txn_date", { ascending: false })
       .limit(1),
   ]);

@@ -47,6 +47,7 @@ export async function applyRuleToPending(rule: MerchantRule, excludeId?: string)
       .eq("needs_categorization", true)
       .is("categorized_at", null)
       .eq("is_internal", false)
+      .is("deleted_at", null)
       .order("id")
       .range(from, to)
   );

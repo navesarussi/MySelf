@@ -17,6 +17,7 @@ export async function loadCategoryHistory(limit = 500): Promise<MerchantCategory
     .from("finance_transactions")
     .select("merchant, description, category")
     .eq("needs_categorization", false)
+    .is("deleted_at", null)
     .not("category", "is", null)
     .order("categorized_at", { ascending: false })
     .limit(limit);
