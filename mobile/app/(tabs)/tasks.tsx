@@ -46,6 +46,14 @@ import {
 import type { Task, TaskExternalMeta, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
 import { useColors, tokens } from "../../src/theme";
+import { useToast } from "../../src/toast";
+import {
+  isLocalOnlyPayload,
+  readApiError,
+  taskDeleteErrorFlash,
+  taskLocalOnlyWarningFlash,
+  taskUpdateErrorFlash,
+} from "../../src/task-errors";
 
 type FormState = {
   id?: string;
@@ -77,6 +85,7 @@ export default function TasksScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, isPending, busy } = useApiMutation();
+  const { show: showToast } = useToast();
   const [filter, setFilter] = useState<TasksFilterState>(defaultTasksFilter);
   const [debouncedQ, setDebouncedQ] = useState(filter.q);
   const [form, setForm] = useState<FormState | null>(null);
@@ -224,28 +233,32 @@ export default function TasksScreen() {
 
       await run((config) => api.updateTask(config, task.id, { status: next }), {
         itemId: task.id,
+        suppressErrorToast: true,
         flash: {
           success: "flash.taskUpdated",
-          error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
           when: "immediate",
         },
-        onError: () => {
+        onError: (err) => {
           if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
           if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+          showToast(t(taskUpdateErrorFlash(task, readApiError(err))), "error");
         },
         onSuccess: (updated) => {
           if (updated) {
             queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
-              patchItemInList(old, task.id, updated)
+              patchItemInList(old, task.id, updated as Task)
             );
             queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-              patchTaskInHome(old, task.id, updated)
+              patchTaskInHome(old, task.id, updated as Task)
             );
+            if (isLocalOnlyPayload(updated)) {
+              showToast(t(taskLocalOnlyWarningFlash(updated)), "error");
+            }
           }
         },
       });
     },
-    [queryClient, tasksQueryKey, run]
+    [queryClient, tasksQueryKey, run, showToast, t]
   );
 
   const toggleDone = useCallback(
@@ -263,28 +276,32 @@ export default function TasksScreen() {
 
       await run((config) => api.updateTask(config, task.id, { status: next }), {
         itemId: task.id,
+        suppressErrorToast: true,
         flash: {
           success: "flash.taskUpdated",
-          error: isExternalTask(task) ? "flash.externalTaskUpdateFailed" : "flash.taskUpdateError",
           when: "immediate",
         },
-        onError: () => {
+        onError: (err) => {
           if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
           if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+          showToast(t(taskUpdateErrorFlash(task, readApiError(err))), "error");
         },
         onSuccess: (updated) => {
           if (updated) {
             queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
-              patchItemInList(old, task.id, updated)
+              patchItemInList(old, task.id, updated as Task)
             );
             queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-              patchTaskInHome(old, task.id, updated)
+              patchTaskInHome(old, task.id, updated as Task)
             );
+            if (isLocalOnlyPayload(updated)) {
+              showToast(t(taskLocalOnlyWarningFlash(updated)), "error");
+            }
           }
         },
       });
     },
-    [queryClient, tasksQueryKey, run]
+    [queryClient, tasksQueryKey, run, showToast, t]
   );
 
   const openEdit = useCallback(
@@ -341,16 +358,20 @@ export default function TasksScreen() {
 
         await run((config) => api.deleteTask(config, task.id), {
           itemId: task.id,
+          suppressErrorToast: true,
           flash: {
             success: "flash.taskDeleted",
-            error: "flash.taskDeleteError",
           },
-          onError: () => {
+          onError: (err) => {
             if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
             if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+            showToast(t(taskDeleteErrorFlash(task, readApiError(err))), "error");
           },
-          onSuccess: () => {
+          onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+            if (isLocalOnlyPayload(result)) {
+              showToast(t(taskLocalOnlyWarningFlash(result)), "error");
+            }
           },
         });
       },

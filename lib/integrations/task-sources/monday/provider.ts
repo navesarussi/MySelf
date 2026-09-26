@@ -1,4 +1,4 @@
-import type { TaskSourceProvider, ExternalTaskDraft } from "../types";
+import type { TaskSourceProvider, ExternalTaskDraft, TaskWritebackOpts } from "../types";
 import {
   fetchAssignedOpenItems,
   fetchMondayAccount,
@@ -48,12 +48,19 @@ export function createMondayProvider(accountKey?: string): TaskSourceProvider {
       return fetchAssignedOpenItems(accessToken, selectedListIds, account);
     },
 
-    async complete(externalId: string, listId: string) {
-      await completeByExternalId(externalId, listId);
+    async complete(externalId: string, listId: string, opts?: TaskWritebackOpts) {
+      await completeByExternalId(externalId, listId, {
+        statusColumnId: opts?.statusColumnId,
+        statusLabels: opts?.statusLabels,
+      });
     },
 
-    async reopen(externalId: string, listId: string, meta?: { statusLabel?: string }) {
-      await reopenByExternalId(externalId, listId, meta?.statusLabel);
+    async reopen(externalId: string, listId: string, opts?: TaskWritebackOpts) {
+      await reopenByExternalId(externalId, listId, opts?.statusLabel, {
+        statusColumnId: opts?.statusColumnId,
+        statusLabels: opts?.statusLabels,
+        statusLabel: opts?.statusLabel,
+      });
     },
   };
 }

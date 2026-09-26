@@ -15,7 +15,7 @@ export function mapGoogleTask(
   if (!task.id) return null;
   if (task.status === "completed") return null;
 
-  const meta: ExternalTaskDraft["meta"] = { listTitle };
+  const meta: ExternalTaskDraft["meta"] = { listTitle, listId };
   if (task.parent) {
     meta.parentExternalId = task.parent;
   }

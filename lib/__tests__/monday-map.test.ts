@@ -14,6 +14,10 @@ const ctx = {
   boardTitle: "Sprint",
   statusColumnId: "status",
   peopleColumnId: "person",
+  statusLabels: [
+    { label: "Working on it", is_done: false },
+    { label: "Done", is_done: true },
+  ],
 };
 
 describe("mapMondayItem", () => {
@@ -34,6 +38,7 @@ describe("mapMondayItem", () => {
     assert.equal(d?.dueDate, "2026-08-01");
     assert.equal(d?.meta.account_key, "42");
     assert.equal(d?.meta.statusLabel, "Working on it");
+    assert.deepEqual(d?.meta.statusLabels, ctx.statusLabels);
     assert.match(d?.meta.deepLink ?? "", /pulses\/99/);
   });
 

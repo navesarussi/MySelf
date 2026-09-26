@@ -161,6 +161,7 @@ export async function fetchAssignedOpenItems(
       boardTitle: meta.title,
       statusColumnId: meta.statusColumnId,
       peopleColumnId: meta.peopleColumnId,
+      statusLabels: meta.statusLabels,
     };
 
     let cursor: string | undefined;

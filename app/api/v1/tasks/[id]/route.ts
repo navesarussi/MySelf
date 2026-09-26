@@ -4,6 +4,8 @@ import { userDb } from "@/lib/db/user-db";
 import { badRequest, dbError, isApiAuthorized, optStr, readJson, str, unauthorized, notFound, projectWriteError } from "@/lib/api/auth";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { applyExternalStatusChange } from "@/lib/integrations/task-sources/writeback";
+import { classifyWritebackError } from "@/lib/integrations/task-sources/writeback-errors";
+import { attachTaskSource } from "@/lib/api/task-mutation";
 import { TASK_SELECT, TaskJoin, projectNameFromJoin } from "@/lib/api/tasks";
 
 const PRIORITIES: TaskPriority[] = ["urgent", "high", "medium", "low"];
@@ -15,6 +17,14 @@ function revalidateTaskPaths() {
   revalidatePath("/tasks");
   revalidatePath("/projects");
   revalidatePath("/");
+}
+
+function safeRevalidateTaskPaths() {
+  try {
+    revalidateTaskPaths();
+  } catch (err) {
+    console.warn("[tasks] revalidate failed", err);
+  }
 }
 
 /** Full row for one task — the list sends a truncated `notes` preview. */
@@ -87,20 +97,33 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if ("due_date" in body) patch.due_date = optStr(body.due_date);
   if ("notes" in body) patch.notes = optStr(body.notes);
 
+  let localOnlyWarning: Record<string, unknown> | null = null;
+
   if (isExternal && "status" in body) {
     const nextStatus = str(body.status) as TaskStatus;
     try {
       await applyExternalStatusChange(task, nextStatus);
       patch.synced_at = new Date().toISOString();
     } catch (err) {
-      return NextResponse.json({ error: "external_write_failed", details: String(err) }, { status: 502 });
+      const classified = classifyWritebackError(err);
+      if (!classified.localOnlyAllowed) {
+        return NextResponse.json(
+          attachTaskSource({ error: classified.code, details: classified.message }, task.source),
+          { status: 502 }
+        );
+      }
+      localOnlyWarning = {
+        local_only: true,
+        warning: classified.code,
+        source: task.source,
+      };
     }
   }
 
   const { data, error } = await (await userDb()).from("tasks").update(patch).eq("id", id).select().single();
   if (error) return projectWriteError(error);
-  revalidateTaskPaths();
-  return NextResponse.json(data);
+  safeRevalidateTaskPaths();
+  return NextResponse.json(localOnlyWarning ? { ...data, ...localOnlyWarning } : data);
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {
@@ -118,25 +141,46 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   const task = existingTask as Task;
 
+  let localOnlyWarning: Record<string, unknown> | null = null;
+
   if (task.source !== "manual") {
     try {
       await applyExternalStatusChange(task, "done");
     } catch (err) {
-      return NextResponse.json({ error: "external_write_failed", details: String(err) }, { status: 502 });
+      const classified = classifyWritebackError(err);
+      if (!classified.localOnlyAllowed) {
+        return NextResponse.json(
+          attachTaskSource({ error: classified.code, details: classified.message }, task.source),
+          { status: 502 }
+        );
+      }
+      localOnlyWarning = {
+        local_only: true,
+        warning: classified.code,
+        source: task.source,
+      };
     }
 
     const now = new Date().toISOString();
     const { error } = await (await userDb())
       .from("tasks")
-      .update({ status: "done", synced_at: now, updated_at: now })
+      .update({
+        status: "done",
+        synced_at: localOnlyWarning ? null : now,
+        updated_at: now,
+      })
       .eq("id", id);
     if (error) return dbError();
-    revalidateTaskPaths();
-    return NextResponse.json({ ok: true, completed: true });
+    safeRevalidateTaskPaths();
+    return NextResponse.json({
+      ok: true,
+      completed: true,
+      ...(localOnlyWarning ?? {}),
+    });
   }
 
   const { error } = await (await userDb()).from("tasks").delete().eq("id", id);
   if (error) return dbError();
-  revalidateTaskPaths();
+  safeRevalidateTaskPaths();
   return NextResponse.json({ ok: true });
 }
