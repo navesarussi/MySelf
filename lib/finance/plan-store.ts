@@ -184,16 +184,34 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
   return buildMonthPlanView(month, planId!, lines, txns, rulesMap, weeklyOverride);
 }
 
+async function ensurePlanRow(month: string): Promise<PlanMeta> {
+  const existing = await fetchPlanMeta(month);
+  if (existing) return existing;
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase.from("finance_month_plans").insert({ month }).select("id").single();
+  if (error) {
+    if (isUniqueViolation(error)) {
+      const again = await fetchPlanMeta(month);
+      if (!again) throw new Error(error.message);
+      return again;
+    }
+    throw new Error(error.message);
+  }
+  if (!data?.id) throw new Error("plan_create_failed");
+  return { planId: String(data.id), weeklyOverride: null };
+}
+
 export async function updateWeeklyBudgetOverride(
   month: string,
   weekly_budget_override: number | null
 ): Promise<number | null> {
-  const plan = await getOrCreateMonthPlan(month);
+  const meta = await ensurePlanRow(month);
   const value = weekly_budget_override != null ? Math.max(0, weekly_budget_override) : null;
   const { error } = await getSupabase()
     .from("finance_month_plans")
     .update({ weekly_budget_override: value, updated_at: new Date().toISOString() })
-    .eq("id", plan.plan_id);
+    .eq("id", meta.planId);
   if (error) throw new Error(error.message);
   return value;
 }
