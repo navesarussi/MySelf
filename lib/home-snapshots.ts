@@ -1,3 +1,5 @@
+import type { LiveEquitySnapshot } from "./trading/account-equity";
+
 export type HomeFinanceSnapshot = {
   month: string;
   net_actual: number;
@@ -11,8 +13,26 @@ export type HomeTradingSnapshot = {
   kill_switch_active: boolean;
 };
 
+/** Legacy /api/v1/home `trading` object — same fields older mobile builds expect. */
+export const HOME_TRADING_LEGACY_FIELDS = [
+  "phase",
+  "equity",
+  "starting_equity",
+  "kill_switch_active",
+] as const satisfies readonly (keyof HomeTradingSnapshot)[];
+
 export function currentMonthKey(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Map canonical live equity into the legacy home payload trading slice. */
+export function homeTradingFromLiveSnapshot(snap: LiveEquitySnapshot): HomeTradingSnapshot {
+  return {
+    phase: snap.phase,
+    equity: snap.equity,
+    starting_equity: snap.starting_equity,
+    kill_switch_active: snap.kill_switch_active,
+  };
 }
 
 export function shapeTradingSnapshot(

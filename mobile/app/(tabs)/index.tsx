@@ -28,6 +28,7 @@ import { achievabilityScore, rankGoalsForHome } from "@/lib/goals-rank";
 import { filterDueRelationships } from "@/lib/relationships-due";
 import { topPriorityTasks } from "@/lib/task-priority";
 import { homeHeroCount } from "@/lib/home-kpis";
+import { resolveHomeTradingTile } from "@/lib/home-trading-tile";
 import type { ContentEntry, Goal, Habit, Relationship, Task } from "@/lib/types";
 
 export default function HomeScreen() {
@@ -81,6 +82,11 @@ export default function HomeScreen() {
     () => (viewingHabitId ? uniqueHabits.find((h) => h.id === viewingHabitId) ?? null : null),
     [uniqueHabits, viewingHabitId]
   );
+  const tradingTile = useMemo(
+    () => resolveHomeTradingTile(tradingEquity.data, data?.trading),
+    [tradingEquity.data, data?.trading]
+  );
+
   const heroCount = homeHeroCount({
     habitsOverdue: habitsOverdueToday.length,
     dueRelationships: dueRelationships.length,
@@ -105,7 +111,15 @@ export default function HomeScreen() {
 
   return (
     <ScreenErrorBoundary name="home">
-    <Screen title={t("home.compass")} subtitle={t("home.quote")} refreshing={isFetching} onRefresh={refresh}>
+    <Screen
+      title={t("home.compass")}
+      subtitle={t("home.quote")}
+      refreshing={isFetching}
+      onRefresh={() => {
+        void tradingEquity.refresh();
+        void refresh();
+      }}
+    >
       {error && !data ? <ErrorNote message={error} onRetry={refresh} /> : null}
       {loading && !data ? <HomeScreenSkeleton /> : null}
       {data ? (
@@ -129,9 +143,9 @@ export default function HomeScreen() {
               readyGoals: data.activeGoals.filter((g) => achievabilityScore(g) >= 3).length,
               financeUncategorized: data.financeUncategorizedCount,
               financeNet: data.finance?.net_actual ?? 0,
-              tradingEquity: tradingEquity.visible ? tradingEquity.data!.equity : null,
-              tradingStartingEquity: tradingEquity.visible ? tradingEquity.data!.starting_equity : null,
-              tradingKill: Boolean(tradingEquity.data?.kill_switch_active),
+              tradingEquity: tradingTile?.equity ?? null,
+              tradingStartingEquity: tradingTile?.starting_equity ?? null,
+              tradingKill: Boolean(tradingTile?.kill_switch_active),
             }}
           />
           </WidgetErrorBoundary>
