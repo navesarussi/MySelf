@@ -134,12 +134,18 @@ export async function fetchAssignedOpenIssues(accessToken: string): Promise<Gith
   return issues;
 }
 
-export async function setGithubIssueState(
+export type GithubIssuePatch = {
+  title?: string;
+  body?: string | null;
+  state?: "open" | "closed";
+};
+
+export async function patchGithubIssue(
   accessToken: string,
   owner: string,
   repo: string,
   number: number,
-  state: "open" | "closed"
+  patch: GithubIssuePatch
 ) {
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`, {
     method: "PATCH",
@@ -150,10 +156,20 @@ export async function setGithubIssueState(
       "User-Agent": "MySelf-App",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ state }),
+    body: JSON.stringify(patch),
   });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`github_issue_update_failed:${res.status}:${body.slice(0, 300)}`);
   }
+}
+
+export async function setGithubIssueState(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  number: number,
+  state: "open" | "closed"
+) {
+  await patchGithubIssue(accessToken, owner, repo, number, { state });
 }

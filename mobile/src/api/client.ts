@@ -1,8 +1,16 @@
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  userMessageHe?: string;
+  localOnlyAllowed?: boolean;
+  constructor(
+    status: number,
+    message: string,
+    extras?: { userMessageHe?: string; localOnlyAllowed?: boolean }
+  ) {
     super(message);
     this.status = status;
+    this.userMessageHe = extras?.userMessageHe;
+    this.localOnlyAllowed = extras?.localOnlyAllowed;
   }
 }
 
@@ -42,10 +50,11 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    const message =
-      data && typeof data === "object" && "error" in data
-        ? String((data as { error: unknown }).error)
-        : `http_${res.status}`;
+    const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+    const message = payload?.error ? String(payload.error) : `http_${res.status}`;
+    const userMessageHe =
+      typeof payload?.user_message_he === "string" ? payload.user_message_he : undefined;
+    const localOnlyAllowed = payload?.local_only_allowed === true;
     void import("../error-reporting").then(({ reportClientError }) =>
       reportClientError({
         message,
@@ -56,7 +65,7 @@ export async function apiFetch<T>(
         upstreamBody: data,
       })
     );
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, { userMessageHe, localOnlyAllowed });
   }
   return data as T;
 }

@@ -1,6 +1,10 @@
 {
   "name": "myself-dashboard",
+<<<<<<< HEAD
   "version": "2.5.1",
+=======
+  "version": "2.4.2",
+>>>>>>> a83914e (fix(tasks): robust Monday writeback + unified task edit sheet (v2.4.2))
   "private": true,
   "scripts": {
     "dev": "next dev",

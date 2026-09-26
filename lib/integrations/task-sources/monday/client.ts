@@ -6,6 +6,7 @@ export {
   getMondayAccessToken,
   completeByExternalId,
   reopenByExternalId,
+  archiveByExternalId,
 } from "./status";
 
 export function mondayAuthUrl(state: string): string {

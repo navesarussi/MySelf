@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { ApiError } from "../api/client";
 import type { Task } from "@/lib/types";
 import {
+  isLocalOnlyAllowed,
+  readApiError,
   taskDeleteErrorFlash,
   taskLocalOnlyWarningFlash,
   taskUpdateErrorFlash,
@@ -33,6 +36,15 @@ describe("task error flash keys", () => {
   it("maps API failures to source-specific update/delete messages", () => {
     assert.equal(taskUpdateErrorFlash(task("google_tasks"), "external_api_failed"), "flash.taskUpdateGoogleFailed");
     assert.equal(taskDeleteErrorFlash(task("monday"), "monday_graphql:boom"), "flash.taskDeleteMondayFailed");
+  });
+
+  it("prefers Hebrew user message from ApiError", () => {
+    const err = new ApiError(409, "monday_permission_denied", {
+      userMessageHe: "אין הרשאה",
+      localOnlyAllowed: true,
+    });
+    assert.equal(readApiError(err), "אין הרשאה");
+    assert.equal(isLocalOnlyAllowed(err), true);
   });
 
   it("maps local-only warnings to resync/reconnect copy", () => {

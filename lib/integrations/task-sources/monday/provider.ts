@@ -52,6 +52,7 @@ export function createMondayProvider(accountKey?: string): TaskSourceProvider {
       await completeByExternalId(externalId, listId, {
         statusColumnId: opts?.statusColumnId,
         statusLabels: opts?.statusLabels,
+        statusLabelIndex: opts?.statusLabelIndex,
       });
     },
 
@@ -60,6 +61,7 @@ export function createMondayProvider(accountKey?: string): TaskSourceProvider {
         statusColumnId: opts?.statusColumnId,
         statusLabels: opts?.statusLabels,
         statusLabel: opts?.statusLabel,
+        statusLabelIndex: opts?.statusLabelIndex,
       });
     },
   };

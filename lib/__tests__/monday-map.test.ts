@@ -15,8 +15,8 @@ const ctx = {
   statusColumnId: "status",
   peopleColumnId: "person",
   statusLabels: [
-    { label: "Working on it", is_done: false },
-    { label: "Done", is_done: true },
+    { label: "Working on it", index: 0, is_done: false },
+    { label: "Done", index: 1, is_done: true },
   ],
 };
 
@@ -27,7 +27,7 @@ describe("mapMondayItem", () => {
         id: "99",
         name: "Ship feature",
         column_values: [
-          { id: "status", type: "status", label: "Working on it", is_done: false },
+          { id: "status", type: "status", label: "Working on it", is_done: false, index: 0 },
           { id: "date", type: "date", date: "2026-08-01" },
         ],
       },
@@ -38,6 +38,7 @@ describe("mapMondayItem", () => {
     assert.equal(d?.dueDate, "2026-08-01");
     assert.equal(d?.meta.account_key, "42");
     assert.equal(d?.meta.statusLabel, "Working on it");
+    assert.equal(d?.meta.statusLabelIndex, 0);
     assert.deepEqual(d?.meta.statusLabels, ctx.statusLabels);
     assert.match(d?.meta.deepLink ?? "", /pulses\/99/);
   });
@@ -59,9 +60,9 @@ describe("mapMondayItem", () => {
 
 describe("status label helpers", () => {
   const labels = [
-    { label: "Working on it", is_done: false },
-    { label: "Done", is_done: true },
-    { label: "Stuck", is_done: false },
+    { label: "Working on it", index: 0, is_done: false },
+    { label: "Done", index: 1, is_done: true },
+    { label: "Stuck", index: 2, is_done: false },
   ];
 
   it("picks Done label", () => {

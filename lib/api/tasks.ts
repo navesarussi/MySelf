@@ -5,7 +5,7 @@ export type TaskJoin = Task & { projects?: { name: string } | { name: string }[]
 
 /** Columns the task endpoints select. `notes` is truncated by the list, full on detail. */
 export const TASK_SELECT =
-  "id, title, project_id, priority, status, due_date, notes, source, external_id, external_list_id, external_meta, synced_at, created_at, updated_at, projects(name)";
+  "id, title, project_id, priority, status, due_date, notes, source, external_id, external_list_id, external_meta, synced_at, hidden_at, created_at, updated_at, projects(name)";
 
 export function projectNameFromJoin(projects: TaskJoin["projects"]): string | undefined {
   if (!projects) return undefined;

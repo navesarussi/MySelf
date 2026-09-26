@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Alert, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
-import { useLayoutDir } from "../../src/layout-dir";
 import {
   useApiQuery,
   useApiMutation,
@@ -16,38 +15,15 @@ import {
 } from "../../src/query";
 import type { HomePayload } from "../../src/api/resources";
 import { ScreenErrorBoundary } from "../../src/components/error-boundary";
-import {
-  Btn,
-  Chip,
-  EmptyState,
-  ErrorNote,
-  Input,
-  Label,
-  Row,
-  Screen,
-  ScreenList,
-  confirmDelete,
-} from "../../src/components/ui";
-import { FormModal } from "../../src/components/form-modal";
-import {
-  isExternalTask,
-  nextStatusForTask,
-  TaskCard,
-  taskPriorityLabel,
-  taskStatusLabel,
-} from "../../src/components/task-card";
-import {
-  ALL_PRIORITIES,
-  ALL_STATUSES,
-  defaultTasksFilter,
-  TasksFilterBar,
-  type TasksFilterState,
-} from "../../src/components/tasks-filter-bar";
-import type { Project, Task, TaskExternalMeta, TaskPriority, TaskSource, TaskStatus } from "@/lib/types";
+import { Btn, EmptyState, ErrorNote, Screen, ScreenList, confirmDelete } from "../../src/components/ui";
+import { TaskEditSheet, type TaskEditFormState } from "../../src/components/task-edit-sheet";
+import { isExternalTask, nextStatusForTask, TaskCard } from "../../src/components/task-card";
+import { defaultTasksFilter, TasksFilterBar, type TasksFilterState } from "../../src/components/tasks-filter-bar";
+import type { Project, Task } from "@/lib/types";
 import { ALL_FILTER } from "@/lib/i18n/types";
-import { useColors, tokens } from "../../src/theme";
 import { useToast } from "../../src/toast";
 import {
+  isLocalOnlyAllowed,
   isLocalOnlyPayload,
   readApiError,
   taskDeleteErrorFlash,
@@ -58,21 +34,7 @@ import {
 /** Stable while loading, so the default-project memo does not rerun every render. */
 const NO_PROJECTS: Project[] = [];
 
-type FormState = {
-  id?: string;
-  title: string;
-  project_id: string;
-  priority: TaskPriority;
-  status: TaskStatus;
-  due_date: string;
-  notes: string;
-  /** True while the full note is being fetched because the list sent a preview. */
-  notesLoading?: boolean;
-  source?: TaskSource;
-  external_meta?: TaskExternalMeta;
-};
-
-const emptyForm = (projectId: string): FormState => ({
+const emptyForm = (projectId: string): TaskEditFormState => ({
   title: "",
   project_id: projectId,
   priority: "medium",
@@ -83,15 +45,13 @@ const emptyForm = (projectId: string): FormState => ({
 
 export default function TasksScreen() {
   const { t } = useI18n();
-  const c = useColors();
-  const { textLtr, textStart, writingDirection } = useLayoutDir();
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { run, isPending, busy } = useApiMutation();
   const { show: showToast } = useToast();
   const [filter, setFilter] = useState<TasksFilterState>(defaultTasksFilter);
   const [debouncedQ, setDebouncedQ] = useState(filter.q);
-  const [form, setForm] = useState<FormState | null>(null);
+  const [form, setForm] = useState<TaskEditFormState | null>(null);
   const listOptionsRef = useRef<Array<{ id: string; title: string }>>([]);
 
   useEffect(() => {
@@ -165,23 +125,102 @@ export default function TasksScreen() {
   }, [tasksQ.data, filter.source, filter.externalList]);
 
   const tasks = tasksQ.data ?? [];
-  const isEditingExternal = form?.id ? isExternalTask({ source: form.source ?? "manual" }) : false;
+  const hideTaskLocally = useCallback(
+    async (taskId: string) => {
+      const prevTasks = queryClient.getQueryData<Task[]>(tasksQueryKey);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+      queryClient.setQueryData<Task[]>(tasksQueryKey, (old) => removeItemFromList(old, taskId));
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => removeTaskFromHome(old, taskId));
+      setForm(null);
+
+      await run((config) => api.updateTask(config, taskId, { hide_locally: true }), {
+        itemId: taskId,
+        flash: { success: "flash.taskHidden" },
+        onError: () => {
+          if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+        },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+        },
+      });
+    },
+    [run, tasksQueryKey]
+  );
+
+  const applyUpdate = useCallback(
+    async (targetId: string, body: Record<string, unknown>, forceLocal = false) => {
+      await run(
+        (config) => api.updateTask(config, targetId, { ...body, force_local: forceLocal || undefined }),
+        {
+          itemId: targetId,
+          suppressErrorToast: true,
+          flash: { success: "flash.taskUpdated", when: "immediate" },
+          onSuccess: (updated) => {
+            if (updated) {
+              queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
+                patchItemInList(old, targetId, updated as Task)
+              );
+              queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
+                patchTaskInHome(old, targetId, updated as Task)
+              );
+              if (isLocalOnlyPayload(updated)) {
+                const warn = taskLocalOnlyWarningFlash(updated);
+                showToast(warn.startsWith("flash.") ? t(warn) : warn, "error");
+              }
+            }
+            queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+          },
+          onError: (err) => {
+            const msg = readApiError(err);
+            if (isLocalOnlyAllowed(err)) {
+              Alert.alert(t("tasks.externalActionTitle"), msg ?? t("flash.taskUpdateError"), [
+                { text: t("common.cancel"), style: "cancel" },
+                {
+                  text: t("tasks.saveLocallyOnly"),
+                  onPress: () => void applyUpdate(targetId, body, true),
+                },
+                {
+                  text: t("tasks.hideLocally"),
+                  onPress: () => void hideTaskLocally(targetId),
+                },
+              ]);
+              return;
+            }
+            const task = tasks.find((x) => x.id === targetId);
+            showToast(t(task ? taskUpdateErrorFlash(task, msg) : "flash.taskUpdateError"), "error");
+          },
+        }
+      );
+    },
+    [run, showToast, t, tasks, tasksQueryKey, hideTaskLocally]
+  );
 
   async function submit() {
     if (!form) return;
     const external = form.id ? isExternalTask({ source: form.source ?? "manual" }) : false;
     if (!external && (!form.title.trim() || !form.project_id)) return;
 
-    const body = external
-      ? { priority: form.priority, status: form.status }
+    const body: Record<string, unknown> = external
+      ? {
+          priority: form.priority,
+          status: form.status,
+          ...(form.mondayStatusIndex != null
+            ? { monday_status_index: form.mondayStatusIndex }
+            : {}),
+          ...(form.external_list_id && form.external_list_id !== tasks.find((x) => x.id === form.id)?.external_list_id
+            ? { external_list_id: form.external_list_id }
+            : {}),
+          ...(form.title.trim() ? { title: form.title.trim() } : {}),
+          ...(form.notesLoading ? {} : { notes: form.notes || null }),
+          ...(form.due_date !== undefined ? { due_date: form.due_date || null } : {}),
+        }
       : {
           title: form.title,
           project_id: form.project_id,
           priority: form.priority,
           status: form.status,
           due_date: form.due_date || null,
-          // Omitted while loading: the field still holds a preview, and a
-          // partial update leaves the stored note untouched.
           ...(form.notesLoading ? {} : { notes: form.notes || null }),
         };
 
@@ -189,24 +228,7 @@ export default function TasksScreen() {
     setForm(null);
 
     if (targetId) {
-      await run((config) => api.updateTask(config, targetId, body), {
-        itemId: targetId,
-        flash: {
-          success: "flash.taskUpdated",
-          error: "flash.taskUpdateError",
-        },
-        onSuccess: (updated) => {
-          if (updated) {
-            queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
-              patchItemInList(old, targetId, updated)
-            );
-            queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-              patchTaskInHome(old, targetId, updated)
-            );
-          }
-          queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
-        },
-      });
+      await applyUpdate(targetId, body);
     } else {
       await run((config) => api.createTask(config, body), {
         flash: {
@@ -316,11 +338,13 @@ export default function TasksScreen() {
         project_id: task.project_id ?? defaultProjectId,
         priority: task.priority,
         status: task.status,
+        mondayStatusIndex: task.external_meta?.statusLabelIndex ?? null,
         due_date: task.due_date ?? "",
         notes: task.notes ?? "",
         notesLoading: needsFullNotes,
         source: task.source,
         external_meta: task.external_meta,
+        external_list_id: task.external_list_id,
       });
 
       // The list only carries a preview. Pull the full note before the field
@@ -344,44 +368,72 @@ export default function TasksScreen() {
     [defaultProjectId, run]
   );
 
+  const performDelete = useCallback(
+    async (task: Task, opts?: { forceLocal?: boolean; hideLocally?: boolean }) => {
+      const prevTasks = queryClient.getQueryData<Task[]>(tasksQueryKey);
+      const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
+
+      queryClient.setQueryData<Task[]>(tasksQueryKey, (old) => removeItemFromList(old, task.id));
+      queryClient.setQueryData<HomePayload>(queryKeys.home, (old) => removeTaskFromHome(old, task.id));
+      setForm(null);
+
+      await run((config) => api.deleteTask(config, task.id, opts), {
+        itemId: task.id,
+        suppressErrorToast: true,
+        flash: { success: "flash.taskDeleted" },
+        onError: (err) => {
+          if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
+          if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
+          const msg = readApiError(err);
+          if (isLocalOnlyAllowed(err)) {
+            Alert.alert(t("tasks.externalActionTitle"), msg ?? t("flash.taskDeleteError"), [
+              { text: t("common.cancel"), style: "cancel" },
+              {
+                text: t("tasks.saveLocallyOnly"),
+                onPress: () => void performDelete(task, { forceLocal: true }),
+              },
+              {
+                text: t("tasks.hideLocally"),
+                onPress: () => void performDelete(task, { hideLocally: true }),
+              },
+            ]);
+            return;
+          }
+          showToast(t(taskDeleteErrorFlash(task, msg)), "error");
+        },
+        onSuccess: (result) => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+          if (isLocalOnlyPayload(result)) {
+            showToast(t(taskLocalOnlyWarningFlash(result)), "error");
+          }
+        },
+      });
+    },
+    [run, showToast, t, tasksQueryKey]
+  );
+
   function removeTask(task: Task) {
     confirmDelete(
       `${t("common.delete")}: ${task.title}?`,
-      async () => {
-        const prevTasks = queryClient.getQueryData<Task[]>(tasksQueryKey);
-        const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-
-        queryClient.setQueryData<Task[]>(tasksQueryKey, (old) =>
-          removeItemFromList(old, task.id)
-        );
-        queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
-          removeTaskFromHome(old, task.id)
-        );
-        setForm(null);
-
-        await run((config) => api.deleteTask(config, task.id), {
-          itemId: task.id,
-          suppressErrorToast: true,
-          flash: {
-            success: "flash.taskDeleted",
-          },
-          onError: (err) => {
-            if (prevTasks) queryClient.setQueryData(tasksQueryKey, prevTasks);
-            if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-            showToast(t(taskDeleteErrorFlash(task, readApiError(err))), "error");
-          },
-          onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
-            if (isLocalOnlyPayload(result)) {
-              showToast(t(taskLocalOnlyWarningFlash(result)), "error");
-            }
-          },
-        });
-      },
+      () => void performDelete(task),
       t("common.delete"),
       t("common.cancel")
     );
   }
+
+  const copyToManual = useCallback(
+    async (taskId: string, projectId: string) => {
+      await run((config) => api.copyTask(config, taskId, { project_id: projectId }), {
+        flash: { success: "flash.taskCopied" },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasksAll });
+          queryClient.invalidateQueries({ queryKey: queryKeys.home });
+          setForm(null);
+        },
+      });
+    },
+    [run]
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: Task }) => (
@@ -432,13 +484,13 @@ export default function TasksScreen() {
         ListEmptyComponent={tasksQ.data && tasks.length === 0 ? <EmptyState text={t("tasks.empty")} /> : null}
       />
 
-      <FormModal
-        visible={form !== null}
-        title={form?.id ? t("tasks.editTask") : t("tasks.addTask")}
+      <TaskEditSheet
+        form={form}
+        projects={projects}
+        listOptions={listOptionsRef.current}
+        busy={busy}
         onClose={() => setForm(null)}
         onSubmit={submit}
-        submitLabel={form?.id ? t("tasks.saveChanges") : t("common.add")}
-        busy={busy}
         onDelete={
           form?.id
             ? () => {
@@ -447,114 +499,16 @@ export default function TasksScreen() {
               }
             : undefined
         }
-      >
-        {form ? (
-          <View>
-            {isEditingExternal ? (
-              <>
-                <Text
-                  style={{
-                    color: c.ink,
-                    fontWeight: "600",
-                    fontSize: tokens.textSm,
-                    textAlign: textStart,
-                    writingDirection,
-                    marginBottom: 4,
-                  }}
-                >
-                  {form.title}
-                </Text>
-                {form.external_meta?.listTitle ? (
-                  <Text
-                    style={{
-                      color: c.muted,
-                      fontSize: tokens.textSm,
-                      textAlign: textStart,
-                      writingDirection,
-                      marginBottom: 8,
-                    }}
-                  >
-                    {form.external_meta.listTitle}
-                  </Text>
-                ) : null}
-                <Text
-                  style={{
-                    color: c.muted,
-                    fontSize: tokens.textXs,
-                    textAlign: textStart,
-                    writingDirection,
-                    marginBottom: 12,
-                  }}
-                >
-                  {t("tasks.externalReadonlyHint")}
-                </Text>
-              </>
-            ) : (
-              <>
-                <Input
-                  value={form.title}
-                  onChangeText={(v) => setForm({ ...form, title: v })}
-                  placeholder={t("tasks.titlePlaceholder")}
-                />
-                <Label>{t("nav.projects")}</Label>
-                <Row wrap style={{ marginBottom: 8 }}>
-                  {projects.map((p) => (
-                    <Chip
-                      key={p.id}
-                      label={p.name}
-                      active={form.project_id === p.id}
-                      onPress={() => setForm({ ...form, project_id: p.id })}
-                    />
-                  ))}
-                </Row>
-              </>
-            )}
-            <Label>{t("tasks.priorityFilter")}</Label>
-            <Row wrap style={{ marginBottom: 8 }}>
-              {ALL_PRIORITIES.map((p) => (
-                <Chip
-                  key={p}
-                  label={taskPriorityLabel(t, p)}
-                  active={form.priority === p}
-                  onPress={() => setForm({ ...form, priority: p })}
-                />
-              ))}
-            </Row>
-            <Label>{t("common.status")}</Label>
-            <Row wrap style={{ marginBottom: 8 }}>
-              {ALL_STATUSES.map((s) => (
-                <Chip
-                  key={s}
-                  label={taskStatusLabel(t, s)}
-                  active={form.status === s}
-                  onPress={() => setForm({ ...form, status: s })}
-                />
-              ))}
-            </Row>
-            {!isEditingExternal ? (
-              <>
-                <Label>{`${t("common.due")} (YYYY-MM-DD)`}</Label>
-                <Input
-                  value={form.due_date}
-                  onChangeText={(v) => setForm({ ...form, due_date: v })}
-                  placeholder="2026-12-31"
-                  autoCapitalize="none"
-                  style={{ textAlign: textLtr }}
-                />
-                <Input
-                  value={form.notes}
-                  onChangeText={(v) => setForm({ ...form, notes: v })}
-                  placeholder={
-                    form.notesLoading ? t("common.loading") : t("tasks.notesPlaceholder")
-                  }
-                  editable={!form.notesLoading}
-                  multiline
-                />
-              </>
-            ) : null}
-          </View>
-        ) : null}
-      </FormModal>
+        onHideLocally={
+          form?.id ? () => void hideTaskLocally(form.id!) : undefined
+        }
+        onCopyToManual={
+          form?.id
+            ? () => void copyToManual(form.id!, form.project_id || defaultProjectId)
+            : undefined
+        }
+        onChange={setForm}
+      />
     </>
     </ScreenErrorBoundary>
   );

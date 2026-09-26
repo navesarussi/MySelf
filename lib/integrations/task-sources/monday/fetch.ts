@@ -6,6 +6,7 @@ import type {
   MondayBoardSummary,
   MondayColumn,
   MondayItem,
+  MondayItemWritebackContext,
   MondayMapContext,
 } from "./types";
 
@@ -37,9 +38,12 @@ function findStatusColumnId(columns: MondayColumn[]): string | null {
   return columns.find((c) => c.type === "status")?.id ?? null;
 }
 
+const HEBREW_DONE_RE = /^(בוצע|הושלם|נסגר)$/i;
+const EN_DONE_RE = /^(done|complete|completed)$/i;
+
 export function parseStatusLabels(
   settingsStr: string | null | undefined
-): { label: string; is_done?: boolean }[] {
+): { label: string; index: number; is_done?: boolean }[] {
   if (!settingsStr) return [];
   try {
     const settings = JSON.parse(settingsStr) as {
@@ -47,13 +51,17 @@ export function parseStatusLabels(
       labels_colors?: Record<string, { var_name?: string }>;
     };
     const labels = settings.labels ?? {};
-    return Object.entries(labels).map(([index, label]) => {
-      const varName = settings.labels_colors?.[index]?.var_name ?? "";
-      const is_done =
-        /done|complete|success|green/i.test(varName) ||
-        /^(done|complete|completed)$/i.test(label);
-      return { label, is_done };
-    });
+    return Object.entries(labels)
+      .filter(([, label]) => label.trim().length > 0)
+      .map(([indexStr, label]) => {
+        const index = Number(indexStr);
+        const varName = settings.labels_colors?.[indexStr]?.var_name ?? "";
+        const is_done =
+          /done|complete|success|green/i.test(varName) ||
+          EN_DONE_RE.test(label) ||
+          HEBREW_DONE_RE.test(label);
+        return { label, index, is_done };
+      });
   } catch {
     return [];
   }
@@ -93,9 +101,10 @@ async function fetchAssignedItemsPage(
 ): Promise<{ items: MondayItem[]; nextCursor: string | null }> {
   const itemFields = `
     id name
+    board { id }
     column_values {
       id type text
-      ... on StatusValue { label is_done }
+      ... on StatusValue { label is_done index }
       ... on DateValue { date }
     }`;
 
@@ -181,4 +190,60 @@ export async function fetchAssignedOpenItems(
   }
 
   return drafts;
+}
+
+function statusFromItemValues(
+  columnValues: MondayItem["column_values"],
+  statusColumnId: string | null
+) {
+  if (!statusColumnId || !columnValues) {
+    return { label: null as string | null, index: null as number | null, isDone: false };
+  }
+  const col = columnValues.find((c) => c.id === statusColumnId);
+  if (!col) return { label: null, index: null, isDone: false };
+  return {
+    label: col.label ?? col.text ?? null,
+    index: typeof col.index === "number" ? col.index : null,
+    isDone: col.is_done === true,
+  };
+}
+
+/** Live item + board meta for write-back — resolves subitem boards and the real status column. */
+export async function fetchMondayItemWritebackContext(
+  accessToken: string,
+  itemId: string,
+  boardIdHint: string
+): Promise<MondayItemWritebackContext | null> {
+  const data = await mondayGraphql<{
+    items: MondayItem[] | null;
+  }>(
+    accessToken,
+    `query ($ids: [ID!]) {
+      items(ids: $ids) {
+        id
+        board { id }
+        column_values {
+          id type
+          ... on StatusValue { label is_done index }
+        }
+      }
+    }`,
+    { ids: [itemId] }
+  );
+
+  const item = data.items?.[0];
+  if (!item) return null;
+
+  const boardId = item.board?.id ? String(item.board.id) : boardIdHint;
+  const meta = await fetchBoardMeta(accessToken, boardId);
+  if (!meta) return null;
+
+  const status = statusFromItemValues(item.column_values, meta.statusColumnId);
+  return {
+    boardId,
+    statusColumnId: meta.statusColumnId,
+    statusLabelIndex: status.index,
+    statusLabel: status.label,
+    statusLabels: meta.statusLabels,
+  };
 }

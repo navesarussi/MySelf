@@ -66,10 +66,10 @@ describe("classifyWritebackError", () => {
     assert.equal(err.localOnlyAllowed, true);
   });
 
-  it("marks external API failures as not local-only", () => {
+  it("marks google 403 as local-only allowed", () => {
     const err = classifyWritebackError(new Error("complete_task_failed:403:forbidden"));
-    assert.equal(err.code, "external_api_failed");
-    assert.equal(err.localOnlyAllowed, false);
+    assert.equal(err.code, "external_permission_denied");
+    assert.equal(err.localOnlyAllowed, true);
   });
 });
 

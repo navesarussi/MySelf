@@ -145,6 +145,28 @@ export async function reopenGoogleTask(
   listId: string,
   taskId: string
 ): Promise<void> {
+  await patchGoogleTask(accessToken, listId, taskId, { status: "needsAction" });
+}
+
+export type GoogleTaskPatch = {
+  title?: string;
+  notes?: string | null;
+  due?: string | null;
+  status?: "needsAction" | "completed";
+};
+
+export async function patchGoogleTask(
+  accessToken: string,
+  listId: string,
+  taskId: string,
+  patch: GoogleTaskPatch
+): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (patch.title !== undefined) body.title = patch.title;
+  if (patch.notes !== undefined) body.notes = patch.notes ?? "";
+  if (patch.due !== undefined) body.due = patch.due;
+  if (patch.status !== undefined) body.status = patch.status;
+
   const res = await fetch(
     `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}`,
     {
@@ -153,13 +175,51 @@ export async function reopenGoogleTask(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ status: "needsAction" }),
+      body: JSON.stringify(body),
     }
   );
 
   if (!res.ok) {
+    const text = await res.text();
+    const prefix = patch.status === "completed" ? "complete_task_failed" : "patch_task_failed";
+    throw new Error(`${prefix}:${res.status}:${text.slice(0, 500)}`);
+  }
+}
+
+export async function moveGoogleTask(
+  accessToken: string,
+  fromListId: string,
+  toListId: string,
+  taskId: string
+): Promise<void> {
+  const res = await fetch(
+    `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(fromListId)}/tasks/${encodeURIComponent(taskId)}/move?destinationTasklist=${encodeURIComponent(toListId)}`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  if (!res.ok) {
     const body = await res.text();
-    throw new Error(`reopen_task_failed:${res.status}:${body.slice(0, 500)}`);
+    throw new Error(`move_task_failed:${res.status}:${body.slice(0, 500)}`);
+  }
+}
+
+export async function deleteGoogleTask(
+  accessToken: string,
+  listId: string,
+  taskId: string
+): Promise<void> {
+  const res = await fetch(
+    `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`delete_task_failed:${res.status}:${body.slice(0, 500)}`);
   }
 }
 
