@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import type { FixedExpenseItem, MatchedTxn } from "@/lib/finance/fixed-expenses";
 import { fmtAmount2 } from "@/lib/finance/format";
+import { formatDisplayMerchantName } from "@/lib/finance/merchant-display";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
@@ -80,6 +81,11 @@ export function FixedExpenseEditModal({
             </Text>
             <Text style={{ color: c.muted, fontSize: tokens.textXs, marginBottom: 6, textAlign: textStart, writingDirection }}>{t("finance.editMerchant")}</Text>
             <Input value={name} onChangeText={setName} editable={!saving} />
+            {item.merchant_key && item.merchant_key !== name ? (
+              <Text style={{ color: c.muted, fontSize: 11, marginTop: 4, textAlign: textStart, writingDirection }} numberOfLines={2}>
+                {t("finance.rawDescriptor")}: {formatDisplayMerchantName(item.merchant_key, { raw: true })}
+              </Text>
+            ) : null}
             <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 10, marginBottom: 6, textAlign: textStart, writingDirection }}>{t("finance.editPlanned")}</Text>
             <Input value={amount} onChangeText={setAmount} keyboardType="decimal-pad" editable={!saving} />
             <View style={{ marginTop: 10 }}>

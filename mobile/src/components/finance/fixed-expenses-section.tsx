@@ -1,13 +1,16 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import type { FixedExpenseItem } from "@/lib/finance/fixed-expenses";
-import { fmtAmount0 } from "@/lib/finance/format";
+import { partitionFixedExpenses } from "@/lib/finance/fixed-expense-dormant";
+import { fmtAmount0, fmtIls0 } from "@/lib/finance/format";
+import { localeTag } from "@/lib/i18n/core";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
-import { Card, ErrorNote, Row, SectionTitle, Skeleton } from "../ui";
+import { Card, ErrorNote, Row, Skeleton } from "../ui";
+import { CollapsibleSectionHeader } from "./collapsible-section-header";
 import { FixedExpenseEditModal } from "./fixed-expense-edit-modal";
+import { MoneyItemRow } from "./money-item-row";
 
 export type FixedExpensePatch = {
   name: string;
@@ -23,6 +26,34 @@ export type FixedExpensePatch = {
 function freqShort(t: (k: string, params?: Record<string, string | number>) => string, item: FixedExpenseItem): string {
   const base = t(`finance.fixedFrequency_${item.frequency}`);
   return item.charge_day ? `${base} · ${t("finance.fixedDay", { day: String(item.charge_day) })}` : base;
+}
+
+function fixedSubtitle(
+  t: (k: string, params?: Record<string, string | number>) => string,
+  item: FixedExpenseItem
+): string | null {
+  const parts: string[] = [];
+  if (item.charge_day) parts.push(t("finance.fixedDay", { day: String(item.charge_day) }));
+  if (item.last_charge_date && item.last_charge_amount != null && item.last_charge_amount > 0) {
+    parts.push(
+      t("finance.fixedLastCharge", {
+        date: item.last_charge_date,
+        amount: fmtAmount0(item.last_charge_amount),
+      })
+    );
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function fixedStatus(item: FixedExpenseItem, t: (k: string) => string): { label: string; tone: "good" | "warn" | "muted" } | null {
+  if (!item.is_active) return { label: t("finance.fixedPaused"), tone: "muted" };
+  if (item.actual_amount <= 0 && item.planned_amount > 0) {
+    return { label: t("finance.fixedPending"), tone: "warn" };
+  }
+  if (item.actual_amount >= item.planned_amount && item.planned_amount > 0) {
+    return { label: t("finance.fixedPaid"), tone: "good" };
+  }
+  return null;
 }
 
 export function FixedExpensesSection({
@@ -52,14 +83,19 @@ export function FixedExpensesSection({
   onConvertToVariable?: (item: FixedExpenseItem) => Promise<boolean>;
   onUnlinkTxn?: (item: FixedExpenseItem, txnId: string) => Promise<boolean>;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const c = useColors();
-  const { textStart, writingDirection, row } = useLayoutDir();
+  const { textStart, writingDirection } = useLayoutDir();
+  const loc = localeTag(locale);
   const [editItem, setEditItem] = useState<FixedExpenseItem | "new" | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showDormant, setShowDormant] = useState(false);
 
-  const plannedTotal = items.reduce((s, i) => s + (i.is_active ? i.planned_amount : 0), 0);
-  const actualTotal = items.reduce((s, i) => s + i.actual_amount, 0);
+  const { active, dormant } = useMemo(() => partitionFixedExpenses(items), [items]);
+  const visibleItems = showDormant ? [...active, ...dormant] : active;
+
+  const plannedTotal = active.reduce((s, i) => s + (i.is_active ? i.planned_amount : 0), 0);
+  const actualTotal = active.reduce((s, i) => s + i.actual_amount, 0);
 
   async function handleSave(patch: FixedExpensePatch) {
     setSaving(true);
@@ -78,19 +114,18 @@ export function FixedExpensesSection({
 
   return (
     <View style={{ marginBottom: 8 }}>
-      <Pressable onPress={onToggleCollapse} accessibilityRole="button">
-        <Row>
-          <SectionTitle>{t("finance.sectionFixed")}</SectionTitle>
-          <Ionicons name={collapsed ? "chevron-down" : "chevron-up"} size={18} color={c.muted} />
-        </Row>
-      </Pressable>
+      <CollapsibleSectionHeader
+        title={t("finance.sectionFixed")}
+        collapsed={collapsed}
+        onPress={onToggleCollapse}
+      />
       <Card>
         <Row style={{ marginBottom: 8 }}>
-          <Text style={{ color: c.muted, fontSize: tokens.textXs, flex: 1, textAlign: textStart, writingDirection }}>
-            {t("finance.planned")}: ₪{fmtAmount0(plannedTotal)}
+          <Text style={{ color: c.muted, fontSize: tokens.textXs, flex: 1, minWidth: 0, textAlign: textStart, writingDirection }}>
+            {t("finance.planned")}: {fmtIls0(plannedTotal, loc)}
           </Text>
-          <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "600" }}>
-            {t("finance.actual")}: ₪{fmtAmount0(actualTotal)}
+          <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "600", flexShrink: 0, writingDirection: "ltr" }}>
+            {t("finance.actual")}: {fmtIls0(actualTotal, loc)}
           </Text>
         </Row>
         {error ? <ErrorNote message={error} onRetry={onRetry} /> : null}
@@ -101,33 +136,43 @@ export function FixedExpensesSection({
                 <Skeleton height={14} style={{ marginBottom: 8 }} />
                 <Skeleton height={14} />
               </>
-            ) : items.length === 0 ? (
+            ) : visibleItems.length === 0 ? (
               <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
                 {t("finance.noFixedExpenses")}
               </Text>
             ) : (
-              items.map((item) => (
-                <Pressable key={item.id} onPress={() => setEditItem(item)} style={{ marginBottom: 10 }}>
-                  <Row>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: item.is_active ? c.ink : c.muted, fontWeight: "600", textAlign: textStart, writingDirection }}>
-                        {item.name}
-                        {!item.is_active ? ` · ${t("finance.fixedPaused")}` : ""}
-                      </Text>
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs, marginTop: 2, textAlign: textStart, writingDirection }}>
-                        {[item.category, freqShort(t, item), item.last_charge_date ? t("finance.fixedLastCharge", { date: item.last_charge_date, amount: fmtAmount0(item.last_charge_amount ?? 0) }) : null]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </Text>
-                    </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Text style={{ color: c.muted, fontSize: tokens.textXs }}>{t("finance.planned")} ₪{fmtAmount0(item.planned_amount)}</Text>
-                      <Text style={{ color: c.ink, fontSize: tokens.textXs, fontWeight: "600" }}>{t("finance.actual")} ₪{fmtAmount0(item.actual_amount)}</Text>
-                    </View>
-                  </Row>
-                </Pressable>
-              ))
+              visibleItems.map((item) => {
+                const status = fixedStatus(item, t);
+                return (
+                  <MoneyItemRow
+                    key={item.id}
+                    title={item.name}
+                    category={item.category}
+                    subtitle={[freqShort(t, item), fixedSubtitle(t, item)].filter(Boolean).join(" · ") || null}
+                    planned={item.planned_amount}
+                    actual={item.actual_amount}
+                    muted={!item.is_active}
+                    statusLabel={status?.label ?? null}
+                    statusTone={status?.tone}
+                    onPress={() => setEditItem(item)}
+                  />
+                );
+              })
             )}
+            {dormant.length > 0 && !showDormant ? (
+              <Pressable onPress={() => setShowDormant(true)} style={{ paddingVertical: 8 }}>
+                <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>
+                  {t("finance.fixedDormantHidden", { count: dormant.length })}
+                </Text>
+              </Pressable>
+            ) : null}
+            {showDormant && dormant.length > 0 ? (
+              <Pressable onPress={() => setShowDormant(false)} style={{ paddingVertical: 4 }}>
+                <Text style={{ color: c.accent, fontSize: tokens.textXs, fontWeight: "600", textAlign: textStart, writingDirection }}>
+                  {t("finance.fixedHideDormant")}
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable onPress={() => setEditItem("new")} style={{ marginTop: 4 }}>
               <Text style={{ color: c.accent, fontWeight: "600", textAlign: textStart, writingDirection }}>
                 + {t("finance.addFixedExpense")}

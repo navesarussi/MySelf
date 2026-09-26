@@ -1,11 +1,16 @@
-import { recurringMerchantGroupKey, typicalChargeAmount } from "@/lib/finance/cal-duplicate";
+import {
+  pickPreferredMerchantLabel,
+  recurringMerchantGroupKey,
+  typicalChargeAmount,
+} from "@/lib/finance/cal-duplicate";
 import {
   fetchUnlinkedTxnIds,
   matchedTxnsForFixed,
   txnMatchesFixedKey,
   type MatchedTxn,
 } from "@/lib/finance/fixed-expense-links";
-import { formatMerchantLabel, normalizeMerchantKey, type MerchantRule } from "@/lib/finance/merchant-rules-client";
+import { formatDisplayMerchantName } from "@/lib/finance/merchant-display";
+import { normalizeMerchantKey, type MerchantRule } from "@/lib/finance/merchant-rules-client";
 import { round2 } from "@/lib/finance/money";
 import type { FinanceTransaction } from "@/lib/finance/types";
 
@@ -55,19 +60,25 @@ function buildFromRule(
   const actual_amount = round2(monthMatches.reduce((s, t) => s + t.amount, 0));
   const sortedHistory = [...historyMatches].sort((a, b) => b.txn_date.localeCompare(a.txn_date));
   const last = sortedHistory[0] ?? null;
-  const amounts = sortedHistory.slice(0, 6).map((t) => t.amount);
+  const nonzeroAmounts = sortedHistory.map((t) => t.amount).filter((a) => round2(a) > 0);
+  const amounts = nonzeroAmounts.slice(0, 6);
   const planned =
-    rule.planned_amount != null && rule.planned_amount >= 0
+    rule.planned_amount != null && rule.planned_amount > 0
       ? round2(Number(rule.planned_amount))
       : amounts.length
         ? typicalChargeAmount(amounts)
         : 0;
 
+  const displayName =
+    formatDisplayMerchantName(rule.display_name) ||
+    formatDisplayMerchantName(rule.merchant_key) ||
+    key;
+
   return {
     id: rule.id ?? key,
     rule_id: rule.id ?? null,
     merchant_key: key,
-    name: rule.display_name?.trim() || formatMerchantLabel(rule.merchant_key) || key,
+    name: displayName,
     category: rule.category,
     planned_amount: planned,
     actual_amount,
@@ -92,11 +103,15 @@ function buildFromTxnGroup(
   const historyMatches = fixedTxnsForKey(historyTxns, key, unlinked);
   const sortedHistory = [...historyMatches].sort((a, b) => b.txn_date.localeCompare(a.txn_date));
   const last = sortedHistory[0] ?? null;
-  const label = formatMerchantLabel(
-    pickPreferredLabel(monthMatches, historyMatches) || key
+  const rawLabel = pickPreferredMerchantLabel(
+    ...monthMatches.flatMap((t) => [t.merchant, t.description]),
+    ...historyMatches.flatMap((t) => [t.merchant, t.description])
   );
-  const amounts = historyMatches.slice(0, 6).map((t) => t.amount);
+  const label = formatDisplayMerchantName(rawLabel || pickPreferredLabel(monthMatches, historyMatches) || key);
+  const nonzeroAmounts = historyMatches.map((t) => t.amount).filter((a) => round2(a) > 0);
+  const amounts = nonzeroAmounts.slice(0, 6);
   const category = sortedHistory.find((t) => t.category)?.category ?? null;
+  const monthActual = round2(monthMatches.reduce((s, t) => s + t.amount, 0));
 
   return {
     id: `txn:${key}`,
@@ -104,7 +119,7 @@ function buildFromTxnGroup(
     merchant_key: key,
     name: label || key,
     category,
-    planned_amount: amounts.length ? typicalChargeAmount(amounts) : round2(monthMatches.reduce((s, t) => s + t.amount, 0)),
+    planned_amount: amounts.length ? typicalChargeAmount(amounts) : monthActual > 0 ? monthActual : 0,
     actual_amount: round2(monthMatches.reduce((s, t) => s + t.amount, 0)),
     frequency: "monthly",
     charge_day: inferChargeDay(historyMatches.map((t) => t.txn_date)),
@@ -156,5 +171,13 @@ export async function buildFixedExpenseItems(
     items.push(buildFromTxnGroup(key, month, monthTxns, historyTxns, await unlinkedFor(key)));
   }
 
-  return items.sort((a, b) => a.name.localeCompare(b.name, "he"));
+  return items.sort((a, b) => {
+    const dayA = a.charge_day ?? 32;
+    const dayB = b.charge_day ?? 32;
+    if (dayA !== dayB) return dayA - dayB;
+    const amtA = Math.max(a.planned_amount, a.actual_amount);
+    const amtB = Math.max(b.planned_amount, b.actual_amount);
+    if (amtB !== amtA) return amtB - amtA;
+    return a.name.localeCompare(b.name, "he");
+  });
 }

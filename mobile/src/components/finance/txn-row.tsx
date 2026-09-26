@@ -5,8 +5,9 @@ import { moneyItemTypeFromTxn } from "@/lib/finance/money-item-type";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
-import { fmtAmount2 } from "@/lib/finance/format";
-import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
+import { formatDisplayMerchantName } from "@/lib/finance/merchant-display";
+import { fmtIls2 } from "@/lib/finance/format";
+import { localeTag } from "@/lib/i18n/core";
 import type { FinanceTransaction } from "@/lib/finance/types";
 
 export const FinanceTxnRow = memo(function FinanceTxnRow({
@@ -23,10 +24,11 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
   onToggleSelect?: () => void;
 }) {
   const c = useColors();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const loc = localeTag(locale);
   const { textStart, writingDirection, row } = useLayoutDir();
   const income = txn.kind === "income";
-  const label = formatMerchantLabel(txn.merchant || txn.description);
+  const label = formatDisplayMerchantName(txn.merchant || txn.description);
   const when = txn.txn_time ? `${txn.txn_date} ${txn.txn_time}` : txn.txn_date;
   const itemType = moneyItemTypeFromTxn(txn);
   const typeLabel = t(`finance.moneyType_${itemType}`);
@@ -39,7 +41,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
       onPress={selectionMode ? onToggleSelect : onPress}
       onLongPress={onToggleSelect}
       accessibilityRole="button"
-      accessibilityLabel={`${label} ${txn.purpose_note ? `(${txn.purpose_note}) ` : ""}${income ? "+" : "−"}₪${fmtAmount2(txn.amount)}`}
+      accessibilityLabel={`${label} ${txn.purpose_note ? `(${txn.purpose_note}) ` : ""}${income ? "+" : "−"}${fmtIls2(txn.amount, loc)}`}
       style={({ pressed }) => ({
         ...row,
         justifyContent: "space-between",
@@ -68,7 +70,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
         </Text>
       </View>
       <Text style={{ color: income ? c.good : c.ink, fontWeight: "800", fontSize: tokens.text, fontVariant: ["tabular-nums"], writingDirection: "ltr" }}>
-        {income ? "+" : "−"}₪{fmtAmount2(txn.amount)}
+        {`${income ? "+" : "−"}${fmtIls2(txn.amount, loc)}`}
       </Text>
     </Pressable>
   );

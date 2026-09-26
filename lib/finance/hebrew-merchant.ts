@@ -9,16 +9,26 @@ const HEBREW_VOCAB = [
   "הוראת קבע",
   "לא הוראת קבע",
   "לא הוראת",
+  "הסיטונאית",
+  "משתלה",
   "מוצרי און",
   "סופר פאר",
   "סופר-פאר",
   "לא אירלנד",
   "תל אביב",
   "בית עסק",
+  "עמלת קנ",
+  "במטח",
   "תחבורה",
   "ברכבות",
   "רכבות",
   "עמותות",
+  "מסעדות",
+  "מוסדות",
+  "משקאות",
+  "קניות",
+  "מילוד",
+  "ותר",
   "תר",
   "הוראת",
   "ארנונה",
@@ -39,9 +49,21 @@ const HEBREW_VOCAB = [
   "דלק",
   "מים",
   "און",
+  "פנאי",
+  "בילוי",
+  "ריהוט",
+  "בית",
+  "גו אה",
+  "שונות",
+  "תיירות",
+  "מחשבים",
+  "זיכוי",
   "לא",
   "שק",
 ].sort((a, b) => b.length - a.length);
+
+/** Minimum glued Hebrew run length before vocab segmentation runs. */
+const GLUED_HEBREW_MIN = 6;
 
 function segmentGluedHebrew(text: string): string {
   let rest = text.replace(/\s+/g, "");
@@ -80,7 +102,7 @@ export function normalizeHebrewDescription(text: string): string {
 
   const hebrewRuns = out.match(/[\u0590-\u05FF"']+/gu) ?? [];
   for (const run of hebrewRuns) {
-    if (run.length >= 8 && !/\s/.test(run)) {
+    if (run.length >= GLUED_HEBREW_MIN && !/\s/.test(run)) {
       const segmented = segmentGluedHebrew(run);
       if (segmented.includes(" ")) out = out.replace(run, segmented);
     }
