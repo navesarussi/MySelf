@@ -1,4 +1,5 @@
 # Build iOS on every main push that touches mobile/, bump patch version, submit to TestFlight.
+# Also runs when this workflow file changes (e.g. to pick up queued mobile fixes on main).
 # Uses a macOS runner + `eas build --local` so we are not blocked by the EAS cloud free quota.
 #
 # Required GitHub secrets (repo → Settings → Secrets → Actions):
