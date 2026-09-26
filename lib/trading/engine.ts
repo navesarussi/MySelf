@@ -12,6 +12,7 @@ import { scanDailyTrend } from "./scan-daily-trend";
 import { scan } from "./scan-v2";
 import { isIntradayManaged } from "./strategy-versions";
 import { resurrectDesyncedTrades } from "./broker/resurrect";
+import { settleBrokerTrades, SETTLE_LOOKBACK_MS } from "./broker/settle";
 import { drawdownFromPeak, shouldTripKillSwitch } from "./risk-envelope";
 import {
   ensureSeeded,
@@ -80,6 +81,13 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
   const earningsNext = openTrades.some((t) => t.asset_class === "STOCK") ? await fetchEarningsSymbols(nextTradingDays(isoDateInZone(new Date(now), "America/New_York"), 2)) : new Set<string>();
   // Intraday positions are managed on 5m bars by the per-minute intraday tick.
   await advancePositions({ trades: openTrades.filter((t) => !isIntradayManaged(t.strategy_version)), frames, universe, params, calendar, earningsNext, agentEnabled: settings.agent_enabled, now, summary, lastPrices });
+  if (settings.execution_venue === "ALPACA_PAPER") {
+    try {
+      await settleBrokerTrades({ now, sinceMs: now - SETTLE_LOOKBACK_MS });
+    } catch (err) {
+      summary.errors.push(`settle: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+    }
+  }
 
   if (settings.agent_enabled) {
     try {

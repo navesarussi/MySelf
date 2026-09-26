@@ -23,10 +23,9 @@ const holdSkew = (q: QualityReport): "warn" | "default" =>
 export default function TradingAnalyticsScreen() {
   const { t } = useI18n();
   const c = useColors();
-  const [execution, setExecution] = useState("ALL");
-  const [track, setTrack] = useState("AGENT");
   const [days, setDays] = useState(0);
-  const scope = useMemo(() => ({ execution, track, days }), [execution, track, days]);
+  // Only real (Alpaca demo) trades exist now — no shadow/baseline scopes to pick.
+  const scope = useMemo(() => ({ execution: "ALL", track: "AGENT", days }), [days]);
   const { data, loading, refresh } = useApiQuery(queryKeys.tradingAnalytics(scope), (cfg) => api.tradingAnalytics(cfg, scope));
   const s = data?.stats;
   const av = data?.agent_value;
@@ -35,15 +34,6 @@ export default function TradingAnalyticsScreen() {
   return (
     <Screen title={t("trading.hubAnalytics")} subtitle={t("trading.analyticsSubtitle")} onRefresh={refresh} refreshing={loading}>
       <View style={{ gap: 8, marginBottom: 10 }}>
-        <Row wrap>
-          {["ALL", "SHADOW", "PAPER"].map((e) => (
-            <Chip key={e} label={e === "ALL" ? t("trading.filterAll") : e} active={execution === e} onPress={() => setExecution(e)} />
-          ))}
-        </Row>
-        <Row wrap>
-          <Chip label={t("trading.trackAgent")} active={track === "AGENT"} onPress={() => setTrack("AGENT")} />
-          <Chip label={t("trading.trackDeterministic")} active={track === "DETERMINISTIC"} onPress={() => setTrack("DETERMINISTIC")} />
-        </Row>
         <Row wrap>
           {[0, 7, 30, 90, 365].map((d) => (
             <Chip key={d} label={d === 0 ? t("trading.daysAll") : `${d}d`} active={days === d} onPress={() => setDays(d)} />

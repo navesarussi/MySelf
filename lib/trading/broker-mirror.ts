@@ -1,4 +1,4 @@
-import { alpaca, sellableQty } from "./broker/alpaca";
+import { alpaca, ensureProtectiveStop, isDustPosition } from "./broker/alpaca";
 import { flattenAtBroker } from "./broker/flatten";
 import { revertFailedBrokerClose } from "./broker/revert-close";
 import { bracketLegs, brokerExit, brokerSupportsExitPlan, pendingDecision, protectiveAdjustments } from "./broker/sync";
@@ -66,23 +66,13 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
         patch.broker_stop_order_id = legs.stop?.id ?? null;
         patch.broker_target_order_id = legs.target?.id ?? null;
       } else {
-        // Size the protective stop from what the broker actually holds, not from
-        // the fill: crypto fees are taken in the asset, so the balance is a
-        // fraction below filled_qty and a sell for the full fill is rejected
-        // with `insufficient balance`. That rejection threw out of the tick, so
-        // the stop was never placed and the position ran unprotected while the
-        // error repeated every 5 minutes.
-        const qty = await sellableQty(trade.symbol, trade.asset_class, d.qty);
-        if (qty === null) {
-          events.push({ type: "CANCELLED", reason: "BROKER_NO_POSITION_FOR_STOP", at: now });
-          patch.broker_status = "stop_skipped_no_position";
-        } else {
-          const stop =
-            trade.asset_class === "STOCK"
-              ? await alpaca.placeStockStop({ symbol: trade.symbol, qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` })
-              : await alpaca.placeCryptoStop({ symbol: trade.symbol, qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` });
-          patch.broker_stop_order_id = stop.id;
-        }
+        // Sized from what the broker holds (crypto fees are taken in the asset)
+        // and adopted when a stop already rests on the symbol — see
+        // ensureProtectiveStop. No stop and nothing held means the position is
+        // already gone; mirrorToBroker settles it from the fills.
+        const stop = await ensureProtectiveStop({ tradeId: trade.id, symbol: trade.symbol, assetClass: trade.asset_class, qty: d.qty, stop: p.stop_price, now });
+        if (stop) patch.broker_stop_order_id = stop.id;
+        else patch.broker_status = "stop_skipped_no_position";
       }
       return { done: false, patch };
     }
@@ -146,13 +136,22 @@ export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: Tr
     return patch;
   }
 
-  if ((p.state === "OPEN" || p.state === "RISK_FREE") && (!stopOrder || ["canceled", "expired", "rejected", "filled"].includes(stopOrder.status))) {
-    const qty = await sellableQty(trade.symbol, trade.asset_class, p.size);
-    if (qty) {
-      const stop =
-        trade.asset_class === "STOCK"
-          ? await alpaca.placeStockStop({ symbol: trade.symbol, qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` })
-          : await alpaca.placeCryptoStop({ symbol: trade.symbol, qty, stop: p.stop_price, clientId: `${trade.id.slice(0, 18)}-sl-${now}` });
+  // The broker is flat although neither tracked order says it filled (a stop
+  // replaced under a new id, a manual close in the Alpaca UI, a fill we missed
+  // while the row was stuck): the position is over. Book it closed now; the
+  // settlement pass replaces this estimate with the real fills.
+  const held = await alpaca.position(trade.symbol, trade.asset_class);
+  if (isDustPosition(held)) {
+    const entry = p.entry_price ?? p.entry_limit;
+    const reason = p.stop_price > entry * 1.0005 ? "TRAIL" : p.stop_price >= entry * 0.9995 ? "BREAKEVEN" : "STOP";
+    events.push(...applyExternalExit(p, lastPrice ?? p.stop_price, reason, at));
+    patch.broker_status = "exit_broker_flat";
+    return patch;
+  }
+
+  if (!stopOrder || ["canceled", "expired", "rejected", "filled"].includes(stopOrder.status)) {
+    const stop = await ensureProtectiveStop({ tradeId: trade.id, symbol: trade.symbol, assetClass: trade.asset_class, qty: p.size, stop: p.stop_price, now });
+    if (stop) {
       patch.broker_stop_order_id = stop.id;
       stopOrder = stop;
     }

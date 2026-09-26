@@ -23,6 +23,8 @@ export type LivePosition = {
   entry_price: number | null;
   entry_limit: number;
   stop_price: number;
+  /** 1R in price at the fill — what current R is measured against. */
+  stop_distance: number | null;
   target_price: number;
   last_price: number | null;
   current_r: number | null;
@@ -208,6 +210,7 @@ function toLivePosition(t: TradeRow, prices: Map<string, number>): LivePosition 
     entry_price: entry,
     entry_limit: t.entry_limit,
     stop_price: p.stop_price,
+    stop_distance: p.stop_distance > 0 ? p.stop_distance : null,
     target_price: p.target_price,
     last_price: last,
     current_r: entry !== null && last !== null && p.stop_distance > 0 ? round((last - entry) / p.stop_distance, 2) : null,

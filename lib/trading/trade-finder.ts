@@ -4,7 +4,7 @@ import { planIntradayTrade, type RatingSnapshot, type TradePlanProposal } from "
 import { RISK_ENVELOPE } from "./config";
 import { MANUAL_STRATEGY_VERSION } from "./engine";
 import { livePrice, loadIntradayFrames, type IntradaySymbol, type LoadedFrames } from "./intraday-data";
-import { insertIntradayTrade, intradayEnvelopeBlocks, loadIntradayAccount, placeIntradayBrokerEntry, ratingSnapshotFor, scannableSymbols, sizeIntraday, stockSession, symbolsToLoad, syncBrokerEntryNow, syncSimEntryNow } from "./intraday-engine";
+import { insertIntradayTrade, intradayEnvelopeBlocks, loadIntradayAccount, placeIntradayBrokerEntry, ratingSnapshotFor, scannableSymbols, sizeIntraday, stockSession, symbolsToLoad, syncBrokerEntryNow } from "./intraday-engine";
 import { getIntradayUniverse, type IntradayUniverseRow } from "./intraday-universe";
 import { M15, M5, confirmOn5m, detectIntradaySetup, features, intradayParamsFor, planAtPrice, scoreIntraday, type IntradayParams, type IntradaySetupHit } from "./strategy/intraday";
 import { closedIdx } from "./strategy/series";
@@ -222,8 +222,10 @@ async function enterClaimedProposal(input: {
   const { sb, id, opt, req, now } = input;
 
   const settings = await getSettings();
-  if (settings.phase !== "PAPER" && settings.phase !== "SHADOW") throw new EnterError(`phase_${settings.phase.toLowerCase()}`);
+  // Only real trades: an entry goes to the Alpaca demo account or it does not happen.
+  if (settings.phase !== "PAPER") throw new EnterError(`phase_${settings.phase.toLowerCase()}`);
   if (settings.kill_switch_active) throw new EnterError("kill_switch_active");
+  if (!opt.broker_tradable) throw new EnterError("not_broker_tradable");
   const sym: IntradaySymbol = { symbol: opt.symbol, asset_class: opt.asset_class, provider_symbol: opt.asset_class === "STOCK" ? opt.symbol : `${opt.symbol}USDT` };
   if (sym.asset_class === "STOCK" && !(await stockSession(now)).canEnter) throw new EnterError("stock_market_closed");
   const live = await livePrice(sym);
@@ -244,6 +246,8 @@ async function enterClaimedProposal(input: {
 
   const errors: string[] = [];
   const ia = await loadIntradayAccount(settings, new Map([[sym.symbol, live]]), now, errors);
+  if (!ia.useBroker) throw new EnterError("broker_unavailable");
+  if (ia.brokerHeld.has(sym.symbol)) throw new EnterError("already_in_symbol");
   const blocks = intradayEnvelopeBlocks(settings, ia.account, sym.symbol);
   if (blocks.length) throw new EnterError(`envelope:${blocks.join(",")}`);
   // Sim fills a MARKET entry on the next 5m bar within a 0.5% tolerance; a LIMIT waits up to an hour.
@@ -251,7 +255,7 @@ async function enterClaimedProposal(input: {
   const plan = sizeIntraday({ entry: simLimit, stop: v.stop, assetClass: sym.asset_class, ia, riskScale: settings.risk_scale });
   if (!plan) throw new EnterError("size_zero");
 
-  const execution = settings.phase === "PAPER" ? "PAPER" : "SHADOW";
+  const execution = "PAPER";
   const snapshot = { proposal_id: id, option: req.option ?? 0, tier: opt.tier, candidate: { ...opt, rating_input: undefined }, agent_plan: opt.plan, user_overrides: req, live_price: live, validation_notes: v.notes, rating_input: opt.rating_input };
   const { data: trig, error: trigErr } = await sb
     .from("trading_triggers")
@@ -304,26 +308,21 @@ async function enterClaimedProposal(input: {
   // proposal — the attempt is recorded, and the search is cheap to re-run.
   await attachProposalTrade(sb, id, tradeId);
 
-  let broker = false;
-  if (ia.useBroker && execution === "PAPER" && opt.broker_tradable) {
-    const placed = await placeIntradayBrokerEntry({ tradeId, sym, plan: { ...plan, entry: v.entry }, target: v.target, orderType: orderType === "MARKET" ? "market" : "limit", now });
-    if (!placed.ok) throw new EnterError(`broker_rejected:${placed.reason ?? ""}`);
-    broker = true;
-  }
+  const placed = await placeIntradayBrokerEntry({ tradeId, sym, plan: { ...plan, entry: v.entry }, target: v.target, orderType: orderType === "MARKET" ? "market" : "limit", now });
+  if (!placed.ok) throw new EnterError(`broker_rejected:${placed.reason ?? ""}`);
+  const broker = true;
   let state: string | null = "PENDING";
-  if (broker && orderType === "MARKET") {
+  if (orderType === "MARKET") {
     // Give the market order a moment to fill, then adopt the fill + place the protective stop now.
     for (let attempt = 0; attempt < 3 && state === "PENDING"; attempt++) {
       await new Promise((r) => setTimeout(r, 1200));
       state = await syncBrokerEntryNow(tradeId).catch(() => "PENDING");
     }
-  } else if (!broker) {
-    state = await syncSimEntryNow(tradeId, live, orderType, now);
   }
   await logEvent({
     kind: "MANUAL_ENTRY",
     symbol: sym.symbol,
-    message: `${broker ? "[Alpaca demo] " : "[סימולציה] "}כניסה מהחיפוש: ${sym.symbol} ${orderType} ${v.entry.toPrecision(6)} · סטופ ${v.stop.toPrecision(6)} · יעד ${v.target.toPrecision(6)} · דירוג ${opt.plan.rating ?? "—"}/10`.slice(0, 300),
+    message: `[Alpaca demo] כניסה מהחיפוש: ${sym.symbol} ${orderType} ${v.entry.toPrecision(6)} · סטופ ${v.stop.toPrecision(6)} · יעד ${v.target.toPrecision(6)} · דירוג ${opt.plan.rating ?? "—"}/10`.slice(0, 300),
     push: true,
   });
   return { trade_id: tradeId, broker, state, order_type: orderType, entry: v.entry, stop: v.stop, target: v.target, size: plan.size, notes: v.notes };

@@ -162,6 +162,8 @@ export type LivePosition = {
   entry_price: number | null;
   entry_limit: number;
   stop_price: number;
+  /** 1R in price at the fill — what current R is measured against. */
+  stop_distance: number | null;
   target_price: number;
   last_price: number | null;
   current_r: number | null;

@@ -119,9 +119,10 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
           <Badge label={t(`trading.state_${p.state}`)} tone={p.state === "RISK_FREE" ? "good" : p.state === "PENDING" ? "default" : "accent"} />
           {p.agent_risk_multiplier !== null && p.agent_risk_multiplier < 1 ? <Badge label={t("trading.multiplier", { m: p.agent_risk_multiplier })} /> : null}
           {p.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
-          {!p.baseline_enter ? <Badge label={t("trading.aiOnly")} tone="accent" /> : null}
           <View style={{ flex: 1 }} />
-          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 18, writingDirection: "ltr" }}>{fmtR(view.currentR)}</Text>
+          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : view.currentR === null ? c.muted : c.ink, fontWeight: "800", fontSize: view.currentR === null ? tokens.textSm : 18, writingDirection: view.currentR === null ? undefined : "ltr" }}>
+            {view.currentR !== null ? fmtR(view.currentR) : p.state === "PENDING" ? t("trading.rAwaitingFill") : t("trading.liveWaiting")}
+          </Text>
         </View>
         <View style={{ height: 8, marginVertical: 10, borderRadius: 4, backgroundColor: c.border, direction: "ltr" }}>
           <View style={{ position: "absolute", left: `${entryPos * 100}%`, top: -2, width: 2, height: 12, backgroundColor: c.muted }} />
@@ -192,13 +193,33 @@ export function TriggerCard({ tr }: { tr: TriggerRow }) {
   );
 }
 
+type RSource = Pick<TradeListItem, "state" | "symbol" | "asset_class" | "entry_price" | "initial_stop_price" | "realized_r">;
+
+/**
+ * The R of any trade, always: realized once closed, live against the current price while open, and a word
+ * (awaiting fill / not filled) while there is no position to measure — never a bare "—".
+ */
+export function useTradeR(trade: RSource | null): { r: number | null; text: string; live: boolean } {
+  const { t } = useI18n();
+  const open = trade?.state === "OPEN" || trade?.state === "RISK_FREE";
+  const live = useLivePrice(trade?.symbol, trade?.asset_class, open);
+  if (!trade) return { r: null, text: "—", live: false };
+  if (trade.state === "CLOSED") return { r: trade.realized_r, text: fmtR(trade.realized_r), live: false };
+  if (trade.state === "PENDING") return { r: null, text: t("trading.rAwaitingFill"), live: false };
+  if (trade.state === "CANCELLED") return { r: null, text: t("trading.rNotFilled"), live: false };
+  const entry = trade.entry_price;
+  const risk = entry !== null ? entry - trade.initial_stop_price : NaN;
+  const r = entry !== null && live.price !== null && risk > 0 ? (live.price - entry) / risk : null;
+  return { r, text: r === null ? t("trading.liveWaiting") : fmtR(r), live: true };
+}
+
 export function TradeRowCard({ trade }: { trade: TradeListItem }) {
   const { t } = useI18n();
   const c = useColors();
   const { row } = useLayoutDir();
   const router = useRouter();
-  const r = trade.realized_r;
-  const tone = rTone(r);
+  const tr = useTradeR(trade);
+  const tone = rTone(tr.r);
   return (
     <Pressable
       onPress={() => router.push(`/trading-trade?id=${trade.id}` as `/${string}`)}
@@ -209,14 +230,16 @@ export function TradeRowCard({ trade }: { trade: TradeListItem }) {
         <View style={{ ...row, gap: 8 }}>
           <Text style={{ color: c.ink, fontWeight: "800", fontSize: 15, writingDirection: "ltr" }}>{trade.symbol}</Text>
           <Badge label={t(`trading.state_${trade.state}`)} tone={trade.state === "CLOSED" ? "default" : "accent"} />
-          <Badge label={trade.execution} tone={trade.execution === "PAPER" ? "accent" : "default"} />
           {trade.score !== null ? <Badge label={t("trading.scoreLabel", { n: trade.score })} /> : null}
           {trade.agent_rating ? <Badge label={t("trading.agentRating", { n: trade.agent_rating })} tone="accent" /> : null}
           {trade.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
-          {!trade.baseline_enter ? <Badge label={t("trading.aiOnly")} tone="accent" /> : null}
-          {trade.track === "DETERMINISTIC" ? <Badge label={t("trading.trackBase")} /> : null}
           <View style={{ flex: 1 }} />
-          <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : c.ink, fontWeight: "800", fontSize: 16, writingDirection: "ltr" }}>{trade.state === "CLOSED" ? fmtR(r) : "—"}</Text>
+          <Text
+            accessibilityHint={tr.live ? t("trading.rLiveHint") : undefined}
+            style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : tr.r === null ? c.muted : c.ink, fontWeight: tr.r === null ? "600" : "800", fontSize: tr.r === null ? tokens.textXs : 16, writingDirection: tr.r === null ? undefined : "ltr" }}
+          >
+            {tr.live && tr.r !== null ? `${tr.text} ●` : tr.text}
+          </Text>
         </View>
         <View style={{ marginTop: 4 }}>
           <TradingText muted size={tokens.textXs}>

@@ -60,7 +60,8 @@ export async function advanceIntraday(trades: TradeRow[], frames: Map<string, Lo
         if (trade.broker_entry_order_id) await alpaca.cancelOrder(trade.broker_entry_order_id);
       }
       if (trade.broker && (pos.state === "OPEN" || pos.state === "RISK_FREE" || pos.state === "CLOSED")) {
-        Object.assign(brokerPatch, await mirrorToBroker(trade, pos, events, lastPrices.get(trade.symbol) ?? null, now));
+        // The row as it will be saved: an entry resolved above may have just placed (or adopted) the stop.
+        Object.assign(brokerPatch, await mirrorToBroker({ ...trade, ...brokerPatch } as TradeRow, pos, events, lastPrices.get(trade.symbol) ?? null, now));
       }
       await persistTrade(trade, pos, events, brokerPatch, from, bars5, pseudo);
     } catch (err) {

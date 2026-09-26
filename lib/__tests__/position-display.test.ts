@@ -28,6 +28,12 @@ describe("positionPriceView", () => {
     assert.equal(view.distanceToStopPct, 0.0732);
   });
 
+  it("keeps measuring R against the fill's risk once the stop trails past the entry", () => {
+    // Stop ratcheted to 101 (above the 100 entry): the current stop gives no distance, the fill's 1R (5) does.
+    const view = positionPriceView({ ...base, stop_price: 101, stop_distance: 5 }, 110);
+    assert.equal(view.currentR, 2);
+  });
+
   it("returns null metrics when no price is available", () => {
     const view = positionPriceView(base, null);
     assert.equal(view.lastPrice, null);

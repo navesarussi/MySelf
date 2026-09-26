@@ -239,6 +239,8 @@ export type TradeRow = {
   broker_target_order_id: string | null;
   broker_status: string | null;
   broker_filled_qty: number | null;
+  /** Set once P&L/R were recomputed from Alpaca's fills (broker/settle.ts). */
+  broker_settled_at?: string | null;
   baseline_enter: boolean;
   /** Rating-only agent (intraday): 1–10 + short explanation; never affects the trade. */
   agent_rating: number | null;
@@ -316,15 +318,15 @@ export async function getClosedTrades(opts: { sinceIso?: string; limit?: number 
 }
 
 /** Closed trades without the heavy jsonb columns — enough for equity and halt accounting. */
-export async function getClosedTradesLite(sinceIso: string): Promise<Pick<TradeRow, "id" | "track" | "execution" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">[]> {
+export async function getClosedTradesLite(sinceIso: string): Promise<Pick<TradeRow, "id" | "track" | "execution" | "broker" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">[]> {
   const { data, error } = await getSupabase()
     .from("trading_trades")
-    .select("id, track, execution, closed_at, realized_r, realized_pnl, created_at")
+    .select("id, track, execution, broker, closed_at, realized_r, realized_pnl, created_at")
     .eq("state", "CLOSED")
     .gte("closed_at", sinceIso)
     .limit(20000);
   if (error) throw new Error(`closed trades: ${error.message}`);
-  return (data ?? []).map((r) => ({ ...(r as Record<string, unknown>), realized_r: numOrNull((r as Record<string, unknown>).realized_r), realized_pnl: numOrNull((r as Record<string, unknown>).realized_pnl) }) as Pick<TradeRow, "id" | "track" | "execution" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">);
+  return (data ?? []).map((r) => ({ ...(r as Record<string, unknown>), realized_r: numOrNull((r as Record<string, unknown>).realized_r), realized_pnl: numOrNull((r as Record<string, unknown>).realized_pnl) }) as Pick<TradeRow, "id" | "track" | "execution" | "broker" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">);
 }
 
 export function toJournalTrade(t: TradeRow): JournalTrade {
@@ -345,13 +347,14 @@ export function toJournalTrade(t: TradeRow): JournalTrade {
 }
 
 /**
- * The "account" whose equity sizes positions and trips breakers: the agent track, which is the
- * only track that respects the portfolio envelope. In SHADOW it is a virtual account; in PAPER, paper.
- * The DETERMINISTIC track is a pure signal-quality baseline and never constrained by the portfolio.
+ * The "account" whose equity sizes positions and trips breakers. In PAPER that is the Alpaca demo
+ * account, so only trades that actually went to the broker count — a row the simulator filled on
+ * its own once sized, halted and showed P&L as if it were money (2026-09: 86 such trades).
+ * In SHADOW (pre-broker phase) it is the virtual account.
  */
-export function isAccountTrade(t: Pick<TradeRow, "track" | "execution">, phase: TradingPhase) {
+export function isAccountTrade(t: Pick<TradeRow, "track" | "execution"> & { broker?: string | null }, phase: TradingPhase) {
   if (t.track !== "AGENT") return false;
-  if (phase === "PAPER" || phase === "LIVE") return t.execution === "PAPER" || t.execution === "LIVE";
+  if (phase === "PAPER" || phase === "LIVE") return (t.execution === "PAPER" || t.execution === "LIVE") && Boolean(t.broker);
   return t.execution === "SHADOW";
 }
 

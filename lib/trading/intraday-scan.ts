@@ -20,6 +20,16 @@ import {
 } from "./intraday-context";
 import { insertIntradayTrade, placeIntradayBrokerEntry, ratingSnapshotFor } from "./intraday-trade";
 
+/**
+ * Automatic intraday entries are retired (2026-09-26). Measured with Alpaca's real costs (≈0.2% per side +
+ * slippage) on the same code: crypto 15m/5m −0.39R per trade over 1,142 trades in 120 days (gross +0.01R —
+ * no edge before costs), crypto 1h/15m −0.13…−0.21R, US stocks −0.24R over 103 trades; the 42 real demo
+ * trades agreed. The profit the demo account made came from positions that stayed open for days, i.e. trend
+ * following — which the daily-trend strategy does on purpose (docs/trading/research-2026-09.md).
+ * Open intraday positions are still managed to their exits; the "search trade" button still enters manually.
+ */
+export const INTRADAY_AUTO_ENTRIES = false;
+
 /** Stage 2 — scan the universe for confirmed setups and enter them. */
 
 export async function scanAndEnter(input: {
@@ -33,9 +43,19 @@ export async function scanAndEnter(input: {
   summary: IntradaySummary;
 }) {
   const { settings, now, summary, ia } = input;
+  if (!INTRADAY_AUTO_ENTRIES) {
+    summary.skipped_reason = "intraday_entries_retired";
+    return;
+  }
+  // Only real trades: without the Alpaca demo account there is nothing to enter.
+  if (!ia.useBroker) {
+    summary.skipped_reason = "broker_unavailable";
+    return;
+  }
   const committeeBatch: CommitteeHookItem[] = [];
   const found: { c: IntradayCandidate; u: IntradayUniverseRow; lf: LoadedFrames }[] = [];
   for (const u of input.universe) {
+    if (!u.broker_tradable) continue;
     if (u.asset_class === "STOCK" && !input.session.canEnter) continue;
     // SPY is loaded as market context for stocks — it's tradable too when it passes nothing special.
     const lf = input.frames.get(u.symbol);
@@ -53,6 +73,8 @@ export async function scanAndEnter(input: {
     try {
       const p = intradayParamsFor(u.asset_class);
       const blocks = intradayEnvelopeBlocks(settings, ia.account, u.symbol);
+      // Alpaca still holds the symbol (or rests an order on it): a new buy is a wash trade it rejects.
+      if (ia.brokerHeld.has(u.symbol) && !blocks.includes("ALREADY_IN_SYMBOL")) blocks.push("ALREADY_IN_SYMBOL");
       const entryLimit = c.entry * (1 + p.entry_cushion);
       const plan = sizeIntraday({ entry: entryLimit, stop: c.stop, assetClass: u.asset_class, ia, riskScale: settings.risk_scale });
       const decision = blocks.length || !plan ? "BLOCKED" : "ENTER";
@@ -114,24 +136,22 @@ export async function scanAndEnter(input: {
         continue;
       }
 
-      const execution = settings.phase === "PAPER" ? "PAPER" : "SHADOW";
+      const execution = "PAPER";
       const i5 = closedIdx(lf.f.s5, c.confirm_time);
       const chart = lf.f.s5.bars.slice(Math.max(0, i5 - CHART_BARS_BEFORE + 1), i5 + 1);
       const tradeId = await insertIntradayTrade({ trigger_id: triggerId, sym: u, strategy_version: INTRADAY_STRATEGY_VERSION, setup: c.setup, score: c.score, execution, plan, target: c.target, trigger_time: c.confirm_time, snapshot, chart });
       summary.entries += 1;
-      const brokerOk = ia.useBroker && execution === "PAPER" && u.broker_tradable;
-      if (brokerOk) {
-        const placed = await placeIntradayBrokerEntry({ tradeId, sym: u, plan, target: c.target, orderType: "limit", now });
-        if (!placed.ok) continue;
-        if (u.asset_class === "STOCK") {
-          if (ia.buyingPower.stock !== null) ia.buyingPower.stock -= plan.notional;
-        } else if (ia.buyingPower.crypto !== null) ia.buyingPower.crypto -= plan.notional;
-      }
+      const placed = await placeIntradayBrokerEntry({ tradeId, sym: u, plan, target: c.target, orderType: "limit", now });
+      if (!placed.ok) continue;
+      if (u.asset_class === "STOCK") {
+        if (ia.buyingPower.stock !== null) ia.buyingPower.stock -= plan.notional;
+      } else if (ia.buyingPower.crypto !== null) ia.buyingPower.crypto -= plan.notional;
+      ia.brokerHeld.add(u.symbol);
       ia.account.open.push({ symbol: u.symbol, entry_limit: plan.entry, remaining_size: plan.size, state: "PENDING", sim_state: { state: "PENDING", entry_price: null, stop_price: plan.stop } } as TradeRow);
       await logEvent({
         kind: "ORDER_PLACED",
         symbol: u.symbol,
-        message: `${brokerOk ? "[Alpaca demo] " : "[סימולציה] "}${u.symbol} ${c.setup} (15m/5m): Limit ${plan.entry.toPrecision(6)} · סטופ ${plan.stop.toPrecision(6)} · יעד ${c.target.toPrecision(6)} · ${c.rr.toFixed(1)}R`.slice(0, 300),
+        message: `[Alpaca demo] ${u.symbol} ${c.setup} (15m/5m): Limit ${plan.entry.toPrecision(6)} · סטופ ${plan.stop.toPrecision(6)} · יעד ${c.target.toPrecision(6)} · ${c.rr.toFixed(1)}R`.slice(0, 300),
       });
     } catch (err) {
       summary.errors.push(`scan-intraday ${u.symbol}: ${err instanceof Error ? err.message : String(err)}`);

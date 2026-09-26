@@ -1,4 +1,4 @@
-import { RISK_ENVELOPE } from "./config";
+import { EXECUTION_RULES, RISK_ENVELOPE } from "./config";
 import type { AssetClass, TradePlan } from "./types";
 
 /** Stage 5 — the stop comes from the chart first; only then is size derived from risk. */
@@ -28,7 +28,7 @@ export function buildTradePlan(input: {
   }
   if (assetClass === "STOCK") size = Math.floor(size);
   else size = Math.floor(size * 1e6) / 1e6;
-  if (size <= 0) return null;
+  if (size <= 0 || size * entry < EXECUTION_RULES.MIN_ORDER_NOTIONAL) return null;
   return {
     entry,
     stop: entry - stopDistance,

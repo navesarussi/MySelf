@@ -2,7 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import { REGIME_REFERENCE, RISK_ENVELOPE, dailyTrendGroup, isCrypto } from "./config";
 import { judgeDailyTrendTrigger, type AgentVerdict } from "./agent-judge";
 import { openRiskR } from "./position";
-import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
+import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured, isDustPosition } from "./broker/alpaca";
 import { returnCorrelation } from "./indicators";
 import { checkNewEntry, drawdownFromPeak } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
@@ -41,6 +41,12 @@ export async function scanDailyTrend(input: {
   const p = LIVE_DAILY_TREND_PARAMS;
   const useBroker = settings.phase === "PAPER" && settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured();
   const cryptoTradable = useBroker ? await alpaca.tradableSymbols().catch(() => new Set<string>()) : new Set<string>();
+  // Holdings the journal does not own (e.g. single shares bought by hand): entering there would make the
+  // eventual close sell them too.
+  const journalOpen = new Set(input.account.open.map((t) => t.symbol));
+  const foreignHeld = useBroker
+    ? new Set((await alpaca.positions().catch(() => [])).filter((p) => !isDustPosition(p)).map((p) => fromAlpacaPositionSymbol(p.symbol)).filter((s) => !journalOpen.has(s)))
+    : new Set<string>();
   const eligible = input.universe.filter((u) => u.manual_enabled && u.screen_passed && u.eligibility !== "DISABLED_POOR");
   if (!eligible.length) return;
 
@@ -235,43 +241,37 @@ export async function scanDailyTrend(input: {
       const chart = c.a.d1.bars.slice(Math.max(0, c.i - CHART_BARS_BEFORE + 1), c.i + 1);
       const base = { trigger_id: triggerId, c, snapshot: snapshot as unknown as Record<string, unknown>, verdict, chart, score };
 
-      // Deterministic baseline — always simulated forward in shadow.
-      await insertDailyTrendTrade({ ...base, track: "DETERMINISTIC", execution: "SHADOW", plan: basePlan });
-
-      const multiplier = verdict ? verdict.risk_multiplier : 1;
-      if (settings.phase === "BACKTEST" || multiplier === 0) continue;
+      // Only real trades: the signal goes to the Alpaca demo account or nowhere. No simulated baseline
+      // row and no AI veto — the research (docs/trading/research-2026-09.md) found the agent's skips
+      // lowered out-of-sample expectancy, and an AI outage (Gemini credits ran out 2026-09-24) turned
+      // every signal into a SKIP. The agent's read is stored on the trigger as commentary.
+      if (settings.phase !== "PAPER" || !useBroker || u.eligibility !== "ACTIVE") continue;
       if (blocks.length) {
         summary.blocked += 1;
         continue;
       }
-      const agentPlan = buildTradePlan({ entry: c.entry, stopDistance: c.stopDist, equity: input.account.equity, assetClass: sym.asset_class, riskScale: settings.risk_scale * multiplier });
-      if (!agentPlan) continue;
-      const execution = settings.phase === "PAPER" && u.eligibility === "ACTIVE" ? "PAPER" : "SHADOW";
-      const brokerOk = useBroker && execution === "PAPER" && (sym.asset_class === "STOCK" ? await alpaca.isStockTradable(sym.symbol) : cryptoTradable.has(`${sym.symbol}/USD`));
-      const tradeId = await insertDailyTrendTrade({ ...base, track: "AGENT", execution, plan: agentPlan });
+      if (foreignHeld.has(sym.symbol)) continue;
+      const tradable = sym.asset_class === "STOCK" ? await alpaca.isStockTradable(sym.symbol) : cryptoTradable.has(`${sym.symbol}/USD`);
+      if (!tradable) continue;
+      const plan = basePlan;
+      const tradeId = await insertDailyTrendTrade({ ...base, track: "AGENT", execution: "PAPER", plan });
       summary.entries += 1;
-      if (brokerOk) {
-        try {
-          const order = await alpaca.placeEntry({ symbol: sym.symbol, assetClass: sym.asset_class, qty: agentPlan.size, limit: agentPlan.entry, stop: agentPlan.stop, target: c.target, clientId: `${tradeId.slice(0, 18)}-in`, bracket: false });
-          await updateTrade(tradeId, { broker: "ALPACA_PAPER", broker_entry_order_id: order.id, broker_status: order.status });
-        } catch (err) {
-          const reason = err instanceof Error ? err.message.slice(0, 160) : "broker_error";
-          await updateTrade(tradeId, { state: "CANCELLED", exit_reason: "BROKER_REJECTED", broker: "ALPACA_PAPER", broker_status: reason, closed_at: iso(now) });
-          await logEvent({ kind: "BROKER_REJECTED", symbol: sym.symbol, severity: "warn", message: `${sym.symbol}: הברוקר דחה את הפקודה (מגמה יומית) — ${reason}` });
-          continue;
-        }
-      } else if (useBroker && execution === "PAPER") {
-        await logEvent({ kind: "BROKER_UNSUPPORTED", symbol: sym.symbol, message: `${sym.symbol}: לא נסחר ב-Alpaca — העסקה נשארת בסימולציה` });
+      try {
+        const order = await alpaca.placeEntry({ symbol: sym.symbol, assetClass: sym.asset_class, qty: plan.size, limit: plan.entry, stop: plan.stop, target: c.target, clientId: `${tradeId.slice(0, 18)}-in`, bracket: false });
+        await updateTrade(tradeId, { broker: "ALPACA_PAPER", broker_entry_order_id: order.id, broker_status: order.status });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message.slice(0, 160) : "broker_error";
+        await updateTrade(tradeId, { state: "CANCELLED", exit_reason: "BROKER_REJECTED", broker: "ALPACA_PAPER", broker_status: reason, closed_at: iso(now) });
+        await logEvent({ kind: "BROKER_REJECTED", symbol: sym.symbol, severity: "warn", message: `${sym.symbol}: הברוקר דחה את הפקודה (מגמה יומית) — ${reason}` });
+        continue;
       }
-      input.account.open.push({ symbol: sym.symbol, entry_limit: agentPlan.entry, remaining_size: agentPlan.size, state: "PENDING", sim_state: { state: "PENDING", entry_price: null, stop_price: agentPlan.stop } } as TradeRow);
-      if (execution === "PAPER") {
-        await logEvent({
-          kind: "ORDER_PLACED",
-          symbol: sym.symbol,
-          message: `${brokerOk ? "[Alpaca demo] " : ""}${sym.symbol} מגמה יומית ${score}: Limit ${agentPlan.entry.toPrecision(6)} · סטופ ${agentPlan.stop.toPrecision(6)} · ×${multiplier} · ${verdict?.thesis ?? "deterministic"}`.slice(0, 300),
-          push: true,
-        });
-      }
+      input.account.open.push({ symbol: sym.symbol, entry_limit: plan.entry, remaining_size: plan.size, state: "PENDING", sim_state: { state: "PENDING", entry_price: null, stop_price: plan.stop } } as TradeRow);
+      await logEvent({
+        kind: "ORDER_PLACED",
+        symbol: sym.symbol,
+        message: `[Alpaca demo] ${sym.symbol} מגמה יומית ${score}: Limit ${plan.entry.toPrecision(6)} · סטופ ${plan.stop.toPrecision(6)}${verdict?.thesis ? ` · ${verdict.thesis}` : ""}`.slice(0, 300),
+        push: true,
+      });
     } catch (err) {
       summary.errors.push(`scan-daily-trend ${c.symbol}: ${err instanceof Error ? err.message : String(err)}`);
     }

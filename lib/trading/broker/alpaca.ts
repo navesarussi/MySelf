@@ -27,7 +27,27 @@ export type AlpacaOrder = {
 };
 
 export type AlpacaAccount = { equity: string; cash: string; buying_power: string; non_marginable_buying_power?: string; status: string; trading_blocked: boolean; account_blocked: boolean; currency: string };
-export type AlpacaPosition = { symbol: string; qty: string; avg_entry_price: string; current_price: string; unrealized_pl: string };
+export type AlpacaPosition = { symbol: string; qty: string; avg_entry_price: string; current_price: string; unrealized_pl: string; market_value?: string };
+
+/** One execution (FILL activity). A single order can fill in many pieces. */
+export type AlpacaFillActivity = { id: string; transaction_time: string; price: string; qty: string; side: "buy" | "sell"; symbol: string; order_id: string };
+
+/**
+ * A leftover worth less than this is fee dust, not a position. Crypto fees are
+ * taken in the asset, so a fully sold position still leaves ~1e-7 units behind —
+ * treating that as "still held" reopened a closed PEPE trade and booked it as
+ * losing its whole notional.
+ */
+export const DUST_NOTIONAL_USD = 1;
+
+export function isDustPosition(p: Pick<AlpacaPosition, "qty" | "current_price" | "market_value"> | null | undefined): boolean {
+  if (!p) return true;
+  const qty = Number(p.qty);
+  if (!(qty > 0)) return true;
+  const value = Number(p.market_value);
+  const notional = Number.isFinite(value) ? Math.abs(value) : qty * Number(p.current_price);
+  return Number.isFinite(notional) && notional < DUST_NOTIONAL_USD;
+}
 
 export function isAlpacaConfigured() {
   return Boolean(process.env.ALPACA_API_KEY_ID?.trim() && process.env.ALPACA_API_SECRET_KEY?.trim());
@@ -192,6 +212,24 @@ export const alpaca = {
 
   positions: () => call<AlpacaPosition[]>("GET", "/v2/positions"),
 
+  /** Every fill between two instants, oldest first (all pages, capped). */
+  async fills(input: { after: number; until?: number; maxPages?: number }): Promise<AlpacaFillActivity[]> {
+    const out: AlpacaFillActivity[] = [];
+    let token: string | null = null;
+    for (let page = 0; page < (input.maxPages ?? 30); page++) {
+      const q = new URLSearchParams({ after: new Date(input.after).toISOString(), direction: "asc", page_size: "100" });
+      if (input.until !== undefined) q.set("until", new Date(input.until).toISOString());
+      if (token) q.set("page_token", token);
+      const rows = await call<AlpacaFillActivity[]>("GET", `/v2/account/activities/FILL?${q}`);
+      out.push(...rows);
+      if (rows.length < 100) return out;
+      token = rows[rows.length - 1].id;
+    }
+    throw new Error("alpaca_fills_truncated");
+  },
+
+  allOpenOrders: () => call<AlpacaOrder[]>("GET", "/v2/orders?status=open&limit=500"),
+
   openOrders: (symbol: string, assetClass: AssetClass) =>
     call<AlpacaOrder[]>("GET", `/v2/orders?status=open&symbols=${encodeURIComponent(alpacaSymbol(symbol, assetClass))}&nested=true`),
 
@@ -240,5 +278,52 @@ export async function sellableQty(
   intended: number
 ): Promise<number | null> {
   const held = await alpaca.position(symbol, assetClass);
+  if (isDustPosition(held)) return null;
   return clampSellQty(intended, Number(held?.qty), assetClass);
+}
+
+/** A resting protective sell (stop / stop-limit) — the thing that keeps a position safe through an outage. */
+export function isProtectiveStop(o: Pick<AlpacaOrder, "side" | "type" | "status">): boolean {
+  return o.side === "sell" && (o.type === "stop" || o.type === "stop_limit") && !["filled", "canceled", "expired", "rejected", "done_for_day"].includes(o.status);
+}
+
+/**
+ * Make sure the position has exactly one broker-side stop, and return it.
+ *
+ * An existing stop on the symbol is adopted rather than duplicated: it already
+ * reserves the quantity, so a second sell is rejected with `insufficient
+ * balance`. That rejection used to throw before the trade row was saved, so the
+ * trade sat PENDING forever while Alpaca held the position (DOT, UNI, SOL on
+ * 2026-09-26) and nothing trailed its stop.
+ */
+export async function ensureProtectiveStop(input: {
+  tradeId: string;
+  symbol: string;
+  assetClass: AssetClass;
+  qty: number;
+  stop: number;
+  now: number;
+}): Promise<AlpacaOrder | null> {
+  const findExisting = async () => {
+    const open = await alpaca.openOrders(input.symbol, input.assetClass).catch(() => [] as AlpacaOrder[]);
+    const stops = open.filter(isProtectiveStop);
+    return stops.find((o) => o.client_order_id?.startsWith(input.tradeId.slice(0, 18))) ?? stops[0] ?? null;
+  };
+  const existing = await findExisting();
+  if (existing) return existing;
+  const qty = await sellableQty(input.symbol, input.assetClass, input.qty);
+  if (qty === null) return null;
+  const clientId = `${input.tradeId.slice(0, 18)}-sl-${input.now}`;
+  try {
+    return input.assetClass === "STOCK"
+      ? await alpaca.placeStockStop({ symbol: input.symbol, qty, stop: input.stop, clientId })
+      : await alpaca.placeCryptoStop({ symbol: input.symbol, qty, stop: input.stop, clientId });
+  } catch (err) {
+    // Raced with a stop placed elsewhere (or a bracket leg): adopt it.
+    if (isAlpacaInsufficientQty(err)) {
+      const raced = await findExisting();
+      if (raced) return raced;
+    }
+    throw err;
+  }
 }
