@@ -1,6 +1,10 @@
 {
   "name": "myself-dashboard",
+<<<<<<< HEAD
   "version": "2.7.4",
+=======
+  "version": "2.7.3",
+>>>>>>> 0eb461c (fix(finance): safe merchant display normalization (v2.7.3))
   "private": true,
   "scripts": {
     "dev": "next dev",

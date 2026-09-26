@@ -65,7 +65,8 @@ const HEBREW_VOCAB = [
 /** Minimum glued Hebrew run length before vocab segmentation runs. */
 const GLUED_HEBREW_MIN = 6;
 
-function segmentGluedHebrew(text: string): string {
+/** Segment glued Hebrew using vocab tokens (for display labels). */
+export function segmentGluedHebrew(text: string): string {
   let rest = text.replace(/\s+/g, "");
   if (!rest) return text.trim();
   const parts: string[] = [];
@@ -80,7 +81,7 @@ function segmentGluedHebrew(text: string): string {
       }
     }
     if (!matched) {
-      const m = rest.match(/^[\u0590-\u05FF]+/u);
+      const m = rest.match(/^[\u0590-\u05FF"']+/u);
       if (!m) break;
       parts.push(m[0]);
       rest = rest.slice(m[0].length);

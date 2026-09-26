@@ -2,33 +2,97 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   formatDisplayMerchantName,
+  meaningfulCharCount,
+  normalizeStoredDisplayName,
   normalizeStoredMerchantFields,
   pickDisplayMerchantLabel,
+  stripFullCategoryPrefix,
 } from "../finance/merchant-display";
 
-describe("formatDisplayMerchantName", () => {
-  it("maps known international merchants", () => {
+describe("formatDisplayMerchantName — Latin / friendly map", () => {
+  it("maps Google Cloud including asterisk form", () => {
     assert.equal(formatDisplayMerchantName("google cloud wfv8mm sydney au"), "Google Cloud");
+    assert.equal(formatDisplayMerchantName("google*cloud xcwlf3 cc google.com au"), "Google Cloud");
+  });
+
+  it("maps other international merchants and strips location junk", () => {
     assert.equal(formatDisplayMerchantName("cursor, ai powered ide cursor.com us"), "Cursor");
     assert.equal(formatDisplayMerchantName("www.hostinger.com larnaca cy"), "Hostinger");
     assert.equal(formatDisplayMerchantName("wix.com 1248411163 luxembourg lu"), "Wix");
+    assert.equal(formatDisplayMerchantName("mcdonalds abu dhabi ai abudhabi ae"), "McDonald's");
+    assert.equal(formatDisplayMerchantName("google*journeydiary"), "Google Journey Diary");
+    assert.equal(formatDisplayMerchantName("apple.com/bill"), "Apple");
+    assert.equal(formatDisplayMerchantName("twilio inc www.twilio.co us"), "Twilio");
+    assert.equal(formatDisplayMerchantName("gett"), "Gett");
+    assert.equal(formatDisplayMerchantName("shein"), "SHEIN");
+    assert.equal(formatDisplayMerchantName("transportfornsw tap sydney au"), "Transport for NSW");
   });
+});
 
+describe("formatDisplayMerchantName — Cal markers and categories", () => {
   it("strips Cal standing-order prefix from Hebrew display", () => {
-    assert.equal(
-      formatDisplayMerchantName("לאהוראתקבעעמותותותרלובי"),
-      "לובי"
-    );
-    assert.equal(
-      formatDisplayMerchantName("לא הוראת קבע ריהוט בית גו אה"),
-      "בית גו אה"
-    );
+    assert.equal(formatDisplayMerchantName("לאהוראתקבעעמותותותרלובי"), "לובי");
+    assert.equal(formatDisplayMerchantName("לא הוראת קבע ריהוט בית גו אה"), "גו אה");
   });
 
-  it("segments glued Hebrew merchant names", () => {
-    const out = formatDisplayMerchantName("פנאיבילוימשתלהסיטונאית");
-    assert.match(out, /פנאי/);
-    assert.match(out, /משתלה/);
+  it("strips standalone leading לא marker", () => {
+    const out = formatDisplayMerchantName("לא ארצות הברית פנאיבילוי");
+    assert.ok(meaningfulCharCount(out) >= 2);
+    assert.doesNotMatch(out, /^בילוי$/);
+    assert.match(out, /פנאי|ארצות|בילוי/);
+  });
+
+  it("does not strip partial glued category (מזוןומשקא)", () => {
+    const out = formatDisplayMerchantName("מזוןומשקארמילוי-ראשוןלציון");
+    assert.doesNotMatch(out, /^ומשקא/);
+    assert.ok(meaningfulCharCount(out) >= 4);
+    assert.match(out, /רמילוי|ראשון|לציון|מזון/);
+  });
+
+  it("preserves geresh in restaurant names after category strip", () => {
+    assert.match(formatDisplayMerchantName("מסעדותג'פהפיצהקיטצ'ן"), /ג'פה/);
+    assert.doesNotMatch(formatDisplayMerchantName("מסעדותג'פהפיצהקיטצ'ן"), /^ג$/);
+    assert.match(formatDisplayMerchantName("מסעדותג'יימסמודיעין"), /ג'יימס/);
+    assert.equal(formatDisplayMerchantName("מסעדותג'נט"), "ג'נט");
+    assert.match(formatDisplayMerchantName("מסעדותקז'ואלברקפהקולינרי"), /קז'ואל/);
+  });
+
+  it("strips full spaced category prefixes", () => {
+    assert.equal(formatDisplayMerchantName("פנאיבילוימשתלהסיטונאית"), "משתלה סיטונאית");
+    assert.equal(formatDisplayMerchantName("רכבות חבור כביש"), "כביש");
+    assert.match(formatDisplayMerchantName("מסעדותארומהבורסה"), /ארומה/);
+    assert.match(formatDisplayMerchantName("ריהוטוביתגואה"), /גו אה/);
+    assert.match(formatDisplayMerchantName("תיירותאחוזתהחוף-גולדה"), /אחוזת|גולדה/);
+    assert.equal(formatDisplayMerchantName("עמותות ותרכוורת"), "כוורת");
+  });
+
+  it("does not over-shrink institution names", () => {
+    const out = formatDisplayMerchantName("מוסדותמילודבע");
+    assert.ok(meaningfulCharCount(out) >= 2);
+    assert.doesNotMatch(out, /^בע$/);
+  });
+
+  it("handles לא-prefixed glued categories with spacing", () => {
+    const out = formatDisplayMerchantName("לא עמותות ותרלובי");
+    assert.match(out, /לובי/);
+    assert.doesNotMatch(out, /^לא\s/);
+  });
+
+  it("segments leisure and food merchants sensibly", () => {
+    assert.match(formatDisplayMerchantName("פנאיבילוישאפל"), /שאפל/);
+    assert.match(formatDisplayMerchantName("מזוןומשקאסופרפארםביגאילת"), /סופר|פארם|אילת/);
+    assert.match(formatDisplayMerchantName("לא אנרגיהחברתהחשמללישראלבע"), /חשמל|ישראל/);
+  });
+
+  it("never returns fewer than 2 meaningful characters", () => {
+    for (const raw of [
+      "מסעדותג'נט",
+      "לא ארצות הברית פנאיבילוי",
+      "מזוןומשקא",
+      "מוסדותמילודבע",
+    ]) {
+      assert.ok(meaningfulCharCount(formatDisplayMerchantName(raw)) >= 2, raw);
+    }
   });
 
   it("preserves raw descriptor when requested", () => {
@@ -37,22 +101,69 @@ describe("formatDisplayMerchantName", () => {
   });
 });
 
-describe("pickDisplayMerchantLabel", () => {
-  it("prefers clean label over OCR garbage", () => {
-    assert.equal(
-      pickDisplayMerchantLabel("לאהוראתקבעלובי", "לובי 99"),
-      "לובי 99"
-    );
+describe("stripFullCategoryPrefix", () => {
+  it("matches only full category names", () => {
+    assert.match(stripFullCategoryPrefix("מסעדותג'נט"), /ג'נט/);
+    assert.equal(stripFullCategoryPrefix("מזוןומשקארמילוי"), "מזוןומשקארמילוי");
   });
 });
 
-describe("normalizeStoredMerchantFields", () => {
-  it("cleans merchant_key and display_name for migration", () => {
+describe("pickDisplayMerchantLabel", () => {
+  it("prefers clean label over OCR garbage", () => {
+    assert.equal(pickDisplayMerchantLabel("לאהוראתקבעלובי", "לובי 99"), "לובי 99");
+  });
+});
+
+describe("normalizeStoredDisplayName / normalizeStoredMerchantFields", () => {
+  it("never changes merchant_key", () => {
+    const key = "מסעדותג'פהפיצהקיטצ'ן";
     const out = normalizeStoredMerchantFields({
+      merchant_key: key,
+      display_name: null,
+    });
+    assert.equal(out.merchant_key, key);
+    assert.match(out.display_name!, /ג'פה/);
+  });
+
+  it("cleans display_name only for migration", () => {
+    const out = normalizeStoredDisplayName({
       merchant_key: "לאהוראתקבענטפליקס",
       display_name: "לא הוראת קבע נטפליקס",
     });
-    assert.equal(out.merchant_key, "נטפליקס");
     assert.equal(out.display_name, "נטפליקס");
   });
+
+  it("is idempotent on display_name", () => {
+    const first = normalizeStoredDisplayName({
+      merchant_key: "google*cloud xcwlf3 cc google.com au",
+      display_name: null,
+    });
+    const second = normalizeStoredDisplayName({
+      merchant_key: "google*cloud xcwlf3 cc google.com au",
+      display_name: first.display_name,
+    });
+    assert.equal(first.display_name, second.display_name);
+  });
+});
+
+describe("formatDisplayMerchantName — preview fixture batch", () => {
+  const cases: Array<{ in: string; assert: (out: string) => void }> = [
+    { in: "לובי 99", assert: (o) => assert.equal(o, "לובי 99") },
+    { in: "עמלת קנ במטח", assert: (o) => assert.equal(o, "עמלת קנ במטח") },
+    { in: "כביש 6", assert: (o) => assert.equal(o, "כביש 6") },
+    { in: "ארצות הברית פנאיבילוי", assert: (o) => assert.ok(meaningfulCharCount(o) >= 2) },
+    { in: "לא מוסדותמילודבע", assert: (o) => assert.match(o, /מילוד|מוסדות/) },
+    { in: "wine&more חינאוי ג'ורג'", assert: (o) => assert.match(o, /wine|חינאוי|ג'ורג'/) },
+    { in: "aldi stores darlinghurst au", assert: (o) => assert.match(o, /Aldi/i) },
+    { in: "esimo limassol cy", assert: (o) => assert.equal(o, "eSIMo") },
+    { in: "מסעדותהמלביהפלורנטין", assert: (o) => assert.match(o, /המלביה|פלורנטין/) },
+    { in: "מזוןמהירפיצהשמש-חולון", assert: (o) => assert.match(o, /פיצה|שמש|חולון/) },
+    { in: "לא ריהוטובית", assert: (o) => assert.match(o, /ריהוט|ובית/) },
+  ];
+
+  for (const { in: input, assert: check } of cases) {
+    it(`preview: ${input.slice(0, 40)}`, () => {
+      check(formatDisplayMerchantName(input));
+    });
+  }
 });
