@@ -2,7 +2,13 @@ import { differenceInCalendarDays } from "date-fns";
 import { userDb } from "@/lib/db/user-db";
 import { dbConfigured } from "@/lib/db-status";
 import { DbWarning } from "@/components/db-warning";
-import { dedupeHabits, effectiveStreak, habitReportDay, selectHomeHabits, todayISO } from "@/lib/habit-stats";
+import {
+  dedupeHabits,
+  effectiveStreak,
+  habitReportDay,
+  sortHabitsForToday,
+  todayISO,
+} from "@/lib/habit-stats";
 import { getTranslations } from "@/lib/i18n";
 import type { Habit, Goal, Commitment, Relationship, TimelineEvent, Task, Project, ContentEntry } from "@/lib/types";
 import { HomeDashboard } from "@/app/legacy/home/dashboard";
@@ -116,7 +122,7 @@ export default async function HomePage() {
   const today = todayISO();
   const todayDate = new Date();
   const uniqueHabits = dedupeHabits(habits, today);
-  const allHabits = selectHomeHabits(habits, today, null);
+  const allHabits = sortHabitsForToday(uniqueHabits);
   const activeStreaks = uniqueHabits.filter(
     (h) => effectiveStreak(h, habitReportDay(h.report_time)) > 0,
   ).length;

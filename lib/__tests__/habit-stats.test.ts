@@ -15,8 +15,10 @@ import {
   isReportDue,
   missedReportDays,
   normalizeReportTime,
+  habitTodaySortTier,
   sortHabitsByOldestReport,
   sortHabitsByReportUrgency,
+  sortHabitsForToday,
 } from "../habit-stats";
 import type { Habit } from "../types";
 
@@ -130,29 +132,67 @@ describe("normalizeReportTime", () => {
   });
 });
 
-describe("sortHabitsByReportUrgency", () => {
+describe("sortHabitsForToday", () => {
   // 10:00 UTC = 13:00 Jerusalem on 2026-07-13 (IDT)
-  const now = new Date("2026-07-13T10:00:00Z");
+  const midday = new Date("2026-07-13T10:00:00Z");
+  // 16:00 UTC = 19:00 Jerusalem — both morning habits are overdue
+  const evening = new Date("2026-07-13T16:00:00Z");
 
-  it("puts unreported habits before already-reported ones", () => {
-    const reported = { ...base, id: "reported", last_checked_on: "2026-07-13", report_time: "00:00" };
-    const unreported = { ...base, id: "unreported", last_checked_on: "2026-07-12", report_time: "00:00" };
-    const sorted = sortHabitsByReportUrgency([reported, unreported], now);
-    assert.deepEqual(sorted.map((h) => h.id), ["unreported", "reported"]);
+  it("puts overdue habits before open-today habits before reported", () => {
+    const overdue = { ...base, id: "overdue", last_checked_on: "2026-07-12", report_time: "08:00" };
+    const pending = { ...base, id: "pending", last_checked_on: "2026-07-11", report_time: "18:00" };
+    const implicit = { ...base, id: "implicit", last_checked_on: "2026-07-12", report_time: "00:00" };
+    const done = { ...base, id: "done", last_checked_on: "2026-07-13", report_time: "08:00" };
+    const sorted = sortHabitsForToday([done, implicit, pending, overdue], midday);
+    assert.deepEqual(sorted.map((h) => h.id), ["overdue", "pending", "implicit", "done"]);
   });
 
-  it("orders unreported habits by soonest report-window reset first", () => {
-    const soon = { ...base, id: "soon", last_checked_on: "2026-07-11", report_time: "14:00" }; // resets in 1h
-    const later = { ...base, id: "later", last_checked_on: "2026-07-11", report_time: "23:00" }; // resets in 10h
-    const sorted = sortHabitsByReportUrgency([later, soon], now);
-    assert.deepEqual(sorted.map((h) => h.id), ["soon", "later"]);
+  it("sorts overdue habits by report time ascending (longest overdue first)", () => {
+    const lateOverdue = { ...base, id: "late", last_checked_on: "2026-07-12", report_time: "14:00" };
+    const earlyOverdue = { ...base, id: "early", last_checked_on: "2026-07-12", report_time: "08:00" };
+    const sorted = sortHabitsForToday([lateOverdue, earlyOverdue], evening);
+    assert.deepEqual(sorted.map((h) => h.id), ["early", "late"]);
   });
 
-  it("keeps already-reported habits in their original order", () => {
-    const a = { ...base, id: "a", last_checked_on: "2026-07-13" };
-    const b = { ...base, id: "b", last_checked_on: "2026-07-13" };
-    const sorted = sortHabitsByReportUrgency([a, b], now);
+  it("sorts open-today habits by next report time ascending", () => {
+    const later = { ...base, id: "later", last_checked_on: "2026-07-11", report_time: "20:00" };
+    const sooner = { ...base, id: "sooner", last_checked_on: "2026-07-11", report_time: "14:00" };
+    const sorted = sortHabitsForToday([later, sooner], midday);
+    assert.deepEqual(sorted.map((h) => h.id), ["sooner", "later"]);
+  });
+
+  it("places implicit-time habits after explicit-time open habits", () => {
+    const explicit = { ...base, id: "explicit", last_checked_on: "2026-07-11", report_time: "20:00" };
+    const implicit = { ...base, id: "implicit", last_checked_on: "2026-07-12", report_time: null };
+    const sorted = sortHabitsForToday([implicit, explicit], midday);
+    assert.deepEqual(sorted.map((h) => h.id), ["explicit", "implicit"]);
+  });
+
+  it("tie-breaks by Hebrew name when report time matches", () => {
+    const b = { ...base, id: "b", name: "ב", last_checked_on: "2026-07-11", report_time: "18:00" };
+    const a = { ...base, id: "a", name: "א", last_checked_on: "2026-07-11", report_time: "18:00" };
+    const sorted = sortHabitsForToday([b, a], midday);
     assert.deepEqual(sorted.map((h) => h.id), ["a", "b"]);
+  });
+
+  it("exposes tiers for overdue, pending, implicit, and done", () => {
+    const overdue = { ...base, id: "o", last_checked_on: "2026-07-12", report_time: "08:00" };
+    const pending = { ...base, id: "p", last_checked_on: "2026-07-11", report_time: "18:00" };
+    const implicit = { ...base, id: "i", last_checked_on: "2026-07-12", report_time: "00:00" };
+    const done = { ...base, id: "d", last_checked_on: "2026-07-13", report_time: "08:00" };
+    assert.equal(habitTodaySortTier(overdue, midday), 0);
+    assert.equal(habitTodaySortTier(pending, midday), 1);
+    assert.equal(habitTodaySortTier(implicit, midday), 2);
+    assert.equal(habitTodaySortTier(done, midday), 4);
+  });
+
+  it("sortHabitsByReportUrgency delegates to sortHabitsForToday", () => {
+    const overdue = { ...base, id: "overdue", last_checked_on: "2026-07-12", report_time: "08:00" };
+    const done = { ...base, id: "done", last_checked_on: "2026-07-13", report_time: "08:00" };
+    assert.deepEqual(
+      sortHabitsByReportUrgency([done, overdue], midday).map((h) => h.id),
+      sortHabitsForToday([done, overdue], midday).map((h) => h.id),
+    );
   });
 });
 

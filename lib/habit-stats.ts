@@ -353,24 +353,51 @@ export function sortHabitsByOldestReport(habits: Habit[]): Habit[] {
   });
 }
 
+/** Sort tier for habits listed for today (lower = higher in the list). */
+export type HabitTodaySortTier = 0 | 1 | 2 | 3 | 4;
+
 /**
- * Habits page order: habits still waiting on today's report float to the top,
- * with the one closest to missing its report window (soonest reset) first.
- * Already-reported habits stay below, in their original order.
+ * 0 overdue today, 1 open today before report time (explicit time),
+ * 2 open today with implicit time, 3 backfill-only, 4 fully reported.
+ */
+export function habitTodaySortTier(habit: Habit, now = new Date()): HabitTodaySortTier {
+  if (!habitNeedsAction(habit, now)) return 4;
+  if (isReportDue(habit, now)) return 0;
+  if (isAwaitingReport(habit, now)) {
+    return hasExplicitReportTime(habit.report_time) ? 1 : 2;
+  }
+  return 3;
+}
+
+function compareHabitNames(a: Habit, b: Habit): number {
+  return a.name.localeCompare(b.name, "he");
+}
+
+/** Stable today-list ordering shared by home, habits tab, and legacy web. */
+export function compareHabitsForToday(a: Habit, b: Habit, now = new Date()): number {
+  const tierA = habitTodaySortTier(a, now);
+  const tierB = habitTodaySortTier(b, now);
+  if (tierA !== tierB) return tierA - tierB;
+
+  if (tierA === 0 || tierA === 1) {
+    const byTime = reportTimeMinutes(a.report_time) - reportTimeMinutes(b.report_time);
+    if (byTime !== 0) return byTime;
+  }
+
+  return compareHabitNames(a, b);
+}
+
+/** Sort habits for today's lists: overdue → pending by time → implicit → backfill → done. */
+export function sortHabitsForToday(habits: Habit[], now = new Date()): Habit[] {
+  return [...habits].sort((a, b) => compareHabitsForToday(a, b, now));
+}
+
+/**
+ * Habits page / home order: overdue first (earliest report time = longest overdue),
+ * then open habits by next report time, implicit-time habits, backfill-only, then done.
  */
 export function sortHabitsByReportUrgency(habits: Habit[], now = new Date()): Habit[] {
-  return habits
-    .map((habit) => ({
-      habit,
-      reported: habit.last_checked_on === habitReportDay(habit.report_time, now),
-      minutesUntilReset: minutesUntilReportReset(habit.report_time, now),
-    }))
-    .sort((a, b) => {
-      if (a.reported !== b.reported) return a.reported ? 1 : -1;
-      if (!a.reported) return a.minutesUntilReset - b.minutesUntilReset;
-      return 0;
-    })
-    .map((entry) => entry.habit);
+  return sortHabitsForToday(habits, now);
 }
 
 /** Keep the most active record when duplicate habit names exist in the database. */

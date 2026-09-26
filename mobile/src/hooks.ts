@@ -75,3 +75,13 @@ export function useTodayDate(): Date {
   const key = todayLocalISO();
   return useMemo(() => new Date(`${key}T12:00:00`), [key]);
 }
+
+/** Wall clock that ticks once per minute so habit overdue ordering updates in place. */
+export function useMinuteNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
