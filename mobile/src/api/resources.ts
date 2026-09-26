@@ -249,6 +249,22 @@ export const api = {
     const qs = sp.toString();
     return apiFetch<TimelineEventsPage>(c, `/timeline/events${qs ? `?${qs}` : ""}`);
   },
+  /** Every visible event. The server returns them all in one page; the loop is
+   *  only a guard in case it ever pages again. */
+  timelineEvents: async (c: ApiConfig): Promise<TimelineEvent[]> => {
+    const out: TimelineEvent[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 20; page++) {
+      const res = await apiFetch<TimelineEventsPage>(
+        c,
+        `/timeline/events${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`
+      );
+      out.push(...res.events);
+      if (!res.nextCursor) break;
+      cursor = res.nextCursor;
+    }
+    return out;
+  },
   timelineEvent: (c: ApiConfig, id: string) =>
     apiFetch<TimelineEvent>(c, `/timeline/events/${id}`),
   createEvent: (c: ApiConfig, body: Partial<TimelineEvent>) =>

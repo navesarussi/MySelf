@@ -28,14 +28,22 @@ describe("leanTimelineEventForList", () => {
     const long = "x".repeat(300);
     const lean = leanTimelineEventForList(event({ description: long }));
     assert.equal(lean.description?.length, 200);
-    assert.equal(lean.description_override, null);
   });
 
-  it("prefers description_override when building preview", () => {
+  it("merges overrides into title and description", () => {
     const lean = leanTimelineEventForList(
-      event({ description: "base", description_override: "override text" })
+      event({ title: "base", title_override: "renamed", description: "base", description_override: "override text" })
     );
+    assert.equal(lean.title, "renamed");
     assert.equal(lean.description, "override text");
-    assert.equal(lean.description_override, null);
+  });
+
+  it("ships only the list fields", () => {
+    const lean = leanTimelineEventForList(
+      event({ google_event_id: "g1", synced_at: "2026-09-01T00:00:00Z", title_override: "x" })
+    );
+    assert.deepEqual(Object.keys(lean).sort(), [
+      "category", "created_at", "description", "event_date", "event_time", "id", "min_zoom", "source", "title",
+    ]);
   });
 });

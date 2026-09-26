@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api, type HomePayload } from "../../src/api/resources";
 import { useI18n } from "../../src/i18n";
 import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
-import type { InfiniteData } from "@tanstack/react-query";
 import {
   useApiQuery,
   useApiMutation,
@@ -18,9 +17,9 @@ import {
   removeEventFromHome,
   patchTimelineEventsCache,
   removeTimelineEventFromCache,
+  addTimelineEventToCache,
   pollUntilSyncDone,
 } from "../../src/query";
-import type { TimelineEventsPage } from "../../src/api/resources";
 import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import {
   Badge,
@@ -43,7 +42,7 @@ import { TimelineEventCard } from "../../src/components/timeline-event-card";
 import { displayDescription, displayTitle, isGoogleCalendarEvent } from "@/lib/timeline-display";
 import { eventsForPeriod, formatPeriodRange, type LifePeriod } from "@/lib/life-periods";
 import type { TimelineEvent } from "@/lib/types";
-import { todayISO } from "@/lib/habit-stats";
+import { todayLocalISO } from "../../src/hooks";
 
 type EventForm = {
   id?: string;
@@ -63,6 +62,8 @@ type PeriodForm = {
   color: string;
   kind: LifePeriod["kind"];
 };
+
+const NO_PERIODS: LifePeriod[] = [];
 
 const emptyEvent: EventForm = { event_date: "", event_time: "", title: "", description: "", category: "" };
 const emptyPeriod: PeriodForm = { title: "", start_date: "", end_date: "", color: "#7dd3c0", kind: "period" };
@@ -93,8 +94,10 @@ export default function TimelineScreen() {
   }, [params.add, router]);
 
   const events = eventsQ.events;
-  const periods = periodsQ.data ?? [];
-  const today = todayISO();
+  const periods = periodsQ.data ?? NO_PERIODS;
+  // The device's calendar day: event dates are local dates, so a UTC "today"
+  // filed today's events under "future" between midnight and 03:00 in Israel.
+  const today = todayLocalISO();
 
   const chronoBuckets = useMemo(() => {
     const todayEvents: TimelineEvent[] = [];
@@ -177,9 +180,8 @@ export default function TimelineScreen() {
         flash: { success: "flash.eventUpdated", error: "flash.eventUpdateError" },
         onSuccess: (updated) => {
           if (updated) {
-            queryClient.setQueryData<InfiniteData<TimelineEventsPage>>(
-              queryKeys.timelineEvents,
-              (old) => patchTimelineEventsCache(old, targetId, updated)
+            queryClient.setQueryData<TimelineEvent[]>(queryKeys.timelineEvents, (old) =>
+              patchTimelineEventsCache(old, targetId, updated)
             );
             queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
               patchEventInHome(old, targetId, updated)
@@ -190,8 +192,13 @@ export default function TimelineScreen() {
     } else {
       await run((config) => api.createEvent(config, body), {
         flash: { success: "flash.eventAdded", error: "flash.eventAddError" },
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
+        onSuccess: (created) => {
+          // The server returns the new row: add it instead of refetching the timeline.
+          if (created) {
+            queryClient.setQueryData<TimelineEvent[]>(queryKeys.timelineEvents, (old) =>
+              addTimelineEventToCache(old, created)
+            );
+          }
           queryClient.invalidateQueries({ queryKey: queryKeys.home });
         },
       });
@@ -206,11 +213,9 @@ export default function TimelineScreen() {
         title: displayTitle(ev),
       }),
       async () => {
-        const prevEvents = queryClient.getQueryData<InfiniteData<TimelineEventsPage>>(
-          queryKeys.timelineEvents
-        );
+        const prevEvents = queryClient.getQueryData<TimelineEvent[]>(queryKeys.timelineEvents);
         const prevHome = queryClient.getQueryData<HomePayload>(queryKeys.home);
-        queryClient.setQueryData<InfiniteData<TimelineEventsPage>>(queryKeys.timelineEvents, (old) =>
+        queryClient.setQueryData<TimelineEvent[]>(queryKeys.timelineEvents, (old) =>
           removeTimelineEventFromCache(old, ev.id)
         );
         queryClient.setQueryData<HomePayload>(queryKeys.home, (old) =>
@@ -227,9 +232,6 @@ export default function TimelineScreen() {
           onError: () => {
             if (prevEvents) queryClient.setQueryData(queryKeys.timelineEvents, prevEvents);
             if (prevHome) queryClient.setQueryData(queryKeys.home, prevHome);
-          },
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
           },
         });
       },
@@ -320,7 +322,6 @@ export default function TimelineScreen() {
       } else if (result.imported != null) {
         setSyncMessage(t("flash.calendarSynced", { count: result.imported }));
       }
-      void queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents });
     } catch {
       setSyncMessage(t("flash.syncFailed"));
     }
@@ -330,7 +331,7 @@ export default function TimelineScreen() {
   const loading = eventsQ.loading || periodsQ.loading;
   const fetching = eventsQ.isFetching || periodsQ.isFetching;
 
-  function openEventForm(ev: TimelineEvent) {
+  const openEventForm = useCallback((ev: TimelineEvent) => {
     setEventForm({
       id: ev.id,
       event_date: ev.event_date,
@@ -340,7 +341,7 @@ export default function TimelineScreen() {
       category: ev.category ?? "",
       isGoogle: isGoogleCalendarEvent(ev),
     });
-  }
+  }, []);
 
   function openPeriodForm(p: LifePeriod) {
     setPeriodForm({
@@ -403,6 +404,57 @@ export default function TimelineScreen() {
       </View>
     );
   }
+
+  const openEventSheet = useCallback((ev: TimelineEvent) => setSheetEvents([ev]), []);
+  const expandPeriod = useCallback((p: LifePeriod) => setExpandedPeriodId(p.id), []);
+
+  const renderChronoRow = useCallback(
+    ({ item }: { item: ChronoRow }) => {
+      if (item.kind === "toggle") {
+        const label =
+          item.section === "future" ? t("timeline.futureSection") : t("timeline.pastSection");
+        return (
+          <Pressable
+            onPress={() =>
+              item.section === "future" ? setFutureOpen((v) => !v) : setPastOpen((v) => !v)
+            }
+          >
+            <Text
+              style={{
+                color: c.accent,
+                fontWeight: "700",
+                fontSize: 15,
+                textAlign: textStart,
+                writingDirection,
+                marginVertical: 6,
+              }}
+            >
+              {item.open ? "▾ " : "▸ "}
+              {label} ({item.count})
+            </Text>
+          </Pressable>
+        );
+      }
+      if (item.kind === "label") {
+        return (
+          <Text
+            style={{
+              color: c.accent,
+              fontWeight: "700",
+              fontSize: 15,
+              textAlign: textStart,
+              writingDirection,
+              marginVertical: 6,
+            }}
+          >
+            {t("timeline.todaySection")}
+          </Text>
+        );
+      }
+      return <TimelineEventCard event={item.event} onPress={openEventForm} />;
+    },
+    [c, t, textStart, writingDirection, openEventForm]
+  );
 
   return (
     <ScreenErrorBoundary name="timeline">
@@ -486,9 +538,9 @@ export default function TimelineScreen() {
         <TimelineVisual
           events={events}
           periods={periods}
-          onEventPress={(ev) => setSheetEvents([ev])}
-          onPeriodPress={(p) => setExpandedPeriodId(p.id)}
-          onClusterPress={(evs) => setSheetEvents(evs)}
+          onEventPress={openEventSheet}
+          onPeriodPress={expandPeriod}
+          onClusterPress={setSheetEvents}
           />
         ) : null}
       </View>
@@ -510,50 +562,7 @@ export default function TimelineScreen() {
             <SectionTitle>{t("timeline.chronological")}</SectionTitle>
           )
         }
-        renderItem={({ item }) => {
-          if (item.kind === "toggle") {
-            const label =
-              item.section === "future" ? t("timeline.futureSection") : t("timeline.pastSection");
-            return (
-              <Pressable
-                onPress={() =>
-                  item.section === "future" ? setFutureOpen((v) => !v) : setPastOpen((v) => !v)
-                }
-              >
-                <Text
-                  style={{
-                    color: c.accent,
-                    fontWeight: "700",
-                    fontSize: 15,
-                    textAlign: textStart,
-                    writingDirection,
-                    marginVertical: 6,
-                  }}
-                >
-                  {item.open ? "▾ " : "▸ "}
-                  {label} ({item.count})
-                </Text>
-              </Pressable>
-            );
-          }
-          if (item.kind === "label") {
-            return (
-              <Text
-                style={{
-                  color: c.accent,
-                  fontWeight: "700",
-                  fontSize: 15,
-                  textAlign: textStart,
-                  writingDirection,
-                  marginVertical: 6,
-                }}
-              >
-                {t("timeline.todaySection")}
-              </Text>
-            );
-          }
-          return <TimelineEventCard event={item.event} onPress={openEventForm} />;
-        }}
+        renderItem={renderChronoRow}
       />
 
       <TimelineEventSheet

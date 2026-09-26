@@ -1,40 +1,30 @@
-import type { InfiniteData } from "@tanstack/react-query";
-import type { TimelineEventsPage } from "../api/resources";
 import type { TimelineEvent } from "@/lib/types";
 import { patchItemInList, removeItemFromList } from "./patch";
 
-export function flattenTimelinePages(
-  data: InfiniteData<TimelineEventsPage> | undefined
-): TimelineEvent[] {
-  if (!data) return [];
-  return data.pages.flatMap((page) => page.events);
-}
+/**
+ * The timeline cache is one flat array of every event (see useTimelineEvents).
+ * Mutations patch it in place instead of refetching thousands of rows.
+ */
 
 export function patchTimelineEventsCache(
-  old: InfiniteData<TimelineEventsPage> | undefined,
+  old: TimelineEvent[] | undefined,
   id: string,
   patch: Partial<TimelineEvent>
-): InfiniteData<TimelineEventsPage> | undefined {
-  if (!old) return undefined;
-  return {
-    ...old,
-    pages: old.pages.map((page) => ({
-      ...page,
-      events: patchItemInList(page.events, id, patch),
-    })),
-  };
+): TimelineEvent[] | undefined {
+  return old ? patchItemInList(old, id, patch) : old;
 }
 
 export function removeTimelineEventFromCache(
-  old: InfiniteData<TimelineEventsPage> | undefined,
+  old: TimelineEvent[] | undefined,
   id: string
-): InfiniteData<TimelineEventsPage> | undefined {
-  if (!old) return undefined;
-  return {
-    ...old,
-    pages: old.pages.map((page) => ({
-      ...page,
-      events: removeItemFromList(page.events, id),
-    })),
-  };
+): TimelineEvent[] | undefined {
+  return old ? removeItemFromList(old, id) : old;
+}
+
+export function addTimelineEventToCache(
+  old: TimelineEvent[] | undefined,
+  event: TimelineEvent
+): TimelineEvent[] | undefined {
+  if (!old) return old;
+  return [event, ...old.filter((e) => e.id !== event.id)];
 }

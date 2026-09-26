@@ -1,76 +1,51 @@
-import { useCallback, useEffect } from "react";
-import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSession } from "../session";
-import { ApiError, type ApiConfig } from "../api/client";
-import { api, type TimelineEventsPage } from "../api/resources";
+import { ApiError } from "../api/client";
+import { api } from "../api/resources";
+import type { TimelineEvent } from "@/lib/types";
 import { queryKeys } from "./keys";
-import { flattenTimelinePages } from "./timeline-cache";
+
+const NO_EVENTS: TimelineEvent[] = [];
 
 /**
- * Paginated timeline events — first page paints quickly; remaining pages load in the background.
+ * Every timeline event as one array — the canvas lays out and clusters the
+ * whole life, so it needs all of it, not a first page.
+ *
+ * The array is the query's own data, so its identity only changes when the
+ * events do: the chronological buckets and the canvas layout are memoized on
+ * it. (The infinite query this replaced flattened its pages on every render,
+ * so any keystroke in a form re-sorted and re-clustered thousands of events.)
+ * On cold start the last copy on the device paints first (timeline-store.ts).
  */
 export function useTimelineEvents() {
   const { token, serverUrl, signOut } = useSession();
-  const sessionReady = Boolean(token && serverUrl);
 
-  const query = useInfiniteQuery<
-    TimelineEventsPage,
-    Error,
-    InfiniteData<TimelineEventsPage>,
-    typeof queryKeys.timelineEvents,
-    string | undefined
-  >({
+  const query = useQuery<TimelineEvent[], Error>({
     queryKey: queryKeys.timelineEvents,
-    queryFn: async ({ pageParam }) => {
+    queryFn: async () => {
       if (!token || !serverUrl) throw new ApiError(401, "unauthorized");
-      const config: ApiConfig = { token, serverUrl };
       try {
-        return await api.timelineEventsPage(config, {
-          cursor: pageParam,
-          limit: 1500,
-        });
+        return await api.timelineEvents({ token, serverUrl });
       } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
-          await signOut();
-        }
+        if (err instanceof ApiError && err.status === 401) await signOut();
         throw err;
       }
     },
-    initialPageParam: undefined,
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
-    enabled: sessionReady,
+    enabled: Boolean(token && serverUrl),
+    staleTime: 1000 * 60 * 2,
   });
 
-  const { hasNextPage, isFetchingNextPage, isPending, fetchNextPage, dataUpdatedAt } = query;
-
-  useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage && !isPending) {
-      void fetchNextPage();
-    }
-  }, [hasNextPage, isFetchingNextPage, isPending, fetchNextPage, dataUpdatedAt]);
-
-  const events = flattenTimelinePages(query.data);
-  const loading = query.isPending && events.length === 0;
-
-  const refresh = useCallback(async () => {
-    const res = await query.refetch();
-    return flattenTimelinePages(res.data);
-  }, [query]);
-
-  const errorMessage = query.error
-    ? query.error instanceof Error
-      ? query.error.message
-      : "error"
-    : null;
+  const events = query.data ?? NO_EVENTS;
+  const { refetch } = query;
+  const refresh = useCallback(async () => (await refetch()).data ?? NO_EVENTS, [refetch]);
 
   return {
     events,
-    loading,
+    loading: query.isPending && events.length === 0,
     isFetching: query.isFetching,
-    isFetchingMore: query.isFetchingNextPage,
-    hasMore: query.hasNextPage ?? false,
-    error: errorMessage,
+    error: query.error ? query.error.message || "error" : null,
     refresh,
-    refetch: query.refetch,
+    refetch,
   };
 }

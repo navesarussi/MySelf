@@ -33,8 +33,10 @@ export function formatEventWhen(
   return `${date} ${d.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-export function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+/** Today's calendar date on this device. Event dates are local dates; the UTC
+ *  date put the "today" marker on yesterday between midnight and 03:00 in Israel. */
+export function todayIso(now = new Date()) {
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
 export function timelineBounds(events: TimelineEvent[], periods: LifePeriod[]) {

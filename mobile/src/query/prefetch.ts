@@ -1,5 +1,6 @@
 import { queryClient } from "./client";
 import { queryKeys } from "./keys";
+import { hydrateTimelineCache, startTimelinePersistence } from "./timeline-store";
 import { api } from "../api/resources";
 import type { ApiConfig } from "../api/client";
 import { defaultTasksFilter } from "../components/tasks-filter-bar";
@@ -32,15 +33,16 @@ export function prefetchAppShell(config: ApiConfig) {
     queryKey: queryKeys.financePlan(monthKey()),
     queryFn: () => api.financePlan(config, monthKey()),
   });
-  void queryClient.prefetchInfiniteQuery({
-    queryKey: queryKeys.timelineEvents,
-    queryFn: ({ pageParam }) =>
-      api.timelineEventsPage(config, {
-        cursor: pageParam as string | undefined,
-        limit: 1500,
-      }),
-    initialPageParam: undefined,
-  });
+  // Last copy from the device first, then refresh it if stale — in that order,
+  // so a fast network answer is never overwritten by the older stored one.
+  startTimelinePersistence();
+  void hydrateTimelineCache().finally(() =>
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.timelineEvents,
+      queryFn: () => api.timelineEvents(config),
+      staleTime: 1000 * 60 * 2,
+    })
+  );
   void queryClient.prefetchQuery({ queryKey: queryKeys.periods, queryFn: () => api.periods(config) });
   void queryClient.prefetchQuery({ queryKey: queryKeys.tradingDashboard, queryFn: () => api.tradingDashboard(config) });
   void queryClient.prefetchQuery({
