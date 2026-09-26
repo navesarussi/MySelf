@@ -63,6 +63,14 @@ describe("settleTrade (books from Alpaca fills)", () => {
     assert.equal(s.r, 2);
   });
 
+  it("books only the quantity the trade bought when the close also sold a holding it never owned", () => {
+    // 10 bought by the trade; the close sold 11 (1 share was bought by hand earlier).
+    const s = settleTrade({ assetClass: "STOCK", entryOrderId: "in", initialStop: 9, plannedRisk: 10, fills: [fill("in", "buy", 10, 10, 1), fill("close", "sell", 11, 12, 2)] });
+    assert.ok(s);
+    assert.equal(s.exit_qty, 10);
+    assert.equal(s.pnl, 20);
+  });
+
   it("measures a small partial fill against the planned risk, not its own sliver", () => {
     // Planned 100 units (risk 100); only 5 filled and ran +3 each.
     const s = settleTrade({ assetClass: "STOCK", entryOrderId: "in", initialStop: 9, plannedRisk: 100, fills: [fill("in", "buy", 5, 10, 1), fill("x", "sell", 5, 13, 2)] });

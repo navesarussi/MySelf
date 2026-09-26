@@ -2,7 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import { REGIME_REFERENCE, RISK_ENVELOPE, dailyTrendGroup, isCrypto } from "./config";
 import { judgeDailyTrendTrigger, type AgentVerdict } from "./agent-judge";
 import { openRiskR } from "./position";
-import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
+import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured, isDustPosition } from "./broker/alpaca";
 import { returnCorrelation } from "./indicators";
 import { checkNewEntry, drawdownFromPeak } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
@@ -41,6 +41,12 @@ export async function scanDailyTrend(input: {
   const p = LIVE_DAILY_TREND_PARAMS;
   const useBroker = settings.phase === "PAPER" && settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured();
   const cryptoTradable = useBroker ? await alpaca.tradableSymbols().catch(() => new Set<string>()) : new Set<string>();
+  // Holdings the journal does not own (e.g. single shares bought by hand): entering there would make the
+  // eventual close sell them too.
+  const journalOpen = new Set(input.account.open.map((t) => t.symbol));
+  const foreignHeld = useBroker
+    ? new Set((await alpaca.positions().catch(() => [])).filter((p) => !isDustPosition(p)).map((p) => fromAlpacaPositionSymbol(p.symbol)).filter((s) => !journalOpen.has(s)))
+    : new Set<string>();
   const eligible = input.universe.filter((u) => u.manual_enabled && u.screen_passed && u.eligibility !== "DISABLED_POOR");
   if (!eligible.length) return;
 
@@ -244,6 +250,7 @@ export async function scanDailyTrend(input: {
         summary.blocked += 1;
         continue;
       }
+      if (foreignHeld.has(sym.symbol)) continue;
       const tradable = sym.asset_class === "STOCK" ? await alpaca.isStockTradable(sym.symbol) : cryptoTradable.has(`${sym.symbol}/USD`);
       if (!tradable) continue;
       const plan = basePlan;

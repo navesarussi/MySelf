@@ -69,8 +69,17 @@ export function settleTrade(input: {
   const entries = input.fills.filter((f) => f.side === "buy" && f.order_id === input.entryOrderId && f.qty > 0 && f.price > 0);
   if (!entries.length) return null;
   const opened_at = Math.min(...entries.map((f) => f.at));
-  const exits = input.fills.filter((f) => f.side === "sell" && f.at >= opened_at && f.qty > 0 && f.price > 0);
   const entry = vwap(entries);
+  // Sells after the entry, oldest first, up to the quantity bought: a close that also dumped a holding the
+  // trade never owned (a share bought by hand) must not book that share as the trade's profit.
+  const exits: BrokerFill[] = [];
+  let left = entry.qty;
+  for (const f of input.fills.filter((x) => x.side === "sell" && x.at >= opened_at && x.qty > 0 && x.price > 0).sort((a, b) => a.at - b.at)) {
+    if (left <= 0) break;
+    const qty = Math.min(f.qty, left);
+    exits.push({ ...f, qty });
+    left -= qty;
+  }
   const exit = vwap(exits);
   if (!(exit.qty >= entry.qty * FLAT_COVERAGE)) return null;
 
