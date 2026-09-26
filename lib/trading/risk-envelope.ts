@@ -65,6 +65,50 @@ export function checkNewEntry(state: EnvelopeState, symbol: string, correlatedWi
   return blocks;
 }
 
+// ── Live account (in % of equity) ───────────────────────────────────────────
+
+export type AccountRiskState = {
+  equity: number;
+  peak_equity: number;
+  /** Realized P&L (USD) of trades closed today / this week (UTC). */
+  realized_pnl_today: number;
+  realized_pnl_week: number;
+  kill_switch_active: boolean;
+  entries_paused: boolean;
+  /** Open (and pending) positions: USD still at risk = size × (entry − stop) while the stop is below entry. */
+  positions: { symbol: string; notional: number; open_risk_usd: number }[];
+};
+
+export function accountHaltStatus(state: Pick<AccountRiskState, "equity" | "realized_pnl_today" | "realized_pnl_week">) {
+  const eq = state.equity > 0 ? state.equity : 1;
+  return {
+    daily: state.realized_pnl_today / eq <= RISK_ENVELOPE.DAILY_LOSS_HALT_PCT,
+    weekly: state.realized_pnl_week / eq <= RISK_ENVELOPE.WEEKLY_LOSS_HALT_PCT,
+  };
+}
+
+/** Open risk in % of equity. */
+export function openRiskPct(state: Pick<AccountRiskState, "equity" | "positions">): number {
+  return state.equity > 0 ? state.positions.reduce((s, p) => s + p.open_risk_usd, 0) / state.equity : 0;
+}
+
+/**
+ * Can a live position in `symbol` risking `riskUsd` be opened? Every limit is a share of equity, so trades
+ * of different sizes (the book's sleeves, the search button) add up honestly.
+ */
+export function checkAccountEntry(state: AccountRiskState, symbol: string, riskUsd: number): EnvelopeBlock[] {
+  const blocks: EnvelopeBlock[] = [];
+  if (state.kill_switch_active || shouldTripKillSwitch(state.equity, state.peak_equity)) blocks.push("KILL_SWITCH");
+  if (state.entries_paused) blocks.push("ENTRIES_PAUSED");
+  const halts = accountHaltStatus(state);
+  if (halts.daily) blocks.push("DAILY_LOSS_HALT");
+  if (halts.weekly) blocks.push("WEEKLY_LOSS_HALT");
+  if (state.positions.length >= RISK_ENVELOPE.ACCOUNT_MAX_POSITIONS) blocks.push("MAX_CONCURRENT");
+  if (state.equity > 0 && openRiskPct(state) + riskUsd / state.equity > RISK_ENVELOPE.ACCOUNT_MAX_OPEN_RISK_PCT + 1e-9) blocks.push("MAX_OPEN_RISK");
+  if (state.positions.some((p) => p.symbol === symbol)) blocks.push("ALREADY_IN_SYMBOL");
+  return blocks;
+}
+
 /**
  * Live risk scale: lowering is instant; raising is deferred (friction by design) —
  * a raise only takes effect after a cooldown and never while a halt is active.

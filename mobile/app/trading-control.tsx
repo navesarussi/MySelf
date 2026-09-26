@@ -5,7 +5,7 @@ import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/query";
-import { Badge, Btn, Card, Chip, ErrorNote, Input, Row, Screen, SectionTitle, SkeletonCard, confirmDelete } from "../src/components/ui";
+import { Badge, Btn, Card, Chip, CollapsibleSection, ErrorNote, Input, Row, Screen, SkeletonCard, confirmDelete } from "../src/components/ui";
 import { TradingText } from "../src/components/trading/blocks";
 import { fmtDateTime, fmtPct, fmtR } from "@/lib/trading/format";
 
@@ -53,24 +53,25 @@ export default function TradingControlScreen() {
   const settings = dash?.settings;
   const envelope = dash?.envelope;
 
+  // The live account envelope, in % of equity (RISK_ENVELOPE.ACCOUNT_*); the R-count limits are research-only.
   const envelopeRows: [string, string][] = envelope
     ? [
-    ["MAX_RISK_PER_TRADE", `crypto ${fmtPct(envelope.MAX_RISK_PER_TRADE.CRYPTO_ALT)} · stocks ${fmtPct(envelope.MAX_RISK_PER_TRADE.STOCK)}`],
-    ["MIN_RR_RATIO", `${envelope.MIN_RR_RATIO}`],
-    ["MAX_CONCURRENT_POSITIONS", `${envelope.MAX_CONCURRENT_POSITIONS}`],
-    ["MAX_TOTAL_OPEN_RISK", `${envelope.MAX_TOTAL_OPEN_RISK_R}R`],
-    ["MAX_CORRELATED_POSITIONS", `${envelope.MAX_CORRELATED_POSITIONS} (ρ ≥ ${envelope.CORRELATION_THRESHOLD})`],
-    ["DAILY_LOSS_HALT", fmtR(envelope.DAILY_LOSS_HALT_R, 0)],
-    ["WEEKLY_LOSS_HALT", fmtR(envelope.WEEKLY_LOSS_HALT_R, 0)],
-    ["MASTER_KILL_SWITCH", `−${fmtPct(envelope.MASTER_KILL_SWITCH_DD, 0)}`],
-    ["MAX_ASSET_EXPOSURE", fmtPct(envelope.MAX_ASSET_EXPOSURE, 0)],
-    ["AGENT_RISK_MULTIPLIERS", envelope.AGENT_RISK_MULTIPLIERS.join(" / ")],
+        [t("trading.envMaxRisk"), `${t("trading.assetCrypto")} ${fmtPct(envelope.MAX_RISK_PER_TRADE.CRYPTO_ALT)} · ${t("trading.assetStock")} ${fmtPct(envelope.MAX_RISK_PER_TRADE.STOCK)}`],
+        [t("trading.envMaxPositions"), `${envelope.ACCOUNT_MAX_POSITIONS ?? envelope.MAX_CONCURRENT_POSITIONS}`],
+        [t("trading.envMaxOpenRisk"), fmtPct(envelope.ACCOUNT_MAX_OPEN_RISK_PCT ?? 0.08, 0)],
+        [t("trading.envDailyHalt"), fmtPct(envelope.DAILY_LOSS_HALT_PCT ?? -0.03, 0)],
+        [t("trading.envWeeklyHalt"), fmtPct(envelope.WEEKLY_LOSS_HALT_PCT ?? -0.05, 0)],
+        [t("trading.envKillSwitch"), `−${fmtPct(envelope.MASTER_KILL_SWITCH_DD, 0)}`],
+        [t("trading.envMaxNotional"), fmtPct(envelope.MAX_ASSET_EXPOSURE, 0)],
       ]
     : [];
+  const envelopeSummary = envelope
+    ? `${envelope.ACCOUNT_MAX_POSITIONS ?? envelope.MAX_CONCURRENT_POSITIONS} · ${fmtPct(envelope.ACCOUNT_MAX_OPEN_RISK_PCT ?? 0.08, 0)} · −${fmtPct(envelope.MASTER_KILL_SWITCH_DD, 0)}`
+    : null;
 
   return (
     <Screen title={t("trading.hubControl")} subtitle={t("trading.controlSubtitle")} onRefresh={refreshAll} refreshing={dashFetching}>
-      <SectionTitle>{t("trading.demoTitle")}</SectionTitle>
+      <CollapsibleSection id="trading.control.demo" title={t("trading.demoTitle")} defaultOpen={true}>
       {brokerError && !broker ? <ErrorNote message={brokerError} onRetry={() => void refreshBroker()} /> : null}
       {broker ? (
         <Card style={broker.connected ? { borderColor: c.good } : undefined}>
@@ -110,7 +111,9 @@ export default function TradingControlScreen() {
         <SkeletonCard lines={3} />
       ) : null}
 
-      <SectionTitle>{t("trading.liveControls")}</SectionTitle>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="trading.control.live" title={t("trading.liveControls")} defaultOpen={true}>
       {settings ? (
         <Card>
           <SwitchRow label={settings.entries_paused ? t("trading.entriesPaused") : t("trading.resume")} value={!settings.entries_paused} onChange={(v) => void control({ action: v ? "resume_entries" : "pause_entries" })} />
@@ -136,6 +139,8 @@ export default function TradingControlScreen() {
         <SkeletonCard lines={4} />
       ) : null}
 
+      </CollapsibleSection>
+
       {settings?.kill_switch_active ? (
         <Card style={{ borderColor: c.warn }}>
           <TradingText bold color={c.warn}>
@@ -146,18 +151,20 @@ export default function TradingControlScreen() {
         </Card>
       ) : null}
 
-      <SectionTitle>{t("trading.envelope")}</SectionTitle>
+      <CollapsibleSection id="trading.control.envelope" title={t("trading.envelope")} defaultOpen={true} summary={envelopeSummary}>
       {envelope ? (
         <Card>
           <TradingText muted size={tokens.textXs}>
             {t("trading.envelopeNote")}
           </TradingText>
           {envelopeRows.map(([k, v]) => (
-            <View key={k} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: c.border, direction: "ltr" }}>
-              <TradingText muted size={tokens.textXs}>
-                {k}
-              </TradingText>
-              <TradingText bold size={tokens.textXs}>
+            <View key={k} style={{ ...row, justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: c.border, gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <TradingText muted size={tokens.textXs}>
+                  {k}
+                </TradingText>
+              </View>
+              <TradingText bold size={tokens.textXs} style={{ writingDirection: "ltr" }}>
                 {v}
               </TradingText>
             </View>
@@ -167,7 +174,9 @@ export default function TradingControlScreen() {
         <SkeletonCard lines={5} />
       ) : null}
 
-      <SectionTitle>{t("trading.calibration")}</SectionTitle>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="trading.control.calibration" title={t("trading.calibration")} defaultOpen={false}>
       <Card>
         <TradingText muted size={tokens.textXs}>
           {t("trading.calibrationNote")}
@@ -225,7 +234,9 @@ export default function TradingControlScreen() {
         ))}
       </Card>
 
-      <SectionTitle>{t("trading.learning")}</SectionTitle>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="trading.control.learning" title={t("trading.learning")} defaultOpen={false}>
       <Card>
         <TradingText muted size={tokens.textXs}>
           {t("trading.learningNote")}
@@ -274,7 +285,9 @@ export default function TradingControlScreen() {
         </View>
       </Card>
 
-      <SectionTitle>{t("trading.universe")}</SectionTitle>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="trading.control.universe" title={t("trading.universe")} defaultOpen={false} summary={uni ? String(uni.universe.length) : null}>
       {uniLoading && !uni ? <SkeletonCard lines={3} /> : null}
       {(uni?.universe ?? []).map((u) => (
         <Card key={u.symbol}>
@@ -300,7 +313,9 @@ export default function TradingControlScreen() {
         </Card>
       ))}
 
-      <SectionTitle>{t("trading.calendar")}</SectionTitle>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="trading.control.calendar" title={t("trading.calendar")} defaultOpen={false}>
       <Card>
         <Row wrap>
           {EVENT_KINDS.map((k) => (
@@ -328,6 +343,7 @@ export default function TradingControlScreen() {
           </TradingText>
         ))}
       </Card>
+      </CollapsibleSection>
     </Screen>
   );
 }

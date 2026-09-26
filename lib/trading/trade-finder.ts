@@ -248,12 +248,12 @@ async function enterClaimedProposal(input: {
   const ia = await loadIntradayAccount(settings, new Map([[sym.symbol, live]]), now, errors);
   if (!ia.useBroker) throw new EnterError("broker_unavailable");
   if (ia.brokerHeld.has(sym.symbol)) throw new EnterError("already_in_symbol");
-  const blocks = intradayEnvelopeBlocks(settings, ia.account, sym.symbol);
-  if (blocks.length) throw new EnterError(`envelope:${blocks.join(",")}`);
   // Sim fills a MARKET entry on the next 5m bar within a 0.5% tolerance; a LIMIT waits up to an hour.
   const simLimit = orderType === "MARKET" ? v.entry * 1.005 : v.entry;
   const plan = sizeIntraday({ entry: simLimit, stop: v.stop, assetClass: sym.asset_class, ia, riskScale: settings.risk_scale });
   if (!plan) throw new EnterError("size_zero");
+  const blocks = intradayEnvelopeBlocks(settings, ia.account, sym.symbol, plan.risk_amount);
+  if (blocks.length) throw new EnterError(`envelope:${blocks.join(",")}`);
 
   const execution = "PAPER";
   const snapshot = { proposal_id: id, option: req.option ?? 0, tier: opt.tier, candidate: { ...opt, rating_input: undefined }, agent_plan: opt.plan, user_overrides: req, live_price: live, validation_notes: v.notes, rating_input: opt.rating_input };

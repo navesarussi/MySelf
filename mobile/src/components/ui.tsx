@@ -530,3 +530,4 @@ export function confirmDelete(title: string, onConfirm: () => void, confirmLabel
 }
 
 export { ScreenList, type ScreenListProps } from "./screen-list";
+export { CollapsibleSection, useSectionOpen } from "./ui/collapsible-section";
