@@ -5,6 +5,7 @@
 # shape of the schema. It does not: 0003 indexes `tasks.project`, 0007 drops
 # that column, so replaying 0003 fails with `column "project" does not exist`.
 # scripts/db-migrate.ts keeps a ledger and applies each file exactly once.
+# Squash merges via GITHUB_TOKEN do not fire push workflows; touch this file to re-trigger after automerge.
 name: Apply Supabase migrations
 
 on:
