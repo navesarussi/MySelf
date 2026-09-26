@@ -4,32 +4,24 @@
  */
 
 import { pickPreferredMerchantLabel } from "@/lib/finance/cal-duplicate";
-import { normalizeHebrewDescription, segmentGluedHebrew } from "@/lib/finance/hebrew-merchant";
+import { normalizeHebrewDescription } from "@/lib/finance/hebrew-merchant";
+import {
+  formatHebrewMerchantRemainder,
+  meaningfulCharCount,
+  stripCategoryPrefix,
+} from "@/lib/finance/merchant-segment";
 import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
 
-/** Full Cal category names — longest first; only exact matches are stripped. */
-export const CAL_CATEGORY_PREFIXES = [
-  "מזון ומשקאות",
-  "מזון מהיר",
-  "פנאי בילוי",
-  "רכבות חבור",
-  "ריהוט ובית",
-  "ריהוט בית",
-  "עמותות ותר",
-  "ציוד ומשרד",
-  "ביטוח ופינ",
-  "מוצרי און",
-  "מסעדות",
-  "מוסדות",
-  "אנרגיה",
-  "תיירות",
-  "ביטוח",
-] as const;
+export { CAL_GLUED_CATEGORY_PREFIXES as CAL_CATEGORY_PREFIXES } from "@/lib/finance/merchant-segment";
+export { meaningfulCharCount } from "@/lib/finance/merchant-segment";
 
 const CAL_STANDING_ORDER = /^(?:לא\s*)?(?:הוראת\s+קבע\s*)+/iu;
 
 /** Standalone Cal "not standing order" marker — not לאומי / לא הוראת. */
 const CAL_NOT_STANDING = /^לא\s+(?!הוראת\b|ומי\b)/iu;
+
+/** Cal category rows prefixed with standalone לא (not standing order). */
+const CAL_NOT_STANDING_CATEGORY = /^לא\s+(?=ביטוח|מוסדות|מזון|מסעדות|אנרגיה|גז|ציוד)/iu;
 
 const COUNTRY_CATEGORY_PREFIX =
   /^(?:(?:לא\s+)?(?:ארצות\s*הברית|ארה"ב|יפן|ליטואניה|אוסטרליה|קפריסין|ישראל|אירלנד|בריטניה|אירופה|חו"ל))(?:\s+(?:שונות|תיירות|מחשבים|מוצרי(?:\s*און)?|מזון(?:\s*ו(?:משקאות|מהיר)?)?|פנאי(?:\s*בילוי)?|רכב(?:ות(?:\s*חבור)?)?|ריהוט(?:\s*ובית)?|בית|אנרגיה|ביטוח|מסעדות|מוסדות|עמותות(?:\s*ותר)?))?\s*/iu;
@@ -39,7 +31,6 @@ const LATIN_LOCATION_TAIL =
 
 type FriendlyRule = { pattern: RegExp; name: string };
 
-/** Known international merchants — match on normalized Latin text. Order matters. */
 const FRIENDLY_MERCHANTS: FriendlyRule[] = [
   { pattern: /google\*?\s*cloud/i, name: "Google Cloud" },
   { pattern: /google\*?\s*play/i, name: "Google Play" },
@@ -65,26 +56,15 @@ const FRIENDLY_MERCHANTS: FriendlyRule[] = [
   { pattern: /^gett\b/i, name: "Gett" },
   { pattern: /^shein\b/i, name: "SHEIN" },
   { pattern: /transportfornsw/i, name: "Transport for NSW" },
+  { pattern: /autogrill/i, name: "Autogrill" },
 ];
-
-function compactHebrew(s: string): string {
-  return s.replace(/[\s"'-]/g, "");
-}
-
-/** Count meaningful letters (Hebrew or Latin), ignoring punctuation and digits. */
-export function meaningfulCharCount(s: string): number {
-  return (s.match(/[\u0590-\u05FFA-Za-z]/g) ?? []).length;
-}
-
-function categoryCompact(cat: string): string {
-  return compactHebrew(cat);
-}
 
 function stripCalMarkers(text: string): string {
   let s = text.trim();
   for (let i = 0; i < 4; i++) {
     const next = s
       .replace(CAL_STANDING_ORDER, "")
+      .replace(CAL_NOT_STANDING_CATEGORY, "")
       .replace(CAL_NOT_STANDING, "")
       .replace(COUNTRY_CATEGORY_PREFIX, "")
       .trim();
@@ -94,38 +74,9 @@ function stripCalMarkers(text: string): string {
   return s;
 }
 
-function sliceAfterCompactPrefix(text: string, prefixCompactLen: number): string {
-  let ci = 0;
-  let oi = 0;
-  while (oi < text.length && ci < prefixCompactLen) {
-    if (!/[\s"'-]/.test(text[oi])) ci++;
-    oi++;
-  }
-  return text.slice(oi).trim();
-}
-
-/** Strip a full known Cal category prefix (spaced or exactly glued). */
+/** @deprecated Use stripCategoryPrefix from merchant-segment */
 export function stripFullCategoryPrefix(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) return trimmed;
-
-  for (const cat of CAL_CATEGORY_PREFIXES) {
-    if (trimmed.startsWith(`${cat} `) || trimmed === cat) {
-      const rest = trimmed.slice(cat.length).trim();
-      if (meaningfulCharCount(rest) >= 2) return rest;
-    }
-  }
-
-  const compact = compactHebrew(trimmed);
-  for (const cat of CAL_CATEGORY_PREFIXES) {
-    const catC = categoryCompact(cat);
-    if (!compact.startsWith(catC) || compact.length <= catC.length) continue;
-    const rest = sliceAfterCompactPrefix(trimmed, catC.length);
-    if (meaningfulCharCount(rest) < 2) continue;
-    return rest;
-  }
-
-  return trimmed;
+  return stripCategoryPrefix(text);
 }
 
 function withMinLengthFallback(original: string, result: string): string {
@@ -180,14 +131,9 @@ function isMostlyLatin(text: string): boolean {
 }
 
 export type DisplayMerchantOptions = {
-  /** When true, prefer the raw descriptor over friendly mapping (detail sheets). */
   raw?: boolean;
 };
 
-/**
- * Best user-facing merchant label.
- * Strips Cal markers and full category prefixes, maps known merchants, never shrinks below 2 letters.
- */
 export function formatDisplayMerchantName(
   value: string | null | undefined,
   options?: DisplayMerchantOptions
@@ -206,24 +152,19 @@ export function formatDisplayMerchantName(
 
   let s = formatMerchantLabel(raw);
   s = stripCalMarkers(s);
-  s = stripFullCategoryPrefix(s);
+  s = stripCategoryPrefix(s);
 
   const latinFriendly = friendlyLatinName(s);
   if (latinFriendly) return latinFriendly;
 
   if (/[\u0590-\u05FF]/.test(s)) {
-    s = normalizeHebrewDescription(s);
-    if (!/\s/.test(s) && meaningfulCharCount(s) >= 4) {
-      const segmented = segmentGluedHebrew(s);
-      if (segmented.includes(" ")) s = segmented;
-    }
+    s = formatHebrewMerchantRemainder(s);
     return withMinLengthFallback(raw, s);
   }
 
   return withMinLengthFallback(raw, titleLatinFallback(s));
 }
 
-/** Pick the best display label from merchant + description fields. */
 export function pickDisplayMerchantLabel(
   ...fields: Array<string | null | undefined>
 ): string {
@@ -236,7 +177,6 @@ export function pickDisplayMerchantLabel(
   return "";
 }
 
-/** Compute display_name for a merchant rule row — never changes merchant_key. */
 export function normalizeStoredDisplayName(input: {
   merchant_key: string;
   display_name?: string | null;
@@ -246,10 +186,6 @@ export function normalizeStoredDisplayName(input: {
   return { display_name: formatDisplayMerchantName(source) || null };
 }
 
-/**
- * Migration helper — merchant_key is returned unchanged; only display_name is normalized.
- * @deprecated Prefer normalizeStoredDisplayName — kept for script compatibility.
- */
 export function normalizeStoredMerchantFields(input: {
   merchant_key: string;
   display_name?: string | null;
@@ -259,7 +195,6 @@ export function normalizeStoredMerchantFields(input: {
   return { merchant_key: rawKey, display_name };
 }
 
-/** Attach computed display label to a merchant rule for API responses. */
 export function enrichMerchantRuleForDisplay<T extends { merchant_key: string; display_name?: string | null }>(
   rule: T
 ): T & { display_name: string } {

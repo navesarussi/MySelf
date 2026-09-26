@@ -42,11 +42,11 @@ describe("formatDisplayMerchantName — Cal markers and categories", () => {
     assert.match(out, /פנאי|ארצות|בילוי/);
   });
 
-  it("does not strip partial glued category (מזוןומשקא)", () => {
+  it("strips glued truncated category prefix (מזוןומשקא)", () => {
     const out = formatDisplayMerchantName("מזוןומשקארמילוי-ראשוןלציון");
     assert.doesNotMatch(out, /^ומשקא/);
-    assert.ok(meaningfulCharCount(out) >= 4);
-    assert.match(out, /רמילוי|ראשון|לציון|מזון/);
+    assert.doesNotMatch(out, /^מזוןומשקא/);
+    assert.match(out, /רמי לוי|ראשון לציון/);
   });
 
   it("preserves geresh in restaurant names after category strip", () => {
@@ -104,7 +104,7 @@ describe("formatDisplayMerchantName — Cal markers and categories", () => {
 describe("stripFullCategoryPrefix", () => {
   it("matches only full category names", () => {
     assert.match(stripFullCategoryPrefix("מסעדותג'נט"), /ג'נט/);
-    assert.equal(stripFullCategoryPrefix("מזוןומשקארמילוי"), "מזוןומשקארמילוי");
+    assert.equal(stripFullCategoryPrefix("מזוןומשקארמילוי"), "רמילוי");
   });
 });
 
