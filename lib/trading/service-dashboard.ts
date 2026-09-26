@@ -5,7 +5,8 @@ import { computePhaseGate, type PhaseGateView } from "./service-gates";
 import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
 import { openRiskR } from "./position";
 import { brokerEquity, computeLiveEquityWithPrices } from "./account-equity";
-import { drawdownFromPeak, haltStatus, weekStartIso } from "./risk-envelope";
+import { accountHaltStatus, drawdownFromPeak, weekStartIso } from "./risk-envelope";
+import { openRiskUsd } from "./tick-context";
 import { getActiveV2Params, getClosedTrades, getOpenTrades, getSettings, isAccountTrade, type TradeRow, type TradingSettings } from "./store";
 import { round } from "./round";
 
@@ -85,6 +86,8 @@ export type DashboardOverview = {
     peak_equity: number;
     drawdown_pct: number;
     open_risk_r: number;
+    /** USD at risk across open positions (stop below entry) as a share of equity. */
+    open_risk_pct: number;
     pnl_day: number;
     pnl_week: number;
     pnl_month: number;
@@ -230,7 +233,9 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   const equity = live.equity;
   const peak = Math.max(settings.peak_equity, equity);
   const dd = drawdownFromPeak(equity, peak);
-  const halts = haltStatus({ realized_r_today: d.r, realized_r_week: w.r });
+  // Halts are on realized P&L as a share of equity — R sums mix trades of different sizes.
+  const halts = accountHaltStatus({ equity, realized_pnl_today: d.pnl, realized_pnl_week: w.pnl });
+  const openRiskUsdTotal = accountOpen.reduce((s, t) => s + openRiskUsd(t), 0);
 
   const [equity_history, gate] = await Promise.all([equitySnapshots(), computePhaseGate(settings, closed)]);
 
@@ -244,6 +249,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       peak_equity: peak,
       drawdown_pct: round(dd),
       open_risk_r: positions.reduce((s, p) => s + p.open_risk_r, 0),
+      open_risk_pct: equity > 0 ? round(openRiskUsdTotal / equity, 4) : 0,
       pnl_day: d.pnl,
       pnl_week: w.pnl,
       pnl_month: m.pnl,

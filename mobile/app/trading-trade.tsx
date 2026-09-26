@@ -6,7 +6,7 @@ import { useI18n } from "../src/i18n";
 import { useLayoutDir } from "../src/layout-dir";
 import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/query";
-import { Badge, Btn, Card, Input, Loading, Screen, SectionTitle } from "../src/components/ui";
+import { Badge, Btn, Card, CollapsibleSection, Input, Loading, Screen } from "../src/components/ui";
 import { CandleChart, KpiGrid, type ChartLevel, type ChartMarker } from "../src/components/trading/charts";
 import { TradingText, useTradeR } from "../src/components/trading/blocks";
 import { TradeManageCard } from "../src/components/trading/trade-manage";
@@ -147,7 +147,7 @@ export default function TradingTradeScreen() {
         </Card>
       ) : null}
 
-      <SectionTitle>{t("trading.agentReasoning")}</SectionTitle>
+      <CollapsibleSection id="trading.trade.agent" title={t("trading.agentReasoning")} defaultOpen={false}>
       <Card>
         {trade.strategy_version === "intraday" ? (
           <>
@@ -229,10 +229,10 @@ export default function TradingTradeScreen() {
           <TradingText muted>{trigger?.agent_error ?? t("trading.noAgent")}</TradingText>
         )}
       </Card>
+      </CollapsibleSection>
 
       {lesson ? (
-        <>
-          <SectionTitle>{t("trading.lesson")}</SectionTitle>
+        <CollapsibleSection id="trading.trade.lesson" title={t("trading.lesson")} defaultOpen={false}>
           <Card>
             <View style={{ ...row, gap: 6, marginBottom: 6 }}>
               <Badge label={t(`trading.quality_${lesson.decision_quality}`)} tone={lesson.decision_quality === "GOOD" ? "good" : lesson.decision_quality === "POOR" ? "warn" : "default"} />
@@ -246,7 +246,7 @@ export default function TradingTradeScreen() {
               {lesson.applies_when}
             </TradingText>
           </Card>
-        </>
+        </CollapsibleSection>
       ) : null}
 
       {sibling ? (
@@ -259,7 +259,7 @@ export default function TradingTradeScreen() {
         </Pressable>
       ) : null}
 
-      <SectionTitle>{t("trading.lifecycle")}</SectionTitle>
+      <CollapsibleSection id="trading.trade.lifecycle" title={t("trading.lifecycle")} summary={String((trade.events ?? []).length)}>
       <Card>
         <TradingText muted size={tokens.textXs}>
           T · {fmtDateTime(trade.trigger_timestamp, locale)} · limit {fmtPrice(trade.entry_limit)}
@@ -274,8 +274,9 @@ export default function TradingTradeScreen() {
           </TradingText>
         ))}
       </Card>
+      </CollapsibleSection>
 
-      <SectionTitle>{t("trading.snapshot")}</SectionTitle>
+      <CollapsibleSection id="trading.trade.snapshot" title={t("trading.snapshot")} defaultOpen={false}>
       <Card>
         {snap.candidate ? (
           <View style={{ marginBottom: 8 }}>
@@ -320,8 +321,9 @@ export default function TradingTradeScreen() {
           </TradingText>
         ) : null}
       </Card>
+      </CollapsibleSection>
 
-      <SectionTitle>{t("trading.journalNotes")}</SectionTitle>
+      <CollapsibleSection id="trading.trade.notes" title={t("trading.journalNotes")}>
       <Card>
         <Input value={notes} onChangeText={setNotes} placeholder={t("trading.notesPlaceholder")} multiline style={{ minHeight: 90, textAlignVertical: "top" }} />
         <Input value={tags} onChangeText={setTags} placeholder={t("trading.tagsPlaceholder")} />
@@ -337,6 +339,7 @@ export default function TradingTradeScreen() {
         </View>
         <Btn label={t("trading.save")} onPress={() => void save()} />
       </Card>
+      </CollapsibleSection>
     </Screen>
   );
 }

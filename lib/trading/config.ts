@@ -19,12 +19,27 @@ export const RISK_ENVELOPE = Object.freeze({
   CORRELATION_THRESHOLD: 0.7,
   DAILY_LOSS_HALT_R: -3,
   WEEKLY_LOSS_HALT_R: -6,
-  /** Drawdown from peak equity that trips the master kill switch. */
-  MASTER_KILL_SWITCH_DD: 0.15,
+  /**
+   * Drawdown from peak equity that trips the master kill switch. The multi-strategy book's worst 10-year
+   * drawdown was ~20% (docs/trading/multi-strategy.md) — the switch is for a broken state, not a bad month.
+   */
+  MASTER_KILL_SWITCH_DD: 0.25,
   /** Max notional per position. Crypto has no leverage at Alpaca, so this caps real risk below MAX_RISK_PER_TRADE on tight stops. */
   MAX_ASSET_EXPOSURE: 0.2,
   /** Allowed agent risk multipliers — the agent can only reduce. */
   AGENT_RISK_MULTIPLIERS: Object.freeze([0, 0.5, 0.75, 1] as const),
+
+  // ── The live account (Alpaca demo), in % of equity ────────────────────────
+  // The R-count limits above assume every trade risks the same 1R — true inside a single-strategy backtest,
+  // false in the book (0.15%–0.5% per trade), where a "+144R week" made of tiny-risk trades showed why.
+  // These are what live entries (the book and the search button) are checked against: checkAccountEntry.
+  /** Open positions across every strategy and manual trade. */
+  ACCOUNT_MAX_POSITIONS: 25,
+  /** Sum of initial risk still at stake (stop below entry), as a share of equity. */
+  ACCOUNT_MAX_OPEN_RISK_PCT: 0.08,
+  /** Realized loss that halts new entries: today / this week (Mon–Sun UTC). Book 2016-26: worst day −3.2% (once), worst week −3.9%. */
+  DAILY_LOSS_HALT_PCT: -0.03,
+  WEEKLY_LOSS_HALT_PCT: -0.05,
 });
 
 /** Execution constants (also not runtime-tunable). */

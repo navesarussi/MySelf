@@ -4,7 +4,7 @@ import { api } from "../src/api/resources";
 import { useI18n } from "../src/i18n";
 import { useColors, tokens } from "../src/theme";
 import { queryKeys, useApiQuery } from "../src/query";
-import { Badge, Card, Chip, Loading, Row, Screen, SectionTitle } from "../src/components/ui";
+import { Badge, Card, Chip, CollapsibleSection, Loading, Row, Screen } from "../src/components/ui";
 import { GroupBars, KpiGrid, RHistogram, SeriesChart } from "../src/components/trading/charts";
 import { TradingText } from "../src/components/trading/blocks";
 import { fmtDuration, fmtPct, fmtR, fmtSignedUsd, fmtUsd } from "@/lib/trading/format";
@@ -55,6 +55,7 @@ export default function TradingAnalyticsScreen() {
             ]}
           />
 
+          <CollapsibleSection id="trading.analytics.curves" title={t("trading.equityCurve")}>
           {data.r_curve.length > 1 ? (
             <Card>
               <SeriesChart values={data.r_curve.map((p) => p.cum_r)} baseline={0} title={t("trading.equityCurve")} format={(v) => fmtR(v, 1)} />
@@ -64,10 +65,10 @@ export default function TradingAnalyticsScreen() {
           <Card>
             <RHistogram bins={data.r_distribution} title={t("trading.rDistribution")} />
           </Card>
+          </CollapsibleSection>
 
           {av ? (
-            <>
-              <SectionTitle>{t("trading.agentValue")}</SectionTitle>
+            <CollapsibleSection id="trading.analytics.agent" title={t("trading.agentValue")} defaultOpen={false}>
               <Card style={{ borderColor: av.verdict === "DESTROYS_VALUE" ? c.warn : av.verdict === "ADDS_VALUE" ? c.good : c.border }}>
                 <Badge label={t(`trading.agentValue_${av.verdict}`, { n: av.triggers })} tone={av.verdict === "ADDS_VALUE" ? "good" : av.verdict === "DESTROYS_VALUE" ? "warn" : "default"} />
                 <View style={{ marginTop: 8 }}>
@@ -87,12 +88,11 @@ export default function TradingAnalyticsScreen() {
                   />
                 </View>
               </Card>
-            </>
+            </CollapsibleSection>
           ) : null}
 
           {data.rating_value && data.rating_value.rated > 0 ? (
-            <>
-              <SectionTitle>{t("trading.ratingValue")}</SectionTitle>
+            <CollapsibleSection id="trading.analytics.rating" title={t("trading.ratingValue")} defaultOpen={false}>
               <Card>
                 <TradingText>{t("trading.ratingValueBody", { n: data.rating_value.rated, corr: data.rating_value.correlation === null ? "—" : String(data.rating_value.correlation) })}</TradingText>
                 <TradingText muted size={tokens.textXs}>
@@ -109,10 +109,10 @@ export default function TradingAnalyticsScreen() {
                   </View>
                 ) : null}
               </Card>
-            </>
+            </CollapsibleSection>
           ) : null}
 
-          <SectionTitle>{t("trading.execQuality")}</SectionTitle>
+          <CollapsibleSection id="trading.analytics.exec" title={t("trading.execQuality")}>
           <KpiGrid
             items={[
               { label: "avg MFE", value: fmtR(data.avg_mfe_r, 2), tone: "good" },
@@ -124,11 +124,11 @@ export default function TradingAnalyticsScreen() {
               { label: t("trading.extensions"), value: String(data.target_extensions) },
             ]}
           />
+          </CollapsibleSection>
 
-          {/* What costs take out of the edge, and what the exits leave behind.
-              The backtest is positive gross and negative net, so this is the
-              number that decides whether the strategy is worth running. */}
-          <SectionTitle>{t("trading.costEdge")}</SectionTitle>
+          {/* What costs take out of the edge, and what the exits leave behind — the number that decides
+              whether a strategy is worth running. */}
+          <CollapsibleSection id="trading.analytics.cost" title={t("trading.costEdge")}>
           <KpiGrid
             items={[
               {
@@ -163,7 +163,9 @@ export default function TradingAnalyticsScreen() {
               },
             ]}
           />
+          </CollapsibleSection>
 
+          <CollapsibleSection id="trading.analytics.breakdowns" title={t("trading.breakdowns")}>
           {[
             { title: t("trading.byStrategy"), rows: data.by_strategy ?? [] },
             { title: t("trading.bySetup"), rows: data.by_setup },
@@ -180,6 +182,7 @@ export default function TradingAnalyticsScreen() {
                 <GroupBars title={g.title} rows={toBars(g.rows)} />
               </Card>
             ))}
+          </CollapsibleSection>
         </>
       ) : null}
     </Screen>

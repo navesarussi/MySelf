@@ -1,6 +1,6 @@
 import { equityFromTrades } from "./account-equity";
 import { lookbackForClass, type BarCache } from "./market-data";
-import { weekStartIso } from "./risk-envelope";
+import { weekStartIso, type AccountRiskState } from "./risk-envelope";
 import { framesFromBars } from "./strategy/data-v2";
 import type { SymbolFrames } from "./strategy/candidates";
 import { getClosedTradesLite, isAccountTrade, type TradeRow, type TradingSettings, type UniverseRow } from "./store";
@@ -70,7 +70,16 @@ export type FrameCache = ReturnType<typeof createFrameCache>;
 
 // ── Account ─────────────────────────────────────────────────────────────────
 
-export type Account = { equity: number; realizedToday: number; realizedWeek: number; open: TradeRow[] };
+export type Account = {
+  equity: number;
+  /** Realized R today / this week — per-trade quality, not an account limit (trade sizes differ). */
+  realizedToday: number;
+  realizedWeek: number;
+  /** Realized P&L in USD today / this week — what the account halts are measured on. */
+  realizedPnlToday: number;
+  realizedPnlWeek: number;
+  open: TradeRow[];
+};
 
 /**
  * Account state the envelope sizes and halts against.
@@ -88,6 +97,33 @@ export async function loadAccount(settings: TradingSettings, openTrades: TradeRo
     equity: equityFromTrades(settings, open, inPhase, lastPrices),
     realizedToday: inPhase.filter((t) => t.closed_at!.slice(0, 10) === today).reduce((s, t) => s + (t.realized_r ?? 0), 0),
     realizedWeek: inPhase.filter((t) => weekStartIso(new Date(t.closed_at!)) === week).reduce((s, t) => s + (t.realized_r ?? 0), 0),
+    realizedPnlToday: inPhase.filter((t) => t.closed_at!.slice(0, 10) === today).reduce((s, t) => s + (t.realized_pnl ?? 0), 0),
+    realizedPnlWeek: inPhase.filter((t) => weekStartIso(new Date(t.closed_at!)) === week).reduce((s, t) => s + (t.realized_pnl ?? 0), 0),
     open,
+  };
+}
+
+/** USD still at risk on an open or pending trade: size × (entry − stop) while the stop is below the entry. */
+export function openRiskUsd(t: Pick<TradeRow, "sim_state" | "entry_limit" | "remaining_size">): number {
+  const p = t.sim_state;
+  if (p.state === "CLOSED" || p.state === "CANCELLED") return 0;
+  const entry = p.entry_price ?? p.entry_limit ?? t.entry_limit;
+  const size = p.state === "PENDING" ? p.initial_size : p.size;
+  return entry > p.stop_price ? size * (entry - p.stop_price) : 0;
+}
+
+/** The live account as the %-of-equity envelope sees it (checkAccountEntry). */
+export function accountRiskState(settings: TradingSettings, account: Account, extraOpen: { symbol: string }[] = []): AccountRiskState {
+  return {
+    equity: account.equity,
+    peak_equity: Math.max(settings.peak_equity, account.equity),
+    realized_pnl_today: account.realizedPnlToday,
+    realized_pnl_week: account.realizedPnlWeek,
+    kill_switch_active: settings.kill_switch_active,
+    entries_paused: settings.entries_paused,
+    positions: [
+      ...account.open.map((t) => ({ symbol: t.symbol, notional: t.entry_limit * t.remaining_size, open_risk_usd: openRiskUsd(t) })),
+      ...extraOpen.map((x) => ({ symbol: x.symbol, notional: 0, open_risk_usd: 0 })),
+    ],
   };
 }
