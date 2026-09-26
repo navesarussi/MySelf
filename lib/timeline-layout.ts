@@ -327,8 +327,9 @@ function monthTicks(min: number, max: number, plotW: number, tickLocale = "he-IL
 export function yearTicks(min: number, max: number, plotW: number) {
   const minYear = new Date(min).getFullYear();
   const maxYear = new Date(max).getFullYear();
-  const span = Math.max(maxYear - minYear, 1);
-  const pxPerYear = plotW / span;
+  // From the real span, not whole calendar years: rounding to years made the
+  // step flip between 1 and 2 while panning at a constant zoom.
+  const pxPerYear = plotW / ((max - min) / YEAR_MS);
 
   let step = 1;
   if (pxPerYear < 40) step = 2;
