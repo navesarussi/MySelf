@@ -18,4 +18,10 @@ describe("normalizeHebrewDescription", () => {
     assert.equal(normalizeHebrewDescription("לא הוראת קבע"), "לא הוראת קבע");
     assert.equal(normalizeHebrewDescription("סופר-פאר"), "סופר-פאר");
   });
+
+  it("segments glued leisure/nursery tokens", () => {
+    const out = normalizeHebrewDescription("פנאיבילוימשתלהסיטונאית");
+    assert.match(out, /פנאי/);
+    assert.match(out, /משתלה/);
+  });
 });

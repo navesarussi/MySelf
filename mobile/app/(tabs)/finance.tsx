@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api/resources";
@@ -477,6 +477,7 @@ export default function FinanceScreen() {
               <PlanSectionBlock
                 key={type}
                 section={section}
+                month={month}
                 onSavePlanned={(id, amount) => void savePlanned(id, amount)}
                 onChangeLineType={(id, lt) => void changeLineType(id, lt)}
                 onAdd={type === "planned" || type === "savings" ? () => setAddType(type) : undefined}
@@ -487,11 +488,13 @@ export default function FinanceScreen() {
         : null}
       {view?.weeks.length ? <WeekStrip weeks={view.weeks} /> : null}
       <Row style={{ marginVertical: 4 }}>
-        <Pressable onPress={() => setShowTxns((v) => !v)} accessibilityRole="button" style={{ flex: 1 }}>
-          <Row>
-            <SectionTitle>{t("finance.allTransactions")}</SectionTitle>
-            <Ionicons name={showTxns ? "chevron-up" : "chevron-down"} size={18} color={c.muted} />
-          </Row>
+        <Pressable onPress={() => setShowTxns((v) => !v)} accessibilityRole="button" style={{ flex: 1, minWidth: 0 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={{ flex: 1, minWidth: 0, color: c.ink, fontSize: 16, fontWeight: "700", textAlign: textStart, writingDirection }}>
+              {t("finance.allTransactions")}
+            </Text>
+            <Ionicons name={showTxns ? "chevron-up" : "chevron-down"} size={18} color={c.muted} style={{ flexShrink: 0 }} />
+          </View>
         </Pressable>
         <Pressable onPress={() => setShowManualAdd(true)} hitSlop={8}>
           <Text style={{ color: c.accent, fontWeight: "600", fontSize: tokens.textXs }}>+ {t("finance.addManualTxn")}</Text>

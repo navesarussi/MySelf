@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { FINANCE_CATEGORIES } from "@/lib/finance/categories";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
@@ -87,9 +88,15 @@ export function CategoryPicker({
           backgroundColor: c.surface,
         }}
       >
-        <Text style={{ color: value ? c.ink : c.muted, textAlign: textStart, writingDirection }}>
-          {value ?? t("finance.pickCategory")}
-        </Text>
+        <View style={{ ...row, alignItems: "center", gap: 8 }}>
+          <Text
+            style={{ flex: 1, minWidth: 0, color: value ? c.ink : c.muted, textAlign: textStart, writingDirection }}
+            numberOfLines={1}
+          >
+            {value ?? t("finance.pickCategory")}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color={c.muted} style={{ flexShrink: 0 }} />
+        </View>
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
