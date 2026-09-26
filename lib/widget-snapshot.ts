@@ -1,3 +1,4 @@
+import { txnMerchantDisplay } from "@/lib/finance/merchant-display";
 import { homeHeroCount } from "./home-kpis";
 import {
   countOverdueHabits,
@@ -43,8 +44,9 @@ export function formatUrgentFinanceLabel(row: {
   amount: number;
   merchant: string | null;
   description: string | null;
+  merchant_display?: string | null;
 }): string {
-  const name = (row.merchant || row.description || "תנועה").trim();
+  const name = txnMerchantDisplay(row) || "תנועה";
   const amount = Math.round(row.amount);
   return `₪${amount} · ${name}`;
 }

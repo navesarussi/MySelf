@@ -12,6 +12,7 @@ import {
 import { loadCategoryHistory, suggestCategoryFromHistory } from "@/lib/finance/merchant-category";
 import { findMerchantRule, resolveExpenseType } from "@/lib/finance/merchant-rules";
 import { rowToTxn } from "@/lib/finance/ingest";
+import { enrichTransactionWithMerchantDisplay } from "@/lib/finance/txn-display";
 import { softDeleteTransaction } from "@/lib/finance/split-txn";
 import { fetchSplitsForTxn } from "@/lib/finance/split-txn";
 import { updateFinanceTransaction } from "@/lib/finance/txn-update";
@@ -51,8 +52,9 @@ export const GET = withRouteHandler(async function GET(_req: NextRequest, ctx: {
       ? resolveExpenseType({ category: suggested_category, kind: "expense", rule })
       : null);
 
+  const enriched = await enrichTransactionWithMerchantDisplay(txn, rule);
   return NextResponse.json({
-    ...txn,
+    ...enriched,
     suggested_category,
     suggested_expense_type,
     default_note: rule?.default_note ?? null,
@@ -87,7 +89,7 @@ export const PATCH = withRouteHandler(async function PATCH(req: NextRequest, ctx
       is_internal: body.is_internal !== undefined ? Boolean(body.is_internal) : undefined,
       skip: body.skip === true,
     });
-    return NextResponse.json(result);
+    return NextResponse.json(await enrichTransactionWithMerchantDisplay(result));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "update_failed";
     reportError({ source: "server", error: err, context: { route: "/finance/transactions/[id] PATCH", integration: "finance" } });

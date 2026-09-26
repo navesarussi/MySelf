@@ -5,7 +5,7 @@ import type { FinanceTransaction } from "@/lib/finance/types";
 
 export type MatchedTxn = Pick<
   FinanceTransaction,
-  "id" | "txn_date" | "amount" | "merchant" | "description" | "purpose_note"
+  "id" | "txn_date" | "amount" | "merchant" | "merchant_display" | "description" | "purpose_note"
 >;
 
 export async function fetchUnlinkedTxnIds(merchantKey: string): Promise<Set<string>> {
@@ -58,6 +58,7 @@ export function matchedTxnsForFixed(
       txn_date: t.txn_date,
       amount: t.amount,
       merchant: t.merchant,
+      merchant_display: t.merchant_display,
       description: t.description,
       purpose_note: t.purpose_note,
     }))

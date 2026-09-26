@@ -44,6 +44,8 @@ export type FinanceTransaction = {
   ils_estimated: boolean;
   description: string;
   merchant: string | null;
+  /** User-facing label from merchant rule display_name or shared formatter (API-only; not stored). */
+  merchant_display?: string;
   account_number: string | null;
   card_name: string | null;
   status: FinanceTxnStatus;

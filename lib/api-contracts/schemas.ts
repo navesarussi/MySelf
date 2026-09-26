@@ -104,6 +104,41 @@ export const planSectionSchema = z.object({
   actual_total: z.number(),
 });
 
+export const financeTransactionSchema = z
+  .object({
+    id: z.string(),
+    source: z.string(),
+    external_key: z.string(),
+    txn_date: isoDate,
+    amount: z.number(),
+    kind: z.enum(["income", "expense"]),
+    currency: z.string(),
+    original_amount: z.number().nullable(),
+    amount_ils: z.number().nullable(),
+    ils_estimated: z.boolean(),
+    description: z.string(),
+    merchant: z.string().nullable(),
+    merchant_display: z.string(),
+    account_number: z.string().nullable(),
+    card_name: z.string().nullable(),
+    status: z.enum(["pending", "completed"]),
+    category: z.string().nullable(),
+    purpose_note: z.string().nullable(),
+    expense_type: z.enum(["fixed", "variable", "savings"]).nullable(),
+    txn_time: z.string().nullable().optional(),
+    installment_index: z.number().nullable(),
+    installment_total: z.number().nullable(),
+    installment_label: z.string().nullable(),
+    is_internal: z.boolean(),
+    needs_categorization: z.boolean(),
+    categorized_at: isoDateTime.nullable(),
+    created_at: isoDateTime,
+    updated_at: isoDateTime,
+  })
+  .passthrough();
+
+export const financeTransactionsResponseSchema = z.array(financeTransactionSchema);
+
 export const financePlanResponseSchema = z
   .object({
     month: z.string().regex(/^\d{4}-\d{2}$/),
@@ -168,6 +203,11 @@ export const MOBILE_API_CONTRACTS = {
   habits: { path: "/api/v1/habits", schema: habitsResponseSchema },
   goals: { path: "/api/v1/goals", schema: goalsResponseSchema },
   financePlan: { path: "/api/v1/finance/plan", schema: financePlanResponseSchema, query: "month" },
+  financeTransactions: {
+    path: "/api/v1/finance/transactions",
+    schema: financeTransactionsResponseSchema,
+    query: "month",
+  },
   relationships: { path: "/api/v1/relationships", schema: relationshipsResponseSchema },
   tradingEquity: { path: "/api/v1/trading/equity", schema: tradingEquityResponseSchema },
   tradingDashboard: { path: "/api/v1/trading/dashboard", schema: tradingDashboardResponseSchema },

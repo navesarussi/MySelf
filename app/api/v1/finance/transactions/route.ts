@@ -5,6 +5,7 @@ import { rowToTxn } from "@/lib/finance/ingest";
 import { loadCategoryHistory } from "@/lib/finance/merchant-category";
 import { createManualTransaction } from "@/lib/finance/manual-txn";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
+import { enrichTransactionWithMerchantDisplay, withMerchantDisplay } from "@/lib/finance/txn-display";
 import { suggestForTxn } from "@/lib/finance/suggest-txn";
 import { TXN_LIST_COLUMNS } from "@/lib/finance/txn-columns";
 import type { MoneyItemType } from "@/lib/finance/money-item-type";
@@ -39,10 +40,13 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
   if (error) return dbError();
   const rows = (data ?? []).map((r) => rowToTxn(r as Record<string, unknown>));
 
-  if (!uncategorized) return NextResponse.json(rows);
+  const rulesMap = await fetchMerchantRulesMap();
+  const withDisplay = rows.map((txn) => withMerchantDisplay(txn, rulesMap));
 
-  const [history, rulesMap] = await Promise.all([loadCategoryHistory(), fetchMerchantRulesMap()]);
-  const items = rows.map((txn) => {
+  if (!uncategorized) return NextResponse.json(withDisplay);
+
+  const history = await loadCategoryHistory();
+  const items = withDisplay.map((txn) => {
     const suggestion = suggestForTxn(txn, rulesMap, history);
     return { ...txn, ...suggestion };
   });
@@ -74,7 +78,7 @@ export const POST = withRouteHandler(async function POST(req: NextRequest) {
       frequency:
         body.frequency === "weekly" || body.frequency === "yearly" ? body.frequency : "monthly",
     });
-    return NextResponse.json(txn);
+    return NextResponse.json(await enrichTransactionWithMerchantDisplay(txn));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "create_failed";
     reportError({ source: "server", error: err, context: { route: "/finance/transactions POST", integration: "finance" } });

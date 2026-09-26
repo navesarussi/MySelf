@@ -148,6 +148,39 @@ export const tradingDashboardFixture = {
   execution_rules: {},
 };
 
+export const financeTransactionsFixture = [
+  {
+    id: "txn-1",
+    source: "visa_cal",
+    external_key: "cal-1",
+    txn_date: "2026-09-15",
+    amount: 120.5,
+    kind: "expense" as const,
+    currency: "ILS",
+    original_amount: null,
+    amount_ils: null,
+    ils_estimated: false,
+    description: "מזוןומשקארמילוי-ראשוןלציון",
+    merchant: "מזוןומשקארמילוי-ראשוןלציון",
+    merchant_display: "רמי לוי ראשון לציון",
+    account_number: null,
+    card_name: "Visa",
+    status: "completed" as const,
+    category: "מזון",
+    purpose_note: null,
+    expense_type: "variable" as const,
+    txn_time: null,
+    installment_index: null,
+    installment_total: null,
+    installment_label: null,
+    is_internal: false,
+    needs_categorization: false,
+    categorized_at: now,
+    created_at: now,
+    updated_at: now,
+  },
+];
+
 export const financePlanFixture: MonthPlanView = {
   month: "2026-09",
   plan_id: "plan-1",

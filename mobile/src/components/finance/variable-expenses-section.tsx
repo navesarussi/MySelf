@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fmtAmount0, fmtIls0, fmtIls2 } from "@/lib/finance/format";
-import { formatDisplayMerchantName } from "@/lib/finance/merchant-display";
+import { txnMerchantDisplay } from "@/lib/finance/merchant-display";
 import { localeTag } from "@/lib/i18n/core";
 import type { VariableCategoryGroup } from "@/lib/finance/variable-breakdown";
 import { useI18n } from "../../i18n";
@@ -102,7 +102,7 @@ export function VariableExpensesSection({
                   </Pressable>
                   {!catCollapsed
                     ? group.transactions.map((txn) => {
-                        const label = formatDisplayMerchantName(txn.merchant || txn.description);
+                        const label = txnMerchantDisplay(txn);
                         const when = txn.txn_time ? `${txn.txn_date} ${txn.txn_time}` : txn.txn_date;
                         return (
                           <Pressable key={txn.id} onPress={() => setEditTxnId(txn.id)} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border }}>

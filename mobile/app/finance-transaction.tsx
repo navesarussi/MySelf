@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { lineTypeForCategory } from "@/lib/finance/expense-type";
 import { fmtAmount2 } from "@/lib/finance/format";
+import { txnMerchantDisplay } from "@/lib/finance/merchant-display";
 import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
 import type { FinanceTransaction } from "@/lib/finance/types";
 import { api, type HomePayload } from "../src/api/resources";
@@ -139,7 +140,7 @@ export default function FinanceTransactionScreen() {
 
   if (!txn && !error) return <Loading />;
 
-  const label = formatMerchantLabel(txn?.merchant || txn?.description || "");
+  const label = txn ? txnMerchantDisplay(txn) : "";
   const isExpense = txn?.kind === "expense";
   const busy = isPending();
   const sourceLabel = txn && SOURCE_KEYS[txn.source] ? t(SOURCE_KEYS[txn.source]) : txn?.source || "";

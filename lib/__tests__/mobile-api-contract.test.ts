@@ -5,6 +5,7 @@ import { MOBILE_API_CONTRACTS, assertHomeTradingLegacyFields } from "../api-cont
 import { validateMobileApiContract } from "../api-contracts/validate";
 import {
   financePlanFixture,
+  financeTransactionsFixture,
   goalsFixture,
   habitsFixture,
   homeFixture,
@@ -23,6 +24,7 @@ describe("mobile API contract fixtures", () => {
     ["habits", habitsFixture],
     ["goals", goalsFixture],
     ["financePlan", financePlanFixture],
+    ["financeTransactions", financeTransactionsFixture],
     ["relationships", relationshipsFixture],
     ["tradingEquity", tradingEquityFixture],
     ["tradingDashboard", tradingDashboardFixture],
