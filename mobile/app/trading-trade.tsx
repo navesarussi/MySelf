@@ -8,7 +8,7 @@ import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/query";
 import { Badge, Btn, Card, Input, Loading, Screen, SectionTitle } from "../src/components/ui";
 import { CandleChart, KpiGrid, type ChartLevel, type ChartMarker } from "../src/components/trading/charts";
-import { TradingText } from "../src/components/trading/blocks";
+import { TradingText, useTradeR } from "../src/components/trading/blocks";
 import { fmtDateTime, fmtDuration, fmtPct, fmtPrice, fmtR, fmtSignedUsd, fmtUsd, rTone } from "@/lib/trading/format";
 
 type TfRead = { trend: string; structure: string; rsi: number | null; adx: number | null; volume_ratio: number | null; squeeze_pct: number | null; bearish_divergence: boolean };
@@ -60,12 +60,14 @@ export default function TradingTradeScreen() {
     return { levels, markers };
   }, [data, t]);
 
+  const liveR = useTradeR(data?.trade ?? null);
+
   if (!data) return <Screen>{loading ? <Loading /> : null}</Screen>;
   const { trade, trigger, sibling, lesson, quality } = data;
   const snap = (trigger?.snapshot ?? trade.trigger_snapshot ?? {}) as TriggerSnapshot;
   const menu = snap.candidate?.target_menu ?? [];
   const chosen = trigger?.agent_target_index ?? null;
-  const tone = rTone(trade.realized_r);
+  const tone = rTone(liveR.r);
   const save = () =>
     run(
       (cfg) =>
@@ -81,15 +83,14 @@ export default function TradingTradeScreen() {
     <Screen title={t("trading.tradeTitle", { symbol: trade.symbol })} subtitle={`${trade.asset_class} · ${trade.bucket_id} · ${trade.mode}`} onRefresh={refresh} refreshing={loading}>
       <View style={{ ...row, gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
         <Badge label={t(`trading.state_${trade.state}`)} tone="accent" />
-        <Badge label={trade.execution} />
-        <Badge label={trade.track === "AGENT" ? t("trading.trackAgent") : t("trading.trackDeterministic")} />
+        {trade.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
         {trade.exit_reason ? <Badge label={trade.exit_reason} tone={tone === "warn" ? "warn" : "good"} /> : null}
         {trade.gapped_through_stop ? <Badge label={t("trading.gapped")} tone="warn" /> : null}
       </View>
 
       <KpiGrid
         items={[
-          { label: "R", value: trade.state === "CLOSED" ? fmtR(trade.realized_r) : "—", tone: tone === "good" ? "good" : tone === "warn" ? "warn" : "default" },
+          { label: "R", value: liveR.text, hint: liveR.live ? t("trading.rLiveHint") : undefined, tone: tone === "good" ? "good" : tone === "warn" ? "warn" : "default" },
           { label: "P&L", value: fmtSignedUsd(trade.realized_pnl), hint: `1R = ${fmtUsd(quality.risk_usd ?? trade.risk_amount)}` },
           { label: "MFE / MAE", value: `${fmtR(trade.mfe_r, 1)} / ${fmtR(trade.mae_r, 1)}` },
           { label: t("trading.entry"), value: fmtPrice(trade.entry_price ?? trade.entry_limit), hint: trade.entry_slippage_bps !== null ? `${t("trading.slippage")} ${trade.entry_slippage_bps}bps` : undefined },

@@ -7,6 +7,8 @@ export type PositionPriceInputs = {
   stop_price: number;
   target_price: number;
   last_price: number | null;
+  /** 1R in price, fixed at the fill. Once the stop trails to or past the entry, stop_price no longer measures it. */
+  stop_distance?: number | null;
 };
 
 export type PositionPriceView = {
@@ -20,7 +22,9 @@ export type PositionPriceView = {
 export function positionPriceView(p: PositionPriceInputs, livePrice: number | null | undefined): PositionPriceView {
   const lastPrice = livePrice ?? p.last_price ?? null;
   const entry = p.entry_price;
-  const stopDistance = entry !== null ? entry - p.stop_price : null;
+  // R is measured against the risk taken at the fill: measured against the current stop, a trade whose stop
+  // had moved to breakeven (the winners) showed no R at all.
+  const stopDistance = p.stop_distance && p.stop_distance > 0 ? p.stop_distance : entry !== null ? entry - p.stop_price : null;
   const span = p.target_price - p.stop_price;
 
   const currentR =

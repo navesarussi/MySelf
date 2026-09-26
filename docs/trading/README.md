@@ -9,7 +9,45 @@ Tab **מסחר** in the Expo app. Backend in `lib/trading/**`, API in `app/api/v
 - **הסוכן מסחר** — the AI part (`lib/trading/agent-judge.ts`).
 - **האסטרטגיית מסחר** — deterministic part + AI part together.
 
-## Intraday strategy — testing phase (2026-09-14)
+## Real trades only + books from the broker (2026-09-26)
+
+- **Nothing is simulated any more.** Every entry goes to the Alpaca demo account or does not happen: the intraday
+  universe is filtered to Alpaca-tradable symbols, the "search trade" button refuses non-tradable symbols, the
+  daily-trend strategy no longer writes a DETERMINISTIC/SHADOW baseline row, and `isAccountTrade` counts only rows
+  with a broker. The 104 simulated/shadow rows from 2026-09-14…26 moved to `trading_trades_archive` (migration 0050).
+- **Books = Alpaca's fills** (`lib/trading/broker/ledger.ts`, `broker/settle.ts`). After every tick each closed
+  broker trade is settled from its FILL activities: entry/exit VWAP, the crypto buy fee (taken in the asset) plus
+  a 0.2% sell fee, P&L, and R = P&L ÷ (filled qty × (fill − initial stop)); a small partial fill or a fill through
+  the stop is measured against the planned risk. `broker_settled_at` marks a settled row.
+  The backfill (`scripts/trading/settle-backfill.ts`) moved the journal from −$21.3K to +$17.7K, matching the
+  account (+$18.4K incl. open positions): PEPE had been booked at −54R (fee dust reopened the trade), and ~$10K
+  of real P&L sat in rows marked "cancelled" whose entry Alpaca had already filled.
+- **Sync fixes**: an existing broker stop is adopted instead of duplicated (the duplicate's `insufficient balance`
+  left DOT/UNI stuck PENDING while Alpaca held them); fee dust (< $1) counts as flat everywhere; a position the
+  broker no longer holds is closed and settled; entries skip symbols Alpaca still holds or has orders on (wash
+  trades) and orders under $100.
+- **R is always shown**: realized when closed, live against the fill's 1R while open (it used to vanish once the
+  stop trailed past the entry), "awaiting fill" while pending; unfilled orders are not listed as trades.
+- **Fees**: `EXECUTION_RULES.FEE_RATE` crypto 0.1% → 0.2% per side (measured), so every backtest uses real costs.
+
+### Strategy decision (2026-09-26): intraday entries retired, daily trend is the core
+
+Same code, 120 days, Alpaca's real costs (`INTRADAY_AUTO_ENTRIES = false` in `intraday-scan.ts`):
+
+| Variant | Trades | Gross | Net (real costs) |
+|---|---|---|---|
+| Crypto 15m setup / 5m entry (live params) | 1,142 | +0.01R | **−0.39R** (±0.07) |
+| Crypto 1h / 15m, min stop 3%, 24h time stop | 284 | +0.05R | −0.13R |
+| US stocks 15m / 5m (33 liquid names, 90d IEX) | 103 | −0.13R | −0.24R |
+
+No regime or trend filter turned it positive; the 42 real demo trades agreed. The demo account's profit came
+from positions that stayed open for days — trend following. So automatic entries now come from the **daily-trend
+strategy** (9 years, 458 trades, +0.24R, 95% CI 0.12–0.36), executed at the broker **deterministically**: the
+agent comments but can no longer skip or shrink (its skips lowered out-of-sample expectancy, and when Gemini ran
+out of credits every signal became a SKIP). v2 4h crypto breakout stays off: +0.11R IS (n=54, 23% DD) / +0.65R
+OOS (n=11) with real fees — too thin to run. The main tick is scheduled by pg_cron (`trading-tick`, every 15 min).
+
+## Intraday strategy — testing phase (2026-09-14, entries retired 2026-09-26)
 
 Crypto only, tick every 5 minutes one minute after each 5m close (`/api/trading/intraday-tick`, Supabase **pg_cron** job `trading-intraday-tick`, `1-59/5 * * * *`, because Vercel Hobby
 crons are daily-only; auth token lives in `myself.trading_cron_tokens`). Code: `lib/trading/strategy/intraday.ts`

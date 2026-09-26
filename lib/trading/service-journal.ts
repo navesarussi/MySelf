@@ -28,7 +28,9 @@ export async function listTrades(f: TradeFilters): Promise<TradeListItem[]> {
   if (f.track) q = q.eq("track", f.track);
   if (f.symbol) q = q.eq("symbol", f.symbol.toUpperCase());
   if (f.state === "open") q = q.in("state", ["PENDING", "OPEN", "RISK_FREE"]);
-  if (f.state === "closed") q = q.eq("state", "CLOSED");
+  else if (f.state === "closed") q = q.eq("state", "CLOSED");
+  // An entry that never filled (rejected, expired) is an order, not a trade — it has no R to show.
+  else q = q.neq("state", "CANCELLED");
   if (f.outcome === "win") q = q.gt("realized_r", 0.6);
   if (f.outcome === "loss") q = q.lt("realized_r", 0);
   if (f.outcome === "breakeven") q = q.gte("realized_r", 0).lte("realized_r", 0.6);

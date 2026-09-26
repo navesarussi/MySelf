@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { isIntradayManaged } from "./engine";
 import { resurrectDesyncedTrades } from "./broker/resurrect";
+import { settleBrokerTrades, SETTLE_LOOKBACK_MS } from "./broker/settle";
 import { loadIntradayFrames, type IntradaySymbol } from "./intraday-data";
 import { getIntradayUniverse, providerSymbolFor, refreshIntradayUniverse } from "./intraday-universe";
 import { getOpenTrades, getSettings, logEvent, updateSettings, type TradeRow } from "./store";
@@ -14,7 +15,7 @@ import {
 } from "./intraday-context";
 import { scannableSymbols } from "./intraday-trade";
 import { advanceIntraday } from "./intraday-advance";
-import { scanAndEnter } from "./intraday-scan";
+import { INTRADAY_AUTO_ENTRIES, scanAndEnter } from "./intraday-scan";
 import { rateEnteredTriggers } from "./intraday-rate";
 import type { IntradayFeatures, IntradayFrames } from "./strategy/intraday";
 
@@ -37,7 +38,6 @@ export {
   ratingSnapshotFor,
   scannableSymbols,
   syncBrokerEntryNow,
-  syncSimEntryNow,
 } from "./intraday-trade";
 export type { IntradayAccount, IntradaySummary, StockSession } from "./intraday-context";
 export type { IntradayFeatures, IntradayFrames };
@@ -94,11 +94,20 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
       }
     }
     const managed = (await getOpenTrades()).filter((t) => isIntradayManaged(t.strategy_version));
-    const frames = await loadIntradayFrames(symbolsToLoad(scannableSymbols(universe, session), managed, session), now, summary.errors);
+    // With automatic entries retired only the open positions (and the market references) need bars.
+    const frames = await loadIntradayFrames(symbolsToLoad(INTRADAY_AUTO_ENTRIES ? scannableSymbols(universe, session) : [], managed, session), now, summary.errors);
     summary.symbols = frames.size;
     const lastPrices = new Map([...frames].map(([s, lf]) => [s, lf.lastPrice]));
 
     await advanceIntraday(managed, frames, lastPrices, session, now, summary);
+    if (settings.execution_venue === "ALPACA_PAPER") {
+      // Books from the fills before the account is loaded, so halts and equity see the real P&L.
+      try {
+        summary.settled = (await settleBrokerTrades({ now, sinceMs: now - SETTLE_LOOKBACK_MS })).settled;
+      } catch (err) {
+        summary.errors.push(`settle: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+      }
+    }
 
     const ia = await loadIntradayAccount(settings, lastPrices, now, summary.errors);
     if (settings.phase !== "PAPER" && settings.phase !== "SHADOW") summary.skipped_reason = `phase_${settings.phase.toLowerCase()}`;

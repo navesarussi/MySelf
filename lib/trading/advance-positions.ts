@@ -137,7 +137,8 @@ export async function advancePositions(input: {
         }
 
         if (trade.broker && (p.state === "OPEN" || p.state === "RISK_FREE" || p.state === "CLOSED")) {
-          Object.assign(brokerPatch, await mirrorToBroker(trade, p, events, input.lastPrices.get(symbol) ?? null, input.now));
+          // The row as it will be saved: an entry resolved above may have just placed (or adopted) the stop.
+          Object.assign(brokerPatch, await mirrorToBroker({ ...trade, ...brokerPatch } as TradeRow, p, events, input.lastPrices.get(symbol) ?? null, input.now));
         }
         await persistTrade(trade, p, events, brokerPatch, from, h1, input);
       }

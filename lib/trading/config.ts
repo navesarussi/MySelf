@@ -29,9 +29,16 @@ export const RISK_ENVELOPE = Object.freeze({
 export const EXECUTION_RULES = Object.freeze({
   MAX_ENTRY_SLIPPAGE: 0.003,
   MIN_PARTIAL_FILL: 0.7,
+  /** Smaller orders are noise (Alpaca rejects crypto under $10; fees and rounding dominate below ~$100). */
+  MIN_ORDER_NOTIONAL: 100,
   /** Pending limit orders expire after this many entry-timeframe bars. */
   PENDING_EXPIRY_BARS: 1,
-  FEE_RATE: Object.freeze({ STOCK: 0.0005, CRYPTO_MAJOR: 0.001, CRYPTO_ALT: 0.001 } as Record<AssetClass, number>),
+  /**
+   * Per side. Crypto: measured on the Alpaca demo account 2026-09-26 — 0.12–0.20% of each buy (taken in the
+   * asset) and 0.18–0.20% of each sell (CFEE rows); 0.1% had the backtests understating costs by half.
+   * Stocks: commission-free, only regulatory sell fees.
+   */
+  FEE_RATE: Object.freeze({ STOCK: 0.0001, CRYPTO_MAJOR: 0.002, CRYPTO_ALT: 0.002 } as Record<AssetClass, number>),
   /** Assumed slippage (fraction) used by backtests and paper fills. */
   ASSUMED_SLIPPAGE: Object.freeze({ STOCK: 0.0005, CRYPTO_MAJOR: 0.0005, CRYPTO_ALT: 0.001 } as Record<AssetClass, number>),
 });

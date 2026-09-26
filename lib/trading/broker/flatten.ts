@@ -1,5 +1,5 @@
 import type { AssetClass } from "../types";
-import { alpaca, isAlpacaInsufficientQty, sellableQty } from "./alpaca";
+import { alpaca, isAlpacaInsufficientQty, isDustPosition, sellableQty } from "./alpaca";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -49,7 +49,7 @@ export async function flattenAtBroker(t: {
 }): Promise<number | null> {
   await releaseReservedQty(t);
   let held = await alpaca.position(t.symbol, t.asset_class);
-  if (!held || Number(held.qty) <= 0) return null;
+  if (!held || isDustPosition(held)) return null;
   const fallback = Number(held.current_price) || null;
   let lastErr: unknown = null;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -57,7 +57,7 @@ export async function flattenAtBroker(t: {
       const order = await alpaca.closePosition(t.symbol, t.asset_class);
       const px = await fillPrice(order.id, fallback);
       held = await alpaca.position(t.symbol, t.asset_class);
-      if (!held || Number(held.qty) <= 0) return px;
+      if (isDustPosition(held)) return px;
       lastErr = new Error("alpaca_close_still_held");
     } catch (err) {
       lastErr = err;
@@ -76,7 +76,7 @@ export async function flattenAtBroker(t: {
     });
     const px = await fillPrice(order.id, fallback);
     held = await alpaca.position(t.symbol, t.asset_class);
-    if (!held || Number(held.qty) <= 0) return px;
+    if (isDustPosition(held)) return px;
   }
   throw lastErr instanceof Error ? lastErr : new Error("alpaca_flatten_failed");
 }

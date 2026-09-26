@@ -299,18 +299,19 @@ export function detectIntradaySetup(s: TfSeries, i: number, p: IntradayParams = 
  */
 export function confirmOn5m(f: IntradayFrames, h: IntradaySetupHit, now: number, p: IntradayParams = INTRADAY_PARAMS): IntradayCandidate | null {
   const setupBar = f.s15.bars[h.i];
-  const armedAt = setupBar.t + M15;
+  // Timeframes come from the series (15m/5m live; the research harness also runs 1h/15m).
+  const armedAt = setupBar.t + f.s15.ms;
   const atr15 = f.s15.atr[h.i];
   const start = closedIdx(f.s5, armedAt) + 1;
   for (let j = start; j < Math.min(f.s5.bars.length, start + p.confirm_window_5m); j++) {
     const b = f.s5.bars[j];
     if (b.t < armedAt) continue;
-    if (b.t + M5 > now) return null;
+    if (b.t + f.s5.ms > now) return null;
     if (b.l <= h.stop) return null;
     if (!(b.c > b.o && b.c >= setupBar.c && Number.isFinite(f.s5.ema20[j]) && b.c > f.s5.ema20[j])) continue;
     const plan = planAtPrice(b.c, h.stop, h.structural_target, atr15, p);
     if (!plan) return null;
-    return { ...h, ...plan, setup_bar_time: setupBar.t, confirm_time: b.t + M5 };
+    return { ...h, ...plan, setup_bar_time: setupBar.t, confirm_time: b.t + f.s5.ms };
   }
   return null;
 }
@@ -334,7 +335,7 @@ export function scanIntraday(f: IntradayFrames, now: number, p: IntradayParams =
   if (last < 0) return [];
   const out: IntradayCandidate[] = [];
   // Setup bar + its confirmation window + slack for a late/missed tick.
-  const oldestArmed = now - M15 - p.confirm_window_5m * M5 - M15;
+  const oldestArmed = now - f.s15.ms - p.confirm_window_5m * f.s5.ms - f.s15.ms;
   for (let i = last; i >= 0 && f.s15.bars[i].t >= oldestArmed; i--) {
     const h = detectIntradaySetup(f.s15, i, p);
     if (!h) continue;

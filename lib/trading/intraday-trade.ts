@@ -4,8 +4,7 @@ import { alpaca } from "./broker/alpaca";
 import { resolveBrokerEntry } from "./engine";
 import { type IntradaySymbol, type LoadedFrames } from "./intraday-data";
 import { type IntradayUniverseRow } from "./intraday-universe";
-import { applyExternalFill, newPendingPosition, type SimPosition } from "./position";
-import { EXECUTION_RULES } from "./config";
+import { newPendingPosition, type SimPosition } from "./position";
 import { closedIdx } from "./strategy/series";
 import { INTRADAY_PARAMS } from "./strategy/intraday";
 import { getOpenTrades, logEvent, simColumns, updateTrade, type TradeRow } from "./store";
@@ -139,27 +138,7 @@ export async function syncBrokerEntryNow(tradeId: string, now = Date.now()): Pro
   return pos.state;
 }
 
-/** Fill a sim-only pending entry at the live price (market now; limit when price already touched). */
-export async function syncSimEntryNow(tradeId: string, live: number, orderType: "MARKET" | "LIMIT", now = Date.now()): Promise<TradeRow["state"] | null> {
-  const trade = (await getOpenTrades()).find((t) => t.id === tradeId);
-  if (!trade || trade.broker || trade.state !== "PENDING" || !(live > 0)) return trade?.state ?? null;
-  const pos: SimPosition = { ...trade.sim_state };
-  if (orderType === "LIMIT" && live > pos.entry_limit) return "PENDING";
-  const slip = EXECUTION_RULES.ASSUMED_SLIPPAGE[trade.asset_class];
-  const raw = orderType === "MARKET" ? live : Math.min(live, pos.entry_limit);
-  const events: TradeRow["events"] = [...(trade.events ?? [])];
-  if (raw <= pos.stop_price) {
-    pos.state = "CANCELLED";
-    pos.cancel_reason = "GAP_BELOW_STOP";
-    pos.closed_at = now;
-    events.push({ type: "CANCELLED", reason: pos.cancel_reason, at: now });
-  } else {
-    events.push(...applyExternalFill(pos, raw * (1 + slip), pos.size, now));
-  }
-  await updateTrade(trade.id, { ...simColumns(pos), events });
-  return pos.state;
-}
-
+/** Symbols the tick scans: only what the Alpaca demo account can trade (no simulated-only trades), stocks while the market is open. */
 export function scannableSymbols(universe: IntradayUniverseRow[], session: StockSession): IntradayUniverseRow[] {
-  return universe.filter((u) => u.asset_class !== "STOCK" || session.open);
+  return universe.filter((u) => u.broker_tradable && (u.asset_class !== "STOCK" || session.open));
 }

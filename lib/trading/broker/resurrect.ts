@@ -1,4 +1,4 @@
-import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured } from "./alpaca";
+import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured, isDustPosition } from "./alpaca";
 import { revertFailedBrokerClose } from "./revert-close";
 import { matchBrokerOrphans } from "./reconcile";
 import { getClosedTrades, getOpenTrades, getSettings, logEvent, simColumns, symbolsLoggedOn, updateTrade } from "../store";
@@ -22,8 +22,12 @@ export async function resurrectDesyncedTrades(now: number): Promise<number> {
     if (t.broker !== "ALPACA_PAPER" || t.track !== "AGENT") continue;
     if (!closedBySymbol.has(t.symbol)) closedBySymbol.set(t.symbol, t);
   }
+  // A settled trade's fills prove it went flat — a holding on its symbol belongs to something else.
+  for (const [symbol, t] of closedBySymbol) if (t.broker_settled_at) closedBySymbol.delete(symbol);
+  // Fee dust left after a full sale is not a position — reopening a trade over
+  // it booked the dust sale as the exit (PEPE −54R).
   const match = matchBrokerOrphans(
-    held.map((p) => ({ symbol: p.symbol, qty: Number(p.qty) })),
+    held.filter((p) => !isDustPosition(p)).map((p) => ({ symbol: p.symbol, qty: Number(p.qty) })),
     new Set(open.map((t) => t.symbol)),
     closedBySymbol
   );
@@ -67,6 +71,7 @@ export async function resurrectDesyncedTrades(now: number): Promise<number> {
       realized_pnl: null,
       last_bar_time: new Date(now).toISOString(),
       broker_status: "resurrected",
+      broker_settled_at: null,
       broker_stop_order_id: null,
       events: [...(trade.events ?? []), { type: "STOP_MOVED", from: p.stop_price, to: p.stop_price, at: now, note: "resurrected — broker still held" }],
     });

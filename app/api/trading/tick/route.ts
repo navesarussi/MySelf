@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isTradingCronAuthorized } from "@/lib/api/cron-auth";
+import { isSchedulerAuthorized } from "@/lib/trading/scheduler-auth";
 import { runTick } from "@/lib/trading/engine";
 import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 300;
 
-/** Trading pipeline tick — called every 15 minutes by .github/workflows/trading-tick.yml. */
+/** Trading pipeline tick — every 15 minutes: Supabase pg_cron job `trading-tick` (GitHub Actions trading-tick.yml as a backup). */
 const handle = withRouteHandler(async function handle(req: NextRequest) {
-  if (!isTradingCronAuthorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await isSchedulerAuthorized(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     return NextResponse.json(await runTick());
   } catch (err) {

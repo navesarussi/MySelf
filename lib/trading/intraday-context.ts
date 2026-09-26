@@ -1,4 +1,4 @@
-import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
+import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured, isDustPosition } from "./broker/alpaca";
 import { marketClock } from "./broker/alpaca-data";
 import { loadAccount, type Account, type TickSummary } from "./engine";
 import { brokerEquity } from "./account-equity";
@@ -32,6 +32,8 @@ export const iso = (ms: number) => new Date(ms).toISOString();
 export type IntradaySummary = Pick<TickSummary, "positions_updated" | "closed" | "triggers" | "entries" | "blocked" | "errors" | "skipped_reason" | "duration_ms"> & {
   ratings: number;
   symbols: number;
+  /** Trades whose P&L/R were booked from Alpaca's fills this tick. */
+  settled?: number;
   stocks_open: boolean;
   universe_refreshed?: { crypto: number; stocks: number };
 };
@@ -56,13 +58,27 @@ export async function stockSession(now: number): Promise<StockSession> {
   };
 }
 
-export type IntradayAccount = { account: Account; buyingPower: { crypto: number | null; stock: number | null }; useBroker: boolean };
+export type IntradayAccount = {
+  account: Account;
+  buyingPower: { crypto: number | null; stock: number | null };
+  useBroker: boolean;
+  /** Symbols Alpaca holds (beyond fee dust) or has open orders on — a new entry there is a wash trade. */
+  brokerHeld: Set<string>;
+};
 
 export async function loadIntradayAccount(settings: TradingSettings, lastPrices: Map<string, number>, now: number, errors: string[]): Promise<IntradayAccount> {
   const account = await loadAccount(settings, await getOpenTrades(), lastPrices, now);
   const useBroker = settings.phase === "PAPER" && settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured();
   const buyingPower = { crypto: null as number | null, stock: null as number | null };
+  const brokerHeld = new Set<string>();
   if (useBroker) {
+    try {
+      const [positions, orders] = await Promise.all([alpaca.positions(), alpaca.allOpenOrders()]);
+      for (const p of positions) if (!isDustPosition(p)) brokerHeld.add(fromAlpacaPositionSymbol(p.symbol));
+      for (const o of orders) brokerHeld.add(fromAlpacaPositionSymbol(o.symbol));
+    } catch (err) {
+      errors.push(`alpaca_positions: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+    }
     try {
       const acct = await alpaca.account();
       // See brokerEquity: an unusable figure must not reach peak_equity.
@@ -77,7 +93,7 @@ export async function loadIntradayAccount(settings: TradingSettings, lastPrices:
       errors.push(`alpaca_account: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
     }
   }
-  return { account, buyingPower, useBroker };
+  return { account, buyingPower, useBroker, brokerHeld };
 }
 
 /** Testing phase: no correlation cap and no macro/funding/earnings vetoes for intraday (user-approved). */
