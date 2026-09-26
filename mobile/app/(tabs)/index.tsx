@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { api, type HomePayload } from "../../src/api/resources";
-import { todayLocalISO, useTodayDate } from "../../src/hooks";
+import { todayLocalISO, useMinuteNow, useTodayDate } from "../../src/hooks";
 import { useHabitActions } from "../../src/hooks/use-habit-actions";
 import { useI18n } from "../../src/i18n";
 import { useApiQuery, useApiMutation, queryKeys, queryClient, patchTaskInHome, patchRelationshipInHome } from "../../src/query";
@@ -49,10 +49,14 @@ export default function HomeScreen() {
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const today = todayISO();
   const todayDate = useTodayDate();
+  const habitNow = useMinuteNow();
   const uniqueHabits = useMemo(() => dedupeHabits(data?.habits ?? [], today), [data?.habits, today]);
   const habitsPendingToday = useMemo(
-    () => sortHabitsByReportUrgency(uniqueHabits).filter((h) => isAwaitingReport(h)),
-    [uniqueHabits]
+    () =>
+      sortHabitsByReportUrgency(uniqueHabits, habitNow).filter((h) =>
+        isAwaitingReport(h, habitNow),
+      ),
+    [uniqueHabits, habitNow],
   );
   const habitsOverdueToday = useMemo(() => filterOverdueHabits(uniqueHabits), [uniqueHabits]);
   const dueRelationships = useMemo(

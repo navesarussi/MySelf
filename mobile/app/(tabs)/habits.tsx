@@ -23,7 +23,13 @@ import { HabitCard } from "../../src/components/habit-card";
 import { HabitsReportedSection } from "../../src/components/habits-reported-section";
 import { HabitDetailsModal } from "../../src/components/habit-details-modal";
 import { HabitEditModal, type HabitEditFields } from "../../src/components/habit-edit-modal";
-import { dedupeHabits, habitNeedsAction, sortHabitsByOldestReport } from "@/lib/habit-stats";
+import {
+  dedupeHabits,
+  habitNeedsAction,
+  sortHabitsByOldestReport,
+  sortHabitsForToday,
+} from "@/lib/habit-stats";
+import { useMinuteNow } from "../../src/hooks";
 
 type AddFormState = {
   name: string;
@@ -67,17 +73,26 @@ export default function HabitsScreen() {
     }
   }, [params.add, router]);
 
-  const allHabits = useMemo(() => sortHabitsByOldestReport(dedupeHabits(data ?? [])), [data]);
+  const habitNow = useMinuteNow();
+  const uniqueHabits = useMemo(() => dedupeHabits(data ?? []), [data]);
 
   const { habitsPending, habitsReported } = useMemo(() => {
     const pending: Habit[] = [];
     const reported: Habit[] = [];
-    for (const habit of allHabits) {
-      if (habitNeedsAction(habit)) pending.push(habit);
+    for (const habit of uniqueHabits) {
+      if (habitNeedsAction(habit, habitNow)) pending.push(habit);
       else reported.push(habit);
     }
-    return { habitsPending: pending, habitsReported: reported };
-  }, [allHabits]);
+    return {
+      habitsPending: sortHabitsForToday(pending, habitNow),
+      habitsReported: sortHabitsByOldestReport(reported),
+    };
+  }, [uniqueHabits, habitNow]);
+
+  const allHabits = useMemo(
+    () => [...habitsPending, ...habitsReported],
+    [habitsPending, habitsReported],
+  );
 
   const viewingHabit = useMemo(
     () => (viewingHabitId ? allHabits.find((h) => h.id === viewingHabitId) ?? null : null),
