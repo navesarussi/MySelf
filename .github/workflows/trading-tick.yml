@@ -1,10 +1,10 @@
 name: Trading tick
 
-# Scanner + position manager for the trading system (Vercel Hobby crons are daily-only).
+# Scanner + position manager for the trading system — manual runs only.
+# The schedule lives in Supabase pg_cron (job `trading-tick`, minutes 3,18,33,48): GitHub's */15 schedule
+# drifted by hours, and two schedulers could run the tick concurrently on the same positions.
 # Requires secrets: MYSELF_API_URL, TRADING_CRON_SECRET (same value as the Vercel env var).
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 concurrency:

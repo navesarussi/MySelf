@@ -45,7 +45,9 @@ from positions that stayed open for days — trend following. So automatic entri
 strategy** (9 years, 458 trades, +0.24R, 95% CI 0.12–0.36), executed at the broker **deterministically**: the
 agent comments but can no longer skip or shrink (its skips lowered out-of-sample expectancy, and when Gemini ran
 out of credits every signal became a SKIP). v2 4h crypto breakout stays off: +0.11R IS (n=54, 23% DD) / +0.65R
-OOS (n=11) with real fees — too thin to run. The main tick is scheduled by pg_cron (`trading-tick`, every 15 min).
+OOS (n=11) with real fees — too thin to run. The main tick is scheduled by pg_cron (`trading-tick`, minutes
+3/18/33/48, same DB token as the intraday job); `trading-tick.yml` is now manual-only so two schedulers never
+run it concurrently.
 
 ## Intraday strategy — testing phase (2026-09-14, entries retired 2026-09-26)
 
@@ -122,7 +124,9 @@ agent's value is measured, not assumed.
 
 1. Migrations apply on push (`db-apply.yml`).
 2. Vercel env: `TRADING_CRON_SECRET`. Gemini key already exists.
-3. GitHub secrets: `TRADING_CRON_SECRET`, `MYSELF_API_URL` — `trading-tick.yml` runs every 15 minutes.
+3. Schedulers: Supabase pg_cron jobs `trading-tick` (main, every 15 min) and `trading-intraday-tick` (every 5 min),
+   authenticated with the token in `myself.trading_cron_tokens`. `trading-tick.yml` (GitHub secrets
+   `TRADING_CRON_SECRET`, `MYSELF_API_URL`) is a manual trigger.
 4. App: Trading → Backtests → run. Starts in phase **BACKTEST**; advances only through gates.
 
 CLI: `npx tsx scripts/trading/backtest.ts --preset CRYPTO --years 3`.
