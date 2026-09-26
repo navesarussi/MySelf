@@ -32,7 +32,10 @@ import type { ContentEntry, Goal, Habit, Relationship, Task } from "@/lib/types"
 
 export default function HomeScreen() {
   const { t, locale } = useI18n();
-  const { data, loading, isFetching, error, refresh } = useApiQuery(queryKeys.home, api.home);
+  const { data, loading, isFetching, error, refresh } = useApiQuery(queryKeys.home, api.home, {
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const { run, isPending } = useApiMutation();
   const {
     handleCheckIn: habitCheckIn,

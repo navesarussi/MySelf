@@ -31,6 +31,14 @@ export type MonthNetTotals = {
   net_actual: number;
 };
 
+/** Matches Money tab hero: income minus fixed/variable/planned section actuals. */
+export function monthNetFromPlanSections(input: {
+  actual_income: number;
+  actual_expense: number;
+}): number {
+  return round2(input.actual_income - input.actual_expense);
+}
+
 function inMonth(txn_date: string, month: string): boolean {
   return txn_date.startsWith(month);
 }

@@ -2,7 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { FinanceTransaction } from "../finance/ingest";
 import type { MerchantRule } from "../finance/merchant-rules";
-import { monthNet, monthNetFromTransactions } from "../finance/month-net";
+import {
+  monthNet,
+  monthNetFromPlanSections,
+  monthNetFromTransactions,
+} from "../finance/month-net";
+import { buildMonthPlanView, type PlanLineRow } from "../finance/plan";
 
 function txn(p: Partial<FinanceTransaction> & Pick<FinanceTransaction, "txn_date" | "amount" | "kind">): FinanceTransaction {
   return {
@@ -176,6 +181,67 @@ describe("monthNetFromTransactions", () => {
     );
     assert.equal(totals.actual_expense, 300);
     assert.equal(totals.net_actual, -300);
+  });
+
+  it("September-like totals when savings carry expense_type", () => {
+    const totals = monthNetFromTransactions(
+      [
+        txn({ txn_date: "2026-09-01", amount: 4143, kind: "income" }),
+        txn({ txn_date: "2026-09-02", amount: 2893, kind: "expense", category: "מזון" }),
+        txn({
+          txn_date: "2026-09-03",
+          amount: 1762,
+          kind: "expense",
+          category: "חיסכון",
+          expense_type: "savings",
+        }),
+      ],
+      "2026-09"
+    );
+    assert.equal(totals.net_actual, 1250);
+  });
+
+  it("raw txn net differs from plan sections when card batch is not yet reconciled", () => {
+    const lines: PlanLineRow[] = [
+      {
+        id: "1",
+        plan_id: "p",
+        line_type: "income",
+        name: "הכנסות",
+        category: null,
+        planned_amount: 5000,
+        sort_order: 0,
+      },
+      {
+        id: "2",
+        plan_id: "p",
+        line_type: "variable",
+        name: "מזון",
+        category: "מזון",
+        planned_amount: 1000,
+        sort_order: 1,
+      },
+    ];
+    const reconciled = [
+      txn({ txn_date: "2026-09-01", amount: 4143, kind: "income" }),
+      txn({ txn_date: "2026-09-05", amount: 2893, kind: "expense", category: "מזון" }),
+      txn({
+        txn_date: "2026-09-10",
+        amount: 1762,
+        kind: "expense",
+        merchant: "מקס איט",
+        description: "מקס איט פיננ",
+        is_internal: true,
+      }),
+    ];
+    const unreconciled = reconciled.map((t) =>
+      t.merchant === "מקס איט" ? { ...t, is_internal: false } : t
+    );
+    const view = buildMonthPlanView("2026-09", "p", lines, reconciled);
+    const raw = monthNetFromTransactions(unreconciled, "2026-09");
+    assert.equal(monthNetFromPlanSections(view.totals), 1250);
+    assert.equal(view.totals.net_actual, 1250);
+    assert.equal(raw.net_actual, -512);
   });
 
   it("counts split income toward net", () => {

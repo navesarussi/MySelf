@@ -16,7 +16,7 @@ import { isPrimaryGoogleEmail } from "@/lib/integrations/google-auth";
 import { formatUrgentFinanceLabel } from "@/lib/widget-snapshot";
 import { scheduleDataIntegrityCleanup } from "@/lib/schedule-data-integrity-cleanup";
 import type { Task } from "@/lib/types";
-import { fetchMonthNetActual } from "@/lib/finance/month-net-server";
+import { fetchMonthNetActual } from "@/lib/finance/plan-store";
 import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 /** Rows sampled for the average-close-days KPI. Ordered by updated_at so the
@@ -201,7 +201,8 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
       }
     : null;
 
-  return NextResponse.json({
+  return NextResponse.json(
+    {
     ...(degraded.length > 0 ? { degraded } : {}),
     habits,
     habitsPending,
@@ -230,5 +231,11 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
       (tradingRes?.settings ?? null) as Record<string, unknown> | null,
       tradingRes?.liveEquity ?? null
     ),
-  });
+  },
+    {
+      headers: {
+        "Cache-Control": "private, no-store, max-age=0",
+      },
+    }
+  );
 });

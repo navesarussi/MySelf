@@ -6,6 +6,7 @@ import { ApiError, type ApiConfig } from "../api/client";
 export type ApiQueryOptions = {
   enabled?: boolean;
   staleTime?: number;
+  refetchOnMount?: boolean | "always";
 };
 
 /**
@@ -39,6 +40,7 @@ export function useApiQuery<T>(
     queryFn,
     enabled: isEnabled,
     staleTime: options?.staleTime,
+    refetchOnMount: options?.refetchOnMount,
   });
 
   const refresh = useCallback(async () => {
