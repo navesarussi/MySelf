@@ -276,6 +276,27 @@ const SEGMENT_TOKENS: CompactToken[] = buildCompactTokens([
 /** Category prefixes that only match with a trailing space (avoid mid-word glued false positives). */
 const SPACED_ONLY_PREFIXES = new Set<string>(["ביטוח ופינ"]);
 
+const CARD_NEW_PREFIX = "חדשהבכרטיס";
+
+/** Lone Cal category blobs → readable spaced labels. */
+const LONE_CATEGORY_LABELS: Record<string, string> = {
+  "מזוןומשקא": "מזון ומשקאות",
+  "מזון ומשקאות": "מזון ומשקאות",
+  "ריהוטובית": "ריהוט ובית",
+  "ריהוט ובית": "ריהוט ובית",
+  "פנאיבילוי": "פנאי ובילוי",
+  "פנאיבילו": "פנאי ובילוי",
+  "פנאי בילוי": "פנאי ובילוי",
+  "מוצריאון": "מוצרי און",
+  "מוצרי און": "מוצרי און",
+};
+
+const GLUED_CATEGORY_LABELS: Record<string, string> = {
+  פנאיבילוי: "פנאי ובילוי",
+  פנאיבילו: "פנאי ובילוי",
+  מוצריאון: "מוצרי און",
+};
+
 export function sliceAfterCompactPrefix(text: string, prefixCompactLen: number): string {
   let ci = 0;
   let oi = 0;
@@ -287,6 +308,63 @@ export function sliceAfterCompactPrefix(text: string, prefixCompactLen: number):
 }
 
 /** Strip Cal category prefix (spaced or glued). Remainder must have ≥ 2 meaningful letters. */
+/** Strip Cal "new on card" marker before category/merchant remainder. */
+export function stripCardNewPrefix(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+
+  if (trimmed.startsWith(`${CARD_NEW_PREFIX} `) || trimmed === CARD_NEW_PREFIX) {
+    const rest = trimmed.slice(CARD_NEW_PREFIX.length).trim();
+    if (meaningfulCharCount(rest) >= 2) return rest;
+  }
+
+  const compact = compactHebrew(trimmed);
+  const prefixC = compactHebrew(CARD_NEW_PREFIX);
+  if (compact.startsWith(prefixC) && compact.length > prefixC.length) {
+    const rest = sliceAfterCompactPrefix(trimmed, prefixC.length);
+    if (meaningfulCharCount(rest) >= 2) return rest;
+  }
+  return trimmed;
+}
+
+export function stripCategoryAndCardPrefixes(text: string): string {
+  let s = text.trim();
+  for (let i = 0; i < 4; i++) {
+    const next = stripCategoryPrefix(stripCardNewPrefix(s));
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
+
+export function expandLoneCategoryLabel(text: string): string {
+  const t = text.trim();
+  if (LONE_CATEGORY_LABELS[t]) return LONE_CATEGORY_LABELS[t];
+  const compact = compactHebrew(t);
+  for (const [key, label] of Object.entries(LONE_CATEGORY_LABELS)) {
+    if (compactHebrew(key) === compact) return label;
+  }
+  return t;
+}
+
+export function expandGluedCategoryLabel(text: string): string {
+  const compact = compactHebrew(text.trim());
+  return GLUED_CATEGORY_LABELS[compact] ?? text.trim();
+}
+
+export function stripInsuranceCategoryPrefix(text: string): string {
+  const trimmed = text.trim();
+  if (/^ביטוח\s+ופינ\s+/iu.test(trimmed)) {
+    return trimmed.replace(/^ביטוח\s+ופינ\s+/iu, "").trim();
+  }
+  const compact = compactHebrew(trimmed);
+  const prefix = compactHebrew("ביטוח ופינ");
+  if (compact.startsWith(prefix) && compact.length > prefix.length) {
+    return sliceAfterCompactPrefix(trimmed, prefix.length);
+  }
+  return trimmed;
+}
+
 export function stripCategoryPrefix(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return trimmed;
@@ -404,7 +482,12 @@ export function normalizeBrandPhrases(text: string): string {
     [/בית\s*ש?מש/giu, "בית שמש"],
     [/רמלה\s*לוד|רמלוד/giu, "רמלה לוד"],
     [/חסונה/giu, "חסון"],
-    [/בינו\s+חנות/giu, "בינוי חניונ"],
+    [/^מילוד(?:\s+בע)?$/giu, "מי לוד"],
+    [/^כביש$/giu, "כביש 6"],
+    [/פמי\s*פרימיום|פמיפרימיום/giu, "פמי פרימיום"],
+    [/גזאלקטרהפאוור(?:סופרגז)?/giu, (m) =>
+      /סופרגז/i.test(m) ? "אלקטרה פאוור סופרגז" : "אלקטרה פאוור"],
+    [/(?<![\u0590-\u05FF])גז(?=אלקטרה)/giu, ""],
     [/גו\s*אה/giu, "גו אה"],
     [/לישראל\s*בע$/giu, "לישראל"],
     [/לישראלבע$/giu, "לישראל"],
@@ -428,8 +511,9 @@ function segmentGluedParts(text: string): string {
 }
 
 export function formatHebrewMerchantRemainder(text: string): string {
-  let s = stripCompanySuffix(text.trim());
+  let s = stripInsuranceCategoryPrefix(stripCompanySuffix(text.trim()));
   s = segmentGluedParts(s);
   s = normalizeBrandPhrases(s);
-  return stripCompanySuffix(s);
+  s = expandLoneCategoryLabel(stripCompanySuffix(s));
+  return s;
 }

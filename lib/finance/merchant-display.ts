@@ -4,10 +4,12 @@
  */
 
 import { pickPreferredMerchantLabel } from "@/lib/finance/cal-duplicate";
-import { normalizeHebrewDescription } from "@/lib/finance/hebrew-merchant";
 import {
+  expandGluedCategoryLabel,
+  expandLoneCategoryLabel,
   formatHebrewMerchantRemainder,
   meaningfulCharCount,
+  stripCategoryAndCardPrefixes,
   stripCategoryPrefix,
 } from "@/lib/finance/merchant-segment";
 import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
@@ -21,13 +23,25 @@ const CAL_STANDING_ORDER = /^(?:לא\s*)?(?:הוראת\s+קבע\s*)+/iu;
 const CAL_NOT_STANDING = /^לא\s+(?!הוראת\b|ומי\b)/iu;
 
 /** Cal category rows prefixed with standalone לא (not standing order). */
-const CAL_NOT_STANDING_CATEGORY = /^לא\s+(?=ביטוח|מוסדות|מזון|מסעדות|אנרגיה|גז|ציוד)/iu;
+const CAL_NOT_STANDING_CATEGORY = /^לא\s+(?=ביטוח|מוסדות|מזון|מסעדות|אנרגיה|גז|ציוד|ריהוט)/iu;
 
-const COUNTRY_CATEGORY_PREFIX =
-  /^(?:(?:לא\s+)?(?:ארצות\s*הברית|ארה"ב|יפן|ליטואניה|אוסטרליה|קפריסין|ישראל|אירלנד|בריטניה|אירופה|חו"ל))(?:\s+(?:שונות|תיירות|מחשבים|מוצרי(?:\s*און)?|מזון(?:\s*ו(?:משקאות|מהיר)?)?|פנאי(?:\s*בילוי)?|רכב(?:ות(?:\s*חבור)?)?|ריהוט(?:\s*ובית)?|בית|אנרגיה|ביטוח|מסעדות|מוסדות|עמותות(?:\s*ותר)?))?\s*/iu;
+const FOREIGN_COUNTRY_RULES: Array<{ re: RegExp; label: string }> = [
+  { re: /^אר(?:ה"ב|צות\s*הברית)/u, label: "ארצות הברית" },
+  { re: /^אירלנד/u, label: "אירלנד" },
+  { re: /^בריטניה/u, label: "בריטניה" },
+  { re: /^אירופה/u, label: "אירופה" },
+  { re: /^חו"ל/u, label: 'חו"ל' },
+  { re: /^יפן/u, label: "יפן" },
+  { re: /^ליטואניה/u, label: "ליטואניה" },
+  { re: /^אוסטרליה/u, label: "אוסטרליה" },
+  { re: /^קפריסין/u, label: "קפריסין" },
+  { re: /^ישראל/u, label: "ישראל" },
+];
 
 const LATIN_LOCATION_TAIL =
   /\s+(?:(?:\b(?:abu\s+dhabi|dubai|sydney|melbourne|larnaca|limassol|luxembourg|darlinghurst|ramat\s*gan|tel\s*aviv)\b|\b[a-z]{2,}\s+[a-z]{2,}\b|\b[a-z]{2}\b))(?:\s+\b[a-z]{2}\b)?$/i;
+
+const LEGAL_ENTITY_SUFFIX = /\s+\b(?:pty|ltd|llc|inc|corp|co|gmbh|llp|plc|limited)\.?\b/gi;
 
 type FriendlyRule = { pattern: RegExp; name: string };
 
@@ -59,6 +73,10 @@ const FRIENDLY_MERCHANTS: FriendlyRule[] = [
   { pattern: /autogrill/i, name: "Autogrill" },
 ];
 
+function stripLeadingStandaloneLo(text: string): string {
+  return text.trim().replace(/^לא\s+(?!הוראת\b|ומי\b)/iu, "");
+}
+
 function stripCalMarkers(text: string): string {
   let s = text.trim();
   for (let i = 0; i < 4; i++) {
@@ -66,12 +84,38 @@ function stripCalMarkers(text: string): string {
       .replace(CAL_STANDING_ORDER, "")
       .replace(CAL_NOT_STANDING_CATEGORY, "")
       .replace(CAL_NOT_STANDING, "")
-      .replace(COUNTRY_CATEGORY_PREFIX, "")
       .trim();
     if (next === s) break;
     s = next;
   }
   return s;
+}
+
+function parseForeignCountryRow(text: string): { country: string; remainder: string } | null {
+  const s = stripLeadingStandaloneLo(text);
+  for (const { re, label } of FOREIGN_COUNTRY_RULES) {
+    const m = s.match(re);
+    if (!m) continue;
+    const remainder = s.slice(m[0].length).trim();
+    if (remainder || s === label) return { country: label, remainder };
+  }
+  return null;
+}
+
+function formatForeignCountryDisplay(country: string, remainder: string): string {
+  if (!remainder) return country;
+  let inner = stripCategoryAndCardPrefixes(remainder);
+  if (!inner || meaningfulCharCount(inner) < 2) {
+    inner = expandGluedCategoryLabel(remainder);
+  } else {
+    inner = expandGluedCategoryLabel(inner);
+  }
+  if (/[\u0590-\u05FF]/.test(inner)) {
+    inner = formatHebrewMerchantRemainder(inner);
+  }
+  inner = expandLoneCategoryLabel(inner);
+  if (!inner) return country;
+  return `${inner} (${country})`;
 }
 
 /** @deprecated Use stripCategoryPrefix from merchant-segment */
@@ -94,6 +138,14 @@ function friendlyLatinName(text: string): string | null {
   return null;
 }
 
+function stripProcessorPrefix(text: string): string {
+  const m = text.trim().match(/^(?:ms|sq|sp)\s*\*?\s*(\S+)/i);
+  if (!m?.[1]) return text.trim();
+  const word = m[1];
+  if (/^nomads/i.test(word)) return "Nomads";
+  return word;
+}
+
 function stripLatinLocationJunk(text: string): string {
   let s = text.trim();
   for (let i = 0; i < 4; i++) {
@@ -101,6 +153,7 @@ function stripLatinLocationJunk(text: string): string {
       .replace(LATIN_LOCATION_TAIL, "")
       .replace(/\s+\d{4,}(?:\s+[\w.]*)?$/g, "")
       .replace(/\s+(?:www\.[\w.]+|[\w.]+\.(?:com|co|io|us|au|ae|cy|lu))\s*$/i, "")
+      .replace(LEGAL_ENTITY_SUFFIX, "")
       .trim();
     if (next === s) break;
     s = next;
@@ -108,20 +161,35 @@ function stripLatinLocationJunk(text: string): string {
   return s;
 }
 
+function trimTrailingPunctuation(text: string): string {
+  return text.replace(/[\s\-–—,.;:]+$/u, "").trim();
+}
+
+function formatLatinAcronym(text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 1 && /^[a-z0-9]{2,4}$/i.test(words[0]!)) {
+    return words[0]!.toUpperCase();
+  }
+  return text;
+}
+
 function titleLatinFallback(text: string): string {
-  const t = stripLatinLocationJunk(text.trim());
+  let t = stripLatinLocationJunk(stripProcessorPrefix(text.trim()));
+  t = trimTrailingPunctuation(t);
   if (!t) return t;
   const friendly = friendlyLatinName(t);
-  if (friendly) return friendly;
+  if (friendly) return trimTrailingPunctuation(friendly);
   if (!/[A-Za-z]/.test(t)) return t;
-  return t
+  const titled = t
     .split(/\s+/)
     .map((w) => {
       if (/^mcdonald/i.test(w)) return "McDonald's";
       if (/^[A-Z0-9*.,/\\-]+$/.test(w) && w.length <= 4) return w;
+      if (/^\d+$/.test(w)) return w;
       return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
     })
     .join(" ");
+  return trimTrailingPunctuation(formatLatinAcronym(titled));
 }
 
 function isMostlyLatin(text: string): boolean {
@@ -144,21 +212,34 @@ export function formatDisplayMerchantName(
   if (options?.raw) return formatMerchantLabel(raw);
 
   if (isMostlyLatin(raw)) {
-    const cleaned = stripLatinLocationJunk(raw);
+    const cleaned = stripLatinLocationJunk(stripProcessorPrefix(raw));
     const friendly = friendlyLatinName(cleaned);
-    if (friendly) return friendly;
+    if (friendly) return trimTrailingPunctuation(friendly);
     return titleLatinFallback(cleaned);
   }
 
+  const foreign = parseForeignCountryRow(raw);
+  if (foreign) {
+    return withMinLengthFallback(raw, formatForeignCountryDisplay(foreign.country, foreign.remainder));
+  }
+
   let s = formatMerchantLabel(raw);
+  s = stripLeadingStandaloneLo(s);
   s = stripCalMarkers(s);
-  s = stripCategoryPrefix(s);
+
+  const foreignAfterLo = parseForeignCountryRow(s);
+  if (foreignAfterLo) {
+    return withMinLengthFallback(raw, formatForeignCountryDisplay(foreignAfterLo.country, foreignAfterLo.remainder));
+  }
+
+  s = stripCategoryAndCardPrefixes(s);
 
   const latinFriendly = friendlyLatinName(s);
-  if (latinFriendly) return latinFriendly;
+  if (latinFriendly) return trimTrailingPunctuation(latinFriendly);
 
   if (/[\u0590-\u05FF]/.test(s)) {
     s = formatHebrewMerchantRemainder(s);
+    s = expandLoneCategoryLabel(s);
     return withMinLengthFallback(raw, s);
   }
 

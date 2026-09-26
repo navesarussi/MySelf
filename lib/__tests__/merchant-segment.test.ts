@@ -1,8 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  expandLoneCategoryLabel,
   formatHebrewMerchantRemainder,
   segmentMerchantRemainder,
+  stripCategoryAndCardPrefixes,
   stripCategoryPrefix,
   stripCompanySuffix,
 } from "../finance/merchant-segment";
@@ -14,7 +16,11 @@ describe("stripCategoryPrefix", () => {
     assert.equal(stripCategoryPrefix("מסעדותג'נט"), "ג'נט");
     assert.equal(stripCategoryPrefix("פנאיבילוישאפל"), "ישאפל");
     assert.equal(stripCategoryPrefix("אנרגיהדלקמנטה"), "דלקמנטה");
-    assert.equal(stripCategoryPrefix("חדשהבכרטיסלובי"), "לובי");
+  });
+
+  it("strips card-new prefix before category", () => {
+    assert.equal(stripCategoryAndCardPrefixes("חדשהבכרטיסעמותותותרלובי"), "לובי");
+    assert.equal(stripCategoryAndCardPrefixes("חדשהבכרטיסמוסדותמילודבע"), "מילודבע");
   });
 
   it("strips spaced categories", () => {
@@ -48,5 +54,12 @@ describe("formatHebrewMerchantRemainder", () => {
   it("normalizes known brand phrases", () => {
     assert.match(formatHebrewMerchantRemainder("חברתהחשמללישראלבע"), /חברת החשמל לישראל/);
     assert.match(formatHebrewMerchantRemainder("רשותהטבעוהגנים"), /רשות הטבע והגנים/);
+  });
+});
+
+describe("expandLoneCategoryLabel", () => {
+  it("expands lone Cal category blobs", () => {
+    assert.equal(expandLoneCategoryLabel("מזוןומשקא"), "מזון ומשקאות");
+    assert.equal(expandLoneCategoryLabel("ריהוטובית"), "ריהוט ובית");
   });
 });

@@ -7,7 +7,7 @@ import { normalizeStoredDisplayName } from "@/lib/finance/merchant-display";
 
 const previewPath =
   process.argv[2] ?? "/home/ubuntu/.cursor/projects/workspace/uploads/normalize-preview_a50e.json";
-const outPath = process.argv[3] ?? "/opt/cursor/artifacts/normalize-dryrun-v2.txt";
+const outPath = process.argv[3] ?? "/opt/cursor/artifacts/normalize-dryrun-v3.txt";
 
 type Preview = { totalRules: number; renames: Array<{ key_from: string; disp_from: string | null }> };
 
