@@ -427,6 +427,11 @@ export function TimelineCanvas({
             <Animated.View
               onLayout={onLayout}
               style={{
+                // Time runs left to right whatever the app's direction. Under
+                // RTL, iOS mirrored every absolute `left` while the pan, pinch
+                // and tap math stayed left-to-right: a drag snapped the other
+                // way on release and pinch zoomed around the mirrored point.
+                direction: "ltr",
                 height,
                 borderRadius: fullscreen ? 0 : tokens.radius,
                 borderWidth: fullscreen ? 0 : 1,
@@ -639,6 +644,7 @@ export function TimelineCanvas({
                             color={c}
                             eventsLabel={eventsLabel}
                             onPressCluster={openCluster}
+                            plotW={plotW}
                           />
                         );
                       })}
@@ -727,7 +733,9 @@ const ClusterMarker = React.memo(function ClusterMarker({
   color,
   eventsLabel,
   onPressCluster,
+  plotW,
 }: {
+  plotW: number;
   cluster: TimelineCluster;
   dupCount: number;
   axisY: number;
@@ -821,7 +829,17 @@ const ClusterMarker = React.memo(function ClusterMarker({
       </Pressable>
 
       {showLabel ? (
-        <Pressable onPress={onPress} style={{ position: "absolute", left: x - 58, top: labelTop, width: 116 }}>
+        <Pressable
+          onPress={onPress}
+          style={{
+            position: "absolute",
+            // Near an edge the label slides inward (its connector still marks
+            // the exact date) instead of being cut off by the board.
+            left: x >= 0 && x <= plotW ? Math.min(Math.max(x - 58, 2), plotW - 118) : x - 58,
+            top: labelTop,
+            width: 116,
+          }}
+        >
           <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 3 }}>
             <Text
               numberOfLines={1}
@@ -1005,6 +1023,7 @@ function Minimap({
       <View
         onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
         style={{
+          direction: "ltr",
           height: 40,
           marginTop: 8,
           borderRadius: tokens.radiusSm,
