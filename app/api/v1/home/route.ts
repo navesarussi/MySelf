@@ -3,7 +3,11 @@ import { getSupabase } from "@/lib/supabase";
 import { userDb } from "@/lib/db/user-db";
 import { isApiAuthorized, unauthorized } from "@/lib/api/auth";
 import { dedupeGoals, dedupeTasks } from "@/lib/data-integrity";
-import { dedupeHabits } from "@/lib/habit-stats";
+import {
+  countOverdueHabits,
+  dedupeHabits,
+  isAwaitingReport,
+} from "@/lib/habit-stats";
 import { avgTaskCloseDays } from "@/lib/task-stats";
 import { selectHomeEvents } from "@/lib/home-events";
 import { currentMonthKey, shapeTradingSnapshot } from "@/lib/home-snapshots";
@@ -178,7 +182,10 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
       projects: undefined,
     }))
   );
+  const now = new Date();
   const habits = dedupeHabits(habitsRes.data || []);
+  const habitsPending = habits.filter((h) => isAwaitingReport(h, now)).length;
+  const habitsOverdue = countOverdueHabits(habits, now);
   const activeGoals = dedupeGoals(goalsRes.data || []);
   scheduleDataIntegrityCleanup(
     habits.length < (habitsRes.data?.length ?? 0) ||
@@ -197,6 +204,8 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
   return NextResponse.json({
     ...(degraded.length > 0 ? { degraded } : {}),
     habits,
+    habitsPending,
+    habitsOverdue,
     activeGoals,
     doneGoalsCount: doneGoalsRes.count || 0,
     pendingCommitments: commitmentsRes.data || [],

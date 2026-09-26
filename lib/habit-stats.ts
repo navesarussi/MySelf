@@ -1,27 +1,43 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import type { HabitReportOutcome } from "@/lib/habit-history";
+import {
+  findJerusalemDayStart,
+  jerusalemClock,
+  jerusalemWallClockToDate,
+  nextJerusalemDay,
+  previousJerusalemDay,
+} from "@/lib/push/time";
 import type { Habit } from "@/lib/types";
 
 const MAX_MISSED_REPORT_DAYS = 14;
+
+/** Habits without an explicit report time are overdue from this Jerusalem hour. */
+export const HABIT_IMPLICIT_OVERDUE_MINUTES = 23 * 60;
 
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
 /**
- * The habit's current reporting day (YYYY-MM-DD). A fresh reporting window
- * opens every day at `report_time` (default "00:00"); before that time the
- * previous day's window is still the active one. Computed on the UTC clock so
- * that server actions and the (client-rendered) card agree, matching the
- * app-wide UTC day handling used by todayISO().
+ * The habit's current reporting day (YYYY-MM-DD, Asia/Jerusalem). With an
+ * explicit `report_time`, the window rolls at that wall-clock time; before it
+ * the previous Jerusalem calendar day is still active. With the default
+ * "00:00" (no explicit time), the window is the full Jerusalem calendar day.
  */
 export function habitReportDay(reportTime?: string | null, now = new Date()): string {
-  const [h = 0, m = 0] = (reportTime || "00:00").split(":").map(Number);
-  const minutesNow = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const threshold = (h || 0) * 60 + (m || 0);
-  const d = new Date(now);
-  if (minutesNow < threshold) d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
+  const { dayKey, minutes } = jerusalemClock(now);
+  if (!hasExplicitReportTime(reportTime)) {
+    return dayKey;
+  }
+  if (minutes < reportTimeMinutes(reportTime)) {
+    return previousJerusalemDay(dayKey);
+  }
+  return dayKey;
+}
+
+/** True when the user set a non-default daily report time. */
+export function hasExplicitReportTime(reportTime?: string | null): boolean {
+  return normalizeReportTime(reportTime) !== "00:00";
 }
 
 /** Normalize a stored time ("HH:MM" or "HH:MM:SS") to an input-friendly "HH:MM". */
@@ -35,26 +51,53 @@ function reportTimeMinutes(reportTime?: string | null): number {
   return (h || 0) * 60 + (m || 0);
 }
 
-/** UTC instant when the reporting window for `day` opens. */
+/** UTC instant when the reporting window for Jerusalem calendar `day` opens. */
 export function reportWindowOpensOn(day: string, reportTime?: string | null): Date {
-  const [h, m] = normalizeReportTime(reportTime).split(":").map(Number);
-  const d = parseISO(`${day}T00:00:00.000Z`);
-  d.setUTCHours(h || 0, m || 0, 0, 0);
-  return d;
+  if (!hasExplicitReportTime(reportTime)) {
+    return findJerusalemDayStart(day);
+  }
+  return jerusalemWallClockToDate(day, normalizeReportTime(reportTime));
 }
 
 /** UTC instant when the reporting window for `day` closes (next window opens). */
 export function reportWindowEndOn(day: string, reportTime?: string | null): Date {
-  const nextDay = format(addDays(parseISO(`${day}T00:00:00.000Z`), 1), "yyyy-MM-dd");
-  return reportWindowOpensOn(nextDay, reportTime);
+  if (!hasExplicitReportTime(reportTime)) {
+    return findJerusalemDayStart(nextJerusalemDay(day));
+  }
+  return jerusalemWallClockToDate(nextJerusalemDay(day), normalizeReportTime(reportTime));
 }
 
-/** True once today's report_time has passed and the habit was not checked for the active day. */
+/**
+ * True when the habit is overdue for its active reporting day: unchecked for
+ * that day and past the configured Jerusalem report time. Habits without an
+ * explicit report time (null / "00:00") become overdue from 23:00 Jerusalem
+ * on the active day only — earlier they stay pending, not overdue.
+ */
 export function isReportDue(habit: Habit, now = new Date()): boolean {
   const day = habitReportDay(habit.report_time, now);
   if (habit.last_checked_on === day) return false;
-  const minutesNow = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return minutesNow >= reportTimeMinutes(habit.report_time);
+
+  if (!hasExplicitReportTime(habit.report_time)) {
+    const { dayKey, minutes } = jerusalemClock(now);
+    if (dayKey !== day) {
+      return now.getTime() >= reportWindowEndOn(day, habit.report_time).getTime();
+    }
+    return minutes >= HABIT_IMPLICIT_OVERDUE_MINUTES;
+  }
+
+  const { minutes } = jerusalemClock(now);
+  return minutes >= reportTimeMinutes(habit.report_time);
+}
+
+/** Alias for overdue checks — same definition as {@link isReportDue}. */
+export const isHabitOverdue = isReportDue;
+
+export function filterOverdueHabits(habits: Habit[], now = new Date()): Habit[] {
+  return habits.filter((habit) => isReportDue(habit, now));
+}
+
+export function countOverdueHabits(habits: Habit[], now = new Date()): number {
+  return filterOverdueHabits(habits, now).length;
 }
 
 /** Habits waiting on the active report day (includes the grace period before report_time). */
@@ -285,11 +328,12 @@ export function habitActivityScore(habit: Habit, today = todayISO()): number {
   );
 }
 
-/** Minutes remaining until the habit's next report-window reset, on the UTC clock. */
+/** Minutes remaining until the habit's next report-window reset (Jerusalem). */
 function minutesUntilReportReset(reportTime: string | null | undefined, now: Date): number {
-  const [h = 0, m = 0] = (reportTime || "00:00").split(":").map(Number);
-  const threshold = (h || 0) * 60 + (m || 0);
-  const minutesNow = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const threshold = hasExplicitReportTime(reportTime)
+    ? reportTimeMinutes(reportTime)
+    : HABIT_IMPLICIT_OVERDUE_MINUTES;
+  const { minutes: minutesNow } = jerusalemClock(now);
   const minutes = (threshold - minutesNow + 1440) % 1440;
   return minutes === 0 ? 1440 : minutes;
 }
