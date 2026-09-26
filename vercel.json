@@ -1,5 +1,6 @@
 {
   "framework": "nextjs",
+  "ignoreCommand": "bash scripts/ci/vercel-should-build.sh",
   "regions": ["sin1"],
   "crons": [
     {
