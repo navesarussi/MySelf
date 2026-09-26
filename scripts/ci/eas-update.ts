@@ -16,11 +16,13 @@ import {
   decideOtaPublish,
   formatSkipInstructions,
   hasExpoUpdates,
+  resolveTestFlightBuildSha,
   validateExpoUpdatesConfig,
   EAS_UPDATE_CHANNEL,
   EAS_UPDATE_ENVIRONMENT,
   type ExpoAppConfig,
   type ExpoPackageJson,
+  type GitCommitLine,
 } from "../../lib/ci/eas-update-gate";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +46,28 @@ function readJsonAtPath<T>(path: string): T {
 function readJsonAtSha<T>(sha: string, filePath: string): T {
   const raw = run("git", ["show", `${sha}:${filePath}`]);
   return JSON.parse(raw) as T;
+}
+
+function commitsAfterTrigger(triggerSha: string): GitCommitLine[] {
+  try {
+    const raw = run("git", [
+      "log",
+      "--first-parent",
+      "--reverse",
+      "--format=%H %s",
+      `${triggerSha}..HEAD`,
+      "-10",
+    ]);
+    return raw
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const space = line.indexOf(" ");
+        return { sha: line.slice(0, space), subject: line.slice(space + 1) };
+      });
+  } catch {
+    return [];
+  }
 }
 
 function latestSuccessfulTestFlightSha(): string | null {
@@ -134,41 +158,54 @@ function main() {
     }
   }
 
-  const testFlightSha = latestSuccessfulTestFlightSha();
-  if (testFlightSha) {
-    log(`Last successful TestFlight iOS head SHA: ${testFlightSha}`);
+  const testFlightTriggerSha = latestSuccessfulTestFlightSha();
+  const testFlightBuildSha = testFlightTriggerSha
+    ? resolveTestFlightBuildSha(testFlightTriggerSha, commitsAfterTrigger(testFlightTriggerSha))
+    : null;
+
+  if (testFlightTriggerSha) {
+    log(`Last successful TestFlight iOS trigger SHA: ${testFlightTriggerSha}`);
+    if (testFlightBuildSha && testFlightBuildSha !== testFlightTriggerSha) {
+      log(
+        `Resolved post-bump build SHA: ${testFlightBuildSha} (binary embeds fingerprint from version-bumped app.json)`,
+      );
+    }
   }
 
   let testFlightHasExpoUpdates = false;
-  if (testFlightSha) {
+  if (testFlightBuildSha) {
     try {
-      const pkg = readJsonAtSha<ExpoPackageJson>(testFlightSha, "mobile/package.json");
+      const pkg = readJsonAtSha<ExpoPackageJson>(testFlightBuildSha, "mobile/package.json");
       testFlightHasExpoUpdates = hasExpoUpdates(pkg);
       log(
         testFlightHasExpoUpdates
-          ? `TestFlight SHA includes expo-updates (${pkg.dependencies?.["expo-updates"] ?? pkg.devDependencies?.["expo-updates"]})`
-          : "TestFlight SHA does not include expo-updates",
+          ? `TestFlight build SHA includes expo-updates (${pkg.dependencies?.["expo-updates"] ?? pkg.devDependencies?.["expo-updates"]})`
+          : "TestFlight build SHA does not include expo-updates",
       );
     } catch (err) {
-      log(`Could not read mobile/package.json at ${testFlightSha}: ${err instanceof Error ? err.message : err}`);
+      log(
+        `Could not read mobile/package.json at ${testFlightBuildSha}: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
   let headFingerprint: string | null = null;
   let testFlightFingerprint: string | null = null;
 
-  if (testFlightSha && testFlightHasExpoUpdates && config.ok) {
+  if (testFlightBuildSha && testFlightHasExpoUpdates && config.ok) {
     ensureMobileDeps(mobileRoot);
     headFingerprint = fingerprintAt(mobileRoot);
     log(`HEAD iOS fingerprint: ${headFingerprint}`);
 
-    testFlightFingerprint = fingerprintForSha(testFlightSha);
-    log(`TestFlight iOS fingerprint (${testFlightSha.slice(0, 7)}): ${testFlightFingerprint}`);
+    testFlightFingerprint = fingerprintForSha(testFlightBuildSha);
+    log(
+      `TestFlight iOS fingerprint (${testFlightBuildSha.slice(0, 7)}): ${testFlightFingerprint}`,
+    );
   }
 
   const decision = decideOtaPublish({
     hasExpoToken,
-    testFlightSha,
+    testFlightSha: testFlightTriggerSha,
     testFlightHasExpoUpdates,
     headFingerprint,
     testFlightFingerprint,

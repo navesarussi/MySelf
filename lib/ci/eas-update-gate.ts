@@ -7,6 +7,29 @@ export const EXPECTED_EAS_PROJECT_ID = "6f81d110-b64f-4339-8dc2-2c93ae180fe8";
 export const EAS_UPDATE_CHANNEL = "production";
 export const EAS_UPDATE_ENVIRONMENT = "production";
 
+/** Commit message from testflight-ios.yml after ci-bump-version.sh (embedded in binary). */
+export const TESTFLIGHT_VERSION_BUMP_SUBJECT =
+  "chore(mobile): bump version for TestFlight [skip ci]";
+
+export type GitCommitLine = { sha: string; subject: string };
+
+/**
+ * testflight-ios.yml bumps app.json version and pushes before `eas build --local`.
+ * GitHub records the triggering commit as headSha, but the binary embeds the
+ * post-bump fingerprint (version is included in @expo/fingerprint by default).
+ */
+export function resolveTestFlightBuildSha(
+  triggerSha: string,
+  commitsAfterTrigger: GitCommitLine[],
+): string {
+  for (const { sha, subject } of commitsAfterTrigger) {
+    if (subject === TESTFLIGHT_VERSION_BUMP_SUBJECT) {
+      return sha;
+    }
+  }
+  return triggerSha;
+}
+
 export type ExpoPackageJson = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;

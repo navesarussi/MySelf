@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   decideOtaPublish,
   hasExpoUpdates,
+  resolveTestFlightBuildSha,
   validateExpoUpdatesConfig,
   EXPECTED_EAS_PROJECT_ID,
+  TESTFLIGHT_VERSION_BUMP_SUBJECT,
 } from "../ci/eas-update-gate";
 
 describe("hasExpoUpdates", () => {
@@ -61,6 +63,30 @@ describe("validateExpoUpdatesConfig", () => {
     });
     assert.equal(r.ok, false);
     assert.match(r.issues.join(" "), /fingerprint/);
+  });
+});
+
+describe("resolveTestFlightBuildSha", () => {
+  const trigger = "dce49d5f9e87014e467ea59c647f534503c4e233";
+  const bump = "b52d2f3c6fb314009be1bf4f61857534e39c3578";
+
+  it("returns post-bump SHA when version bump commit follows trigger", () => {
+    const resolved = resolveTestFlightBuildSha(trigger, [
+      { sha: bump, subject: TESTFLIGHT_VERSION_BUMP_SUBJECT },
+      { sha: "a5f41135b5d9ebdc79ec4623f05b818d550a10ce", subject: "fix(ci): OTA gate" },
+    ]);
+    assert.equal(resolved, bump);
+  });
+
+  it("returns trigger SHA when no bump commit is present", () => {
+    const resolved = resolveTestFlightBuildSha(trigger, [
+      { sha: "a5f41135b5d9ebdc79ec4623f05b818d550a10ce", subject: "fix(ci): OTA gate" },
+    ]);
+    assert.equal(resolved, trigger);
+  });
+
+  it("returns trigger SHA when commit list is empty", () => {
+    assert.equal(resolveTestFlightBuildSha(trigger, []), trigger);
   });
 });
 
