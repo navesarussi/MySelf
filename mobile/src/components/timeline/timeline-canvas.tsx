@@ -61,6 +61,8 @@ const LABEL_TOP_GAP = 16;
  *  axis position no longer depends on how many lanes the current zoom needs —
  *  it used to, so the whole board bobbed up and down while zooming. */
 const RESERVED_LABEL_LANES = 3;
+/** Label lanes a short board keeps by compressing the period tracks. */
+const MIN_LABEL_LANES = 2;
 /** Width of one density-strip column. */
 const DENSITY_BIN_PX = 4;
 const DENSITY_MAX_H = 9;
@@ -311,7 +313,15 @@ export function TimelineCanvas({
   const padMax = deferredView.max + span;
 
   const { lanes, laneCount } = useMemo(() => stablePeriodLanes(periods, today), [periods, today]);
-  const tracksH = tracksHeight(laneCount);
+  // Short boards (landscape full screen is ~250pt) compress the period tracks,
+  // down to half, so at least two label lanes always fit under the axis.
+  const fullTracksH = tracksHeight(laneCount);
+  const minBelowAxis = LABEL_TOP_GAP + MIN_LABEL_LANES * EVENT_LANE_H + 12;
+  const trackScale = Math.min(
+    1,
+    Math.max(0.5, (height - minBelowAxis - axisLineTop(0) - 8) / fullTracksH)
+  );
+  const tracksH = fullTracksH * trackScale;
   const intrinsicAxisY = axisLineTop(tracksH);
 
   const zoomLevel = spanToZoomLevel(span);
@@ -485,8 +495,8 @@ export function TimelineCanvas({
                               position: "absolute",
                               left: spanPx.left,
                               width: spanPx.width,
-                              top: topPad + geom.top,
-                              height: geom.bottom - geom.top,
+                              top: topPad + geom.top * trackScale,
+                              height: (geom.bottom - geom.top) * trackScale,
                               borderRadius: 9,
                               borderTopStartRadius: spanPx.clippedStart ? 0 : 9,
                               borderBottomStartRadius: spanPx.clippedStart ? 0 : 9,
@@ -516,7 +526,12 @@ export function TimelineCanvas({
                               >
                                 <Text
                                   numberOfLines={1}
-                                  style={{ color: c.ink, fontSize: 11, fontWeight: "700", maxWidth: label.width }}
+                                  style={{
+                                    color: c.ink,
+                                    fontSize: trackScale < 0.7 ? 10 : 11,
+                                    fontWeight: "700",
+                                    maxWidth: label.width,
+                                  }}
                                 >
                                   {p.title}
                                 </Text>
@@ -673,9 +688,11 @@ export function TimelineCanvas({
         color={c}
       />
 
-      <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "center", marginTop: 6 }}>
-        {t("timeline.gestureHint")}
-      </Text>
+      {fullscreen ? null : (
+        <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: "center", marginTop: 6 }}>
+          {t("timeline.gestureHint")}
+        </Text>
+      )}
     </View>
   );
 }
