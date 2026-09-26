@@ -2,12 +2,11 @@ import { getSupabase } from "@/lib/supabase";
 import { EXECUTION_RULES, RISK_ENVELOPE } from "./config";
 import type { StrategyV2Params } from "./strategy/candidates";
 import { computePhaseGate, type PhaseGateView } from "./service-gates";
-import { createBarCache } from "./market-data";
 import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
 import { openRiskR } from "./position";
-import { brokerEquity, equityFromTrades } from "./account-equity";
+import { brokerEquity, computeLiveEquityWithPrices } from "./account-equity";
 import { drawdownFromPeak, haltStatus, weekStartIso } from "./risk-envelope";
-import { getActiveV2Params, getClosedTrades, getOpenTrades, getSettings, getUniverse, isAccountTrade, type TradeRow, type TradingSettings, type UniverseRow } from "./store";
+import { getActiveV2Params, getClosedTrades, getOpenTrades, getSettings, isAccountTrade, type TradeRow, type TradingSettings } from "./store";
 import { round } from "./round";
 
 /** The trading dashboard read model: equity, open positions, phase gate, recent activity. */
@@ -151,32 +150,6 @@ export async function getBrokerStatus(venue: "SIM" | "ALPACA_PAPER"): Promise<Br
   }
 }
 
-/** External bar/quote fetch — kept for commands and chat; not on the hot dashboard path. */
-export async function lastPrices(trades: TradeRow[], universe: UniverseRow[]) {
-  const cache = createBarCache();
-  const out = new Map<string, number>();
-  const { livePrice } = await import("./intraday-data");
-  await Promise.all(
-    [...new Set(trades.map((t) => t.symbol))].map(async (symbol) => {
-      const u = universe.find((x) => x.symbol === symbol);
-      if (!u) return;
-      try {
-        const bars = await cache.get(u, "1h", 6);
-        const last = bars.at(-1);
-        if (last) {
-          out.set(symbol, last.c);
-          return;
-        }
-      } catch {
-        /* fall through to live quote */
-      }
-      const px = await livePrice({ symbol: u.symbol, asset_class: u.asset_class, provider_symbol: u.provider_symbol });
-      if (px) out.set(symbol, px);
-    })
-  );
-  return out;
-}
-
 export async function getTriggers(opts: { limit?: number; symbol?: string } = {}): Promise<TriggerRow[]> {
   let q = getSupabase().from("trading_triggers").select("*").order("created_at", { ascending: false }).limit(opts.limit ?? 30);
   if (opts.symbol) q = q.eq("symbol", opts.symbol.toUpperCase());
@@ -227,18 +200,18 @@ function toLivePosition(t: TradeRow, prices: Map<string, number>): LivePosition 
   };
 }
 
-/** DB-only dashboard core — no external market-data or broker calls. */
+/** Dashboard core — live equity uses the same marks as the equity endpoint. */
 export async function getDashboardOverview(): Promise<DashboardOverview> {
   const settings = await getSettings();
-  const [open, closed, active] = await Promise.all([
+  const [open, closed, active, live] = await Promise.all([
     getOpenTrades(),
     getClosedTrades({ sinceIso: settings.phase_started_at }),
     getActiveV2Params(),
+    computeLiveEquityWithPrices(settings),
   ]);
   const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
   const otherOpen = open.filter((t) => !isAccountTrade(t, settings.phase));
-  // Position cards poll live prices client-side; entry_price fallback keeps equity sane.
-  const prices = new Map<string, number>();
+  const prices = live.prices;
   const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase) && t.closed_at && t.closed_at >= settings.phase_started_at);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
@@ -254,7 +227,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
 
   const positions = accountOpen.map((t) => toLivePosition(t, prices));
   const otherPositions = otherOpen.map((t) => toLivePosition(t, prices));
-  const equity = equityFromTrades(settings, accountOpen, accountClosed, prices);
+  const equity = live.equity;
   const peak = Math.max(settings.peak_equity, equity);
   const dd = drawdownFromPeak(equity, peak);
   const halts = haltStatus({ realized_r_today: d.r, realized_r_week: w.r });

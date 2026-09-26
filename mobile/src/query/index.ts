@@ -9,6 +9,7 @@ export * from "./task-sync";
 export * from "./timeline-cache";
 export * from "./timeline-store";
 export * from "./use-api-query";
+export * from "./use-trading-equity";
 export * from "./section-state";
 export * from "./use-api-mutation";
 export * from "./use-timeline-events";

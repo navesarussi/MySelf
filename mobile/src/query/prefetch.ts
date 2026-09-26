@@ -1,5 +1,6 @@
 import { queryClient } from "./client";
 import { queryKeys } from "./keys";
+import { fetchTradingEquity } from "./use-trading-equity";
 import { hydrateTimelineCache, startTimelinePersistence } from "./timeline-store";
 import { api } from "../api/resources";
 import type { ApiConfig } from "../api/client";
@@ -44,6 +45,7 @@ export function prefetchAppShell(config: ApiConfig) {
     })
   );
   void queryClient.prefetchQuery({ queryKey: queryKeys.periods, queryFn: () => api.periods(config) });
+  void queryClient.prefetchQuery({ queryKey: queryKeys.tradingEquity, queryFn: () => fetchTradingEquity(config) });
   void queryClient.prefetchQuery({ queryKey: queryKeys.tradingDashboard, queryFn: () => api.tradingDashboard(config) });
   void queryClient.prefetchQuery({
     queryKey: queryKeys.tradingTriggersFeed,

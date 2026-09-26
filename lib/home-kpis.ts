@@ -1,3 +1,5 @@
+import { tradingEquityTone, tradingPnl } from "./trading/equity-display";
+
 export type HomeKpiHref = "/habits" | "/relationships" | "/goals" | "/tasks" | "/finance" | "/trading";
 
 export type HomeKpiInput = {
@@ -116,14 +118,14 @@ export function buildHomeKpis(i: HomeKpiInput): HomeKpiSpec[] {
     },
   ];
   if (i.tradingEquity !== null) {
-    const pnl = i.tradingStartingEquity != null ? i.tradingEquity - i.tradingStartingEquity : 0;
+    const pnl = i.tradingStartingEquity != null ? tradingPnl(i.tradingEquity, i.tradingStartingEquity) : 0;
     items.splice(5, 0, {
       id: "trading",
       labelKey: "home.tradingEquity",
       value: String(i.tradingEquity),
       hintKey: i.tradingStartingEquity != null ? "home.tradingPnl" : undefined,
-      hintParams: i.tradingStartingEquity != null ? { pnl: Math.round(pnl) } : undefined,
-      tone: i.tradingKill ? "warn" : pnl < 0 ? "warn" : pnl > 0 ? "good" : "default",
+      hintParams: i.tradingStartingEquity != null ? { pnl } : undefined,
+      tone: tradingEquityTone(pnl, i.tradingKill),
       href: "/trading",
     });
   }

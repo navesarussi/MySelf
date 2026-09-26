@@ -15,6 +15,7 @@ import { AntDesign, Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
 import { SessionProvider, useSession } from "../src/session";
 import type { HomePayload } from "../src/api/resources";
+import type { TradingEquitySnapshot } from "@/lib/trading/types-client";
 import { clearAccountCaches, queryKeys } from "../src/query";
 import { syncWidgetSnapshot, useWidgetHomeQuerySync } from "../src/widget/sync-widget-snapshot";
 import { setAppVersion } from "../src/api/client";
@@ -76,11 +77,14 @@ function useWidgetSnapshotLifecycle() {
       if (state === "active" && signedIn) {
         // Refresh home after widget App Intents so KPIs rewrite from the server.
         void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tradingEquity });
         return;
       }
       if (state !== "background" && state !== "inactive") return;
       const home = queryClient.getQueryData<HomePayload>(queryKeys.home) ?? null;
-      void syncWidgetSnapshot({ signedIn, home }).catch(() => {});
+      const tradingEquity =
+        queryClient.getQueryData<TradingEquitySnapshot | null>(queryKeys.tradingEquity) ?? null;
+      void syncWidgetSnapshot({ signedIn, home, tradingEquity }).catch(() => {});
     });
     return () => sub.remove();
   }, [signedIn]);

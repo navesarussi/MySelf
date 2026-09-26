@@ -28,6 +28,7 @@ import type {
   TradingParamSet,
   TradingProposal,
   TradingProposalOption,
+  TradingEquitySnapshot,
   TradingTradeDetail,
   TriggerRow,
   UniverseRow,
@@ -672,6 +673,7 @@ export const api = {
     return data as import("@/lib/finance/import/types").ImportUploadSummary;
   },
   tradingDashboard: (c: ApiConfig) => apiFetch<DashboardOverview>(c, "/trading/dashboard"),
+  tradingEquity: (c: ApiConfig) => apiFetch<TradingEquitySnapshot>(c, "/trading/equity"),
   tradingBroker: (c: ApiConfig) => apiFetch<BrokerStatus>(c, "/trading/broker"),
   tradingEvents: (c: ApiConfig, limit = 30) => apiFetch<TradingEvent[]>(c, `/trading/events?limit=${limit}`),
   tradingTrades: (c: ApiConfig, filters: Record<string, string | undefined> = {}) => {
