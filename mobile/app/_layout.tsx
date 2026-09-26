@@ -31,6 +31,7 @@ import {
   setErrorReportingConfig,
 } from "../src/error-reporting";
 import { usePushNotifications } from "../src/push/use-push";
+import { useExpoUpdates } from "../src/updates/use-expo-updates";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { queryClient } from "../src/query/client";
 import { persistOptions } from "../src/query/persist";
@@ -95,6 +96,7 @@ function AppStack() {
   const { resolved } = useTheme();
   const { t } = useI18n();
   usePushNotifications();
+  useExpoUpdates();
   useErrorReportingLifecycle();
   useWidgetSnapshotLifecycle();
   useClearCachesOnSignOut();

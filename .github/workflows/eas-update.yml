@@ -1,0 +1,47 @@
+# Publish JS-only EAS Updates after main pushes when the native fingerprint is
+# unchanged. Native changes defer to testflight-ios.yml.
+#
+# Required secret: EXPO_TOKEN — https://expo.dev/accounts/saussilberg/settings/access-tokens
+# When missing, the job exits successfully with instructions in the log.
+name: EAS Update (OTA)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - "lib/**"
+      - "!lib/**/__tests__/**"
+      - "!mobile/**/__tests__/**"
+  workflow_dispatch:
+
+concurrency:
+  group: eas-update
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Publish OTA update
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish EAS Update when fingerprint matches production build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/ci-eas-update.mjs
