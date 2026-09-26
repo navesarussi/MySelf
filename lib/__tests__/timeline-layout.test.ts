@@ -10,6 +10,9 @@ import {
   TRACKS_PAD_TOP,
   tracksHeight,
   timelineTicks,
+  yearTicks,
+  YEAR_MS,
+  DAY_MS,
   toTime,
 } from "../timeline-layout";
 import type { LifePeriod } from "../life-periods";
@@ -154,5 +157,18 @@ describe("month ticks at coarse steps", () => {
     const ticks = timelineTicks(min, max, 900, "en-US");
     const labels = ticks.map((t) => t.label);
     assert.ok(labels.includes("2021") && labels.includes("2022"), labels.join(","));
+  });
+});
+
+describe("year tick step", () => {
+  it("does not change when the view pans at a constant zoom", () => {
+    const span = 9 * YEAR_MS;
+    const steps = new Set<number>();
+    for (let k = 0; k < 24; k++) {
+      const min = new Date(2010, 0, 1).getTime() + k * 30 * DAY_MS;
+      const years = yearTicks(min, min + span, 380).map((t) => t.year);
+      steps.add(years[1] - years[0]);
+    }
+    assert.equal(steps.size, 1, `steps seen: ${[...steps].join(",")}`);
   });
 });
