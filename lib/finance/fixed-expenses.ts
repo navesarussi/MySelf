@@ -14,8 +14,6 @@ import { normalizeMerchantKey, type MerchantRule } from "@/lib/finance/merchant-
 import { round2 } from "@/lib/finance/money";
 import type { FinanceTransaction } from "@/lib/finance/types";
 
-export { isDormantFixedExpense, partitionFixedExpenses } from "@/lib/finance/fixed-expense-dormant";
-
 export type { MatchedTxn };
 
 export type FixedExpenseFrequency = "monthly" | "weekly" | "yearly";
