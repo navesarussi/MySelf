@@ -3,7 +3,7 @@ import { type PlanLineType, PLAN_SECTION_ORDER } from "@/lib/finance/expense-typ
 import { weekBucketsForMonth, weeklyVariablePace } from "@/lib/finance/weekly";
 import type { MerchantRule } from "@/lib/finance/merchant-rules";
 import type { MonthPlanView, PlanLineRow, PlanLineView, PlanSectionView } from "@/lib/finance/plan-types";
-import { monthNetFromTransactions, type MonthNetSplit } from "@/lib/finance/month-net";
+import { monthNetFromPlanSections } from "@/lib/finance/month-net";
 import { actualForLine, groupActuals, round2, type SeedGroup } from "@/lib/finance/plan-actuals";
 
 export type { PlanLineType, PlanLineRow, PlanLineView, PlanSectionView, MonthPlanView };
@@ -97,8 +97,7 @@ export function buildMonthPlanView(
   lines: PlanLineRow[],
   txns: FinanceTransaction[],
   rulesMap?: Map<string, MerchantRule>,
-  weeklyBudgetOverride: number | null = null,
-  splitsByParentId?: ReadonlyMap<string, readonly MonthNetSplit[]>
+  weeklyBudgetOverride: number | null = null
 ): MonthPlanView {
   const sections = {} as Record<PlanLineType, PlanSectionView>;
 
@@ -121,7 +120,6 @@ export function buildMonthPlanView(
   const planned_expense = round2(sections.fixed.planned_total + sections.variable.planned_total + sections.planned.planned_total);
   const actual_expense = round2(sections.fixed.actual_total + sections.variable.actual_total + sections.planned.actual_total);
   const savings_planned = sections.savings.planned_total;
-  const netTotals = monthNetFromTransactions(txns, month, rulesMap, splitsByParentId);
   const weeks = weekBucketsForMonth(month, txns);
 
   return {
@@ -135,7 +133,7 @@ export function buildMonthPlanView(
       planned_expense,
       actual_expense,
       net_planned: round2(planned_income - planned_expense - savings_planned),
-      net_actual: netTotals.net_actual,
+      net_actual: monthNetFromPlanSections({ actual_income, actual_expense }),
       savings_planned,
     },
     weeks,

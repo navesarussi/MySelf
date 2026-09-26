@@ -2,6 +2,7 @@
 export {
   expenseCountsTowardNet,
   monthNet,
+  monthNetFromPlanSections,
   monthNetFromTransactions,
   type MonthNetSplit,
   type MonthNetTotals,

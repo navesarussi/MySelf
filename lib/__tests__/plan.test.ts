@@ -151,6 +151,7 @@ describe("buildMonthPlanView", () => {
     );
     assert.equal(view.totals.net_actual, 4200);
     assert.equal(view.sections.savings.actual_total, 1200);
+    assert.equal(view.totals.actual_income - view.totals.actual_expense, view.totals.net_actual);
   });
 });
 

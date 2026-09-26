@@ -13,7 +13,7 @@ import { inferredCategory, inferTxnKind, shouldSkipCategorizationPrompt } from "
 import type { FinanceSource } from "@/lib/finance/external-key";
 import { fetchMerchantRulesMap } from "@/lib/finance/merchant-rules";
 import { reconcileMonthTransactions } from "@/lib/finance/reconcile";
-import { fetchSplitsByParentIds } from "@/lib/finance/month-net-server";
+import { monthNetFromPlanSections } from "@/lib/finance/month-net";
 import { fetchTransactionsInRange, monthBounds } from "@/lib/finance/txn-range";
 
 /** Bank/card sync and import sources — kind is authoritative from the feed. */
@@ -181,11 +181,8 @@ export async function getOrCreateMonthPlan(month: string): Promise<MonthPlanView
   let lines = (lineRows ?? []).map((r) => rowToLine(r as Record<string, unknown>));
   lines = await ensureTemplateLines(planId!, lines);
 
-  const [rulesMap, splitsByParentId] = await Promise.all([
-    fetchMerchantRulesMap(),
-    fetchSplitsByParentIds(txns.map((t) => t.id)),
-  ]);
-  return buildMonthPlanView(month, planId!, lines, txns, rulesMap, weeklyOverride, splitsByParentId);
+  const rulesMap = await fetchMerchantRulesMap();
+  return buildMonthPlanView(month, planId!, lines, txns, rulesMap, weeklyOverride);
 }
 
 async function ensurePlanRow(month: string): Promise<PlanMeta> {
@@ -276,4 +273,16 @@ export async function addPlanLine(input: {
 export async function deletePlanLine(lineId: string): Promise<void> {
   const { error } = await getSupabase().from("finance_plan_lines").delete().eq("id", lineId);
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Canonical month net for Home KPI and widgets. Runs the same reconcile +
+ * classify pipeline as the Money tab before summing plan section actuals.
+ */
+export async function fetchMonthNetActual(month: string): Promise<number> {
+  const view = await getOrCreateMonthPlan(month);
+  return monthNetFromPlanSections({
+    actual_income: view.totals.actual_income,
+    actual_expense: view.totals.actual_expense,
+  });
 }
