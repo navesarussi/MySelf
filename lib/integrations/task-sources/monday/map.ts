@@ -48,15 +48,22 @@ export function mapMondayItem(
       account_name: ctx.accountName,
       statusColumnId: ctx.statusColumnId ?? undefined,
       statusLabel: status.label ?? undefined,
+      statusLabels: ctx.statusLabels,
     },
   };
 }
 
+const DONE_LABEL_RE = /^(done|complete|completed|בוצע|הושלם|נסגר)$/i;
+
 export function pickDoneLabel(labels: { label: string; is_done?: boolean }[]): string | null {
   const done = labels.filter((l) => l.is_done);
-  if (!done.length) return null;
-  const preferred = done.find((l) => /^(done|complete|completed)$/i.test(l.label));
-  return (preferred ?? done[0]).label;
+  if (done.length) {
+    const preferred = done.find((l) => /^(done|complete|completed)$/i.test(l.label));
+    return (preferred ?? done[0]).label;
+  }
+  const byText = labels.find((l) => DONE_LABEL_RE.test(l.label));
+  if (byText) return byText.label;
+  return labels.length > 0 ? labels[labels.length - 1]!.label : null;
 }
 
 export function pickReopenLabel(

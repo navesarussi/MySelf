@@ -1,4 +1,4 @@
-import type { TaskSourceProvider, ExternalTaskDraft } from "../types";
+import type { TaskSourceProvider, ExternalTaskDraft, TaskWritebackOpts } from "../types";
 import {
   fetchAssignedOpenIssues,
   fetchGithubRepos,
@@ -36,13 +36,13 @@ export function createGithubProvider(): TaskSourceProvider {
       return drafts;
     },
 
-    async complete(externalId: string, _listId: string) {
+    async complete(externalId: string, _listId: string, _opts?: TaskWritebackOpts) {
       const accessToken = await getGithubAccessToken();
       const { owner, repo, number } = parseGithubExternalId(externalId);
       await setGithubIssueState(accessToken, owner, repo, number, "closed");
     },
 
-    async reopen(externalId: string, _listId: string) {
+    async reopen(externalId: string, _listId: string, _opts?: TaskWritebackOpts) {
       const accessToken = await getGithubAccessToken();
       const { owner, repo, number } = parseGithubExternalId(externalId);
       await setGithubIssueState(accessToken, owner, repo, number, "open");

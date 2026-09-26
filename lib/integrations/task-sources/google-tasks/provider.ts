@@ -1,4 +1,4 @@
-import type { TaskSourceProvider, ExternalTaskDraft } from "../types";
+import type { TaskSourceProvider, ExternalTaskDraft, TaskWritebackOpts } from "../types";
 import {
   getValidGoogleTasksAccessToken,
   fetchTaskLists,
@@ -44,12 +44,12 @@ export function createGoogleTasksProvider(): TaskSourceProvider {
       return drafts;
     },
 
-    async complete(externalId: string, listId: string) {
+    async complete(externalId: string, listId: string, _opts?: TaskWritebackOpts) {
       const accessToken = await getValidGoogleTasksAccessToken();
       await completeGoogleTask(accessToken, listId, externalId);
     },
 
-    async reopen(externalId: string, listId: string) {
+    async reopen(externalId: string, listId: string, _opts?: TaskWritebackOpts) {
       const accessToken = await getValidGoogleTasksAccessToken();
       await reopenGoogleTask(accessToken, listId, externalId);
     },

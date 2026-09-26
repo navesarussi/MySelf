@@ -128,12 +128,15 @@ export type TaskSource = "manual" | "google_tasks" | "monday" | "github" | "gmai
 
 export type TaskExternalMeta = {
   listTitle?: string;
+  /** Backup for `external_list_id` when legacy rows lack the column value. */
+  listId?: string;
   deepLink?: string;
   parentExternalId?: string;
   account_key?: string;
   account_name?: string;
   statusColumnId?: string;
   statusLabel?: string;
+  statusLabels?: { label: string; is_done?: boolean }[];
 };
 
 export type Task = {

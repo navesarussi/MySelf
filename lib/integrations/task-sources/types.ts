@@ -1,5 +1,7 @@
 export type TaskSourceId = "google_tasks" | "monday" | "github";
 
+export type StatusLabelOption = { label: string; is_done?: boolean };
+
 export type ExternalTaskDraft = {
   externalId: string;
   externalListId: string;
@@ -9,13 +11,21 @@ export type ExternalTaskDraft = {
   status: "open" | "done";
   meta: {
     listTitle?: string;
+    listId?: string;
     deepLink?: string;
     parentExternalId?: string;
     account_key?: string;
     account_name?: string;
     statusColumnId?: string;
     statusLabel?: string;
+    statusLabels?: StatusLabelOption[];
   };
+};
+
+export type TaskWritebackOpts = {
+  statusLabel?: string | null;
+  statusLabels?: StatusLabelOption[];
+  statusColumnId?: string | null;
 };
 
 export type TaskSourceCapabilities = {
@@ -29,10 +39,6 @@ export interface TaskSourceProvider {
   capabilities: TaskSourceCapabilities;
   listSources(): Promise<{ id: string; title: string }[]>;
   pullOpenTasks(selectedListIds: string[]): Promise<ExternalTaskDraft[]>;
-  complete(externalId: string, listId: string): Promise<void>;
-  reopen(
-    externalId: string,
-    listId: string,
-    meta?: { statusLabel?: string }
-  ): Promise<void>;
+  complete(externalId: string, listId: string, opts?: TaskWritebackOpts): Promise<void>;
+  reopen(externalId: string, listId: string, opts?: TaskWritebackOpts): Promise<void>;
 }

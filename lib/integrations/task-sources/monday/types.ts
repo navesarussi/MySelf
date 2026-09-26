@@ -43,6 +43,8 @@ export type MondayItem = {
   column_values?: MondayColumnValue[];
 };
 
+export type MondayStatusLabelOption = { label: string; is_done?: boolean };
+
 export type MondayMapContext = {
   accountKey: string;
   accountName: string;
@@ -51,4 +53,5 @@ export type MondayMapContext = {
   boardTitle: string;
   statusColumnId: string | null;
   peopleColumnId: string | null;
+  statusLabels: MondayStatusLabelOption[];
 };

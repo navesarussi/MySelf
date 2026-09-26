@@ -1,5 +1,6 @@
 import { mondayGraphql } from "./graphql";
 import { pickDoneLabel, pickReopenLabel } from "./map";
+import type { MondayStatusLabelOption } from "./types";
 import { fetchBoardMeta } from "./fetch";
 import { getIntegrationToken } from "../../tokens";
 import { MONDAY_PROVIDER } from "../../monday-config";
@@ -37,10 +38,11 @@ export async function completeMondayItem(
   boardId: string,
   itemId: string,
   statusColumnId: string | null,
-  statusLabels: { label: string; is_done?: boolean }[]
+  statusLabels: MondayStatusLabelOption[]
 ) {
   if (!statusColumnId) throw new Error("monday_no_status_column");
-  const label = pickDoneLabel(statusLabels) ?? "Done";
+  const label = pickDoneLabel(statusLabels);
+  if (!label) throw new Error("monday_no_done_label");
   await changeStatus(accessToken, boardId, itemId, statusColumnId, label);
 }
 
@@ -58,29 +60,46 @@ export async function reopenMondayItem(
   await changeStatus(accessToken, boardId, itemId, statusColumnId, label);
 }
 
-export async function completeByExternalId(externalId: string, boardId: string) {
-  const { accountKey, itemId } = parseMondayExternalId(externalId);
-  const token = await getMondayAccessToken(accountKey);
-  const meta = await fetchBoardMeta(token, boardId);
-  if (!meta) throw new Error("monday_board_not_found");
-  await completeMondayItem(token, boardId, itemId, meta.statusColumnId, meta.statusLabels);
-}
+type MondayWritebackCache = {
+  statusColumnId?: string | null;
+  statusLabels?: MondayStatusLabelOption[];
+  statusLabel?: string | null;
+};
 
-export async function reopenByExternalId(
+export async function completeByExternalId(
   externalId: string,
   boardId: string,
-  previousLabel?: string | null
+  cache?: MondayWritebackCache
 ) {
   const { accountKey, itemId } = parseMondayExternalId(externalId);
   const token = await getMondayAccessToken(accountKey);
   const meta = await fetchBoardMeta(token, boardId);
   if (!meta) throw new Error("monday_board_not_found");
+  const labels =
+    cache?.statusLabels?.length ? cache.statusLabels : meta.statusLabels;
+  const columnId = cache?.statusColumnId ?? meta.statusColumnId;
+  await completeMondayItem(token, boardId, itemId, columnId, labels);
+}
+
+export async function reopenByExternalId(
+  externalId: string,
+  boardId: string,
+  previousLabel?: string | null,
+  cache?: MondayWritebackCache
+) {
+  const { accountKey, itemId } = parseMondayExternalId(externalId);
+  const token = await getMondayAccessToken(accountKey);
+  const meta = await fetchBoardMeta(token, boardId);
+  if (!meta) throw new Error("monday_board_not_found");
+  const labels =
+    cache?.statusLabels?.length ? cache.statusLabels : meta.statusLabels;
+  const columnId = cache?.statusColumnId ?? meta.statusColumnId;
   await reopenMondayItem(
     token,
     boardId,
     itemId,
-    meta.statusColumnId,
-    meta.statusLabels,
-    previousLabel
+    columnId,
+    labels,
+    previousLabel ?? cache?.statusLabel
   );
 }

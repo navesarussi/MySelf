@@ -96,7 +96,7 @@ export async function fetchOpenTasks(accessToken: string, listId: string) {
     if (pageToken) params.set("pageToken", pageToken);
 
     const res = await fetch(
-      `https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks?${params}`,
+      `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks?${params}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
@@ -123,7 +123,7 @@ export async function completeGoogleTask(
   taskId: string
 ): Promise<void> {
   const res = await fetch(
-    `https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks/${taskId}`,
+    `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}`,
     {
       method: "PATCH",
       headers: {
@@ -146,7 +146,7 @@ export async function reopenGoogleTask(
   taskId: string
 ): Promise<void> {
   const res = await fetch(
-    `https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks/${taskId}`,
+    `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}`,
     {
       method: "PATCH",
       headers: {

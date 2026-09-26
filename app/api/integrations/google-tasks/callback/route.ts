@@ -4,8 +4,11 @@ import { exchangeGoogleTasksCode } from "@/lib/integrations/task-sources/google-
 import { GOOGLE_TASKS_PROVIDER } from "@/lib/integrations/google-config";
 import { getIntegrationToken, saveIntegrationToken } from "@/lib/integrations/tokens";
 import { consumeOAuthNext, consumeOAuthState } from "@/lib/integrations/oauth-state";
+import { oauthStateAccount } from "@/lib/integrations/oauth-state-token";
 import { redirectToAppOrNext } from "@/lib/integrations/oauth-redirect";
 import { setFlashCookie } from "@/lib/flash";
+import { runAsUser } from "@/lib/db/user-context";
+import { currentUserId } from "@/lib/db/current-user";
 
 const APP_REDIRECT_COOKIE = "google_tasks_oauth_app_redirect";
 
@@ -28,6 +31,21 @@ export async function GET(req: NextRequest) {
     return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
   }
 
+  let owner = await oauthStateAccount(state);
+  if (!owner) {
+    try {
+      owner = await currentUserId();
+    } catch {
+      owner = null;
+    }
+  }
+
+  if (!owner) {
+    setFlashCookie(jar, "Invalid OAuth state — try again", "error");
+    return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
+  }
+
+  return runAsUser(owner, async () => {
   try {
     const tokens = await exchangeGoogleTasksCode(code);
     const existing = await getIntegrationToken(GOOGLE_TASKS_PROVIDER);
@@ -58,4 +76,5 @@ export async function GET(req: NextRequest) {
     }
     return redirectToAppOrNext({ jar, origin: url.origin, next, appRedirectCookie: APP_REDIRECT_COOKIE });
   }
+  });
 }

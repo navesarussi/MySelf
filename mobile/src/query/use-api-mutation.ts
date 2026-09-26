@@ -8,6 +8,8 @@ import type { MutateFlash } from "../hooks";
 export type RunMutationOptions<T = unknown> = {
   flash?: MutateFlash;
   itemId?: string;
+  /** When true, the caller handles error toasts in onError. */
+  suppressErrorToast?: boolean;
   onMutate?: () => void | (() => void) | Promise<void | (() => void)>;
   onSuccess?: (data: T) => void;
   onError?: (err: unknown) => void;
@@ -44,7 +46,7 @@ export function useApiMutation() {
           ? { flash: optionsOrFlash as MutateFlash }
           : (optionsOrFlash as RunMutationOptions<T>) ?? {};
 
-      const { flash, itemId, onMutate, onSuccess, onError } = opts;
+      const { flash, itemId, suppressErrorToast, onMutate, onSuccess, onError } = opts;
 
       setBusyCount((c) => c + 1);
       if (itemId) {
@@ -89,7 +91,7 @@ export function useApiMutation() {
 
         if (err instanceof ApiError && err.status === 401) {
           await signOut();
-        } else {
+        } else if (!suppressErrorToast) {
           const apiMsg = err instanceof ApiError ? err.message : "";
           if (flash?.error) showToast(t(flash.error), "error");
           else if (apiMsg && apiMsg !== "db_error") showToast(apiMsg, "error");
