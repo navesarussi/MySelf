@@ -5,7 +5,7 @@ import { moneyItemTypeFromTxn } from "@/lib/finance/money-item-type";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
-import { formatDisplayMerchantName } from "@/lib/finance/merchant-display";
+import { txnMerchantDisplay } from "@/lib/finance/merchant-display";
 import { fmtIls2 } from "@/lib/finance/format";
 import { localeTag } from "@/lib/i18n/core";
 import type { FinanceTransaction } from "@/lib/finance/types";
@@ -28,7 +28,7 @@ export const FinanceTxnRow = memo(function FinanceTxnRow({
   const loc = localeTag(locale);
   const { textStart, writingDirection, row } = useLayoutDir();
   const income = txn.kind === "income";
-  const label = formatDisplayMerchantName(txn.merchant || txn.description);
+  const label = txnMerchantDisplay(txn);
   const when = txn.txn_time ? `${txn.txn_date} ${txn.txn_time}` : txn.txn_date;
   const itemType = moneyItemTypeFromTxn(txn);
   const typeLabel = t(`finance.moneyType_${itemType}`);

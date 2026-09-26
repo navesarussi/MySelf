@@ -8,6 +8,7 @@ export type VariableTxnItem = Pick<
   | "txn_date"
   | "txn_time"
   | "merchant"
+  | "merchant_display"
   | "description"
   | "amount"
   | "category"
@@ -56,6 +57,7 @@ export function buildVariableBreakdown(
       txn_date: t.txn_date,
       txn_time: t.txn_time ?? null,
       merchant: t.merchant,
+      merchant_display: t.merchant_display,
       description: t.description,
       amount: t.amount,
       category: t.category,

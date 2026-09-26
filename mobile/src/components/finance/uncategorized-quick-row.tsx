@@ -5,6 +5,7 @@ import { quickCategoryOptions } from "@/lib/finance/categorize-client";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
+import { txnMerchantDisplay } from "@/lib/finance/merchant-display";
 import type { UncategorizedTxn } from "./categorize-save";
 
 export function UncategorizedQuickRow({
@@ -23,7 +24,7 @@ export function UncategorizedQuickRow({
   const { t } = useI18n();
   const c = useColors();
   const { textStart, writingDirection, row } = useLayoutDir();
-  const label = txn.merchant || txn.description;
+  const label = txnMerchantDisplay(txn);
   const suggested = txn.suggested_category ?? null;
   const chips = useMemo(() => quickCategoryOptions(suggested, categories, 5), [suggested, categories]);
 

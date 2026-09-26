@@ -9,6 +9,7 @@ import { useColors, tokens } from "../src/theme";
 import { useApiQuery, queryClient, queryKeys } from "../src/query";
 import { Btn, Card, ErrorNote, Loading, Screen, SectionTitle } from "../src/components/ui";
 import type { FinanceImportBatchRow, ImportUploadSummary } from "@/lib/finance/import/types";
+import { txnMerchantDisplay } from "@/lib/finance/merchant-display";
 
 const SOURCE_OPTIONS = [
   { value: "", labelKey: "finance.importSourceAuto" },
@@ -197,7 +198,7 @@ export default function FinanceImportScreen() {
         >
           <View style={{ ...row, justifyContent: "space-between" }}>
             <Text style={{ color: c.ink, flex: 1, textAlign: textStart, writingDirection }} numberOfLines={1}>
-              {txn.merchant || txn.description}
+              {txnMerchantDisplay(txn)}
             </Text>
             <Text style={{ color: txn.kind === "income" ? c.good : c.ink, fontWeight: "700" }}>
               {txn.kind === "income" ? "+" : "−"}₪{Number(txn.amount).toLocaleString("he-IL")}

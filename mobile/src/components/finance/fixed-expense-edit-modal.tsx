@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import type { FixedExpenseItem, MatchedTxn } from "@/lib/finance/fixed-expenses";
 import { fmtAmount2 } from "@/lib/finance/format";
-import { formatDisplayMerchantName } from "@/lib/finance/merchant-display";
+import { formatDisplayMerchantName, txnMerchantDisplay } from "@/lib/finance/merchant-display";
 import { useI18n } from "../../i18n";
 import { useLayoutDir } from "../../layout-dir";
 import { useColors, tokens } from "../../theme";
@@ -116,7 +116,7 @@ export function FixedExpenseEditModal({
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: c.ink, fontSize: tokens.textXs, textAlign: textStart, writingDirection }}>{m.txn_date}</Text>
                       <Text style={{ color: c.muted, fontSize: tokens.textXs, textAlign: textStart, writingDirection }} numberOfLines={1}>
-                        {m.merchant || m.description}
+                        {txnMerchantDisplay(m)}
                       </Text>
                     </View>
                     <Text style={{ color: c.ink, fontWeight: "700", fontVariant: ["tabular-nums"] }}>₪{fmtAmount2(m.amount)}</Text>

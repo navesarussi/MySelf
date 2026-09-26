@@ -12,7 +12,11 @@ import {
   stripCategoryAndCardPrefixes,
   stripCategoryPrefix,
 } from "@/lib/finance/merchant-segment";
-import { formatMerchantLabel } from "@/lib/finance/merchant-rules-client";
+import {
+  formatMerchantLabel,
+  matchMerchantRule,
+  type MerchantRule,
+} from "@/lib/finance/merchant-rules-client";
 
 export { CAL_GLUED_CATEGORY_PREFIXES as CAL_CATEGORY_PREFIXES } from "@/lib/finance/merchant-segment";
 export { meaningfulCharCount } from "@/lib/finance/merchant-segment";
@@ -284,4 +288,46 @@ export function enrichMerchantRuleForDisplay<T extends { merchant_key: string; d
     formatDisplayMerchantName(rule.merchant_key) ||
     rule.merchant_key;
   return { ...rule, display_name: display };
+}
+
+/** Resolve display label: rule display_name first, then shared formatter on txn fields. */
+export function resolveMerchantDisplay(input: {
+  merchant?: string | null;
+  description?: string | null;
+  rule?: Pick<MerchantRule, "display_name" | "merchant_key"> | null;
+}): string {
+  const fromRule = input.rule?.display_name?.trim();
+  if (fromRule) {
+    const formatted = formatDisplayMerchantName(fromRule);
+    if (formatted) return formatted;
+  }
+  return pickDisplayMerchantLabel(input.merchant, input.description);
+}
+
+export type MerchantDisplayTxn = {
+  merchant?: string | null;
+  description?: string | null;
+  merchant_display?: string | null;
+};
+
+/** Prefer API merchant_display; otherwise client-side formatter (pre/post server deploy). */
+export function txnMerchantDisplay(txn: MerchantDisplayTxn): string {
+  const fromApi = txn.merchant_display?.trim();
+  if (fromApi) return fromApi;
+  return pickDisplayMerchantLabel(txn.merchant, txn.description);
+}
+
+export function withMerchantDisplay<T extends MerchantDisplayTxn>(
+  txn: T,
+  rulesMap: Map<string, MerchantRule>
+): T & { merchant_display: string } {
+  const rule = matchMerchantRule(txn.merchant, txn.description, rulesMap);
+  return {
+    ...txn,
+    merchant_display: resolveMerchantDisplay({
+      merchant: txn.merchant,
+      description: txn.description,
+      rule,
+    }),
+  };
 }

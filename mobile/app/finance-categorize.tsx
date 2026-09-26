@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { fmtAmount2 } from "@/lib/finance/format";
+import { txnMerchantDisplay } from "@/lib/finance/merchant-display";
 import { api } from "../src/api/resources";
 import { useSession } from "../src/session";
 import { useI18n } from "../src/i18n";
@@ -132,7 +133,7 @@ export default function FinanceCategorizeScreen() {
 
   if (!txn && !error) return <Loading />;
 
-  const label = txn?.merchant || txn?.description || "";
+  const label = txn ? txnMerchantDisplay(txn) : "";
   const busy = isPending();
   const isExpense = txn?.kind === "expense";
   const suggested = txn?.suggested_category ?? null;

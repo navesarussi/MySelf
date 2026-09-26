@@ -6,7 +6,9 @@ import {
   normalizeStoredDisplayName,
   normalizeStoredMerchantFields,
   pickDisplayMerchantLabel,
+  resolveMerchantDisplay,
   stripFullCategoryPrefix,
+  txnMerchantDisplay,
 } from "../finance/merchant-display";
 
 describe("formatDisplayMerchantName — Latin / friendly map", () => {
@@ -169,6 +171,49 @@ describe("formatDisplayMerchantName — v3 refinements", () => {
     assert.equal(formatDisplayMerchantName("C2i Holding -"), "C2i Holding");
     assert.equal(formatDisplayMerchantName("Kxh Pty Ltd sydney au"), "KXH");
     assert.doesNotMatch(formatDisplayMerchantName("C2i Holding -"), /-$/);
+  });
+});
+
+describe("resolveMerchantDisplay", () => {
+  it("prefers rule display_name over raw txn merchant", () => {
+    assert.equal(
+      resolveMerchantDisplay({
+        merchant: "מזוןומשקארמילוי-ראשוןלציון",
+        description: null,
+        rule: { merchant_key: "רמי לוי", display_name: "רמי לוי ראשון לציון" },
+      }),
+      "רמי לוי ראשון לציון"
+    );
+  });
+
+  it("falls back to formatter when no rule display_name", () => {
+    const out = resolveMerchantDisplay({
+      merchant: "מזוןומשקארמילוי-ראשוןלציון",
+      description: null,
+      rule: null,
+    });
+    assert.match(out, /רמי לוי|ראשון לציון/);
+  });
+});
+
+describe("txnMerchantDisplay", () => {
+  it("prefers API merchant_display", () => {
+    assert.equal(
+      txnMerchantDisplay({
+        merchant: "מזוןומשקארמילוי-ראשוןלציון",
+        description: null,
+        merchant_display: "רמי לוי ראשון לציון",
+      }),
+      "רמי לוי ראשון לציון"
+    );
+  });
+
+  it("formats client-side when merchant_display absent", () => {
+    const out = txnMerchantDisplay({
+      merchant: "לאהוראתקבעעמותותותרלובי",
+      description: null,
+    });
+    assert.equal(out, "לובי");
   });
 });
 
