@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { detectRebased, planBarSync } from "../trading/book/bars";
+import { BOOK_LAST_BARS_SYMBOL_BATCH, detectRebased, planBarSync } from "../trading/book/bars";
 import { sizeSignal } from "../trading/book/engine";
 import { isEtfName, selectBookCrypto, selectBookStocks } from "../trading/book/universe";
 import { buildMultiAsset, cryptoTrend, exitDecision, pullback, runBook } from "../trading/strategy/multi";
@@ -45,6 +45,11 @@ describe("book universe", () => {
 });
 
 describe("daily bar store", () => {
+  it("batches book_last_bars by symbol list, not by paginating the full-table result", () => {
+    assert.ok(BOOK_LAST_BARS_SYMBOL_BATCH <= 1000);
+    assert.equal(Math.ceil(2400 / BOOK_LAST_BARS_SYMBOL_BATCH), 5);
+  });
+
   it("backfills new symbols and appends to stored ones", () => {
     assert.deepEqual(planBarSync(["A", "B"], new Map([["A", { t: "2026-09-25", c: 10 }]])), { backfill: ["B"], incremental: ["A"] });
   });

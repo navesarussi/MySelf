@@ -17,6 +17,8 @@ export const BOOK_HISTORY_DAYS = 430;
 export const SPLIT_TOLERANCE = 0.005;
 /** How far back the incremental sync re-reads (to catch splits and late corrections). */
 const RECHECK_DAYS = 12;
+/** PostgREST caps RPC rows at 1000; batch symbols so each call stays under that limit. */
+export const BOOK_LAST_BARS_SYMBOL_BATCH = 500;
 
 export const dayIso = (t: number) => new Date(t).toISOString().slice(0, 10);
 /** UTC midnight of the bar's date — the research convention (Yahoo daily bars are normalised the same way). */
@@ -59,15 +61,17 @@ async function upsertRows(rows: ReturnType<typeof toRows>) {
   }
 }
 
-async function lastStoredBars(): Promise<Map<string, LastBar>> {
+async function lastStoredBars(symbols: string[]): Promise<Map<string, LastBar>> {
   const out = new Map<string, LastBar>();
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await getSupabase().rpc("book_last_bars").range(from, from + 999);
+  for (let i = 0; i < symbols.length; i += BOOK_LAST_BARS_SYMBOL_BATCH) {
+    const batch = symbols.slice(i, i + BOOK_LAST_BARS_SYMBOL_BATCH);
+    const { data, error } = await getSupabase().rpc("book_last_bars", { p_symbols: batch });
     if (error) throw new Error(`book_last_bars: ${error.message}`);
-    const rows = (data ?? []) as { symbol: string; t: string; c: number }[];
-    for (const r of rows) out.set(r.symbol, { t: r.t, c: Number(r.c) });
-    if (rows.length < 1000) return out;
+    for (const r of (data ?? []) as { symbol: string; t: string; c: number }[]) {
+      out.set(r.symbol, { t: r.t, c: Number(r.c) });
+    }
   }
+  return out;
 }
 
 async function storedCloses(symbols: string[], sinceIso: string): Promise<Map<string, Map<string, number>>> {
@@ -97,7 +101,7 @@ export type BarSyncResult = { appended: number; backfilled: number; rebased: str
  */
 export async function syncStockBars(input: { symbols: string[]; now: number; deadline: number }): Promise<BarSyncResult> {
   const { now } = input;
-  const last = await lastStoredBars();
+  const last = await lastStoredBars(input.symbols);
   const plan = planBarSync(input.symbols, last);
   const endMs = now - 16 * 60_000; // SIP bars are free once 15 minutes old
   const res: BarSyncResult = { appended: 0, backfilled: 0, rebased: [], remaining: 0 };
