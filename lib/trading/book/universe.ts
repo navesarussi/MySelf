@@ -72,6 +72,8 @@ export function selectBookCrypto(tickers: { symbol: string; quoteVolume: string 
  */
 export async function saveBookUniverse(rows: BookUniverseRow[], now: number) {
   if (!rows.length) return;
+  // Alpaca can list a symbol twice (e.g. a class-share alias); one upsert chunk must not touch a row twice.
+  rows = [...new Map(rows.map((r) => [r.symbol, r])).values()];
   const sb = getSupabase();
   const { data: off } = await sb.from("trading_book_universe").select("symbol").eq("enabled", false);
   const disabled = new Set(((off ?? []) as { symbol: string }[]).map((r) => r.symbol));
