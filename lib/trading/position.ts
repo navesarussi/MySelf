@@ -50,6 +50,8 @@ export type SimPosition = {
   peak_price?: number;
   target_extensions?: number;
   initial_target_price?: number;
+  /** A strategy exit already sent to the broker (e.g. a stock sell queued for the next open); closed when the broker is flat. */
+  exit_pending?: ExitReason | null;
   /** Override of EXECUTION_RULES.PENDING_EXPIRY_BARS (e.g. a manual limit order waiting for a pullback). */
   pending_expiry_bars?: number;
 };
