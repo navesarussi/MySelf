@@ -7,6 +7,9 @@ import {
   tradingEquityFixture,
 } from "@/lib/api-contracts/fixtures";
 
+// Collapsible sections remember their state in AsyncStorage, which has no native module under Jest.
+jest.mock("@react-native-async-storage/async-storage", () => require("@react-native-async-storage/async-storage/jest/async-storage-mock"));
+
 jest.mock("@expo/vector-icons", () => ({
   Ionicons: "Ionicons",
   AntDesign: "AntDesign",
