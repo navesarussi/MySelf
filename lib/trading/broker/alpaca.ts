@@ -27,7 +27,16 @@ export type AlpacaOrder = {
 };
 
 export type AlpacaAccount = { equity: string; cash: string; buying_power: string; non_marginable_buying_power?: string; status: string; trading_blocked: boolean; account_blocked: boolean; currency: string };
-export type AlpacaPosition = { symbol: string; qty: string; avg_entry_price: string; current_price: string; unrealized_pl: string; market_value?: string };
+export type AlpacaPosition = {
+  symbol: string;
+  qty: string;
+  /** Quantity not reserved by open sell orders — use for closes and protective stops. */
+  qty_available?: string;
+  avg_entry_price: string;
+  current_price: string;
+  unrealized_pl: string;
+  market_value?: string;
+};
 
 /** One execution (FILL activity). A single order can fill in many pieces. */
 export type AlpacaFillActivity = { id: string; transaction_time: string; price: string; qty: string; side: "buy" | "sell"; symbol: string; order_id: string };
@@ -185,6 +194,9 @@ export const alpaca = {
 
   getOrder: (id: string) => call<AlpacaOrder>("GET", `/v2/orders/${id}?nested=true`),
 
+  getOrderByClientId: (clientOrderId: string) =>
+    call<AlpacaOrder>("GET", `/v2/orders:by_client_order_id/${encodeURIComponent(clientOrderId)}?nested=true`),
+
   /** Replace returns a NEW order id. */
   replaceOrder: (id: string, patch: { stop_price?: number; limit_price?: number }, assetClass: AssetClass) =>
     call<AlpacaOrder>("PATCH", `/v2/orders/${id}`, {
@@ -272,14 +284,19 @@ export function clampSellQty(
   return qty > 0 ? qty : null;
 }
 
+export function positionSellableQty(held: AlpacaPosition | null | undefined, intended: number, assetClass: AssetClass): number | null {
+  if (isDustPosition(held)) return null;
+  const available = Number(held?.qty_available ?? held?.qty);
+  return clampSellQty(intended, available, assetClass);
+}
+
 export async function sellableQty(
   symbol: string,
   assetClass: AssetClass,
   intended: number
 ): Promise<number | null> {
   const held = await alpaca.position(symbol, assetClass);
-  if (isDustPosition(held)) return null;
-  return clampSellQty(intended, Number(held?.qty), assetClass);
+  return positionSellableQty(held, intended, assetClass);
 }
 
 /** A resting protective sell (stop / stop-limit) — the thing that keeps a position safe through an outage. */
@@ -323,6 +340,8 @@ export async function ensureProtectiveStop(input: {
     if (isAlpacaInsufficientQty(err)) {
       const raced = await findExisting();
       if (raced) return raced;
+      // Reserved qty or fee dust — do not throw every tick; reconciliation syncs the journal.
+      return null;
     }
     throw err;
   }

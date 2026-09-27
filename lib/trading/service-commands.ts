@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { entryConfirmedAtBroker } from "./broker/reconcile-decisions";
 import { flattenAtBroker } from "./broker/flatten";
 import { editTradeLevels } from "./trade-edit";
 import { forceClose, realizedR } from "./position";
@@ -68,6 +69,7 @@ async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH")
 
   for (const t of trades) {
     const p = { ...t.sim_state };
+    const entryOk = entryConfirmedAtBroker(t);
     let brokerPx: number | null = null;
     if (t.broker) {
       try {
@@ -80,9 +82,42 @@ async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH")
     }
 
     const market = prices.get(t.symbol);
+    if (!entryOk) {
+      if (brokerPx !== null) {
+        const ev = forceClose(p, brokerPx, reason, now);
+        await updateTrade(t.id, {
+          ...simColumns(p),
+          events: [...(t.events ?? []), ...ev],
+          ...(p.state === "CLOSED" ? { realized_r: round(realizedR(p), 3), realized_pnl: round(p.cash_flow, 2) } : {}),
+        });
+        out.closed.push(t.symbol);
+        continue;
+      }
+      if (p.state === "PENDING") {
+        p.state = "CANCELLED";
+        p.cancel_reason = "MANUAL_NO_ENTRY";
+        p.closed_at = now;
+        await updateTrade(t.id, {
+          ...simColumns(p),
+          events: [...(t.events ?? []), { type: "CANCELLED", reason: "MANUAL_NO_ENTRY", at: now }],
+          reconciliation_kind: "journal_flat_unknown",
+          realized_r: null,
+          realized_pnl: null,
+        });
+        out.closed.push(t.symbol);
+        continue;
+      }
+      out.failed.push({ symbol: t.symbol, reason: "entry_not_confirmed_no_broker_fill" });
+      continue;
+    }
+
     const price = brokerPx ?? market ?? p.entry_price ?? p.entry_limit;
+    if (price === null || !Number.isFinite(price)) {
+      out.failed.push({ symbol: t.symbol, reason: "no_price" });
+      continue;
+    }
     const ev = forceClose(p, price, reason, now);
-    const estimated = brokerPx === null && market === undefined && p.state !== "PENDING";
+    const estimated = brokerPx === null && market === undefined;
 
     try {
       await updateTrade(t.id, {
