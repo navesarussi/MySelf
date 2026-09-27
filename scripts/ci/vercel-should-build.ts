@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
 /**
  * CLI wrapper for Vercel ignoreCommand (called from scripts/ci/vercel-should-build.sh).
- * Exit 0 → build; exit 1 → skip.
+ * Vercel's Ignored Build Step: exit 0 → SKIP the build ("ignored"), exit 1 → build.
+ * (It was inverted: every commit that needed a deploy was canceled, only skippable ones built.)
  */
 import { shouldBuildVercel } from "../../lib/ci/vercel-should-build";
 
@@ -15,4 +16,4 @@ const { build, reason } = shouldBuildVercel({
 });
 
 console.log(build ? `build: ${reason}` : `skip: ${reason}`);
-process.exit(build ? 0 : 1);
+process.exit(build ? 1 : 0);
