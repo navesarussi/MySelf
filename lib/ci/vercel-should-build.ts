@@ -12,9 +12,11 @@ export type ShouldBuildInput = {
   conservativeWhenUnknown?: boolean;
 };
 
-/** Paths that do not require a Vercel production rebuild on their own. */
+/**
+ * Paths that do not require a Vercel production rebuild on their own.
+ * NOT `mobile/`: the web app at the domain root is the Expo web export of mobile/ (scripts/export-expo-web.sh).
+ */
 export function isSkippableDeployPath(file: string): boolean {
-  if (file.startsWith("mobile/")) return true;
   if (file.startsWith("docs/")) return true;
   if (file.startsWith(".github/")) return true;
   if (file.includes("/__tests__/")) return true;
@@ -29,9 +31,9 @@ export function shouldBuildVercel(input: ShouldBuildInput): { build: boolean; re
     return { build: false, reason: `branch ${input.branch} is not main` };
   }
 
-  if (/\[skip ci\]/i.test(input.commitMessage)) {
-    return { build: false, reason: "[skip ci] commit" };
-  }
+  // No "[skip ci]" shortcut: the TestFlight bot pushes one right after every merge, Vercel cancels the
+  // merge's production build in favour of the newer commit, and skipping that commit left production on old
+  // code (2026-09-27: #103, #114 and #115 never deployed). Its diff (package.json version) decides instead.
 
   if (input.changedFiles.length === 0) {
     return conservative

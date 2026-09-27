@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import { isSkippableDeployPath, shouldBuildVercel } from "../ci/vercel-should-build";
 
 describe("isSkippableDeployPath", () => {
-  it("treats mobile, docs, ci, and tests as skippable", () => {
-    assert.equal(isSkippableDeployPath("mobile/app.json"), true);
+  it("treats docs, ci, and tests as skippable", () => {
     assert.equal(isSkippableDeployPath("docs/SSOT/SRS.md"), true);
     assert.equal(isSkippableDeployPath(".github/workflows/verify.yml"), true);
     assert.equal(isSkippableDeployPath("lib/__tests__/home.test.ts"), true);
@@ -16,6 +15,8 @@ describe("isSkippableDeployPath", () => {
     assert.equal(isSkippableDeployPath("lib/ops/smoke.ts"), false);
     assert.equal(isSkippableDeployPath("vercel.json"), false);
     assert.equal(isSkippableDeployPath("package.json"), false);
+    // The web app at the domain root is the Expo web export of mobile/.
+    assert.equal(isSkippableDeployPath("mobile/app/(tabs)/trading.tsx"), false);
   });
 });
 
@@ -29,20 +30,29 @@ describe("shouldBuildVercel", () => {
     assert.equal(r.build, false);
   });
 
-  it("skips [skip ci] version bumps on main", () => {
+  it("builds the [skip ci] version bump that follows every merge — it cancels the merge's own build", () => {
     const r = shouldBuildVercel({
       branch: "main",
       commitMessage: "chore(mobile): bump version for TestFlight [skip ci]",
       changedFiles: ["package.json", "mobile/app.json"],
     });
-    assert.equal(r.build, false);
+    assert.equal(r.build, true);
   });
 
-  it("skips main commits that only touch mobile and ci", () => {
+  it("builds when the mobile (web) app changes", () => {
     const r = shouldBuildVercel({
       branch: "main",
       commitMessage: "feat(mobile): OTA",
       changedFiles: ["mobile/app/_layout.tsx", ".github/workflows/eas-update.yml"],
+    });
+    assert.equal(r.build, true);
+  });
+
+  it("skips main commits that only touch docs, ci and tests", () => {
+    const r = shouldBuildVercel({
+      branch: "main",
+      commitMessage: "docs",
+      changedFiles: ["docs/trading/README.md", ".github/workflows/eas-update.yml", "lib/__tests__/x.test.ts"],
     });
     assert.equal(r.build, false);
   });
