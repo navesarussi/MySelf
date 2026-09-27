@@ -37,7 +37,9 @@ export type ExitReason =
   | "EARNINGS"
   | "MANUAL"
   | "KILL_SWITCH"
-  | "TIME_STOP";
+  | "TIME_STOP"
+  /** A strategy's own exit rule fired at the close (e.g. mean reversion back above its 5-day average). */
+  | "SIGNAL";
 /** What happens to the remaining half after the 1R partial exit. */
 export type ExitPlan = "TARGET_2R" | "TRAIL_2ATR" | "STRUCTURAL";
 

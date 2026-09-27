@@ -165,6 +165,25 @@ export const alpaca = {
     return call<AlpacaOrder>("POST", "/v2/orders", base);
   },
 
+  /**
+   * Stock entry with its protective stop attached (order class OTO): the stop leg is held until the entry
+   * fills, then works on its own — no window without a stop. Accepted outside market hours with a `day`
+   * time in force, so an order sent after the close executes at the next open (verified on the demo account).
+   */
+  placeOtoStockEntry(input: { symbol: string; qty: number; type: "market" | "limit"; limit?: number; stop: number; clientId: string }) {
+    return call<AlpacaOrder>("POST", "/v2/orders", {
+      symbol: input.symbol,
+      qty: String(roundQty(input.qty, "STOCK")),
+      side: "buy",
+      type: input.type,
+      time_in_force: "day",
+      ...(input.type === "limit" && input.limit !== undefined ? { limit_price: priceStr(input.limit, "STOCK") } : {}),
+      order_class: "oto",
+      stop_loss: { stop_price: priceStr(input.stop, "STOCK") },
+      client_order_id: input.clientId,
+    });
+  },
+
   /** Broker-side protective stop for crypto (stop-limit with a 1% limit cushion so it actually fills). */
   placeCryptoStop(input: { symbol: string; qty: number; stop: number; clientId: string }) {
     return call<AlpacaOrder>("POST", "/v2/orders", {
