@@ -3,7 +3,7 @@ import { AppState, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import * as Notifications from "expo-notifications";
 import { useSession } from "../session";
-import { registerPushToken } from "./register";
+import { clearDeliveredNotifications, registerPushToken } from "./register";
 
 const ALLOWED_PATHS = new Set([
   "/",
@@ -61,6 +61,12 @@ export function usePushNotifications() {
   useEffect(() => {
     if (Platform.OS === "web") return;
 
+    void clearDeliveredNotifications();
+
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void clearDeliveredNotifications();
+    });
+
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as Record<string, unknown>;
       const screen = screenFromData(data);
@@ -74,6 +80,9 @@ export function usePushNotifications() {
       if (screen) router.push(screen as `/${string}`);
     });
 
-    return () => responseSub.remove();
+    return () => {
+      appStateSub.remove();
+      responseSub.remove();
+    };
   }, [router]);
 }

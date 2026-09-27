@@ -7,13 +7,22 @@ import { api } from "../api/resources";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
+    shouldShowAlert: false,
+    shouldPlaySound: false,
     shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
+    shouldShowBanner: false,
+    shouldShowList: false,
   }),
 });
+
+/** Clears Notification Center / lock-screen entries and resets the app icon badge. */
+export async function clearDeliveredNotifications(): Promise<void> {
+  if (Platform.OS === "web") return;
+  await Promise.all([
+    Notifications.dismissAllNotificationsAsync(),
+    Notifications.setBadgeCountAsync(0),
+  ]);
+}
 
 function projectId(): string | undefined {
   return (
