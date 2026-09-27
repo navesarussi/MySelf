@@ -45,14 +45,17 @@ function fakeAlpaca(opts: { qty: number; chunk: number; lagReads: number; price:
 describe("flattenAtBroker on the paper engine", () => {
   const realFetch = globalThis.fetch;
   const realSleep = flattenTiming.sleep;
+  const realOpen = flattenTiming.marketOpen;
   beforeEach(() => {
     process.env.ALPACA_API_KEY_ID = "test";
     process.env.ALPACA_API_SECRET_KEY = "test";
     flattenTiming.sleep = async () => {};
+    flattenTiming.marketOpen = async () => true;
   });
   afterEach(() => {
     globalThis.fetch = realFetch;
     flattenTiming.sleep = realSleep;
+    flattenTiming.marketOpen = realOpen;
   });
 
   const trade = { symbol: "DOT", asset_class: "CRYPTO_ALT" as const, broker_entry_order_id: null, broker_stop_order_id: null, broker_target_order_id: null };
@@ -73,5 +76,27 @@ describe("flattenAtBroker on the paper engine", () => {
     const px = await flattenAtBroker(trade);
     assert.equal(fake.remaining(), 0);
     assert.equal(px, 1.2);
+  });
+
+  it("queues one sell for the open when the stock market is closed, instead of spinning", async () => {
+    flattenTiming.marketOpen = async () => false;
+    const posted: string[] = [];
+    let openOrders: { side: string; type: string; id: string }[] = [];
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      if (url.pathname === "/v2/positions/AAPL") return new Response(JSON.stringify({ symbol: "AAPL", qty: "1", current_price: "340", market_value: "340" }));
+      if (url.pathname === "/v2/orders" && method === "GET") return new Response(JSON.stringify(openOrders));
+      if (url.pathname === "/v2/orders" && method === "POST") {
+        posted.push(String(init?.body));
+        openOrders = [{ side: "sell", type: "market", id: "q1" }];
+        return new Response(JSON.stringify({ id: "q1", status: "accepted" }));
+      }
+      return new Response("{}", { status: 500 });
+    }) as typeof fetch;
+    const t = { symbol: "AAPL", asset_class: "STOCK" as const, broker_entry_order_id: null, broker_stop_order_id: null, broker_target_order_id: null };
+    await assert.rejects(flattenAtBroker(t), /stock_exit_queued_for_open/);
+    await assert.rejects(flattenAtBroker(t), /stock_exit_queued_for_open/);
+    assert.equal(posted.length, 1);
   });
 });

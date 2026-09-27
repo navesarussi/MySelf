@@ -1,8 +1,13 @@
 import type { AssetClass } from "../types";
 import { alpaca, isAlpacaInsufficientQty, isDustPosition, positionSellableQty } from "./alpaca";
+import { marketClock } from "./alpaca-data";
 
 /** Waits between broker calls; tests replace it to run the retry loop instantly. */
-export const flattenTiming = { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) };
+export const flattenTiming = {
+  sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+  /** Is the US stock market open now? (tests replace it) */
+  marketOpen: async () => (await marketClock().catch(() => ({ is_open: true }))).is_open,
+};
 const sleep = (ms: number) => flattenTiming.sleep(ms);
 
 async function cancelAndSettle(id: string) {
@@ -65,6 +70,19 @@ export async function flattenAtBroker(t: {
   broker_stop_order_id: string | null;
   broker_target_order_id: string | null;
 }): Promise<number | null> {
+  if (t.asset_class === "STOCK" && !(await flattenTiming.marketOpen())) {
+    // A stock sell cannot fill while the market is closed: retrying spun for ~30s per symbol and ran the
+    // tick past 85s (weekend reconcile of AAPL/MSFT/SPY). Queue one market sell for the open instead, and
+    // tell the caller the position is still held — it closes when that sell fills.
+    const held = await alpaca.position(t.symbol, t.asset_class);
+    if (!held || isDustPosition(held)) return null;
+    const open = await alpaca.openOrders(t.symbol, t.asset_class).catch(() => []);
+    if (!open.some((o) => o.side === "sell" && o.type === "market")) {
+      for (const o of open) if (o.side === "sell") await alpaca.cancelOrder(o.id);
+      await alpaca.placeMarketSell({ symbol: t.symbol, assetClass: "STOCK", qty: Math.floor(Number(held.qty)), clientId: `fl-${t.symbol}-${Date.now()}`.slice(0, 48) });
+    }
+    throw new Error("stock_exit_queued_for_open");
+  }
   await releaseReservedQty(t);
   let held = await alpaca.position(t.symbol, t.asset_class);
   if (!held || isDustPosition(held)) return null;
