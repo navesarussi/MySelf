@@ -1,10 +1,11 @@
 import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured, isDustPosition } from "./broker/alpaca";
 import { marketClock } from "./broker/alpaca-data";
 import { loadAccount, type Account, type TickSummary } from "./engine";
+import { accountRiskState } from "./tick-context";
+import { RISK_ENVELOPE } from "./config";
 import { brokerEquity } from "./account-equity";
-import { checkNewEntry, type EnvelopeBlock } from "./risk-envelope";
+import { checkAccountEntry, type EnvelopeBlock } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
-import { openRiskR } from "./position";
 import { getOpenTrades, type TradingSettings } from "./store";
 import { usSessionMinutes } from "./veto";
 import type { AssetClass, TradePlan } from "./types";
@@ -96,21 +97,13 @@ export async function loadIntradayAccount(settings: TradingSettings, lastPrices:
   return { account, buyingPower, useBroker, brokerHeld };
 }
 
-/** Testing phase: no correlation cap and no macro/funding/earnings vetoes for intraday (user-approved). */
-export function intradayEnvelopeBlocks(settings: TradingSettings, account: Account, symbol: string): EnvelopeBlock[] {
-  return checkNewEntry(
-    {
-      equity: account.equity,
-      peak_equity: Math.max(settings.peak_equity, account.equity),
-      realized_r_today: account.realizedToday,
-      realized_r_week: account.realizedWeek,
-      kill_switch_active: settings.kill_switch_active,
-      entries_paused: settings.entries_paused,
-      positions: account.open.map((t) => ({ symbol: t.symbol, notional: t.entry_limit * t.remaining_size, open_risk_r: openRiskR(t.sim_state) })),
-    },
-    symbol,
-    []
-  );
+/**
+ * Account envelope for a live entry (search button): every limit in % of equity (checkAccountEntry).
+ * `riskUsd` is the entry's own risk; a list preview that has not sized yet passes the per-trade cap.
+ */
+export function intradayEnvelopeBlocks(settings: TradingSettings, account: Account, symbol: string, riskUsd?: number): EnvelopeBlock[] {
+  const risk = riskUsd ?? RISK_ENVELOPE.MAX_RISK_PER_TRADE.STOCK * account.equity;
+  return checkAccountEntry(accountRiskState(settings, account), symbol, risk);
 }
 
 export function sizeIntraday(input: { entry: number; stop: number; assetClass: AssetClass; ia: IntradayAccount; riskScale: number }): TradePlan | null {

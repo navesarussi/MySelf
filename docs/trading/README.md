@@ -30,6 +30,15 @@ Tab **מסחר** in the Expo app. Backend in `lib/trading/**`, API in `app/api/v
   stop trailed past the entry), "awaiting fill" while pending; unfilled orders are not listed as trades.
 - **Fees**: `EXECUTION_RULES.FEE_RATE` crypto 0.1% → 0.2% per side (measured), so every backtest uses real costs.
 
+### Live account envelope in % of equity (2026-09-26)
+
+Live entries (the book and the search button) are checked by `checkAccountEntry` (`risk-envelope.ts`) against
+`RISK_ENVELOPE.ACCOUNT_*`: ≤ 25 positions, ≤ 8% of equity at risk across open stops, entries halt after a −3%
+realized day or −5% realized week, kill switch at −25% from peak. R-count limits (`MAX_TOTAL_OPEN_RISK_R`,
+`DAILY_LOSS_HALT_R`, …) stay only for the single-strategy research backtests and the paused AI committee —
+summing R across trades of different sizes read a +144R week out of tiny-risk trades. Thresholds come from the
+multi-strategy book's 10-year realized-loss tails (worst day −3.2%, worst week −3.9%).
+
 ### Strategy decision (2026-09-26): intraday entries retired, daily trend is the core
 
 Same code, 120 days, Alpaca's real costs (`INTRADAY_AUTO_ENTRIES = false` in `intraday-scan.ts`):

@@ -58,7 +58,8 @@ export const LIVE_DAILY_TREND_PARAMS: DailyTrendParams = {
   trail_atr: 3,
   stop_atr: 3,
   rs_min: 0,
-  max_concurrent: RISK_ENVELOPE.MAX_CONCURRENT_POSITIONS,
+  // The validated config ran 5 concurrent positions ("c5"); pinned so envelope changes can't drift the research.
+  max_concurrent: 5,
 };
 
 export type DailyAsset = { symbol: string; asset_class: AssetClass; group: string; d1: TfSeries; sma200: number[]; idx: Map<number, number> };

@@ -260,6 +260,8 @@ export type DashboardOverview = {
     peak_equity: number;
     drawdown_pct: number;
     open_risk_r: number;
+    /** USD at risk across open positions (stop below entry) as a share of equity. */
+    open_risk_pct?: number;
     pnl_day: number;
     pnl_week: number;
     pnl_month: number;

@@ -6,7 +6,10 @@ cd "$ROOT/mobile"
 
 if [ ! -d node_modules ]; then
   echo "Installing mobile dependencies…"
-  npm ci
+  # npm 12 (Vercel) rejects a lock file missing other platforms' optional packages (fsevents,
+  # lightningcss-*), which npm drops when the lock is written on one OS — that broke every deploy on
+  # 2026-09-27. Fall back to a normal install rather than failing the whole build.
+  npm ci || { echo "npm ci failed (lock file out of sync) — falling back to npm install"; npm install --no-audit --no-fund; }
 fi
 
 echo "Exporting Expo web → public/spa"
