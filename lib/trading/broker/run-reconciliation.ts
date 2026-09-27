@@ -317,6 +317,8 @@ export async function runBrokerReconciliation(now = Date.now()): Promise<Reconci
       await executeAction(action, { trades, fills, now, summary });
     } catch (err) {
       const detail = err instanceof Error ? err.message.slice(0, 120) : "?";
+      // Market closed: the sell is queued for the open — that is the plan, not a failure.
+      if (detail === "stock_exit_queued_for_open") continue;
       const label = action.kind === "resolve_ambiguous_order" ? action.tradeId : action.symbol;
       summary.errors.push(`${action.kind} ${label}: ${detail}`);
       const sym = action.kind === "resolve_ambiguous_order" ? action.symbol : action.symbol;

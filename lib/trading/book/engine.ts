@@ -341,7 +341,8 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       block("ALREADY_IN_SYMBOL");
       continue;
     }
-    const sleeveOpen = open.filter((x) => x.setup === sleeve.def.id).length + account.open.filter((x) => x.setup === sleeve.def.id && !open.includes(x)).length;
+    // Each entry is pushed to both lists; count symbols once or the sleeve fills at half its cap.
+    const sleeveOpen = new Set([...open, ...account.open].filter((x) => x.setup === sleeve.def.id).map((x) => x.symbol)).size;
     if (sleeveOpen >= sleeve.max_positions) {
       block(`MAX_${sleeve.def.id}`);
       continue;
