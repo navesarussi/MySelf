@@ -15,14 +15,16 @@ describe("conflict marker guard", () => {
   });
 
   it("detects standard conflict markers", () => {
-    const content = `{
-  "version": "2.7.0"
-<<<<<<< HEAD
-  "name": "ours"
-=======
-  "name": "theirs"
->>>>>>> branch
-}`;
+    const content = [
+      "{",
+      '  "version": "2.7.0"',
+      "<<<<<<< HEAD",
+      '  "name": "ours"',
+      "=======",
+      '  "name": "theirs"',
+      ">>>>>>> branch",
+      "}",
+    ].join("\n");
     assert.deepEqual(linesWithConflictMarkers(content), [3, 5, 7]);
   });
 
