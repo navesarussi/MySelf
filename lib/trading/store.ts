@@ -241,6 +241,8 @@ export type TradeRow = {
   broker_filled_qty: number | null;
   /** Set once P&L/R were recomputed from Alpaca's fills (broker/settle.ts). */
   broker_settled_at?: string | null;
+  /** Non-null when the row was created or closed by broker reconciliation (excluded from strategy P&L). */
+  reconciliation_kind?: string | null;
   baseline_enter: boolean;
   /** Rating-only agent (intraday): 1–10 + short explanation; never affects the trade. */
   agent_rating: number | null;
@@ -352,7 +354,11 @@ export function toJournalTrade(t: TradeRow): JournalTrade {
  * its own once sized, halted and showed P&L as if it were money (2026-09: 86 such trades).
  * In SHADOW (pre-broker phase) it is the virtual account.
  */
-export function isAccountTrade(t: Pick<TradeRow, "track" | "execution"> & { broker?: string | null }, phase: TradingPhase) {
+export function isAccountTrade(
+  t: Pick<TradeRow, "track" | "execution"> & { broker?: string | null; reconciliation_kind?: string | null },
+  phase: TradingPhase
+) {
+  if (t.reconciliation_kind) return false;
   if (t.track !== "AGENT") return false;
   if (phase === "PAPER" || phase === "LIVE") return (t.execution === "PAPER" || t.execution === "LIVE") && Boolean(t.broker);
   return t.execution === "SHADOW";

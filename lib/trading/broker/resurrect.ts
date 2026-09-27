@@ -1,8 +1,7 @@
 import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured, isDustPosition } from "./alpaca";
 import { revertFailedBrokerClose } from "./revert-close";
 import { matchBrokerOrphans } from "./reconcile";
-import { getClosedTrades, getOpenTrades, getSettings, logEvent, simColumns, symbolsLoggedOn, updateTrade } from "../store";
-import { BROKER_ORPHAN_KIND, orphanReportDay, orphansToReport } from "./orphan-report";
+import { getClosedTrades, getOpenTrades, getSettings, logEvent, simColumns, updateTrade } from "../store";
 
 /**
  * Journal said CLOSED, Alpaca still holds — put the trade back to OPEN so the
@@ -31,26 +30,7 @@ export async function resurrectDesyncedTrades(now: number): Promise<number> {
     new Set(open.map((t) => t.symbol)),
     closedBySymbol
   );
-  // A position the strategy never owned stays until a human acts on it, so it is
-  // reported once a day rather than on every 5-minute tick — that spam was 80%
-  // of the whole trading event log.
-  //
-  // Its own kind, not BROKER_DESYNC: three unrelated conditions shared that one
-  // (this, a trade reopened because the broker still held it, and a failed
-  // broker close), so deduping on the shared kind would have silenced a genuine
-  // alert about a different problem on the same symbol.
-  if (match.unknownSymbols.length) {
-    const day = orphanReportDay(new Date(now));
-    const fresh = orphansToReport(match.unknownSymbols, await symbolsLoggedOn(BROKER_ORPHAN_KIND, day));
-    for (const symbol of fresh) {
-      await logEvent({
-        kind: BROKER_ORPHAN_KIND,
-        symbol,
-        severity: "warn",
-        message: `${symbol}: פוזיציה בברוקר בלי עסקה פתוחה ביומן`,
-      });
-    }
-  }
+  // Unknown orphans (no journal row to reopen) are closed by runBrokerReconciliation.
   let n = 0;
   for (const id of match.reopenIds) {
     const trade = closed.find((t) => t.id === id);

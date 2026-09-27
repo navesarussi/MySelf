@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { isIntradayManaged } from "./engine";
 import { resurrectDesyncedTrades } from "./broker/resurrect";
+import { runBrokerReconciliation } from "./broker/run-reconciliation";
 import { settleBrokerTrades, SETTLE_LOOKBACK_MS } from "./broker/settle";
 import { loadIntradayFrames, type IntradaySymbol } from "./intraday-data";
 import { getIntradayUniverse, providerSymbolFor, refreshIntradayUniverse } from "./intraday-universe";
@@ -92,6 +93,12 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
       } catch (err) {
         summary.errors.push(`resurrect: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
       }
+      try {
+        const rec = await runBrokerReconciliation(now);
+        if (rec.errors.length) summary.errors.push(...rec.errors.map((e) => `reconcile: ${e}`));
+      } catch (err) {
+        summary.errors.push(`reconcile: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+      }
     }
     const managed = (await getOpenTrades()).filter((t) => isIntradayManaged(t.strategy_version));
     // With automatic entries retired only the open positions (and the market references) need bars.
@@ -120,7 +127,15 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
   } finally {
     summary.duration_ms = Date.now() - started;
     if (summary.errors.length) {
-      await logEvent({ kind: "INTRADAY_ERRORS", severity: summary.errors.length > 5 ? "critical" : "warn", message: summary.errors.slice(0, 5).join(" | ").slice(0, 900), data: summary.errors }).catch(() => null);
+      const noisy = summary.errors.filter((e) => /insufficient|40310000|alpaca_403/i.test(e));
+      const rest = summary.errors.filter((e) => !/insufficient|40310000|alpaca_403/i.test(e));
+      const payload = rest.length ? rest : noisy.slice(0, 1);
+      await logEvent({
+        kind: "INTRADAY_ERRORS",
+        severity: payload.length > 5 ? "critical" : "warn",
+        message: payload.slice(0, 5).join(" | ").slice(0, 900),
+        data: { errors: summary.errors, suppressed_insufficient: noisy.length > 1 ? noisy.length - 1 : 0 },
+      }).catch(() => null);
     }
     await getSupabase()
       .from("trading_settings")

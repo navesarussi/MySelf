@@ -3,7 +3,7 @@ import { flattenAtBroker } from "./broker/flatten";
 import { revertFailedBrokerClose } from "./broker/revert-close";
 import { bracketLegs, brokerExit, brokerSupportsExitPlan, pendingDecision, protectiveAdjustments } from "./broker/sync";
 import { applyExternalExit, applyExternalFill, type SimPosition } from "./position";
-import { logEvent, type TradeRow } from "./store";
+import { logEvent, symbolsLoggedOn, type TradeRow } from "./store";
 import { DAILY_TREND_STRATEGY_VERSION, INTRADAY_STRATEGY_VERSION, MANUAL_STRATEGY_VERSION } from "./strategy-versions";
 
 /**
@@ -23,16 +23,20 @@ const INTRADAY_ENTRY_EXPIRY_MS = 15 * 60_000;
 const MANUAL_ENTRY_EXPIRY_MS = 60 * 60_000;
 
 export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events: TradeRow["events"], now: number): Promise<{ done: boolean; patch: Record<string, unknown> }> {
-  if (!trade.broker_entry_order_id) {
-    p.state = "CANCELLED";
-    p.cancel_reason = "BROKER_ORDER_MISSING";
-    p.closed_at = now;
-    return { done: true, patch: {} };
+  const patch: Record<string, unknown> = {};
+  const clientOrderId = `${trade.id.slice(0, 18)}-in`;
+  let order = trade.broker_entry_order_id ? await alpaca.getOrder(trade.broker_entry_order_id).catch(() => null) : null;
+  if (!order) {
+    order = await alpaca.getOrderByClientId(clientOrderId).catch(() => null);
+    if (order) patch.broker_entry_order_id = order.id;
   }
-  const order = await alpaca.getOrder(trade.broker_entry_order_id);
+  if (!order) {
+    // Ambiguous timeout or missing id — reconciliation also looks up by client_order_id; do not invent a cancel yet.
+    return { done: false, patch: { broker_status: "order_lookup_pending" } };
+  }
   const expiry = trade.strategy_version === INTRADAY_STRATEGY_VERSION ? INTRADAY_ENTRY_EXPIRY_MS : trade.strategy_version === MANUAL_STRATEGY_VERSION ? MANUAL_ENTRY_EXPIRY_MS : undefined;
   const d = pendingDecision(order, Date.parse(trade.trigger_timestamp), now, expiry);
-  const patch: Record<string, unknown> = { broker_status: order.status, broker_filled_qty: Number(order.filled_qty) };
+  Object.assign(patch, { broker_status: order.status, broker_filled_qty: Number(order.filled_qty) });
   const cancel = (reason: string) => {
     p.state = "CANCELLED";
     p.cancel_reason = reason;
@@ -124,14 +128,18 @@ export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: Tr
       patch.broker_status = "close_failed";
       patch.realized_r = null;
       patch.realized_pnl = null;
-      await logEvent({
-        kind: "BROKER_DESYNC",
-        symbol: trade.symbol,
-        severity: "critical",
-        message: `${trade.symbol}: סגירה בברוקר נכשלה — העסקה נשארת פתוחה ביומן`,
-        data: { trade_id: trade.id, detail },
-        push: true,
-      });
+      const day = new Date(at).toISOString().slice(0, 10);
+      const already = await symbolsLoggedOn("BROKER_DESYNC", day);
+      if (!already.includes(trade.symbol)) {
+        await logEvent({
+          kind: "BROKER_DESYNC",
+          symbol: trade.symbol,
+          severity: "critical",
+          message: `${trade.symbol}: סגירה בברוקר נכשלה — העסקה נשארת פתוחה ביומן`,
+          data: { trade_id: trade.id, detail },
+          push: true,
+        });
+      }
     }
     return patch;
   }

@@ -12,6 +12,7 @@ import { scanDailyTrend } from "./scan-daily-trend";
 import { scan } from "./scan-v2";
 import { isIntradayManaged } from "./strategy-versions";
 import { resurrectDesyncedTrades } from "./broker/resurrect";
+import { runBrokerReconciliation } from "./broker/run-reconciliation";
 import { settleBrokerTrades, SETTLE_LOOKBACK_MS } from "./broker/settle";
 import { drawdownFromPeak, shouldTripKillSwitch } from "./risk-envelope";
 import {
@@ -74,6 +75,12 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
       await resurrectDesyncedTrades(now);
     } catch (err) {
       summary.errors.push(`resurrect: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+    }
+    try {
+      const rec = await runBrokerReconciliation(now);
+      if (rec.errors.length) summary.errors.push(...rec.errors.map((e) => `reconcile: ${e}`));
+    } catch (err) {
+      summary.errors.push(`reconcile: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
     }
   }
   const openTrades = await getOpenTrades();

@@ -1,5 +1,5 @@
 import type { AssetClass } from "../types";
-import { alpaca, isAlpacaInsufficientQty, isDustPosition, sellableQty } from "./alpaca";
+import { alpaca, isAlpacaInsufficientQty, isDustPosition, positionSellableQty } from "./alpaca";
 
 /** Waits between broker calls; tests replace it to run the retry loop instantly. */
 export const flattenTiming = { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) };
@@ -90,18 +90,25 @@ export async function flattenAtBroker(t: {
     await sleep(300);
   }
   held = await alpaca.position(t.symbol, t.asset_class);
-  const qty = held && !isDustPosition(held) ? await sellableQty(t.symbol, t.asset_class, Number(held.qty)) : null;
+  const qty = positionSellableQty(held, Number(held?.qty ?? 0), t.asset_class);
   if (qty) {
-    const placed = await alpaca.placeMarketSell({
-      symbol: t.symbol,
-      assetClass: t.asset_class,
-      qty,
-      clientId: `fl-${t.symbol}-${Date.now()}`.slice(0, 48),
-    });
-    const order = await settledOrder(placed.id);
-    const fill = Number(order?.filled_avg_price);
-    if (fill > 0) px = fill;
+    try {
+      const placed = await alpaca.placeMarketSell({
+        symbol: t.symbol,
+        assetClass: t.asset_class,
+        qty,
+        clientId: `fl-${t.symbol}-${Date.now()}`.slice(0, 48),
+      });
+      const order = await settledOrder(placed.id);
+      const fill = Number(order?.filled_avg_price);
+      if (fill > 0) px = fill;
+    } catch (err) {
+      if (!isAlpacaInsufficientQty(err)) throw err;
+      lastErr = err;
+    }
   }
   if (await waitFlat(t, 6)) return px;
+  held = await alpaca.position(t.symbol, t.asset_class);
+  if (isDustPosition(held)) return px;
   throw lastErr instanceof Error ? lastErr : new Error("alpaca_flatten_failed");
 }
