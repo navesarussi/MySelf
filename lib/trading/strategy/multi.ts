@@ -1,0 +1,580 @@
+import { EXECUTION_RULES } from "../config";
+import { rsi, sma } from "../indicators";
+import { computeStats, groupStats, type GroupStat, type PerformanceStats } from "../metrics";
+import { applyExternalFill, forceClose, newPendingPosition, realizedR, stepPosition, type SimPosition } from "../position";
+import type { AssetClass, Bar, ExitReason } from "../types";
+import { buildDailyAsset, dailyRsRanks, donchianExitBreached, LIVE_DAILY_TREND_PARAMS, scanDailyTrendCandidates, type DailyAsset } from "./daily-trend";
+import { closedIdx } from "./series";
+
+/**
+ * האסטרטגיית מסחר — deterministic multi-strategy book on daily bars.
+ *
+ * Several independent strategy families share one account: each is a pure `scan` (signals on a closed
+ * daily bar) + `exit` (a strategy exit decided on a closed bar) + management handed to the position state
+ * machine. The portfolio backtest and the live engine call the same functions, so research numbers are
+ * what runs (docs/trading/multi-strategy.md).
+ *
+ * Why several families: trade count only rises legitimately by adding independent edges, not by loosening
+ * one. Trend breakouts are rare and ride for weeks; mean reversion fires often and exits in days; the two
+ * are negatively correlated in time (MR earns in chop, trend in runs).
+ */
+
+export const D1 = 86_400_000;
+
+export type StrategyGroup = "STOCKS" | "ETF" | "CRYPTO";
+
+export type StrategyId = "TREND" | "MR_RSI2" | "MR_IBS" | "PULLBACK" | "CRYPTO_TREND";
+
+/** A daily asset plus the extra series the families read — all from closed daily bars. */
+export type MultiAsset = DailyAsset & {
+  sma5: number[];
+  sma10: number[];
+  sma20: number[];
+  sma50: number[];
+  sma100: number[];
+  rsi2: number[];
+  /** Internal bar strength: where the close sits in the day's range (0 = low, 1 = high). */
+  ibs: number[];
+  /** 50-day average dollar volume — point-in-time liquidity, no look-ahead. */
+  dv50: number[];
+  /** 126-day (≈6-month) return — the momentum a cross-sectional rank is taken on. */
+  ret126: number[];
+};
+
+export function buildMultiAsset(symbol: string, asset_class: AssetClass, group: StrategyGroup, bars: Bar[]): MultiAsset {
+  const base = buildDailyAsset(symbol, asset_class, group, bars);
+  const c = bars.map((b) => b.c);
+  return {
+    ...base,
+    sma5: sma(c, 5),
+    sma10: sma(c, 10),
+    sma20: sma(c, 20),
+    sma50: sma(c, 50),
+    sma100: sma(c, 100),
+    rsi2: rsi(c, 2),
+    ibs: bars.map((b) => (b.h > b.l ? (b.c - b.l) / (b.h - b.l) : 0.5)),
+    dv50: sma(bars.map((b) => b.c * b.v), 50),
+    ret126: c.map((x, i) => (i >= 126 && c[i - 126] > 0 ? x / c[i - 126] - 1 : NaN)),
+  };
+}
+
+/** Rank (0 = weakest, 1 = strongest) of each asset's 6-month return among those with a bar at `t`. */
+export function momentumRanks(assets: MultiAsset[], t: number): Map<string, number> {
+  const list: { symbol: string; r: number }[] = [];
+  for (const a of assets) {
+    const i = a.idx.get(t);
+    if (i === undefined || !Number.isFinite(a.ret126[i])) continue;
+    list.push({ symbol: a.symbol, r: a.ret126[i] });
+  }
+  list.sort((x, y) => x.r - y.r);
+  const out = new Map<string, number>();
+  list.forEach((x, k) => out.set(x.symbol, list.length > 1 ? k / (list.length - 1) : 0.5));
+  return out;
+}
+
+export type ScanContext = {
+  /** Market regime references by group (SPY for stocks, BTC for crypto); ETFs trade without one. */
+  references: Partial<Record<StrategyGroup, MultiAsset>>;
+};
+
+export type Signal = {
+  strategy: StrategyId;
+  a: MultiAsset;
+  /** Signal bar (closed). */
+  i: number;
+  t: number;
+  /** Reference price: the signal close. */
+  entry: number;
+  /** CLOSE: executed at the signal close; LIMIT_NEXT: a limit at `entry` that may fill on the next bar. */
+  fill: "CLOSE" | "LIMIT_NEXT";
+  stop: number;
+  target: number | null;
+  /** Priority when capacity is short (higher first). */
+  score: number;
+};
+
+export type Management = {
+  breakeven_at_r: number;
+  trail_after_r: number | null;
+  trail_mult: number;
+  /** Close at the end of this many bars in the trade (TIME_STOP); null = no time limit. */
+  max_hold_bars: number | null;
+};
+
+export type StrategyDef = {
+  id: StrategyId;
+  groups: StrategyGroup[];
+  manage: Management;
+  scan(assets: MultiAsset[], t: number, ctx: ScanContext): Signal[];
+  /** Exit decided on closed bar `i` of an open position, executed at that close. */
+  exit?(a: MultiAsset, i: number, pos: SimPosition): ExitReason | null;
+};
+
+const fin = (x: number | undefined) => typeof x === "number" && Number.isFinite(x);
+
+/** Is the group's regime reference above its 200-day average on the bar that closed by `t`? */
+export function regimeUp(ctx: ScanContext, group: StrategyGroup, t: number, smaKey: "sma200" | "sma100" = "sma200"): boolean {
+  const ref = ctx.references[group];
+  if (!ref) return true;
+  const ri = closedIdx(ref.d1, t + D1);
+  if (ri < 0) return false;
+  const level = ref[smaKey][ri];
+  return fin(level) && ref.d1.bars[ri].c > level;
+}
+
+function barAt(a: MultiAsset, t: number): number | null {
+  const i = a.idx.get(t);
+  return i === undefined ? null : i;
+}
+
+// ── Families ────────────────────────────────────────────────────────────────
+
+export type TrendParams = {
+  /** Point-in-time liquidity floor (50-day average dollar volume); 0 = off. */
+  min_dv: number;
+  /** Minimum volatility-adjusted relative-strength rank within the group (dailyRsRanks, 0–1). */
+  rs_min: number;
+};
+export const TREND_PARAMS: TrendParams = { min_dv: 0, rs_min: LIVE_DAILY_TREND_PARAMS.rs_min };
+
+/** Trend breakout — the validated daily-trend strategy (100-day high, 3×ATR stop and chandelier, 20-day-low exit). */
+export function trendBreakout(p: TrendParams = TREND_PARAMS): StrategyDef {
+  const params = { ...LIVE_DAILY_TREND_PARAMS, rs_min: p.rs_min };
+  return {
+    id: "TREND",
+    // 2016-26 by group (multi-research): stocks +0.10/+0.01/+0.17R train/valid/holdout; ETFs flat since 2022;
+    // crypto is better served by CRYPTO_TREND (+0.34R vs +0.01R in validation).
+    groups: ["STOCKS"],
+    manage: { breakeven_at_r: 100, trail_after_r: LIVE_DAILY_TREND_PARAMS.trail_after_r, trail_mult: LIVE_DAILY_TREND_PARAMS.trail_atr, max_hold_bars: null },
+    scan(assets, t, ctx) {
+      const refs = { STOCKS: ctx.references.STOCKS, CRYPTO: ctx.references.CRYPTO, ETF: undefined };
+      const pool = p.min_dv ? assets.filter((a) => {
+        const i = a.idx.get(t);
+        return i !== undefined && a.dv50[i] >= p.min_dv;
+      }) : assets;
+      return scanDailyTrendCandidates(pool, t, refs, params, dailyRsRanks(pool, t)).map((c) => ({
+        strategy: "TREND" as const,
+        a: c.a as MultiAsset,
+        i: c.i,
+        t,
+        entry: c.entry,
+        fill: "LIMIT_NEXT" as const,
+        stop: c.stop,
+        target: null,
+        score: c.rs ?? 0.5,
+      }));
+    },
+    exit(a, i) {
+      return donchianExitBreached(a.d1, i, LIVE_DAILY_TREND_PARAMS.exit_days) ? "TRAIL" : null;
+    },
+  };
+}
+export const TREND: StrategyDef = trendBreakout();
+
+export type MrRsi2Params = { rsi_max: number; exit_sma: 5 | 10; stop_atr: number; max_hold: number; min_price: number };
+export const MR_RSI2_PARAMS: MrRsi2Params = { rsi_max: 10, exit_sma: 5, stop_atr: 2.5, max_hold: 10, min_price: 5 };
+
+/**
+ * Short-term mean reversion (Connors RSI(2)): in a long-term uptrend (close > SMA200, market regime up),
+ * buy a 2-day RSI washout at the close; sell the first close back above the 5-day average.
+ */
+export function mrRsi2(p: MrRsi2Params = MR_RSI2_PARAMS): StrategyDef {
+  return {
+    id: "MR_RSI2",
+    groups: ["STOCKS", "ETF"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: p.max_hold },
+    scan(assets, t, ctx) {
+      const out: Signal[] = [];
+      for (const a of assets) {
+        const i = barAt(a, t);
+        if (i === null || i < 210) continue;
+        const b = a.d1.bars[i];
+        if (!(b.c >= p.min_price) || !(b.c > a.sma200[i]) || !(a.rsi2[i] < p.rsi_max)) continue;
+        if (a.group === "STOCKS" && !regimeUp(ctx, "STOCKS", t)) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        out.push({ strategy: "MR_RSI2", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: null, score: p.rsi_max - a.rsi2[i] });
+      }
+      return out;
+    },
+    exit(a, i) {
+      const level = p.exit_sma === 5 ? a.sma5[i] : a.sma10[i];
+      return a.d1.bars[i].c > level ? "SIGNAL" : null;
+    },
+  };
+}
+
+export type MrIbsParams = { ibs_max: number; exit_ibs: number; stop_atr: number; max_hold: number; trend: boolean };
+export const MR_IBS_PARAMS: MrIbsParams = { ibs_max: 0.15, exit_ibs: 0.75, stop_atr: 2.5, max_hold: 5, trend: true };
+
+/** Internal-bar-strength reversion on ETFs: a close at the bottom of the day's range tends to be bought back. */
+export function mrIbs(p: MrIbsParams = MR_IBS_PARAMS): StrategyDef {
+  return {
+    id: "MR_IBS",
+    groups: ["ETF"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: p.max_hold },
+    scan(assets, t) {
+      const out: Signal[] = [];
+      for (const a of assets) {
+        const i = barAt(a, t);
+        if (i === null || i < 210) continue;
+        const b = a.d1.bars[i];
+        if (!(a.ibs[i] < p.ibs_max) || (p.trend && !(b.c > a.sma200[i]))) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        out.push({ strategy: "MR_IBS", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: null, score: p.ibs_max - a.ibs[i] });
+      }
+      return out;
+    },
+    exit(a, i) {
+      const b = a.d1.bars[i];
+      return a.ibs[i] > p.exit_ibs || (i > 0 && b.c > a.d1.bars[i - 1].h) ? "SIGNAL" : null;
+    },
+  };
+}
+
+export type PullbackParams = {
+  down_days: number;
+  stop_atr: number;
+  exit_high_days: number;
+  max_hold: number;
+  trail_after_r: number | null;
+  trail_mult: number;
+  /** Point-in-time liquidity floor (50-day average dollar volume). */
+  min_dv?: number;
+  /** Minimum 6-month momentum rank among the scanned stocks (0–1). */
+  min_rs?: number;
+};
+/** Chosen on 2016-21 (all 108 grid configs were positive, median Sharpe 0.55), confirmed on 2022-24H1 (+0.05R). */
+export const PULLBACK_PARAMS: PullbackParams = { down_days: 3, stop_atr: 1.5, exit_high_days: 10, max_hold: 20, trail_after_r: null, trail_mult: 2.5 };
+
+/**
+ * Buy the dip inside a confirmed trend (SMA50 > SMA200, close > SMA200, market regime up) after N lower
+ * closes; sell the first close above the recent high. Stocks only — on ETFs it lost in 2022-24.
+ */
+export function pullback(p: PullbackParams = PULLBACK_PARAMS): StrategyDef {
+  return {
+    id: "PULLBACK",
+    groups: ["STOCKS"],
+    manage: { breakeven_at_r: 100, trail_after_r: p.trail_after_r, trail_mult: p.trail_mult, max_hold_bars: p.max_hold },
+    scan(assets, t, ctx) {
+      const out: Signal[] = [];
+      const ranks = p.min_rs ? momentumRanks(assets, t) : null;
+      for (const a of assets) {
+        const i = barAt(a, t);
+        if (i === null || i < 210) continue;
+        const bars = a.d1.bars;
+        const b = bars[i];
+        if (!(b.c > a.sma200[i]) || !(a.sma50[i] > a.sma200[i])) continue;
+        if (p.min_dv && !(a.dv50[i] >= p.min_dv)) continue;
+        if (ranks && !((ranks.get(a.symbol) ?? 0) >= (p.min_rs ?? 0))) continue;
+        let down = true;
+        for (let k = 0; k < p.down_days; k++) if (!(bars[i - k].c < bars[i - k - 1].c)) down = false;
+        if (!down) continue;
+        if (a.group === "STOCKS" && !regimeUp(ctx, "STOCKS", t)) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        out.push({ strategy: "PULLBACK", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: null, score: (a.sma50[i] - a.sma200[i]) / atrv });
+      }
+      return out;
+    },
+    exit(a, i) {
+      const bars = a.d1.bars;
+      let hi = -Infinity;
+      for (let j = i - p.exit_high_days; j < i; j++) if (j >= 0) hi = Math.max(hi, bars[j].h);
+      return bars[i].c > hi ? "SIGNAL" : null;
+    },
+  };
+}
+
+export type CryptoTrendParams = { breakout_days: number; exit_days: number; stop_atr: number; trail_mult: number; regime_sma: "sma100" | "sma200" };
+/** Chosen on 2018-21 (all 216 grid configs positive, median Sharpe 1.28), confirmed on 2022-24H1 (+0.34R, Sharpe 0.66). */
+export const CRYPTO_TREND_PARAMS: CryptoTrendParams = { breakout_days: 20, exit_days: 10, stop_atr: 2.5, trail_mult: 4, regime_sma: "sma100" };
+
+/** Faster crypto trend: 20-day breakout while BTC is above its 100-day average; 10-day-low exit and a 4×ATR chandelier. */
+export function cryptoTrend(p: CryptoTrendParams = CRYPTO_TREND_PARAMS): StrategyDef {
+  return {
+    id: "CRYPTO_TREND",
+    groups: ["CRYPTO"],
+    manage: { breakeven_at_r: 100, trail_after_r: 0, trail_mult: p.trail_mult, max_hold_bars: null },
+    scan(assets, t, ctx) {
+      if (!regimeUp(ctx, "CRYPTO", t, p.regime_sma)) return [];
+      const out: Signal[] = [];
+      for (const a of assets) {
+        const i = barAt(a, t);
+        if (i === null || i < Math.max(110, p.breakout_days + 1)) continue;
+        const bars = a.d1.bars;
+        let hi = -Infinity;
+        for (let j = i - p.breakout_days; j < i; j++) hi = Math.max(hi, bars[j].h);
+        const b = bars[i];
+        if (!(b.c > hi) || !(b.c > a.sma100[i])) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        out.push({ strategy: "CRYPTO_TREND", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: null, score: (b.c - hi) / atrv });
+      }
+      return out;
+    },
+    exit(a, i) {
+      return donchianExitBreached(a.d1, i, p.exit_days) ? "TRAIL" : null;
+    },
+  };
+}
+
+// ── Portfolio backtest ──────────────────────────────────────────────────────
+
+export type Sleeve = { def: StrategyDef; risk_pct: number; max_positions: number };
+
+export type BookEnvelope = {
+  max_positions: number;
+  /** Sum of open initial risk (fraction of equity) across positions whose stop is still below entry. */
+  max_open_risk: number;
+  /** Notional cap per position (fraction of equity). */
+  max_notional: number;
+  /** Gross notional cap across the book (fraction of equity; stocks have 2× margin at Alpaca, crypto none). */
+  max_gross: number;
+};
+
+/**
+ * No drawdown brake: tested on 2016-26 it locked the book at −20% (no new entries → no recovery) and cut the
+ * 10-year CAGR from 21% to 5%. Drawdown is controlled by the per-trade risk of each sleeve instead.
+ */
+export const DEFAULT_BOOK_ENVELOPE: BookEnvelope = { max_positions: 12, max_open_risk: 0.06, max_notional: 0.2, max_gross: 1.5 };
+
+export type BookTrade = {
+  strategy: StrategyId;
+  symbol: string;
+  group: string;
+  asset_class: AssetClass;
+  opened_at: number;
+  closed_at: number;
+  r: number;
+  pnl: number;
+  exit_reason: string;
+  bars_held: number;
+  mfe_r: number;
+};
+
+export type BookResult = {
+  stats: PerformanceStats;
+  trades: BookTrade[];
+  equity: { t: number; equity: number }[];
+  cagr: number;
+  sharpe: number | null;
+  max_dd: number;
+  by_strategy: GroupStat[];
+  blocked: Record<string, number>;
+};
+
+type Live = {
+  pos: SimPosition;
+  a: MultiAsset;
+  sleeve: Sleeve;
+  risk_pct: number;
+  entered_at_close_of: number | null;
+  /** NEXT_OPEN execution: the entry is a market-on-open order for the next bar. */
+  enter_next_open?: boolean;
+  /** NEXT_OPEN execution: a strategy/time exit decided at a close, sold at the next open. */
+  exit_next_open?: ExitReason | null;
+};
+
+/**
+ * How signals at a close are executed for stocks. CLOSE = at that close (what a 15:50 ET order approximates);
+ * NEXT_OPEN = market-on-open the next session (what an order sent after the close gets). Crypto trades
+ * around the clock, so its "close" order is sent right after the daily bar closes either way.
+ */
+export type StockExecution = "CLOSE" | "NEXT_OPEN";
+
+/**
+ * Open a position for `sig`: filled at the signal close (with the assumed slippage) or resting as a limit
+ * for the next bar. Pure — also what the live engine uses to seed a broker-backed trade's state.
+ */
+export function positionForSignal(sig: Signal, size: number, m: Management = defFor(sig.strategy).manage): SimPosition {
+  const pos = newPendingPosition({ asset_class: sig.a.asset_class, entry: sig.entry, stop: sig.stop, size });
+  pos.exit_plan = "STRUCTURAL";
+  pos.target_price = sig.target ?? sig.entry + 1000 * (sig.entry - sig.stop);
+  pos.initial_target_price = pos.target_price;
+  pos.breakeven_at_r = m.breakeven_at_r;
+  pos.partial_fraction = 0;
+  pos.trail_after_r = m.trail_after_r;
+  pos.trail_mult = m.trail_mult;
+  return pos;
+}
+
+const REGISTRY = new Map<StrategyId, StrategyDef>();
+/** Every family the book knows (defaults); the backtest may pass tuned copies through its sleeves. */
+export function registerStrategies(defs: StrategyDef[]) {
+  for (const d of defs) REGISTRY.set(d.id, d);
+}
+registerStrategies([TREND, mrRsi2(), mrIbs(), pullback(), cryptoTrend()]);
+export function defFor(id: StrategyId): StrategyDef {
+  const d = REGISTRY.get(id);
+  if (!d) throw new Error(`unknown strategy ${id}`);
+  return d;
+}
+
+/** Strategy exit or time stop for an open position on closed bar `i` (null = hold). */
+export function exitDecision(def: StrategyDef, a: MultiAsset, i: number, pos: SimPosition): ExitReason | null {
+  if (pos.state !== "OPEN" && pos.state !== "RISK_FREE") return null;
+  const signal = def.exit?.(a, i, pos) ?? null;
+  if (signal) return signal;
+  if (def.manage.max_hold_bars !== null && pos.bars_held + 1 >= def.manage.max_hold_bars) return "TIME_STOP";
+  return null;
+}
+
+export function runBook(input: {
+  assets: MultiAsset[];
+  references: ScanContext["references"];
+  sleeves: Sleeve[];
+  envelope?: BookEnvelope;
+  start: number;
+  end: number;
+  starting_equity: number;
+  stock_execution?: StockExecution;
+}): BookResult {
+  const env = input.envelope ?? DEFAULT_BOOK_ENVELOPE;
+  const ctx: ScanContext = { references: input.references };
+  const times = [...new Set(input.assets.flatMap((a) => a.d1.bars.map((b) => b.t)))].filter((t) => t >= input.start && t <= input.end).sort((a, b) => a - b);
+  const bySleeveAssets = input.sleeves.map((s) => input.assets.filter((a) => s.def.groups.includes(a.group as StrategyGroup)));
+  let cash = input.starting_equity;
+  let peak = cash;
+  let maxDd = 0;
+  const curve: { t: number; equity: number }[] = [];
+  const trades: BookTrade[] = [];
+  const blocked: Record<string, number> = {};
+  const live: Live[] = [];
+  const block = (k: string) => (blocked[k] = (blocked[k] ?? 0) + 1);
+
+  const settle = (l: Live) => {
+    if (l.pos.state !== "CLOSED") return;
+    cash += l.pos.cash_flow;
+    trades.push({
+      strategy: l.sleeve.def.id,
+      symbol: l.a.symbol,
+      group: l.a.group,
+      asset_class: l.a.asset_class,
+      opened_at: l.pos.opened_at ?? l.pos.closed_at ?? 0,
+      closed_at: l.pos.closed_at ?? 0,
+      r: realizedR(l.pos),
+      pnl: l.pos.cash_flow,
+      exit_reason: l.pos.exit_reason ?? "?",
+      bars_held: l.pos.bars_held,
+      mfe_r: l.pos.mfe_r,
+    });
+  };
+  const markPrice = (l: Live, t: number) => {
+    const i = closedIdx(l.a.d1, t + D1);
+    return i >= 0 ? l.a.d1.bars[i].c : (l.pos.entry_price ?? l.pos.entry_limit);
+  };
+
+  for (const t of times) {
+    // 1) manage every position on today's closed bar: stops/trail intrabar, strategy exits at the close.
+    for (let k = live.length - 1; k >= 0; k--) {
+      const l = live[k];
+      const i = l.a.idx.get(t);
+      if (i === undefined || l.entered_at_close_of === i) continue;
+      const bar = l.a.d1.bars[i];
+      if (l.enter_next_open && l.pos.state === "PENDING") {
+        l.enter_next_open = false;
+        if (bar.o <= l.pos.stop_price) {
+          // Gapped through the stop before the order could fill: the setup is dead.
+          l.pos.state = "CANCELLED";
+          l.pos.cancel_reason = "GAP_BELOW_STOP";
+          l.pos.closed_at = bar.t;
+        } else applyExternalFill(l.pos, bar.o * (1 + EXECUTION_RULES.ASSUMED_SLIPPAGE[l.a.asset_class]), l.pos.initial_size, bar.t);
+      }
+      if (l.exit_next_open && (l.pos.state === "OPEN" || l.pos.state === "RISK_FREE")) {
+        forceClose(l.pos, bar.o, l.exit_next_open, bar.t);
+      } else if (l.pos.state !== "CANCELLED") {
+        const exit = exitDecision(l.sleeve.def, l.a, i, l.pos);
+        const deferred = exit !== null && l.a.asset_class === "STOCK" && input.stock_execution === "NEXT_OPEN";
+        stepPosition(l.pos, bar, { atr: l.a.d1.atr[i - 1] ?? NaN, force_exit_reason: deferred ? undefined : (exit ?? undefined) });
+        if (deferred && (l.pos.state === "OPEN" || l.pos.state === "RISK_FREE")) l.exit_next_open = exit;
+      }
+      if (l.pos.state === "CLOSED" || l.pos.state === "CANCELLED") {
+        settle(l);
+        live.splice(k, 1);
+      }
+    }
+
+    // 2) mark to market
+    let mtm = 0;
+    for (const l of live) if (l.pos.entry_price !== null) mtm += l.pos.cash_flow + markPrice(l, t) * l.pos.size;
+    const equity = cash + mtm;
+    peak = Math.max(peak, equity);
+    maxDd = Math.max(maxDd, 1 - equity / peak);
+    curve.push({ t, equity });
+
+    // 3) new signals on today's close, best first across sleeves
+    const signals: { sig: Signal; sleeve: Sleeve }[] = [];
+    input.sleeves.forEach((s, k) => {
+      for (const sig of s.def.scan(bySleeveAssets[k], t, ctx)) signals.push({ sig, sleeve: s });
+    });
+    signals.sort((x, y) => y.sig.score - x.sig.score);
+    for (const { sig, sleeve } of signals) {
+      if (live.some((l) => l.a.symbol === sig.a.symbol)) {
+        block("ALREADY_IN_SYMBOL");
+        continue;
+      }
+      if (live.length >= env.max_positions) {
+        block("MAX_POSITIONS");
+        continue;
+      }
+      if (live.filter((l) => l.sleeve === sleeve).length >= sleeve.max_positions) {
+        block(`MAX_${sleeve.def.id}`);
+        continue;
+      }
+      const openRisk = live.reduce((s, l) => s + (l.pos.state === "RISK_FREE" ? 0 : l.risk_pct), 0);
+      const riskPct = sleeve.risk_pct;
+      if (openRisk + riskPct > env.max_open_risk + 1e-9) {
+        block("MAX_OPEN_RISK");
+        continue;
+      }
+      const stopDist = sig.entry - sig.stop;
+      if (!(stopDist > 0)) continue;
+      const gross = live.reduce((s, l) => s + markPrice(l, t) * (l.pos.entry_price !== null ? l.pos.size : l.pos.initial_size), 0);
+      const room = Math.max(0, env.max_gross * equity - gross);
+      let size = (riskPct * equity) / stopDist;
+      size = Math.min(size, (env.max_notional * equity) / sig.entry, room / sig.entry);
+      if (sig.a.asset_class === "STOCK") size = Math.floor(size);
+      if (!(size * sig.entry >= EXECUTION_RULES.MIN_ORDER_NOTIONAL)) {
+        block("SIZE");
+        continue;
+      }
+      const pos = positionForSignal(sig, size, sleeve.def.manage);
+      const nextOpen = sig.fill === "CLOSE" && sig.a.asset_class === "STOCK" && input.stock_execution === "NEXT_OPEN";
+      if (sig.fill === "CLOSE" && !nextOpen) {
+        applyExternalFill(pos, sig.entry * (1 + EXECUTION_RULES.ASSUMED_SLIPPAGE[sig.a.asset_class]), size, t);
+        if (!(pos.stop_distance > 0)) continue;
+      }
+      // Risk actually taken, as a fraction of equity (the notional caps can make it smaller than the sleeve's).
+      const risk_pct = (size * stopDist) / equity;
+      live.push({ pos, a: sig.a, sleeve, risk_pct, entered_at_close_of: sig.fill === "CLOSE" ? sig.i : null, enter_next_open: nextOpen });
+    }
+  }
+  for (const l of live) {
+    const i = closedIdx(l.a.d1, input.end + D1);
+    if (i < 0) continue;
+    forceClose(l.pos, l.a.d1.bars[i].c, "MANUAL", l.a.d1.bars[i].t);
+    settle(l);
+  }
+
+  const rets: number[] = [];
+  for (let k = 1; k < curve.length; k++) rets.push(curve[k].equity / curve[k - 1].equity - 1);
+  const m = rets.reduce((a, b) => a + b, 0) / Math.max(1, rets.length);
+  const sd = Math.sqrt(rets.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, rets.length));
+  const days = times.length ? (times[times.length - 1] - times[0]) / D1 : 0;
+  // Calendar-day returns (crypto trades every day): annualise with the observed bars per year.
+  const perYear = days > 0 ? (curve.length / days) * 365 : 252;
+  const years = days / 365;
+  const rt = trades.map((x) => ({ ...x, reached_1r: x.mfe_r >= 1 }));
+  return {
+    stats: computeStats(rt),
+    trades,
+    equity: curve,
+    cagr: years > 0 ? (cash / input.starting_equity) ** (1 / years) - 1 : 0,
+    sharpe: rets.length > 30 && sd > 0 ? Math.round((m / sd) * Math.sqrt(perYear) * 100) / 100 : null,
+    max_dd: maxDd,
+    by_strategy: groupStats(rt, (x) => x.strategy),
+    blocked,
+  };
+}

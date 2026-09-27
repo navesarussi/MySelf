@@ -4,7 +4,7 @@ import { revertFailedBrokerClose } from "./broker/revert-close";
 import { bracketLegs, brokerExit, brokerSupportsExitPlan, pendingDecision, protectiveAdjustments } from "./broker/sync";
 import { applyExternalExit, applyExternalFill, type SimPosition } from "./position";
 import { logEvent, symbolsLoggedOn, type TradeRow } from "./store";
-import { DAILY_TREND_STRATEGY_VERSION, INTRADAY_STRATEGY_VERSION, MANUAL_STRATEGY_VERSION } from "./strategy-versions";
+import { BOOK_STRATEGY_VERSION, DAILY_TREND_STRATEGY_VERSION, INTRADAY_STRATEGY_VERSION, MANUAL_STRATEGY_VERSION } from "./strategy-versions";
 
 /**
  * Keeping the (paper) broker and the simulator in agreement.
@@ -21,6 +21,8 @@ import { DAILY_TREND_STRATEGY_VERSION, INTRADAY_STRATEGY_VERSION, MANUAL_STRATEG
 const INTRADAY_ENTRY_EXPIRY_MS = 15 * 60_000;
 /** A manual limit (pullback) entry waits up to an hour. */
 const MANUAL_ENTRY_EXPIRY_MS = 60 * 60_000;
+/** A book stock entry is sent after the close and fills at the next open (day order — it expires on its own). */
+const BOOK_ENTRY_EXPIRY_MS = 26 * 60 * 60_000;
 
 export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events: TradeRow["events"], now: number): Promise<{ done: boolean; patch: Record<string, unknown> }> {
   const patch: Record<string, unknown> = {};
@@ -34,7 +36,7 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
     // Ambiguous timeout or missing id — reconciliation also looks up by client_order_id; do not invent a cancel yet.
     return { done: false, patch: { broker_status: "order_lookup_pending" } };
   }
-  const expiry = trade.strategy_version === INTRADAY_STRATEGY_VERSION ? INTRADAY_ENTRY_EXPIRY_MS : trade.strategy_version === MANUAL_STRATEGY_VERSION ? MANUAL_ENTRY_EXPIRY_MS : undefined;
+  const expiry = trade.strategy_version === INTRADAY_STRATEGY_VERSION ? INTRADAY_ENTRY_EXPIRY_MS : trade.strategy_version === MANUAL_STRATEGY_VERSION ? MANUAL_ENTRY_EXPIRY_MS : trade.strategy_version === BOOK_STRATEGY_VERSION ? BOOK_ENTRY_EXPIRY_MS : undefined;
   const d = pendingDecision(order, Date.parse(trade.trigger_timestamp), now, expiry);
   Object.assign(patch, { broker_status: order.status, broker_filled_qty: Number(order.filled_qty) });
   const cancel = (reason: string) => {
@@ -151,9 +153,16 @@ export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: Tr
   const held = await alpaca.position(trade.symbol, trade.asset_class);
   if (isDustPosition(held)) {
     const entry = p.entry_price ?? p.entry_limit;
-    const reason = p.stop_price > entry * 1.0005 ? "TRAIL" : p.stop_price >= entry * 0.9995 ? "BREAKEVEN" : "STOP";
+    const reason = p.exit_pending ?? (p.stop_price > entry * 1.0005 ? "TRAIL" : p.stop_price >= entry * 0.9995 ? "BREAKEVEN" : "STOP");
     events.push(...applyExternalExit(p, lastPrice ?? p.stop_price, reason, at));
+    p.exit_pending = null;
     patch.broker_status = "exit_broker_flat";
+    return patch;
+  }
+  // A strategy exit is already queued at the broker (a stock sell for the next open): its order holds the
+  // quantity, so no protective stop is re-placed — the position closes when that sell fills.
+  if (p.exit_pending) {
+    patch.broker_status = "exit_queued";
     return patch;
   }
 

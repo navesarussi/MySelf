@@ -9,6 +9,11 @@ Tab **מסחר** in the Expo app. Backend in `lib/trading/**`, API in `app/api/v
 - **הסוכן מסחר** — the AI part (`lib/trading/agent-judge.ts`).
 - **האסטרטגיית מסחר** — deterministic part + AI part together.
 
+## Multi-strategy book (2026-09-27) — see [multi-strategy.md](multi-strategy.md)
+
+The daily-trend scan is replaced by the book: crypto trend (the robust edge) + stock pullbacks (thin edge,
+traded small), scanned daily over every liquid asset at Alpaca.
+
 ## Real trades only + books from the broker (2026-09-26)
 
 - **Nothing is simulated any more.** Every entry goes to the Alpaca demo account or does not happen: the intraday

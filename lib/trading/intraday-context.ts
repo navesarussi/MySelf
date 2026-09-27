@@ -36,7 +36,7 @@ export type IntradaySummary = Pick<TickSummary, "positions_updated" | "closed" |
   /** Trades whose P&L/R were booked from Alpaca's fills this tick. */
   settled?: number;
   stocks_open: boolean;
-  universe_refreshed?: { crypto: number; stocks: number };
+  universe_refreshed?: { crypto: number; stocks: number; book?: number };
 };
 
 export type StockSession = { open: boolean; canEnter: boolean; mustFlatten: boolean };

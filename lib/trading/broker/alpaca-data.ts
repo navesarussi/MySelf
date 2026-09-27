@@ -84,7 +84,14 @@ export function marketClock(): Promise<AlpacaClock> {
   return getJson<AlpacaClock>(`${ALPACA_PAPER_BASE}/v2/clock`, 10_000);
 }
 
-export type AlpacaAsset = { symbol: string; exchange: string; tradable: boolean; fractionable: boolean; easy_to_borrow: boolean; marginable: boolean; shortable: boolean; status: string };
+/** One regular session from Alpaca's trading calendar (date in New York; open/close as "HH:MM" New York time). */
+export type AlpacaSession = { date: string; open: string; close: string };
+
+export function marketCalendar(startIso: string, endIso: string): Promise<AlpacaSession[]> {
+  return getJson<AlpacaSession[]>(`${ALPACA_PAPER_BASE}/v2/calendar?start=${startIso}&end=${endIso}`, 10_000);
+}
+
+export type AlpacaAsset = { symbol: string; name?: string; exchange: string; tradable: boolean; fractionable: boolean; easy_to_borrow: boolean; marginable: boolean; shortable: boolean; status: string };
 
 /** Listed, tradable US equities/ETFs (no OTC, no share-class dots). */
 export async function listedStockAssets(): Promise<AlpacaAsset[]> {

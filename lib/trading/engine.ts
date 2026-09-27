@@ -1,16 +1,15 @@
 import { getSupabase } from "@/lib/supabase";
-import { D1, createFrameCache, iso, loadAccount, type TickSummary } from "./tick-context";
+import { D1, TICK_TIME_BUDGET_MS, createFrameCache, iso, loadAccount, type TickSummary } from "./tick-context";
 import { brokerEquity } from "./account-equity";
 import { createBarCache, fetchEarningsSymbols } from "./market-data";
 import { forceClose, openRiskR, realizedR, type PositionEvent } from "./position";
 import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
 import { flattenAtBroker } from "./broker/flatten";
 import { advancePositions } from "./advance-positions";
-import { dailyScreen } from "./daily-screen";
 import { learnFromClosedTrades } from "./learn-loop";
-import { scanDailyTrend } from "./scan-daily-trend";
+import { advanceBookBroker, runBookTick } from "./book/engine";
 import { scan } from "./scan-v2";
-import { isIntradayManaged } from "./strategy-versions";
+import { isBookManaged, isIntradayManaged } from "./strategy-versions";
 import { resurrectDesyncedTrades } from "./broker/resurrect";
 import { runBrokerReconciliation } from "./broker/run-reconciliation";
 import { settleBrokerTrades, SETTLE_LOOKBACK_MS } from "./broker/settle";
@@ -87,7 +86,13 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
   const lastPrices = new Map<string, number>();
   const earningsNext = openTrades.some((t) => t.asset_class === "STOCK") ? await fetchEarningsSymbols(nextTradingDays(isoDateInZone(new Date(now), "America/New_York"), 2)) : new Set<string>();
   // Intraday positions are managed on 5m bars by the per-minute intraday tick.
-  await advancePositions({ trades: openTrades.filter((t) => !isIntradayManaged(t.strategy_version)), frames, universe, params, calendar, earningsNext, agentEnabled: settings.agent_enabled, now, summary, lastPrices });
+  // Book positions are managed on daily bars by their pass; between passes only the broker is mirrored.
+  try {
+    await advanceBookBroker(now, summary.errors);
+  } catch (err) {
+    summary.errors.push(`book_broker: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+  }
+  await advancePositions({ trades: openTrades.filter((t) => !isIntradayManaged(t.strategy_version) && !isBookManaged(t.strategy_version)), frames, universe, params, calendar, earningsNext, agentEnabled: settings.agent_enabled, now, summary, lastPrices });
   if (settings.execution_venue === "ALPACA_PAPER") {
     try {
       await settleBrokerTrades({ now, sinceMs: now - SETTLE_LOOKBACK_MS });
@@ -147,12 +152,6 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
     await updateSettings({ peak_equity: peak });
   }
 
-  if (settings.last_screen_date !== today) {
-    await dailyScreen(universeRows, cache, now, summary);
-    await updateSettings({ last_screen_date: today });
-    summary.screened = true;
-  }
-
   if (settings.phase === "BACKTEST") summary.skipped_reason = "phase_backtest_scanning_disabled";
   else if (settings.phase === "LIVE") {
     summary.skipped_reason = "live_broker_not_connected";
@@ -161,15 +160,16 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
   else {
     const playbook = await getActivePlaybook();
     if (V2_SCAN_ENABLED) await scan({ settings, universe: universeRows, params, frames, cache, calendar, account, playbook, now, started, summary });
-    // Daily-trend scans once per day (its signal only changes on a daily close) — gate separately from
-    // v2's 4h scan, but share the SAME account/portfolio state so the combined envelope is respected.
-    if (settings.last_daily_trend_scan_date !== today) {
-      try {
-        await scanDailyTrend({ settings, universe: universeRows, cache, account, playbook, now, started, summary });
-        await updateSettings({ last_daily_trend_scan_date: today });
-      } catch (err) {
-        summary.errors.push(`daily_trend_scan: ${err instanceof Error ? err.message : String(err)}`);
-      }
+  }
+  // The multi-strategy book replaces the single daily-trend scan (lib/trading/book): its daily passes
+  // manage their own positions and entries; halts and the kill switch are enforced inside (checkAccountEntry).
+  if (settings.phase === "PAPER") {
+    try {
+      const passes = await runBookTick(now, started + TICK_TIME_BUDGET_MS, summary.errors);
+      summary.entries += passes.reduce((s, x) => s + x.entries, 0);
+      summary.triggers += passes.reduce((s, x) => s + x.signals, 0);
+    } catch (err) {
+      summary.errors.push(`book: ${err instanceof Error ? err.message.slice(0, 160) : "?"}`);
     }
   }
 

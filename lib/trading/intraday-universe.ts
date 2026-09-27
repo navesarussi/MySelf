@@ -5,6 +5,7 @@ import { isAlpacaConfigured } from "./broker/alpaca";
 import { SEED_UNIVERSE } from "./config";
 import type { AssetClass, Bar } from "./types";
 import { mapWithConcurrency } from "@/lib/concurrency";
+import { saveBookUniverse, selectBookCrypto, selectBookStocks, type BookUniverseRow } from "./book/universe";
 
 /**
  * Intraday universe — rebuilt once a day from liquidity, not a hand-picked list:
@@ -81,9 +82,10 @@ export function selectStockUniverse(daily: Map<string, Bar[]>, opts: { exclude?:
 }
 
 /** Rebuild myself.trading_intraday_universe. Returns counts; errors are thrown for the caller to log. */
-export async function refreshIntradayUniverse(now = Date.now()): Promise<{ crypto: number; stocks: number }> {
+export async function refreshIntradayUniverse(now = Date.now()): Promise<{ crypto: number; stocks: number; book?: number }> {
   const tickers = (await (await fetch("https://data-api.binance.vision/api/v3/ticker/24hr", { cache: "no-store", signal: AbortSignal.timeout(20_000) })).json()) as { symbol: string; quoteVolume: string; lastPrice: string }[];
   let stockRows: IntradayUniverseRow[] = [];
+  let bookStocks: BookUniverseRow[] = [];
   let stockSymbols = new Set<string>();
   let alpacaBases = new Set<string>();
   if (isAlpacaConfigured()) {
@@ -100,6 +102,8 @@ export async function refreshIntradayUniverse(now = Date.now()): Promise<{ crypt
       for (const [s, b] of res) daily.set(s, b);
     });
     stockRows = selectStockUniverse(daily);
+    // The multi-strategy book screens every liquid name from the same bars (no second pull).
+    bookStocks = selectBookStocks(daily, new Map(assets.map((a) => [a.symbol, a.name])));
   }
   const cryptoRows = selectCryptoUniverse(tickers, { stockSymbols, alpacaBases });
   // One namespace per symbol: a stock wins a ticker collision (crypto bases are rarely real stock tickers we trade).
@@ -111,7 +115,9 @@ export async function refreshIntradayUniverse(now = Date.now()): Promise<{ crypt
   const { error } = await sb.from("trading_intraday_universe").upsert(rows.map((r) => ({ ...r, refreshed_at: refreshedAt })), { onConflict: "symbol" });
   if (error) throw new Error(`intraday universe upsert: ${error.message}`);
   await sb.from("trading_intraday_universe").delete().lt("refreshed_at", refreshedAt);
-  return { crypto: cryptoRows.length, stocks: stockRows.length };
+  const book = [...bookStocks, ...selectBookCrypto(tickers, alpacaBases)];
+  await saveBookUniverse(book, now);
+  return { crypto: cryptoRows.length, stocks: stockRows.length, book: book.length };
 }
 
 /** Current intraday universe; falls back to the seeded crypto list when the table hasn't been built yet. */
