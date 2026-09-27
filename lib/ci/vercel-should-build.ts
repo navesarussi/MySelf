@@ -1,7 +1,7 @@
 /**
  * Vercel ignoreCommand logic (see vercel.json + scripts/ci/vercel-should-build.sh).
  *
- * Exit semantics for the shell wrapper: 0 = build, 1 = skip.
+ * Vercel exit semantics (handled by the CLI wrapper): 0 = skip the build, 1 = build.
  */
 
 export type ShouldBuildInput = {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vercel ignoreCommand — exit 0 to build, exit 1 to skip.
+# Vercel ignoreCommand — exit 0 skips the build, exit 1 builds (see vercel-should-build.ts).
 # https://vercel.com/docs/project-configuration#ignorecommand
 set -euo pipefail
 
