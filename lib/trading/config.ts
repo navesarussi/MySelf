@@ -33,10 +33,14 @@ export const RISK_ENVELOPE = Object.freeze({
   // The R-count limits above assume every trade risks the same 1R — true inside a single-strategy backtest,
   // false in the book (0.15%–0.5% per trade), where a "+144R week" made of tiny-risk trades showed why.
   // These are what live entries (the book and the search button) are checked against: checkAccountEntry.
-  /** Open positions across every strategy and manual trade. */
-  ACCOUNT_MAX_POSITIONS: 25,
-  /** Sum of initial risk still at stake (stop below entry), as a share of equity. */
-  ACCOUNT_MAX_OPEN_RISK_PCT: 0.08,
+  /** Open positions across every strategy and manual trade (book 2026-09-28: 6 crypto + 20 momentum + 5 rotation + 40 reversal slots). */
+  ACCOUNT_MAX_POSITIONS: 80,
+  /**
+   * Sum of initial risk still at stake (stop below entry), as a share of equity. The book's stops are
+   * catastrophe stops 4–5 ATR away, so this is a worst-case bound, not the expected loss; real exposure is
+   * capped by the book's gross notional (BOOK_LIMITS.max_gross).
+   */
+  ACCOUNT_MAX_OPEN_RISK_PCT: 0.25,
   /** Realized loss that halts new entries: today / this week (Mon–Sun UTC). Book 2016-26: worst day −3.2% (once), worst week −3.9%. */
   DAILY_LOSS_HALT_PCT: -0.03,
   WEEKLY_LOSS_HALT_PCT: -0.05,

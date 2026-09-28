@@ -13,11 +13,16 @@ import { BOOK_STRATEGY_VERSION, isBookManaged } from "../strategy-versions";
 import { accountRiskState, loadAccount, type Account } from "../tick-context";
 import type { AssetClass, ExitReason } from "../types";
 import {
+  assetRotation,
   buildMultiAsset,
   cryptoTrend,
+  EQUITY_ETFS,
   exitDecision,
+  momentum,
   positionForSignal,
   pullback,
+  reversal,
+  ROTATION_ETFS,
   type MultiAsset,
   type Signal,
   type Sleeve,
@@ -35,18 +40,36 @@ import { getBookUniverse, type BookUniverseRow } from "./universe";
  * scan the whole universe for new signals and send them to the broker. Between passes the 15-minute tick
  * only mirrors the broker (fills, stops, exits, settlement — advanceBookBroker).
  *
- * Sleeves and risk come from the 10-year research on the full universe (docs/trading/multi-strategy.md):
- * crypto trend is the robust edge; stock pullbacks are a thin edge traded small; stock trend breakouts
- * showed no edge across ~1,900 liquid stocks and are not traded.
+ * Sleeves and risk come from the 10-year research on the full universe (docs/trading/multi-strategy.md), one
+ * edge per horizon: crypto trend (weeks), stock momentum and cross-asset rotation (months, rebalanced monthly),
+ * and short-term reversal in momentum leaders (days). 2016-26 together: CAGR 24%, Sharpe 1.22, max DD 21%,
+ * ~480 trades a year — every period positive. The old stock pullback earned nothing over the equal-weight
+ * universe and is retired (open ones are still managed to their exits).
  */
-
 export const BOOK_SLEEVES: Sleeve[] = [
   { def: cryptoTrend(), risk_pct: 0.005, max_positions: 6 },
-  { def: pullback(), risk_pct: 0.0015, max_positions: 12 },
+  { def: momentum(), risk_pct: 0.003, max_positions: 20 },
+  { def: assetRotation(), risk_pct: 0.008, max_positions: 5 },
+  // Mean reversion needs many small slots: signals cluster in selloffs and 10 big slots fill on the first day.
+  { def: reversal(), risk_pct: 0.0025, max_positions: 40 },
 ];
 
+/** Families no longer entered whose open positions are still managed to their exits. */
+const RETIRED_DEFS = [pullback()];
+
 /** The research book's own caps (the account envelope in % of equity sits above these). */
-export const BOOK_LIMITS = Object.freeze({ max_positions: 20, max_notional: 0.2, max_gross: 1.5 });
+export const BOOK_LIMITS = Object.freeze({
+  max_positions: 75,
+  max_notional: 0.2,
+  /** Stock gross notional (book positions + queued entries) as a share of equity — research: 1.0 → max DD 21% vs 30% at 1.5. */
+  max_gross: 1.0,
+  max_risk_per_trade: 0.01,
+});
+
+/** Symbols every stock pass loads whatever the day's liquidity ranking (the ETF families trade fixed lists). */
+const ALWAYS_STOCKS = [...ROTATION_ETFS, ...EQUITY_ETFS];
+
+const defById = (id: string) => [...BOOK_SLEEVES.map((s) => s.def), ...RETIRED_DEFS].find((d) => d.id === (id as StrategyId));
 
 export type BookGroupKey = "CRYPTO" | "STOCKS";
 export type BookState = { crypto_bar?: string; stocks_bar?: string; backfill_remaining?: number };
@@ -58,6 +81,18 @@ const REFERENCE: Record<BookGroupKey, { symbol: string; asset_class: AssetClass;
 };
 
 const groupOf = (t: Pick<TradeRow, "asset_class">): BookGroupKey => (t.asset_class === "STOCK" ? "STOCKS" : "CRYPTO");
+
+/** Stock notional of open and queued book trades at their entry price — what BOOK_LIMITS.max_gross caps. */
+export function bookStockGross(trades: Pick<TradeRow, "asset_class" | "entry_limit" | "entry_price" | "remaining_size" | "position_size">[]): number {
+  let g = 0;
+  for (const t of trades) {
+    if (t.asset_class !== "STOCK") continue;
+    const px = Number(t.entry_price ?? t.entry_limit) || 0;
+    const qty = Number(t.remaining_size) || Number(t.position_size) || 0;
+    g += px * qty;
+  }
+  return g;
+}
 
 /** Last US session (NY date) whose close is at least 20 minutes behind `now`, or null. */
 export async function lastClosedSession(now: number): Promise<string | null> {
@@ -110,7 +145,7 @@ async function loadGroupAssets(group: BookGroupKey, rows: BookUniverseRow[], ext
   const series = await loadStockSeries(symbols, now - BOOK_HISTORY_DAYS * D1);
   for (const s of symbols) {
     const bars = series.get(s);
-    if (bars && bars.length >= 120) out.set(s, buildMultiAsset(s, "STOCK", grp.get(s) ?? (s === "SPY" ? "ETF" : "STOCKS"), bars));
+    if (bars && bars.length >= 120) out.set(s, buildMultiAsset(s, "STOCK", grp.get(s) ?? (ALWAYS_STOCKS.includes(s) ? "ETF" : "STOCKS"), bars));
   }
   return out;
 }
@@ -145,7 +180,7 @@ async function requestExit(trade: TradeRow, p: SimPosition, reason: ExitReason, 
 /** Manage one open book position on its unseen closed daily bars. */
 async function manageOnBar(trade: TradeRow, a: MultiAsset, barIso: string, now: number, summary: BookPassSummary) {
   if (trade.state !== "OPEN" && trade.state !== "RISK_FREE") return;
-  const def = BOOK_SLEEVES.find((s) => s.def.id === (trade.setup as StrategyId))?.def;
+  const def = defById(trade.setup ?? "");
   if (!def) return;
   const p: SimPosition = { ...trade.sim_state };
   if (p.exit_pending) return;
@@ -200,7 +235,7 @@ async function brokerContext(): Promise<{ equity: number | null; buying: Buying;
 export function sizeSignal(sig: Pick<Signal, "entry" | "stop" | "a">, riskPct: number, equity: number, buyingPower: number | null): { size: number; riskUsd: number; notional: number } | null {
   const stopDist = sig.entry - sig.stop;
   if (!(stopDist > 0) || !(equity > 0)) return null;
-  const cap = RISK_ENVELOPE.MAX_RISK_PER_TRADE[sig.a.asset_class];
+  const cap = sig.a.asset_class === "STOCK" ? BOOK_LIMITS.max_risk_per_trade : RISK_ENVELOPE.MAX_RISK_PER_TRADE[sig.a.asset_class];
   let size = (Math.min(riskPct, cap) * equity) / stopDist;
   size = Math.min(size, (BOOK_LIMITS.max_notional * equity) / sig.entry);
   if (buyingPower !== null) size = Math.min(size, Math.max(0, buyingPower * 0.95) / sig.entry);
@@ -298,11 +333,14 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
   const mine = open.filter((t) => groupOf(t) === group);
 
   if (group === "STOCKS") {
-    const sync = await syncStockBars({ symbols: [...new Set([...universe.map((r) => r.symbol), ...mine.map((t) => t.symbol), "SPY"])], now, deadline });
+    const sync = await syncStockBars({ symbols: [...new Set([...universe.map((r) => r.symbol), ...mine.map((t) => t.symbol), ...ALWAYS_STOCKS])], now, deadline });
     if (sync.remaining > 0) summary.errors.push(`bars_backfill_remaining:${sync.remaining}`);
   }
-  const assets = await loadGroupAssets(group, universe, mine.map((t) => t.symbol), now);
+  const assets = await loadGroupAssets(group, universe, [...mine.map((t) => t.symbol), ...(group === "STOCKS" ? ALWAYS_STOCKS : [])], now);
   const t = Date.parse(`${barIso}T00:00:00Z`);
+  // Cross-sectional state (momentum ranks) for this bar, before rank-based exits are decided.
+  const pool = [...assets.values()];
+  for (const s of BOOK_SLEEVES) s.def.prepare?.(pool.filter((a) => s.def.groups.includes(a.group as StrategyGroup)), t);
 
   for (const trade of mine) {
     const a = assets.get(trade.symbol);
@@ -322,7 +360,6 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
   }
   const account: Account = { ...(await loadAccount(settings, await getOpenTrades(), new Map(), now)), equity: broker.equity };
   const refs = { STOCKS: assets.get("SPY"), CRYPTO: assets.get("BTC") };
-  const pool = [...assets.values()];
   const signals: { sig: Signal; sleeve: Sleeve }[] = [];
   for (const sleeve of BOOK_SLEEVES) {
     if (!sleeve.def.groups.some((g) => (group === "CRYPTO" ? g === "CRYPTO" : g !== "CRYPTO"))) continue;
@@ -332,6 +369,7 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
   signals.sort((x, y) => y.sig.score - x.sig.score);
   summary.signals = signals.length;
   const bookOpen = () => open.length + summary.entries;
+  let stockGross = bookStockGross(open);
   for (const { sig, sleeve } of signals) {
     if (Date.now() > deadline) {
       block("TIME_BUDGET");
@@ -357,6 +395,10 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       block("SIZE");
       continue;
     }
+    if (sig.a.asset_class === "STOCK" && stockGross + sized.notional > BOOK_LIMITS.max_gross * broker.equity) {
+      block("MAX_GROSS");
+      continue;
+    }
     const blocks = checkAccountEntry(accountRiskState(settings, account), sig.a.symbol, sized.riskUsd);
     if (blocks.length) {
       blocks.forEach(block);
@@ -368,6 +410,7 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       summary.entries += 1;
       broker.held.add(sig.a.symbol);
       if (sig.a.asset_class === "STOCK") {
+        stockGross += sized.notional;
         if (broker.buying.stock !== null) broker.buying.stock -= sized.notional;
       } else if (broker.buying.crypto !== null) broker.buying.crypto -= sized.notional;
       const pos = positionForSignal(sig, sized.size, sleeve.def.manage);
@@ -401,7 +444,8 @@ export async function advanceBookBroker(now: number, errors: string[]) {
 /** Run whichever daily passes are due; each group's bar is processed once (settings.book_state). */
 export async function runBookTick(now: number, deadline: number, errors: string[]): Promise<BookPassSummary[]> {
   const settings = await getSettings();
-  const state = ((settings as unknown as { book_state?: BookState }).book_state ?? {}) as BookState;
+  // book_state must come back from getSettings — when it did not, every tick re-ran both passes (2.10.x).
+  const state = settings.book_state as BookState;
   const due = await duePasses(state, now);
   const out: BookPassSummary[] = [];
   for (const d of due) {
@@ -414,7 +458,7 @@ export async function runBookTick(now: number, deadline: number, errors: string[
       if (!backfillLeft) {
         const next = { ...state, [d.group === "CRYPTO" ? "crypto_bar" : "stocks_bar"]: d.bar };
         Object.assign(state, next);
-        await updateSettings({ book_state: next } as unknown as Partial<TradingSettings>);
+        await updateSettings({ book_state: next });
       }
       errors.push(...s.errors.filter((e) => !e.startsWith("bars_backfill_remaining")).map((e) => `book: ${e}`));
       await logEvent({ kind: "BOOK_PASS", message: `ספר אסטרטגיות · ${d.group === "CRYPTO" ? "קריפטו" : "מניות"} ${d.bar}: ${s.signals} סיגנלים · ${s.entries} כניסות · ${s.exits} יציאות${backfillLeft ? " · טוען היסטוריה" : ""}`, data: s });
