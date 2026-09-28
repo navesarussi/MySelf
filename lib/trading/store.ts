@@ -361,7 +361,10 @@ export function isAccountTrade(
   t: Pick<TradeRow, "track" | "execution"> & { broker?: string | null; reconciliation_kind?: string | null },
   phase: TradingPhase
 ) {
-  if (t.reconciliation_kind) return false;
+  // Rows reconciliation created (orphan closes) or closed without fills are not strategy trades. A real trade
+  // whose quantity was synced or that reconciliation closed from fills still is — excluding those pushed live
+  // book positions out of the account (2026-09-28).
+  if (t.reconciliation_kind === "orphan_close" || t.reconciliation_kind === "journal_flat_unknown") return false;
   if (t.track !== "AGENT") return false;
   if (phase === "PAPER" || phase === "LIVE") return (t.execution === "PAPER" || t.execution === "LIVE") && Boolean(t.broker);
   return t.execution === "SHADOW";

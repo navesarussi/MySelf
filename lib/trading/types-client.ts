@@ -155,6 +155,8 @@ export type LivePosition = {
   id: string;
   symbol: string;
   asset_class: string;
+  /** The strategy that opened it (book sleeve id); null for manual/legacy. */
+  setup: string | null;
   mode: string;
   track: string;
   execution: string;

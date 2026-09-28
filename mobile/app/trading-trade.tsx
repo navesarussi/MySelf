@@ -8,7 +8,8 @@ import { useColors, tokens } from "../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery } from "../src/query";
 import { Badge, Btn, Card, CollapsibleSection, Input, Loading, Screen } from "../src/components/ui";
 import { CandleChart, KpiGrid, type ChartLevel, type ChartMarker } from "../src/components/trading/charts";
-import { TradingText, useTradeR } from "../src/components/trading/blocks";
+import { exitRuleLabel, TradingText, useTradeR } from "../src/components/trading/blocks";
+import { realTarget } from "@/lib/trading/position-display";
 import { TradeManageCard } from "../src/components/trading/trade-manage";
 import { fmtDateTime, fmtDuration, fmtPct, fmtPrice, fmtR, fmtSignedUsd, fmtUsd, rTone } from "@/lib/trading/format";
 
@@ -47,11 +48,13 @@ export default function TradingTradeScreen() {
     const levels: ChartLevel[] = [
       { price: tr.entry_price ?? tr.entry_limit, label: t("trading.entry"), tone: "accent" },
       { price: tr.initial_stop_price, label: t("trading.stop"), tone: "warn" },
-      { price: tr.target_price, label: t("trading.target"), tone: "good" },
     ];
+    // A signal-exit trade's placeholder target is ~1000R away — drawing it would flatten the chart.
+    const target = realTarget({ entry_price: tr.entry_price, entry_limit: tr.entry_limit, stop_price: tr.initial_stop_price, target_price: tr.target_price });
+    if (target !== null) levels.push({ price: target, label: t("trading.target"), tone: "good" });
     if (tr.exit_price) levels.push({ price: tr.exit_price, label: t("trading.exit"), tone: "muted" });
     const initialTarget = tr.sim_state?.initial_target_price;
-    if (initialTarget && Math.abs(initialTarget - tr.target_price) > 1e-9) levels.push({ price: initialTarget, label: "TP₀", tone: "muted" });
+    if (target !== null && initialTarget && Math.abs(initialTarget - tr.target_price) > 1e-9) levels.push({ price: initialTarget, label: "TP₀", tone: "muted" });
     const markers: ChartMarker[] = [{ t: Date.parse(tr.trigger_timestamp), label: "T", tone: "accent" }];
     for (const e of tr.events ?? []) {
       if (e.type === "PARTIAL_1R") markers.push({ t: e.at, label: "1R", tone: "good" });
@@ -98,7 +101,9 @@ export default function TradingTradeScreen() {
           { label: "MFE / MAE", value: `${fmtR(trade.mfe_r, 1)} / ${fmtR(trade.mae_r, 1)}` },
           { label: t("trading.entry"), value: fmtPrice(trade.entry_price ?? trade.entry_limit), hint: trade.entry_slippage_bps !== null ? `${t("trading.slippage")} ${trade.entry_slippage_bps}bps` : undefined },
           { label: t("trading.stop"), value: fmtPrice(trade.initial_stop_price), hint: trade.stop_price !== trade.initial_stop_price ? `→ ${fmtPrice(trade.stop_price)}` : undefined },
-          { label: t("trading.target"), value: fmtPrice(trade.target_price), hint: quality.r_to_target !== null ? `${quality.r_to_target}R` : undefined },
+          realTarget({ entry_price: trade.entry_price, entry_limit: trade.entry_limit, stop_price: trade.initial_stop_price, target_price: trade.target_price }) !== null
+            ? { label: t("trading.target"), value: fmtPrice(trade.target_price), hint: quality.r_to_target !== null ? `${quality.r_to_target}R` : undefined }
+            : { label: t("trading.target"), value: "—", hint: exitRuleLabel(t, trade.setup) },
           // The exit is the first thing you look for on a closed trade, and it
           // was only ever drawn as a line on the chart.
           {

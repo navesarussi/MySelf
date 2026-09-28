@@ -41,3 +41,16 @@ describe("positionPriceView", () => {
     assert.equal(view.progress, null);
   });
 });
+
+describe("placeholder targets", () => {
+  it("treats a far signal-exit placeholder as no target and scales the bar to +3R", () => {
+    const v = positionPriceView({ entry_price: 100, stop_price: 95, target_price: 100 + 1000 * 5, last_price: 105, stop_distance: 5 }, null);
+    assert.equal(v.target, null);
+    assert.equal(v.progress, 0.5); // 105 on 95 → 115
+    assert.equal(v.entryPos, 0.25);
+  });
+  it("keeps a real target", () => {
+    const v = positionPriceView({ entry_price: 100, stop_price: 95, target_price: 115, last_price: 105, stop_distance: 5 }, null);
+    assert.equal(v.target, 115);
+  });
+});

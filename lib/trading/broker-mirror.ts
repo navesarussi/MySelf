@@ -23,6 +23,8 @@ const INTRADAY_ENTRY_EXPIRY_MS = 15 * 60_000;
 const MANUAL_ENTRY_EXPIRY_MS = 60 * 60_000;
 /** A book stock entry is sent after the close and fills at the next open (day order — it expires on its own). */
 const BOOK_ENTRY_EXPIRY_MS = 26 * 60 * 60_000;
+/** Crypto trades around the clock: a market entry still unfilled after this means Alpaca has no liquidity in the pair. */
+const BOOK_CRYPTO_ENTRY_EXPIRY_MS = 20 * 60_000;
 
 export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events: TradeRow["events"], now: number): Promise<{ done: boolean; patch: Record<string, unknown> }> {
   const patch: Record<string, unknown> = {};
@@ -36,7 +38,7 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
     // Ambiguous timeout or missing id — reconciliation also looks up by client_order_id; do not invent a cancel yet.
     return { done: false, patch: { broker_status: "order_lookup_pending" } };
   }
-  const expiry = trade.strategy_version === INTRADAY_STRATEGY_VERSION ? INTRADAY_ENTRY_EXPIRY_MS : trade.strategy_version === MANUAL_STRATEGY_VERSION ? MANUAL_ENTRY_EXPIRY_MS : trade.strategy_version === BOOK_STRATEGY_VERSION ? BOOK_ENTRY_EXPIRY_MS : undefined;
+  const expiry = trade.strategy_version === INTRADAY_STRATEGY_VERSION ? INTRADAY_ENTRY_EXPIRY_MS : trade.strategy_version === MANUAL_STRATEGY_VERSION ? MANUAL_ENTRY_EXPIRY_MS : trade.strategy_version === BOOK_STRATEGY_VERSION ? (trade.asset_class === "STOCK" ? BOOK_ENTRY_EXPIRY_MS : BOOK_CRYPTO_ENTRY_EXPIRY_MS) : undefined;
   const d = pendingDecision(order, Date.parse(trade.trigger_timestamp), now, expiry);
   Object.assign(patch, { broker_status: order.status, broker_filled_qty: Number(order.filled_qty) });
   const cancel = (reason: string) => {
