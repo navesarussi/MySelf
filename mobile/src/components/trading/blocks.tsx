@@ -95,6 +95,13 @@ export function PhaseGateCard({ gate, onAdvance, onReview }: { gate: PhaseGateVi
   );
 }
 
+/** The strategy's exit rule, for trades that have no take-profit price. */
+export function exitRuleLabel(t: (k: string) => string, setup: string | null | undefined): string {
+  const key = `trading.exitRule_${setup ?? ""}`;
+  const label = setup ? t(key) : "";
+  return label && label !== key ? label : t("trading.exitRuleDefault");
+}
+
 export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => void }) {
   const { t } = useI18n();
   const c = useColors();
@@ -103,8 +110,7 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
   const live = useLivePrice(p.symbol, p.asset_class, true);
   const view = positionPriceView(p, live.price);
   const tone = rTone(view.currentR);
-  const span = p.target_price - p.stop_price;
-  const entryPos = p.entry_price !== null && span > 0 ? (p.entry_price - p.stop_price) / span : 1 / 3;
+  const entryPos = view.entryPos ?? 1 / 3;
   const priceWaiting = view.lastPrice === null && live.source === null;
   const lastColor = live.direction === "up" ? c.good : live.direction === "down" ? c.warn : priceWaiting ? c.muted : c.ink;
   return (
@@ -119,6 +125,7 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
           <Badge label={t(`trading.state_${p.state}`)} tone={p.state === "RISK_FREE" ? "good" : p.state === "PENDING" ? "default" : "accent"} />
           {p.agent_risk_multiplier !== null && p.agent_risk_multiplier < 1 ? <Badge label={t("trading.multiplier", { m: p.agent_risk_multiplier })} /> : null}
           {p.broker ? <Badge label={t("trading.brokerBadge")} tone="good" /> : null}
+          {p.setup ? <Badge label={t(`trading.setup_${p.setup}`)} /> : null}
           <View style={{ flex: 1 }} />
           <Text style={{ color: tone === "good" ? c.good : tone === "warn" ? c.warn : view.currentR === null ? c.muted : c.ink, fontWeight: "800", fontSize: view.currentR === null ? tokens.textSm : 18, writingDirection: view.currentR === null ? undefined : "ltr" }}>
             {view.currentR !== null ? fmtR(view.currentR) : p.state === "PENDING" ? t("trading.rAwaitingFill") : t("trading.liveWaiting")}
@@ -136,8 +143,8 @@ export function PositionCard({ p, onClose }: { p: LivePosition; onClose: () => v
             {t("trading.last")} {priceWaiting ? t("trading.liveWaiting") : fmtPrice(view.lastPrice)}
             {live.direction === "up" ? " ▲" : live.direction === "down" ? " ▼" : ""}
           </Text>
-          <Text style={{ color: c.good, fontSize: tokens.textXs }}>
-            {p.exit_plan === "TRAIL_2ATR" ? t("trading.trail") : `${t("trading.target")} ${fmtPrice(p.target_price)}`}
+          <Text style={{ color: view.target === null ? c.muted : c.good, fontSize: tokens.textXs }}>
+            {p.exit_plan === "TRAIL_2ATR" ? t("trading.trail") : view.target !== null ? `${t("trading.target")} ${fmtPrice(view.target)}` : exitRuleLabel(t, p.setup)}
           </Text>
         </View>
         <View style={{ ...row, marginTop: 8, gap: 8 }}>

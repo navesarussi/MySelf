@@ -162,11 +162,14 @@ async function executeAction(action: ReconcileAction, ctx: { trades: Map<string,
     case "sync_qty": {
       const trade = ctx.trades.get(action.tradeId);
       if (!trade || trade.state === "CLOSED" || trade.state === "CANCELLED") return;
+      // An entry still filling (opening auction, partial fills) is not a mismatch: syncing mid-fill flip-flopped
+      // sizes (KNSA 45 → 19 → 45 in three minutes). Wait until no buy order is working on the symbol.
+      const working = await alpaca.openOrders(trade.symbol, trade.asset_class).catch(() => null);
+      if (working === null || working.some((o) => o.side === "buy")) return;
       const p: SimPosition = { ...trade.sim_state, size: action.brokerQty, initial_size: action.brokerQty };
       await updateTrade(trade.id, {
         ...simColumns(p),
         position_size: action.brokerQty,
-        reconciliation_kind: trade.reconciliation_kind ?? "qty_sync",
         events: [...(trade.events ?? []), { type: "STOP_MOVED", from: action.journalQty, to: action.brokerQty, at: ctx.now, note: "reconciliation qty sync" }],
       });
       ctx.summary.qty_synced += 1;

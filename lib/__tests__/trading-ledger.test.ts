@@ -113,6 +113,10 @@ describe("real trades only", () => {
     assert.equal(isAccountTrade({ track: "AGENT", execution: "PAPER", broker: null }, "PAPER"), false);
     assert.equal(isAccountTrade({ track: "AGENT", execution: "PAPER", broker: "ALPACA_PAPER" }, "PAPER"), true);
     assert.equal(isAccountTrade({ track: "DETERMINISTIC", execution: "SHADOW", broker: null }, "PAPER"), false);
+    // a real trade whose quantity reconciliation synced, or closed from fills, is still an account trade
+    assert.equal(isAccountTrade({ track: "AGENT", execution: "PAPER", broker: "ALPACA_PAPER", reconciliation_kind: "qty_sync" }, "PAPER"), true);
+    assert.equal(isAccountTrade({ track: "AGENT", execution: "PAPER", broker: "ALPACA_PAPER", reconciliation_kind: "journal_flat" }, "PAPER"), true);
+    assert.equal(isAccountTrade({ track: "AGENT", execution: "PAPER", broker: "ALPACA_PAPER", reconciliation_kind: "orphan_close" }, "PAPER"), false);
   });
 
   it("scans only what Alpaca can trade", () => {
