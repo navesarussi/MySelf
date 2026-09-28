@@ -122,6 +122,31 @@ export const R_MEASUREMENT = Object.freeze({
   MIN_STOP_ATR_FRACTION: 0.25,
 });
 
+/**
+ * Entry sizing guards — every live entry path (book, IBS close, manual search, scans, committee)
+ * reads these before submitting to Alpaca. Prevents penny names, oversize notional, and 403 balance errors.
+ */
+export const ENTRY_GUARDS = Object.freeze({
+  /** Reject stock entries below this USD price. */
+  MIN_STOCK_PRICE: 5,
+  /** Meme/penny crypto always blocked when listed here (fallback when volume data missing). */
+  CRYPTO_DENYLIST: Object.freeze(["GRAM", "PEPE", "SHIB", "FLOKI", "BONK", "WIF", "BOME"] as string[]),
+  /** Minimum Binance 24h quote volume (USD) when ticker data is available. */
+  CRYPTO_MIN_QUOTE_VOLUME_24H: 5_000_000,
+  /** Only use this fraction of broker buying power per entry (Alpaca insufficient-balance guard). */
+  BUYING_POWER_BUFFER: 0.95,
+  /** Max position notional as a fraction of account equity. */
+  MAX_POSITION_NOTIONAL_PCT: 0.1,
+  /** Hard USD cap per position regardless of equity. */
+  MAX_POSITION_NOTIONAL_USD: 25_000,
+  /** Minimum stop distance for sizing — same as R_MEASUREMENT; tight stops cannot inflate qty. */
+  MIN_STOP_DISTANCE_PCT: 0.005,
+  /** Minimum average daily dollar volume for stock entries (myself.trading_daily_bars). */
+  MIN_STOCK_AVG_DOLLAR_VOLUME: 20_000_000,
+  /** Lookback sessions for ADTV from stored daily bars. */
+  STOCK_ADTV_LOOKBACK_DAYS: 20,
+});
+
 export const SEED_UNIVERSE: UniverseSymbol[] = [
   { symbol: "BTC", asset_class: "CRYPTO_MAJOR", provider_symbol: "BTCUSDT" },
   { symbol: "ETH", asset_class: "CRYPTO_MAJOR", provider_symbol: "ETHUSDT" },

@@ -7,6 +7,7 @@ import { intradayParamsFor, scanIntraday, type IntradayCandidate } from "./strat
 import { logEvent, type TradeRow, type TradingSettings } from "./store";
 import { intradayToOpportunityTicket } from "./committee/adapters";
 import { runCommitteeShadowBatch, type CommitteeHookItem } from "./committee/hook";
+import { checkEntryGuardPre } from "./entry-guards";
 import {
   CHART_BARS_BEFORE,
   MAX_CONFIRM_AGE_MS,
@@ -72,7 +73,17 @@ export async function scanAndEnter(input: {
     }
     try {
       const p = intradayParamsFor(u.asset_class);
-      const blocks = intradayEnvelopeBlocks(settings, ia.account, u.symbol);
+      const guardPre = checkEntryGuardPre({
+        symbol: u.symbol,
+        asset_class: u.asset_class,
+        entry: c.entry,
+        stop: c.stop,
+        equity: ia.account.equity,
+        buying_power: u.asset_class === "STOCK" ? ia.buyingPower.stock : ia.buyingPower.crypto,
+        avg_dollar_volume: u.dollar_volume ?? null,
+        quote_volume_24h: u.dollar_volume ?? null,
+      });
+      const blocks = [...intradayEnvelopeBlocks(settings, ia.account, u.symbol), ...(guardPre ? [guardPre.reason] : [])];
       // Alpaca still holds the symbol (or rests an order on it): a new buy is a wash trade it rejects.
       if (ia.brokerHeld.has(u.symbol) && !blocks.includes("ALREADY_IN_SYMBOL")) blocks.push("ALREADY_IN_SYMBOL");
       const entryLimit = c.entry * (1 + p.entry_cushion);

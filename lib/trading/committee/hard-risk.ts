@@ -1,4 +1,5 @@
 import { RISK_ENVELOPE } from "../config";
+import { checkEntryGuardPre } from "../entry-guards";
 import { round } from "../round";
 import { openRiskR, type SimPosition } from "../position";
 import type { EnvelopeState } from "../risk-envelope";
@@ -48,6 +49,16 @@ export function issueRiskCertificate(input: HardRiskInput): ParseResult<RiskCert
   }
   const stopDistance = entry - stop;
   if (!(stopDistance > 0)) blocks.push("INVALID_GEOMETRY");
+
+  const guardPre = checkEntryGuardPre({
+    symbol: input.ticket.symbol,
+    asset_class: input.assetClass,
+    entry,
+    stop,
+    equity: input.equity,
+    buying_power: input.maxNotional ?? null,
+  });
+  if (guardPre) blocks.push(guardPre.reason);
 
   const menuIdx = input.targetIndex ?? 0;
   const targetItem = input.ticket.target_menu[menuIdx] ?? input.ticket.target_menu[0];

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { R_MEASUREMENT } from "../trading/config";
 import { isMeasurableTrade, measurableR, partitionMeasurableTrades } from "../trading/measurable-trades";
-import { flooredRiskUsd, flooredStopDistance } from "../trading/r-measurement";
+import { flooredRiskUsd, flooredStopDistance, storedRiskUsd } from "../trading/r-measurement";
 
 const base = {
   track: "AGENT" as const,
@@ -62,9 +62,29 @@ describe("R measurement floor", () => {
       realized_r: 1000,
     };
     const r = measurableR(t);
-    const risk = flooredRiskUsd({ entry_price: 100, stop_price: 99.99, size: 10 });
+    const stored = storedRiskUsd(100, 1000);
+    const floored = flooredRiskUsd({ entry_price: 100, stop_price: 99.99, size: 10 });
+    const risk = Math.max(stored, floored);
     assert.ok(r < 1000);
     assert.equal(r, Math.round((100 / risk) * 1000) / 1000);
+  });
+
+  it("never increases |R| vs stored realized_r when floor does not apply", () => {
+    const cases = [
+      { entry: 20, stop: 18, size: 500, pnl: -240, stored: -0.024 },
+      { entry: 0.55, stop: 0.5, size: 8000, pnl: -144, stored: -0.018 },
+      { entry: 11, stop: 10, size: 4000, pnl: 41468, stored: 10.367 },
+    ];
+    for (const c of cases) {
+      const t = { ...base, entry_price: c.entry, initial_stop_price: c.stop, position_size: c.size, realized_pnl: c.pnl, realized_r: c.stored };
+      const r = measurableR(t);
+      assert.ok(Math.abs(r) <= Math.abs(c.stored) + 1e-9, `${c.stored} -> ${r}`);
+    }
+  });
+
+  it("shrinks |R| when the measurement floor applies", () => {
+    const t = { ...base, entry_price: 100, initial_stop_price: 99.99, position_size: 10, realized_pnl: -5, realized_r: -50 };
+    assert.ok(Math.abs(measurableR(t)) < 50);
   });
 
   it("uses ATR floor when provided", () => {

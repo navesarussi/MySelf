@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { adx, aggregateBars, atr, ema, returnCorrelation, rsi, sma } from "../trading/indicators";
 import { forceClose, newPendingPosition, openRiskR, ratchetStop, realizedR, stepPosition } from "../trading/position";
 import { buildTradePlan } from "../trading/sizing";
-import { RISK_ENVELOPE } from "../trading/config";
+import { ENTRY_GUARDS, RISK_ENVELOPE } from "../trading/config";
 import { applyRiskScaleRequest, checkNewEntry, drawdownFromPeak, shouldTripKillSwitch, weekStartIso } from "../trading/risk-envelope";
 import { computeStats, monteCarlo, wilsonInterval } from "../trading/metrics";
 import { evaluateVetoes, nextTradingDays } from "../trading/veto";
@@ -63,7 +63,7 @@ describe("sizing (stop first, then size)", () => {
   it("shrinks size (not the stop) when exposure cap binds", () => {
     const plan = buildTradePlan({ entry: 100, stopDistance: 1, equity: 100_000, assetClass: "CRYPTO_MAJOR", riskScale: 1 })!;
     assert.equal(plan.stop, 99);
-    assert.ok(plan.notional <= RISK_ENVELOPE.MAX_ASSET_EXPOSURE * 100_000 + 1e-6);
+    assert.ok(plan.notional <= ENTRY_GUARDS.MAX_POSITION_NOTIONAL_PCT * 100_000 + 1e-6);
     assert.ok(plan.size_reduced_for_exposure);
   });
 
