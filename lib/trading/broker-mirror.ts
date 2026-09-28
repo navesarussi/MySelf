@@ -66,12 +66,13 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
       if (d.kind === "PARTIAL_KEEP") await alpaca.cancelOrder(order.id);
       events.push(...applyExternalFill(p, d.price, d.qty, d.at));
       const isDailyTrend = trade.strategy_version === DAILY_TREND_STRATEGY_VERSION;
-      if (trade.asset_class === "STOCK" && !isDailyTrend) {
-        // v2 / intraday / manual stocks entered on a bracket — its legs already carry the stop/target.
-        const legs = bracketLegs(order);
-        patch.broker_stop_order_id = legs.stop?.id ?? null;
+      const legs = bracketLegs(order);
+      if (trade.asset_class === "STOCK" && !isDailyTrend && legs.stop) {
+        // v2 / intraday / manual / book stocks entered on a bracket or OTO — its legs already carry the stop/target.
+        patch.broker_stop_order_id = legs.stop.id;
         patch.broker_target_order_id = legs.target?.id ?? null;
       } else {
+        // Crypto, daily-trend, and plain stock entries without a stop leg (market-on-close buys).
         // Sized from what the broker holds (crypto fees are taken in the asset)
         // and adopted when a stop already rests on the symbol — see
         // ensureProtectiveStop. No stop and nothing held means the position is
