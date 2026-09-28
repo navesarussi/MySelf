@@ -270,6 +270,7 @@ export type DashboardOverview = {
     r_day: number;
     r_week: number;
     r_month: number;
+    excluded_trades?: number;
     halted_daily: boolean;
     halted_weekly: boolean;
     kill_switch_distance_pct: number;
@@ -312,6 +313,7 @@ export type AgentValueReport = {
 
 export type AnalyticsPayload = {
   scope: { execution: string; track: string };
+  excluded_trades: number;
   stats: PerformanceStats;
   r_curve: { t: number; cum_r: number }[];
   r_distribution: { bin: number; count: number }[];

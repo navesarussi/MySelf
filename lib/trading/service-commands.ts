@@ -118,12 +118,19 @@ async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH")
     }
     const ev = forceClose(p, price, reason, now);
     const estimated = brokerPx === null && market === undefined;
+    const exitConfirmed = brokerPx !== null;
 
     try {
       await updateTrade(t.id, {
         ...simColumns(p),
         events: [...(t.events ?? []), ...ev],
-        ...(p.state === "CLOSED" ? { realized_r: round(realizedR(p), 3), realized_pnl: round(p.cash_flow, 2) } : {}),
+        ...(p.state === "CLOSED"
+          ? {
+              realized_r: round(realizedR(p), 3),
+              realized_pnl: round(p.cash_flow, 2),
+              exit_price_confirmed: exitConfirmed,
+            }
+          : {}),
       });
       out.closed.push(t.symbol);
       if (estimated) out.estimated.push(t.symbol);

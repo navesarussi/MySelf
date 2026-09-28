@@ -110,6 +110,18 @@ export const AGENT_PROMPT_VERSION = "trade-analyst-v3-discretion";
 /** Paper account starting equity (USD). */
 export const PAPER_STARTING_EQUITY = 100_000;
 
+/**
+ * R-multiple measurement floor — caps inflated R when the stop sits unrealistically
+ * close to entry (tiny stop_distance blows up cash_flow / risk). Used only for strategy
+ * metrics and gates; broker P&L and account equity are unchanged.
+ */
+export const R_MEASUREMENT = Object.freeze({
+  /** Minimum per-share stop distance as a fraction of entry (0.5%). */
+  MIN_STOP_DISTANCE_PCT: 0.005,
+  /** When ATR is available (live open R), also floor at this fraction of ATR(14). */
+  MIN_STOP_ATR_FRACTION: 0.25,
+});
+
 export const SEED_UNIVERSE: UniverseSymbol[] = [
   { symbol: "BTC", asset_class: "CRYPTO_MAJOR", provider_symbol: "BTCUSDT" },
   { symbol: "ETH", asset_class: "CRYPTO_MAJOR", provider_symbol: "ETHUSDT" },

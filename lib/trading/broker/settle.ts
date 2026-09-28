@@ -122,6 +122,7 @@ export async function settleBrokerTrades(input: { now: number; sinceMs: number; 
         closed_at: new Date(s.closed_at).toISOString(),
         sim_state: p,
         broker_settled_at: new Date(input.now).toISOString(),
+        exit_price_confirmed: true,
         updated_at: new Date(input.now).toISOString(),
       })
       .eq("id", t.id);

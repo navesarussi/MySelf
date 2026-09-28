@@ -3,6 +3,7 @@ import { lookbackForClass, type BarCache } from "./market-data";
 import { weekStartIso, type AccountRiskState } from "./risk-envelope";
 import { framesFromBars } from "./strategy/data-v2";
 import type { SymbolFrames } from "./strategy/candidates";
+import { isMeasurableTrade, measurableR } from "./measurable-trades";
 import { getClosedTradesLite, isAccountTrade, type TradeRow, type TradingSettings, type UniverseRow } from "./store";
 import type { UniverseSymbol } from "./types";
 
@@ -95,8 +96,12 @@ export async function loadAccount(settings: TradingSettings, openTrades: TradeRo
   const open = openTrades.filter((t) => isAccountTrade(t, settings.phase));
   return {
     equity: equityFromTrades(settings, open, inPhase, lastPrices),
-    realizedToday: inPhase.filter((t) => t.closed_at!.slice(0, 10) === today).reduce((s, t) => s + (t.realized_r ?? 0), 0),
-    realizedWeek: inPhase.filter((t) => weekStartIso(new Date(t.closed_at!)) === week).reduce((s, t) => s + (t.realized_r ?? 0), 0),
+    realizedToday: inPhase
+      .filter((t) => isMeasurableTrade(t, settings.phase) && t.closed_at!.slice(0, 10) === today)
+      .reduce((s, t) => s + measurableR(t), 0),
+    realizedWeek: inPhase
+      .filter((t) => isMeasurableTrade(t, settings.phase) && weekStartIso(new Date(t.closed_at!)) === week)
+      .reduce((s, t) => s + measurableR(t), 0),
     realizedPnlToday: inPhase.filter((t) => t.closed_at!.slice(0, 10) === today).reduce((s, t) => s + (t.realized_pnl ?? 0), 0),
     realizedPnlWeek: inPhase.filter((t) => weekStartIso(new Date(t.closed_at!)) === week).reduce((s, t) => s + (t.realized_pnl ?? 0), 0),
     open,

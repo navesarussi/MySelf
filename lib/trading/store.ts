@@ -244,6 +244,8 @@ export type TradeRow = {
   broker_filled_qty: number | null;
   /** Set once P&L/R were recomputed from Alpaca's fills (broker/settle.ts). */
   broker_settled_at?: string | null;
+  /** True when exit price came from a broker fill; false for estimated manual closes. */
+  exit_price_confirmed?: boolean | null;
   /** Non-null when the row was created or closed by broker reconciliation (excluded from strategy P&L). */
   reconciliation_kind?: string | null;
   baseline_enter: boolean;
@@ -323,15 +325,68 @@ export async function getClosedTrades(opts: { sinceIso?: string; limit?: number 
 }
 
 /** Closed trades without the heavy jsonb columns — enough for equity and halt accounting. */
-export async function getClosedTradesLite(sinceIso: string): Promise<Pick<TradeRow, "id" | "track" | "execution" | "broker" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">[]> {
+export async function getClosedTradesLite(
+  sinceIso: string
+): Promise<
+  Pick<
+    TradeRow,
+    | "id"
+    | "track"
+    | "execution"
+    | "broker"
+    | "closed_at"
+    | "realized_r"
+    | "realized_pnl"
+    | "created_at"
+    | "reconciliation_kind"
+    | "broker_settled_at"
+    | "exit_price_confirmed"
+    | "entry_price"
+    | "broker_filled_qty"
+    | "state"
+    | "initial_stop_price"
+    | "position_size"
+  >[]
+> {
   const { data, error } = await getSupabase()
     .from("trading_trades")
-    .select("id, track, execution, broker, closed_at, realized_r, realized_pnl, created_at")
+    .select(
+      "id, track, execution, broker, closed_at, realized_r, realized_pnl, created_at, reconciliation_kind, broker_settled_at, exit_price_confirmed, entry_price, broker_filled_qty, state, initial_stop_price, position_size"
+    )
     .eq("state", "CLOSED")
     .gte("closed_at", sinceIso)
     .limit(20000);
   if (error) throw new Error(`closed trades: ${error.message}`);
-  return (data ?? []).map((r) => ({ ...(r as Record<string, unknown>), realized_r: numOrNull((r as Record<string, unknown>).realized_r), realized_pnl: numOrNull((r as Record<string, unknown>).realized_pnl) }) as Pick<TradeRow, "id" | "track" | "execution" | "broker" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">);
+  return (data ?? []).map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      ...(row as object),
+      realized_r: numOrNull(row.realized_r),
+      realized_pnl: numOrNull(row.realized_pnl),
+      entry_price: numOrNull(row.entry_price),
+      broker_filled_qty: numOrNull(row.broker_filled_qty),
+      initial_stop_price: numOrNull(row.initial_stop_price) ?? 0,
+      position_size: numOrNull(row.position_size) ?? 0,
+    } as Pick<
+      TradeRow,
+      | "id"
+      | "track"
+      | "execution"
+      | "broker"
+      | "closed_at"
+      | "realized_r"
+      | "realized_pnl"
+      | "created_at"
+      | "reconciliation_kind"
+      | "broker_settled_at"
+      | "exit_price_confirmed"
+      | "entry_price"
+      | "broker_filled_qty"
+      | "state"
+      | "initial_stop_price"
+      | "position_size"
+    >;
+  });
 }
 
 export function toJournalTrade(t: TradeRow): JournalTrade {
@@ -351,24 +406,7 @@ export function toJournalTrade(t: TradeRow): JournalTrade {
   };
 }
 
-/**
- * The "account" whose equity sizes positions and trips breakers. In PAPER that is the Alpaca demo
- * account, so only trades that actually went to the broker count — a row the simulator filled on
- * its own once sized, halted and showed P&L as if it were money (2026-09: 86 such trades).
- * In SHADOW (pre-broker phase) it is the virtual account.
- */
-export function isAccountTrade(
-  t: Pick<TradeRow, "track" | "execution"> & { broker?: string | null; reconciliation_kind?: string | null },
-  phase: TradingPhase
-) {
-  // Rows reconciliation created (orphan closes) or closed without fills are not strategy trades. A real trade
-  // whose quantity was synced or that reconciliation closed from fills still is — excluding those pushed live
-  // book positions out of the account (2026-09-28).
-  if (t.reconciliation_kind === "orphan_close" || t.reconciliation_kind === "journal_flat_unknown") return false;
-  if (t.track !== "AGENT") return false;
-  if (phase === "PAPER" || phase === "LIVE") return (t.execution === "PAPER" || t.execution === "LIVE") && Boolean(t.broker);
-  return t.execution === "SHADOW";
-}
+export { isAccountTrade } from "./account-trade";
 
 export async function updateTrade(id: string, patch: Record<string, unknown>) {
   const { error } = await getSupabase()

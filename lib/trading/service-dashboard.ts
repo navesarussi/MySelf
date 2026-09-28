@@ -7,6 +7,8 @@ import { openRiskR } from "./position";
 import { brokerEquity, computeLiveEquityWithPrices } from "./account-equity";
 import { accountHaltStatus, drawdownFromPeak, weekStartIso } from "./risk-envelope";
 import { openRiskUsd } from "./tick-context";
+import { isMeasurableTrade, measurableR, partitionMeasurableTrades } from "./measurable-trades";
+import { flooredStopDistance } from "./r-measurement";
 import { getActiveV2Params, getClosedTrades, getOpenTrades, getSettings, isAccountTrade, type TradeRow, type TradingSettings } from "./store";
 import { round } from "./round";
 import { BOOK_LIMITS, BOOK_SLEEVES, bookStockGross } from "./book/engine";
@@ -99,6 +101,8 @@ export type DashboardOverview = {
     r_day: number;
     r_week: number;
     r_month: number;
+    /** Closed trades excluded from R totals (reconciliation, unconfirmed fills). */
+    excluded_trades: number;
     halted_daily: boolean;
     halted_weekly: boolean;
     kill_switch_distance_pct: number;
@@ -203,7 +207,10 @@ function toLivePosition(t: TradeRow, prices: Map<string, number>): LivePosition 
     stop_distance: p.stop_distance > 0 ? p.stop_distance : null,
     target_price: p.target_price,
     last_price: last,
-    current_r: entry !== null && last !== null && p.stop_distance > 0 ? round((last - entry) / p.stop_distance, 2) : null,
+    current_r:
+      entry !== null && last !== null
+        ? round((last - entry) / flooredStopDistance({ entry_price: entry, stop_price: p.stop_price }), 2)
+        : null,
     distance_to_stop_pct: last !== null ? round((last - p.stop_price) / last) : null,
     distance_to_target_pct: last !== null && p.exit_plan !== "TRAIL_2ATR" ? round((p.target_price - last) / last) : null,
     exit_plan: p.exit_plan,
@@ -230,17 +237,18 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   const otherOpen = open.filter((t) => !isAccountTrade(t, settings.phase));
   const prices = live.prices;
   const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase) && t.closed_at && t.closed_at >= settings.phase_started_at);
+  const { measurable: measurableClosed, excluded: excludedClosed } = partitionMeasurableTrades(accountClosed, settings.phase);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const week = weekStartIso(now);
   const month = today.slice(0, 7);
-  const sumBy = (pred: (t: TradeRow) => boolean) => {
-    const list = accountClosed.filter(pred);
-    return { pnl: round(list.reduce((s, t) => s + (t.realized_pnl ?? 0), 0), 2), r: round(list.reduce((s, t) => s + (t.realized_r ?? 0), 0), 3) };
-  };
-  const d = sumBy((t) => t.closed_at!.slice(0, 10) === today);
-  const w = sumBy((t) => weekStartIso(new Date(t.closed_at!)) === week);
-  const m = sumBy((t) => t.closed_at!.slice(0, 7) === month);
+  const sumPnlBy = (pred: (t: TradeRow) => boolean) =>
+    round(accountClosed.filter(pred).reduce((s, t) => s + (t.realized_pnl ?? 0), 0), 2);
+  const sumRBy = (pred: (t: TradeRow) => boolean) =>
+    round(measurableClosed.filter(pred).reduce((s, t) => s + measurableR(t), 0), 3);
+  const d = { pnl: sumPnlBy((t) => t.closed_at!.slice(0, 10) === today), r: sumRBy((t) => t.closed_at!.slice(0, 10) === today) };
+  const w = { pnl: sumPnlBy((t) => weekStartIso(new Date(t.closed_at!)) === week), r: sumRBy((t) => weekStartIso(new Date(t.closed_at!)) === week) };
+  const m = { pnl: sumPnlBy((t) => t.closed_at!.slice(0, 7) === month), r: sumRBy((t) => t.closed_at!.slice(0, 7) === month) };
 
   const positions = accountOpen.map((t) => toLivePosition(t, prices));
   const otherPositions = otherOpen.map((t) => toLivePosition(t, prices));
@@ -270,6 +278,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       r_day: d.r,
       r_week: w.r,
       r_month: m.r,
+      excluded_trades: excludedClosed.length,
       halted_daily: halts.daily,
       halted_weekly: halts.weekly,
       kill_switch_distance_pct: round(Math.max(0, RISK_ENVELOPE.MASTER_KILL_SWITCH_DD - dd)),
