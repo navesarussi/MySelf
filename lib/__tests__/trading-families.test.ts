@@ -160,3 +160,18 @@ describe("IBS close sleeve", () => {
     assert.equal(out[2].c, 99.2);
   });
 });
+
+describe("dashboard book overview", () => {
+  it("lists every sleeve with its live count and the stock exposure", async () => {
+    const { bookOverview } = await import("../trading/service-dashboard");
+    const row = (setup: string, px: number, qty: number, asset_class = "STOCK") =>
+      ({ setup, asset_class, strategy_version: "book", entry_price: px, entry_limit: px, remaining_size: qty, position_size: qty }) as never;
+    const o = bookOverview([row("REVERSAL", 100, 50), row("REVERSAL", 50, 100), row("MOMENTUM", 200, 25), row("IBS_CLOSE", 400, 30), row("CRYPTO_TREND", 60000, 1, "CRYPTO_MAJOR")], 100_000);
+    const by = Object.fromEntries(o.sleeves.map((x) => [x.id, x]));
+    assert.deepEqual(Object.keys(by).sort(), ["ASSET_ROTATION", "CRYPTO_TREND", "IBS_CLOSE", "MOMENTUM", "REVERSAL"]);
+    assert.equal(by.REVERSAL.open, 2);
+    assert.equal(by.IBS_CLOSE.horizon, "OVERNIGHT");
+    assert.equal(by.IBS_CLOSE.risk_pct, null);
+    assert.equal(o.stock_gross_pct, 0.15); // 5k + 5k + 5k; IBS_CLOSE and crypto outside the cap
+  });
+});

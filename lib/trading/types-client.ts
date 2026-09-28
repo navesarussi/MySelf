@@ -279,6 +279,12 @@ export type DashboardOverview = {
   equity_history: { day: string; equity: number; open_risk_r: number }[];
   envelope: typeof RISK_ENVELOPE;
   execution_rules: typeof EXECUTION_RULES;
+  /** Absent on servers older than 2.13. */
+  book?: {
+    sleeves: { id: string; horizon: "OVERNIGHT" | "DAYS" | "WEEKS" | "MONTHS"; risk_pct: number | null; notional_pct: number | null; max_positions: number; open: number }[];
+    max_gross: number;
+    stock_gross_pct: number;
+  };
 };
 
 export type DashboardPayload = DashboardOverview & {
