@@ -85,6 +85,11 @@ describe("error-reporting noise filter", () => {
       true
     );
   });
+
+  it("skips expected no_price soft failures from live ticker polling", () => {
+    assert.equal(isNoiseError({ error: new Error("no_price"), httpStatus: 503 }), true);
+    assert.equal(isNoiseError({ error: new Error("no_price"), message: "no_price" }), true);
+  });
 });
 
 describe("error-reporting dedupe", () => {

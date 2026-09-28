@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { getAppVersion } from "../version";
+import { shouldSkipClientReport } from "./skip-report";
 
 const QUEUE_KEY = "myself:error_report_queue";
 const MAX_QUEUE = 50;
@@ -37,19 +38,6 @@ let flushing = false;
 function errorSource(): "mobile-ios" | "web" {
   if (Platform.OS === "ios") return "mobile-ios";
   return "web";
-}
-
-function shouldSkipClientReport(input: ClientErrorInput): boolean {
-  if (input.httpStatus === 401) return true;
-  const msg = input.message.toLowerCase();
-  return (
-    msg.includes("network request failed") ||
-    msg.includes("failed to fetch") ||
-    msg.includes("aborted") ||
-    msg.includes("no_server") ||
-    input.message === "not_connected" ||
-    input.message.startsWith("token_refresh_failed")
-  );
 }
 
 export function setErrorReportingConfig(next: ReportingConfig | null): void {

@@ -10,6 +10,8 @@ const TOKEN_EXPIRED = new Set([
 
 const TOKEN_EXPIRED_PREFIX = ["token_refresh_failed"];
 
+const SOFT_FAILURE = new Set(["no_price"]);
+
 const LOCAL_ONLY_WRITEBACK = new Set([
   "monday_permission_denied",
   "monday_item_not_found",
@@ -54,6 +56,7 @@ export function isNoiseError(input: {
   }
 
   if (TOKEN_EXPIRED.has(message)) return true;
+  if (SOFT_FAILURE.has(message)) return true;
   if (LOCAL_ONLY_WRITEBACK.has(message)) return true;
   if (TOKEN_EXPIRED_PREFIX.some((p) => message.startsWith(p))) return true;
 
