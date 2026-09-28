@@ -176,6 +176,42 @@ export default function TradingControlScreen() {
 
       </CollapsibleSection>
 
+      <CollapsibleSection
+        id="trading.control.book"
+        title={t("trading.bookTitle")}
+        defaultOpen={true}
+        summary={dash?.book ? `${dash.book.sleeves.reduce((n, x) => n + x.open, 0)} · ${fmtPct(dash.book.stock_gross_pct, 0)}` : null}
+      >
+        {dash?.book ? (
+          <Card>
+            <TradingText muted size={tokens.textXs}>
+              {t("trading.bookNote")}
+            </TradingText>
+            {dash.book.sleeves.map((x) => (
+              <View key={x.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border, gap: 4 }}>
+                <View style={{ ...row, justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <View style={{ ...row, alignItems: "center", gap: 6, flex: 1 }}>
+                    <TradingText bold>{t(`trading.setup_${x.id}`)}</TradingText>
+                    <Badge label={t(`trading.bookHorizon_${x.horizon}`)} />
+                  </View>
+                  <TradingText size={tokens.textXs} style={{ writingDirection: "ltr" }}>
+                    {t("trading.bookSlots", { open: String(x.open), max: String(x.max_positions) })}
+                  </TradingText>
+                </View>
+                <TradingText muted size={tokens.textXs}>
+                  {x.risk_pct !== null ? t("trading.bookRisk", { v: fmtPct(x.risk_pct, 2) }) : t("trading.bookNotional", { v: fmtPct(x.notional_pct ?? 0, 0) })}
+                </TradingText>
+              </View>
+            ))}
+            <TradingText muted size={tokens.textXs} style={{ marginTop: 8 }}>
+              {t("trading.bookGross", { v: fmtPct(dash.book.stock_gross_pct, 0), max: fmtPct(dash.book.max_gross, 0) })}
+            </TradingText>
+          </Card>
+        ) : dashLoading ? (
+          <SkeletonCard lines={4} />
+        ) : null}
+      </CollapsibleSection>
+
       <CollapsibleSection id="trading.control.calibration" title={t("trading.calibration")} defaultOpen={false}>
       <Card>
         <TradingText muted size={tokens.textXs}>

@@ -9,6 +9,9 @@ import { accountHaltStatus, drawdownFromPeak, weekStartIso } from "./risk-envelo
 import { openRiskUsd } from "./tick-context";
 import { getActiveV2Params, getClosedTrades, getOpenTrades, getSettings, isAccountTrade, type TradeRow, type TradingSettings } from "./store";
 import { round } from "./round";
+import { BOOK_LIMITS, BOOK_SLEEVES, bookStockGross } from "./book/engine";
+import { IBS_CLOSE_PARAMS } from "./strategy/multi";
+import { isBookManaged } from "./strategy-versions";
 
 /** The trading dashboard read model: equity, open positions, phase gate, recent activity. */
 
@@ -105,6 +108,14 @@ export type DashboardOverview = {
   equity_history: { day: string; equity: number; open_risk_r: number }[];
   envelope: typeof RISK_ENVELOPE;
   execution_rules: typeof EXECUTION_RULES;
+  book: BookOverview;
+};
+
+/** The deterministic book's sleeves (docs/trading/multi-strategy.md) with their live position counts. */
+export type BookOverview = {
+  sleeves: { id: string; horizon: "OVERNIGHT" | "DAYS" | "WEEKS" | "MONTHS"; risk_pct: number | null; notional_pct: number | null; max_positions: number; open: number }[];
+  max_gross: number;
+  stock_gross_pct: number;
 };
 
 export type DashboardPayload = DashboardOverview & {
@@ -267,7 +278,18 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
     equity_history,
     envelope: RISK_ENVELOPE,
     execution_rules: EXECUTION_RULES,
+    book: bookOverview(open, equity),
   };
+}
+
+const HORIZON: Record<string, BookOverview["sleeves"][number]["horizon"]> = { CRYPTO_TREND: "WEEKS", MOMENTUM: "MONTHS", ASSET_ROTATION: "MONTHS", REVERSAL: "DAYS", IBS_CLOSE: "OVERNIGHT" };
+
+export function bookOverview(open: TradeRow[], equity: number): BookOverview {
+  const book = open.filter((t) => isBookManaged(t.strategy_version));
+  const count = (id: string) => book.filter((t) => t.setup === id).length;
+  const sleeves: BookOverview["sleeves"] = BOOK_SLEEVES.map((s) => ({ id: s.def.id, horizon: HORIZON[s.def.id] ?? "DAYS", risk_pct: s.risk_pct, notional_pct: null, max_positions: s.max_positions, open: count(s.def.id) }));
+  sleeves.push({ id: "IBS_CLOSE", horizon: "OVERNIGHT", risk_pct: null, notional_pct: IBS_CLOSE_PARAMS.notional_pct, max_positions: IBS_CLOSE_PARAMS.max_positions, open: count("IBS_CLOSE") });
+  return { sleeves, max_gross: BOOK_LIMITS.max_gross, stock_gross_pct: equity > 0 ? round(bookStockGross(book) / equity, 4) : 0 };
 }
 
 /** Full dashboard for chat/commands — composes overview + feed + optional broker. */
