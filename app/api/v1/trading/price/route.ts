@@ -5,7 +5,7 @@ import { withRouteHandler } from "@/lib/api/with-route-handler";
 
 export const maxDuration = 10;
 
-/** Latest trade price for the live ticker (stocks: Alpaca IEX; crypto clients prefer the Binance stream directly). */
+/** Latest tradable price for the live ticker (stocks: Alpaca IEX with snapshot fallback; crypto clients prefer the Binance stream). */
 export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const denied = await denyUnlessPrimary(req);
   if (denied) return denied;
@@ -13,5 +13,5 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
   const assetClass = req.nextUrl.searchParams.get("asset_class") === "STOCK" ? "STOCK" : "CRYPTO_ALT";
   if (!/^[A-Z0-9]{1,12}$/.test(symbol)) return badRequest("invalid_symbol");
   const price = await livePrice({ symbol, asset_class: assetClass, provider_symbol: assetClass === "STOCK" ? symbol : `${symbol}USDT` });
-  return price ? NextResponse.json({ symbol, price, at: Date.now() }) : NextResponse.json({ error: "no_price" }, { status: 503 });
+  return NextResponse.json({ symbol, price: price ?? null, at: Date.now() });
 });

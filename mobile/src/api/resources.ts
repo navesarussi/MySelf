@@ -696,7 +696,7 @@ export const api = {
   runTradingBacktest: (c: ApiConfig, body: { preset: "CRYPTO" | "STOCKS" | "ALL"; years: number }) =>
     apiFetch<{ id: string }>(c, "/trading/backtests", { method: "POST", body }),
   tradingPrice: (c: ApiConfig, symbol: string, assetClass: string) =>
-    apiFetch<{ symbol: string; price: number; at: number }>(c, `/trading/price?symbol=${encodeURIComponent(symbol)}&asset_class=${encodeURIComponent(assetClass)}`),
+    apiFetch<{ symbol: string; price: number | null; at: number }>(c, `/trading/price?symbol=${encodeURIComponent(symbol)}&asset_class=${encodeURIComponent(assetClass)}`),
   tradingSearch: (c: ApiConfig) => apiFetch<TradingProposal>(c, "/trading/search", { method: "POST", body: {} }),
   tradingEnterProposal: (c: ApiConfig, id: string, body: Record<string, unknown>) =>
     apiFetch<{ trade_id: string; broker: boolean; state: string | null; order_type: string; entry: number; stop: number; target: number; size: number; notes: string[] }>(c, `/trading/proposals/${encodeURIComponent(id)}/enter`, { method: "POST", body }),
