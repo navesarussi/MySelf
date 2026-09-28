@@ -1,4 +1,4 @@
-import { isRegularSessionBar, latestStockPrices, stockBars } from "./broker/alpaca-data";
+import { isRegularSessionBar, stockBars, stockLivePrices } from "./broker/alpaca-data";
 import { isAlpacaConfigured } from "./broker/alpaca";
 import { fetchBars } from "./market-data";
 import { M15, M5, buildIntradayFrames, type IntradayFrames } from "./strategy/intraday";
@@ -87,10 +87,10 @@ export async function loadIntradayFrames(symbols: IntradaySymbol[], now: number,
   return out;
 }
 
-/** Latest tradable price: Binance last trade for crypto, Alpaca IEX last trade for stocks. */
+/** Latest tradable price: Binance last trade for crypto; stocks: IEX last trade with snapshot/daily-bar fallback. */
 export async function livePrice(sym: IntradaySymbol): Promise<number | null> {
   try {
-    if (sym.asset_class === "STOCK") return (await latestStockPrices([sym.provider_symbol])).get(sym.provider_symbol) ?? null;
+    if (sym.asset_class === "STOCK") return (await stockLivePrices([sym.provider_symbol])).get(sym.provider_symbol) ?? null;
     const res = await fetch(`https://data-api.binance.vision/api/v3/ticker/price?symbol=${encodeURIComponent(sym.provider_symbol)}`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
     const d = (await res.json()) as { price?: string };
     const p = Number(d.price);

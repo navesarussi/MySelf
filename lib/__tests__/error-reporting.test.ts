@@ -75,6 +75,11 @@ describe("error-reporting noise filter", () => {
     assert.equal(isNoiseError({ error: new Error("monday_graphql_failed") }), false);
   });
 
+  it("skips expected live-price soft misses", () => {
+    assert.equal(isNoiseError({ error: new Error("no_price"), httpStatus: 503 }), true);
+    assert.equal(isNoiseError({ error: new Error("no_price") }), true);
+  });
+
   it("skips expected Monday permission denials", () => {
     assert.equal(isNoiseError({ error: new Error("monday_permission_denied") }), true);
     assert.equal(

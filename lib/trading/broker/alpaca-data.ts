@@ -78,6 +78,25 @@ export async function latestStockPrices(symbols: string[]): Promise<Map<string, 
   return out;
 }
 
+/** Merge IEX latest-trade prices with snapshot fallbacks for symbols missing a recent print. */
+export function fillStockPricesFromSnapshots(latest: Map<string, number>, snapshots: Map<string, StockSnapshot>, symbols: string[]): Map<string, number> {
+  const out = new Map(latest);
+  for (const s of symbols) {
+    if (out.has(s)) continue;
+    const p = snapshots.get(s)?.price;
+    if (p && p > 0) out.set(s, p);
+  }
+  return out;
+}
+
+/** Latest tradable price per symbol: IEX last trade, falling back to snapshot daily bar close (same as stockSnapshots). */
+export async function stockLivePrices(symbols: string[]): Promise<Map<string, number>> {
+  const latest = await latestStockPrices(symbols);
+  const missing = symbols.filter((s) => !latest.has(s));
+  if (!missing.length) return latest;
+  return fillStockPricesFromSnapshots(latest, await stockSnapshots(missing), missing);
+}
+
 export type StockSnapshot = { o: number; h: number; l: number; c: number; v: number; price: number; at: number };
 
 /**
