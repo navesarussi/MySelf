@@ -44,6 +44,12 @@ export default function TradingAnalyticsScreen() {
       {!data ? <Loading /> : null}
       {s && q ? (
         <>
+          {data.excluded_trades > 0 ? (
+            <TradingText muted size={tokens.textXs}>
+              {t("trading.excludedTrades", { n: data.excluded_trades })}
+            </TradingText>
+          ) : null}
+
           <KpiGrid
             items={[
               { label: t("trading.trades"), value: String(s.trades) },

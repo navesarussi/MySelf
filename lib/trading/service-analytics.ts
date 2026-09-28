@@ -1,5 +1,6 @@
 import { computeStats, equityCurveR, groupStats, rDistribution, ratingValue, type GroupStat, type PerformanceStats, type RatingValue } from "./metrics";
-import { getClosedTrades, toJournalTrade } from "./store";
+import { isMeasurableTrade, measurableR, partitionMeasurableTrades, toMeasurableRTrades } from "./measurable-trades";
+import { getClosedTrades, getSettings, toJournalTrade } from "./store";
 import { agentValueReport, bucketStats, type AgentValueReport } from "./learning";
 import { round } from "./round";
 import { qualityReport, type QualityReport } from "./trade-quality";
@@ -8,6 +9,8 @@ import { qualityReport, type QualityReport } from "./trade-quality";
 
 export type AnalyticsPayload = {
   scope: { execution: string; track: string };
+  /** Closed trades excluded from stats (reconciliation, unconfirmed fills, estimated exits). */
+  excluded_trades: number;
   stats: PerformanceStats;
   r_curve: { t: number; cum_r: number }[];
   r_distribution: { bin: number; count: number }[];
@@ -41,15 +44,22 @@ export type AnalyticsPayload = {
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export async function getAnalytics(scope: { execution?: string; track?: string; sinceIso?: string }): Promise<AnalyticsPayload> {
-  const all = await getClosedTrades({ sinceIso: scope.sinceIso });
+  const [all, settings] = await Promise.all([getClosedTrades({ sinceIso: scope.sinceIso }), getSettings()]);
   const execution = scope.execution ?? "ALL";
   const track = scope.track ?? "AGENT";
   const list = all.filter((t) => (execution === "ALL" || t.execution === execution) && (track === "ALL" || t.track === track));
-  const rt = list.map((t) => ({ ...t, r: t.realized_r ?? 0, closed_at: Date.parse(t.closed_at ?? t.created_at), reached_1r: t.reached_1r, exit_reason: t.exit_reason }));
+  const { measurable, excluded } = partitionMeasurableTrades(list, settings.phase);
+  const rt = toMeasurableRTrades(measurable, settings.phase).map((t) => ({
+    ...t,
+    reached_1r: t.reached_1r,
+    exit_reason: t.exit_reason,
+  }));
+  const measurableJournal = all.filter((t) => isMeasurableTrade(t, settings.phase));
   const avg = (xs: number[]) => (xs.length ? round(xs.reduce((s, x) => s + x, 0) / xs.length, 3) : 0);
   const slips = list.map((t) => t.entry_slippage_bps).filter((x): x is number => x !== null);
   return {
     scope: { execution, track },
+    excluded_trades: excluded.length,
     stats: computeStats(rt),
     r_curve: equityCurveR(rt),
     r_distribution: rDistribution(rt),
@@ -76,8 +86,10 @@ export async function getAnalytics(scope: { execution?: string; track?: string; 
     total_fees: round(list.reduce((s, t) => s + t.fees_paid, 0), 2),
     avg_slippage_bps: slips.length ? avg(slips) : null,
     gaps_through_stop: list.filter((t) => t.gapped_through_stop).length,
-    agent_value: agentValueReport(all.map(toJournalTrade)),
-    buckets: bucketStats(all.map(toJournalTrade)),
-    quality: qualityReport(list),
+    agent_value: agentValueReport(
+      measurableJournal.map((t) => ({ ...toJournalTrade(t), realized_r: measurableR(t) }))
+    ),
+    buckets: bucketStats(measurableJournal.map((t) => ({ ...toJournalTrade(t), realized_r: measurableR(t) }))),
+    quality: qualityReport(measurable.map((t) => ({ ...t, realized_r: measurableR(t) }))),
   };
 }

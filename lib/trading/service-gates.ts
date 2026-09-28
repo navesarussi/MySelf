@@ -2,7 +2,8 @@ import { getSupabase } from "@/lib/supabase";
 import { backtestGate, nextPhase, paperGate, shadowGate, type BacktestGateInput, type GateCheck } from "./gates";
 import { agentValueReport } from "./learning";
 import { computeStats } from "./metrics";
-import { getClosedTrades, isAccountTrade, toJournalTrade, type TradeRow, type TradingSettings } from "./store";
+import { toMeasurableRTrades } from "./measurable-trades";
+import { getClosedTrades, toJournalTrade, type TradeRow, type TradingSettings } from "./store";
 import type { TradingPhase } from "./types";
 
 /** Go/No-Go view: which gate the current phase has to clear before the next one. */
@@ -36,7 +37,8 @@ export async function computePhaseGate(settings: TradingSettings, closed?: Trade
       reasoning_reviewed: await reviewed("reasoning_reviewed", settings.phase_started_at),
     });
   } else if (settings.phase === "PAPER") {
-    const trades = (closed ?? (await getClosedTrades())).filter((t) => t.closed_at && t.closed_at >= settings.phase_started_at && isAccountTrade(t, "PAPER"));
+    const inPhase = (closed ?? (await getClosedTrades())).filter((t) => t.closed_at && t.closed_at >= settings.phase_started_at);
+    const measurable = toMeasurableRTrades(inPhase, "PAPER");
     const bt = await latestBacktestGateInput();
     const { count } = await getSupabase()
       .from("trading_events")
@@ -45,7 +47,7 @@ export async function computePhaseGate(settings: TradingSettings, closed?: Trade
       .gte("created_at", iso(Date.now() - 14 * 86_400_000));
     checks = paperGate({
       days_in_phase: days,
-      paper_stats: computeStats(trades.map((t) => ({ r: t.realized_r ?? 0, closed_at: Date.parse(t.closed_at!) }))),
+      paper_stats: computeStats(measurable.map((t) => ({ r: t.r, closed_at: t.closed_at }))),
       backtest_expectancy_r: bt?.stats.expectancy_r ?? null,
       critical_events_14d: count ?? 0,
       survived_outage_reviewed: await reviewed("resilience_reviewed", settings.phase_started_at),

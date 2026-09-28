@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import type { GateCheck, LivePosition, PhaseGateView, TradeListItem, TriggerRow } from "@/lib/trading/types-client";
 import { fmtDateTime, fmtPct, fmtPrice, fmtR, rTone } from "@/lib/trading/format";
+import { flooredStopDistance, measurableR } from "@/lib/trading/measurable-trades";
 import { positionPriceView } from "@/lib/trading/position-display";
 import { useI18n } from "../../i18n";
 import { useLivePrice } from "./use-live-price";
@@ -200,7 +201,10 @@ export function TriggerCard({ tr }: { tr: TriggerRow }) {
   );
 }
 
-type RSource = Pick<TradeListItem, "state" | "symbol" | "asset_class" | "entry_price" | "initial_stop_price" | "realized_r">;
+type RSource = Pick<
+  TradeListItem,
+  "state" | "symbol" | "asset_class" | "entry_price" | "initial_stop_price" | "realized_r" | "realized_pnl" | "position_size"
+>;
 
 /**
  * The R of any trade, always: realized once closed, live against the current price while open, and a word
@@ -211,11 +215,14 @@ export function useTradeR(trade: RSource | null): { r: number | null; text: stri
   const open = trade?.state === "OPEN" || trade?.state === "RISK_FREE";
   const live = useLivePrice(trade?.symbol, trade?.asset_class, open);
   if (!trade) return { r: null, text: "—", live: false };
-  if (trade.state === "CLOSED") return { r: trade.realized_r, text: fmtR(trade.realized_r), live: false };
+  if (trade.state === "CLOSED") {
+    const r = measurableR(trade);
+    return { r, text: fmtR(r), live: false };
+  }
   if (trade.state === "PENDING") return { r: null, text: t("trading.rAwaitingFill"), live: false };
   if (trade.state === "CANCELLED") return { r: null, text: t("trading.rNotFilled"), live: false };
   const entry = trade.entry_price;
-  const risk = entry !== null ? entry - trade.initial_stop_price : NaN;
+  const risk = entry !== null ? flooredStopDistance({ entry_price: entry, stop_price: trade.initial_stop_price }) : NaN;
   const r = entry !== null && live.price !== null && risk > 0 ? (live.price - entry) / risk : null;
   return { r, text: r === null ? t("trading.liveWaiting") : fmtR(r), live: true };
 }

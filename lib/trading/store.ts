@@ -244,6 +244,8 @@ export type TradeRow = {
   broker_filled_qty: number | null;
   /** Set once P&L/R were recomputed from Alpaca's fills (broker/settle.ts). */
   broker_settled_at?: string | null;
+  /** True when exit price came from a broker fill; false for estimated manual closes. */
+  exit_price_confirmed?: boolean | null;
   /** Non-null when the row was created or closed by broker reconciliation (excluded from strategy P&L). */
   reconciliation_kind?: string | null;
   baseline_enter: boolean;
@@ -323,15 +325,68 @@ export async function getClosedTrades(opts: { sinceIso?: string; limit?: number 
 }
 
 /** Closed trades without the heavy jsonb columns — enough for equity and halt accounting. */
-export async function getClosedTradesLite(sinceIso: string): Promise<Pick<TradeRow, "id" | "track" | "execution" | "broker" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">[]> {
+export async function getClosedTradesLite(
+  sinceIso: string
+): Promise<
+  Pick<
+    TradeRow,
+    | "id"
+    | "track"
+    | "execution"
+    | "broker"
+    | "closed_at"
+    | "realized_r"
+    | "realized_pnl"
+    | "created_at"
+    | "reconciliation_kind"
+    | "broker_settled_at"
+    | "exit_price_confirmed"
+    | "entry_price"
+    | "broker_filled_qty"
+    | "state"
+    | "initial_stop_price"
+    | "position_size"
+  >[]
+> {
   const { data, error } = await getSupabase()
     .from("trading_trades")
-    .select("id, track, execution, broker, closed_at, realized_r, realized_pnl, created_at")
+    .select(
+      "id, track, execution, broker, closed_at, realized_r, realized_pnl, created_at, reconciliation_kind, broker_settled_at, exit_price_confirmed, entry_price, broker_filled_qty, state, initial_stop_price, position_size"
+    )
     .eq("state", "CLOSED")
     .gte("closed_at", sinceIso)
     .limit(20000);
   if (error) throw new Error(`closed trades: ${error.message}`);
-  return (data ?? []).map((r) => ({ ...(r as Record<string, unknown>), realized_r: numOrNull((r as Record<string, unknown>).realized_r), realized_pnl: numOrNull((r as Record<string, unknown>).realized_pnl) }) as Pick<TradeRow, "id" | "track" | "execution" | "broker" | "closed_at" | "realized_r" | "realized_pnl" | "created_at">);
+  return (data ?? []).map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      ...(row as object),
+      realized_r: numOrNull(row.realized_r),
+      realized_pnl: numOrNull(row.realized_pnl),
+      entry_price: numOrNull(row.entry_price),
+      broker_filled_qty: numOrNull(row.broker_filled_qty),
+      initial_stop_price: numOrNull(row.initial_stop_price) ?? 0,
+      position_size: numOrNull(row.position_size) ?? 0,
+    } as Pick<
+      TradeRow,
+      | "id"
+      | "track"
+      | "execution"
+      | "broker"
+      | "closed_at"
+      | "realized_r"
+      | "realized_pnl"
+      | "created_at"
+      | "reconciliation_kind"
+      | "broker_settled_at"
+      | "exit_price_confirmed"
+      | "entry_price"
+      | "broker_filled_qty"
+      | "state"
+      | "initial_stop_price"
+      | "position_size"
+    >;
+  });
 }
 
 export function toJournalTrade(t: TradeRow): JournalTrade {

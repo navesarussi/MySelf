@@ -7,7 +7,7 @@ import {
   type AlpacaFillActivity,
 } from "./alpaca";
 import { flattenAtBroker } from "./flatten";
-import { backfillOrphanCloses, insertOrphanCloseRow, recordPendingOrphanClose, settlePendingOrphanCloses } from "./orphan-close";
+import { insertOrphanCloseRow, recordPendingOrphanClose, settlePendingOrphanCloses } from "./orphan-close";
 import { matchBrokerOrphans } from "./reconcile";
 import { toBrokerFill } from "./settle";
 import { settleTrade } from "./ledger";
@@ -294,14 +294,6 @@ export async function runBrokerReconciliation(now = Date.now()): Promise<Reconci
       }
     }
   }
-
-  const dayStart = new Date(now).toISOString().slice(0, 10);
-  summary.orphans_settled += await backfillOrphanCloses({
-    symbols: ["AAPL", "MSFT", "SPY"],
-    sinceMs: Date.parse(`${dayStart}T00:00:00.000Z`),
-    now,
-    openTrades: open,
-  }).catch(() => 0);
 
   return summary;
 }
