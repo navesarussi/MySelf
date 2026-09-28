@@ -1,18 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { R_MEASUREMENT } from "../trading/config";
-import {
-  flooredRiskUsd,
-  flooredStopDistance,
-  isMeasurableTrade,
-  measurableR,
-  partitionMeasurableTrades,
-} from "../trading/measurable-trades";
+import { isMeasurableTrade, measurableR, partitionMeasurableTrades } from "../trading/measurable-trades";
+import { flooredRiskUsd, flooredStopDistance } from "../trading/r-measurement";
 
 const base = {
   track: "AGENT" as const,
   execution: "PAPER" as const,
-  broker: "ALPACA_PAPER" as const,
+  broker: "ALPACA_PAPER",
   reconciliation_kind: null,
   broker_settled_at: "2026-09-20T12:00:00.000Z",
   exit_price_confirmed: true,

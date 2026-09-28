@@ -1,40 +1,27 @@
-import { R_MEASUREMENT } from "./config";
+import { isAccountTrade } from "./account-trade";
 import { entryConfirmedAtBroker } from "./broker/reconcile-decisions";
-import { isAccountTrade, type TradeRow } from "./store";
+import { flooredRiskUsd, rFromPnl } from "./r-measurement";
 import type { TradingPhase } from "./types";
 
 /** Fields the clean-set predicate and floored-R helpers need. */
-export type MeasurableTradeFields = Pick<
-  TradeRow,
-  | "track"
-  | "execution"
-  | "broker"
-  | "reconciliation_kind"
-  | "broker_settled_at"
-  | "exit_price_confirmed"
-  | "entry_price"
-  | "broker_filled_qty"
-  | "state"
-  | "realized_r"
-  | "realized_pnl"
-  | "initial_stop_price"
-  | "position_size"
-> & {
+export type MeasurableTradeFields = {
+  track: string;
+  execution: string;
+  broker?: string | null;
+  reconciliation_kind?: string | null;
+  broker_settled_at?: string | null;
+  exit_price_confirmed?: boolean | null;
+  entry_price: number | null;
+  broker_filled_qty: number | null;
+  state: string;
+  realized_r: number | null;
+  realized_pnl: number | null;
+  initial_stop_price: number;
+  position_size: number;
   sim_state?: { opened_at: number | null; state: string; entry_price?: number | null; initial_size?: number };
 };
 
-/** Per-share stop distance with a pct (and optional ATR) floor for R denominators. */
-export function flooredStopDistance(input: { entry_price: number; stop_price: number; atr?: number | null }): number {
-  const raw = Math.abs(input.entry_price - input.stop_price);
-  const pctFloor = input.entry_price * R_MEASUREMENT.MIN_STOP_DISTANCE_PCT;
-  const atrFloor = input.atr && input.atr > 0 ? input.atr * R_MEASUREMENT.MIN_STOP_ATR_FRACTION : 0;
-  return Math.max(raw, pctFloor, atrFloor);
-}
-
-/** USD risk denominator for R = P&L / risk, with the measurement floor applied. */
-export function flooredRiskUsd(input: { entry_price: number; stop_price: number; size: number; atr?: number | null }): number {
-  return flooredStopDistance(input) * input.size;
-}
+export { flooredStopDistance, flooredRiskUsd } from "./r-measurement";
 
 /**
  * Strategy-measurable trade: broker-confirmed fills, no reconciliation row, no
@@ -63,13 +50,16 @@ export function isMeasurableTrade(t: MeasurableTradeFields, phase: TradingPhase)
 /** R-multiple for metrics, recomputed with the risk floor when P&L and levels are known. */
 export function measurableR(t: MeasurableTradeFields): number {
   const entry = t.entry_price ?? t.sim_state?.entry_price ?? null;
-  const stop = t.initial_stop_price;
   const size = t.sim_state?.initial_size ?? t.position_size;
-  const pnl = t.realized_pnl;
-  if (entry === null || !(stop > 0) || !(size > 0) || pnl === null) return t.realized_r ?? 0;
-  const risk = flooredRiskUsd({ entry_price: entry, stop_price: stop, size });
-  if (!(risk > 0)) return t.realized_r ?? 0;
-  return Math.round((pnl / risk) * 1000) / 1000;
+  return (
+    rFromPnl({
+      entry_price: entry,
+      initial_stop_price: t.initial_stop_price,
+      position_size: size,
+      realized_pnl: t.realized_pnl,
+      realized_r: t.realized_r,
+    }) ?? t.realized_r ?? 0
+  );
 }
 
 export function partitionMeasurableTrades<T extends MeasurableTradeFields>(
@@ -87,10 +77,9 @@ export function partitionMeasurableTrades<T extends MeasurableTradeFields>(
 export type RTradeFromRow = { r: number; closed_at: number; reached_1r?: boolean; exit_reason?: string | null };
 
 /** Closed rows → R series for {@link computeStats}, filtered and floored. */
-export function toMeasurableRTrades<T extends MeasurableTradeFields & { closed_at?: string | null; created_at?: string; reached_1r?: boolean; exit_reason?: string | null }>(
-  trades: T[],
-  phase: TradingPhase
-): (T & RTradeFromRow)[] {
+export function toMeasurableRTrades<
+  T extends MeasurableTradeFields & { closed_at?: string | null; created_at?: string; reached_1r?: boolean; exit_reason?: string | null },
+>(trades: T[], phase: TradingPhase): (T & RTradeFromRow)[] {
   return trades
     .filter((t) => isMeasurableTrade(t, phase))
     .map((t) => ({

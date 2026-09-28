@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import type { GateCheck, LivePosition, PhaseGateView, TradeListItem, TriggerRow } from "@/lib/trading/types-client";
 import { fmtDateTime, fmtPct, fmtPrice, fmtR, rTone } from "@/lib/trading/format";
-import { flooredStopDistance, measurableR } from "@/lib/trading/measurable-trades";
+import { flooredStopDistance, rFromPnl } from "@/lib/trading/r-measurement";
 import { positionPriceView } from "@/lib/trading/position-display";
 import { useI18n } from "../../i18n";
 import { useLivePrice } from "./use-live-price";
@@ -216,7 +216,14 @@ export function useTradeR(trade: RSource | null): { r: number | null; text: stri
   const live = useLivePrice(trade?.symbol, trade?.asset_class, open);
   if (!trade) return { r: null, text: "—", live: false };
   if (trade.state === "CLOSED") {
-    const r = measurableR(trade);
+    const r =
+      rFromPnl({
+        entry_price: trade.entry_price,
+        initial_stop_price: trade.initial_stop_price,
+        position_size: trade.position_size,
+        realized_pnl: trade.realized_pnl,
+        realized_r: trade.realized_r,
+      }) ?? trade.realized_r;
     return { r, text: fmtR(r), live: false };
   }
   if (trade.state === "PENDING") return { r: null, text: t("trading.rAwaitingFill"), live: false };
