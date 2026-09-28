@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import { RISK_ENVELOPE } from "../config";
+import { checkEntryGuardPre, logEntryGuardSkip, sizeWithEntryGuards } from "../entry-guards";
 import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured, isDustPosition } from "../broker/alpaca";
 import { marketCalendar } from "../broker/alpaca-data";
 import { flattenAtBroker } from "../broker/flatten";
@@ -231,18 +232,19 @@ export async function brokerContext(): Promise<{ equity: number | null; buying: 
   return { equity: eq.ok ? eq.equity : null, buying: { stock: num(acct.buying_power), crypto: num(acct.non_marginable_buying_power ?? acct.cash) }, held };
 }
 
-/** Size a signal: sleeve risk of equity over the stop distance, capped by notional, buying power and the account envelope. */
+/** Size a signal: sleeve risk of equity over the guard-floored stop distance, capped by entry guards and buying power. */
 export function sizeSignal(sig: Pick<Signal, "entry" | "stop" | "a">, riskPct: number, equity: number, buyingPower: number | null): { size: number; riskUsd: number; notional: number } | null {
-  const stopDist = sig.entry - sig.stop;
-  if (!(stopDist > 0) || !(equity > 0)) return null;
   const cap = sig.a.asset_class === "STOCK" ? BOOK_LIMITS.max_risk_per_trade : RISK_ENVELOPE.MAX_RISK_PER_TRADE[sig.a.asset_class];
-  let size = (Math.min(riskPct, cap) * equity) / stopDist;
-  size = Math.min(size, (BOOK_LIMITS.max_notional * equity) / sig.entry);
-  if (buyingPower !== null) size = Math.min(size, Math.max(0, buyingPower * 0.95) / sig.entry);
-  size = sig.a.asset_class === "STOCK" ? Math.floor(size) : Math.floor(size * 1e6) / 1e6;
-  const notional = size * sig.entry;
-  if (!(size > 0) || notional < 100) return null;
-  return { size, riskUsd: size * stopDist, notional };
+  const sized = sizeWithEntryGuards({
+    entry: sig.entry,
+    stop: sig.stop,
+    equity,
+    asset_class: sig.a.asset_class,
+    risk_pct: Math.min(riskPct, cap),
+    buying_power: buyingPower,
+  });
+  if (!sized || sized.block) return null;
+  return { size: sized.size, riskUsd: sized.risk_usd, notional: sized.notional };
 }
 
 /** Journal the signal and send it to the broker: OTO (stop attached, next open) or market-on-close (MOC). */
@@ -392,10 +394,28 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       block("MAX_BOOK");
       continue;
     }
+    const uni = universe.find((r) => r.symbol === sig.a.symbol);
+    const bars = assets.get(sig.a.symbol)?.d1.bars;
+    const pre = checkEntryGuardPre({
+      symbol: sig.a.symbol,
+      asset_class: sig.a.asset_class,
+      entry: sig.entry,
+      stop: sig.stop,
+      equity: broker.equity,
+      buying_power: null,
+      avg_dollar_volume: uni?.dollar_volume ?? (bars ? undefined : null),
+      quote_volume_24h: uni?.dollar_volume ?? null,
+    });
+    if (pre) {
+      block(pre.reason);
+      void logEntryGuardSkip({ symbol: sig.a.symbol, reason: pre.reason, detail: pre.detail, now });
+      continue;
+    }
     const bp = sig.a.asset_class === "STOCK" ? broker.buying.stock : broker.buying.crypto;
     const sized = sizeSignal(sig, sleeve.risk_pct * settings.risk_scale, broker.equity, bp);
     if (!sized) {
       block("SIZE");
+      void logEntryGuardSkip({ symbol: sig.a.symbol, reason: "MAX_POSITION_NOTIONAL", detail: "size blocked by guards or min notional", now });
       continue;
     }
     if (sig.a.asset_class === "STOCK" && stockGross + sized.notional > BOOK_LIMITS.max_gross * broker.equity) {

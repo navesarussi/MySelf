@@ -4,6 +4,7 @@ import { judgeDailyTrendTrigger, type AgentVerdict } from "./agent-judge";
 import { openRiskR } from "./position";
 import { alpaca, fromAlpacaPositionSymbol, isAlpacaConfigured, isDustPosition } from "./broker/alpaca";
 import { returnCorrelation } from "./indicators";
+import { avgDollarVolumeFromBars, checkEntryGuardPre } from "./entry-guards";
 import { checkNewEntry, drawdownFromPeak } from "./risk-envelope";
 import { buildTradePlan } from "./sizing";
 import { LIVE_DAILY_TREND_PARAMS, buildDailyAsset, scanDailyTrendCandidates, scoreDailyCandidate, type DailyAsset, type DailyCandidate } from "./strategy/daily-trend";
@@ -135,8 +136,18 @@ export async function scanDailyTrend(input: {
         sym.symbol,
         correlated
       );
+      const guardPre = checkEntryGuardPre({
+        symbol: sym.symbol,
+        asset_class: sym.asset_class,
+        entry: c.entry,
+        stop: c.stop,
+        equity: input.account.equity,
+        buying_power: null,
+        avg_dollar_volume: sym.asset_class === "STOCK" ? avgDollarVolumeFromBars(c.a.d1.bars.slice(0, c.i + 1)) : null,
+      });
+      const entryBlocks = guardPre ? [...blocks, guardPre.reason] : blocks;
       const basePlan = buildTradePlan({ entry: c.entry, stopDistance: c.stopDist, equity: input.account.equity, assetClass: sym.asset_class, riskScale: settings.risk_scale });
-      const deterministic = vetoes.length ? "VETO" : blocks.length || !basePlan ? "BLOCKED" : "ENTER";
+      const deterministic = vetoes.length ? "VETO" : entryBlocks.length || !basePlan ? "BLOCKED" : "ENTER";
       const snapshot = { candidate: { symbol: c.symbol, group: c.group, entry: c.entry, stop: c.stop, target: c.target, rs: c.rs, room_r: c.room, features: c.features }, correlations, funding_rate: funding ?? null, vix, btc_dominance_pct: dominance };
 
       const { data: trig, error: trigErr } = await getSupabase()
@@ -152,7 +163,7 @@ export async function scanDailyTrend(input: {
             score,
             snapshot,
             vetoes,
-            envelope_blocks: blocks,
+            envelope_blocks: entryBlocks,
             plan: basePlan ? { ...basePlan, target: c.target } : null,
             deterministic_decision: deterministic,
             baseline_enter: true,
@@ -173,7 +184,7 @@ export async function scanDailyTrend(input: {
           ticket: ticketR.data,
           assetClass: sym.asset_class,
           vetoes,
-          envelopeBlocks: blocks,
+          envelopeBlocks: entryBlocks,
           triggerId,
           headlines: [],
           earningsWindow: earnings?.has(sym.symbol) ?? false,
@@ -246,7 +257,7 @@ export async function scanDailyTrend(input: {
       // lowered out-of-sample expectancy, and an AI outage (Gemini credits ran out 2026-09-24) turned
       // every signal into a SKIP. The agent's read is stored on the trigger as commentary.
       if (settings.phase !== "PAPER" || !useBroker || u.eligibility !== "ACTIVE") continue;
-      if (blocks.length) {
+      if (entryBlocks.length) {
         summary.blocked += 1;
         continue;
       }

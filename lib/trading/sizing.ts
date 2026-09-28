@@ -1,4 +1,5 @@
 import { EXECUTION_RULES, RISK_ENVELOPE } from "./config";
+import { guardStopDistance, maxEntryNotional } from "./entry-guards";
 import type { AssetClass, TradePlan } from "./types";
 
 /** Stage 5 — the stop comes from the chart first; only then is size derived from risk. */
@@ -12,14 +13,17 @@ export function buildTradePlan(input: {
   /** Extra notional ceiling (e.g. remaining cash buying power) — can only shrink the position. */
   maxNotional?: number;
 }): TradePlan | null {
-  const { entry, stopDistance, equity, assetClass } = input;
+  const { entry, equity, assetClass } = input;
+  const stop = entry - input.stopDistance;
+  const stopDistance = guardStopDistance(entry, stop);
   if (!(entry > 0) || !(stopDistance > 0) || !(stopDistance < entry) || !(equity > 0)) return null;
   // Clamp defensively — nothing may push risk above the envelope.
   const scale = Math.min(1, Math.max(0, input.riskScale));
   const riskAmount = RISK_ENVELOPE.MAX_RISK_PER_TRADE[assetClass] * equity * scale;
   if (riskAmount <= 0) return null;
   let size = riskAmount / stopDistance;
-  const maxNotional = Math.min(RISK_ENVELOPE.MAX_ASSET_EXPOSURE * equity, input.maxNotional ?? Infinity);
+  const guardCap = maxEntryNotional({ equity, buying_power: input.maxNotional ?? null });
+  const maxNotional = Math.min(guardCap, input.maxNotional ?? Infinity);
   let reduced = false;
   // Over exposure → shrink the position, never tighten the stop.
   if (size * entry > maxNotional) {

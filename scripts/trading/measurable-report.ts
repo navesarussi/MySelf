@@ -80,7 +80,7 @@ const FIXTURES: Row[] = [
     state: "CLOSED",
     realized_r: -42,
     realized_pnl: -4200,
-    initial_stop_price: 99.5,
+    initial_stop_price: 90,
     position_size: 10,
     closed_at: "2026-09-15T16:00:00Z",
     created_at: "2026-09-15T10:00:00Z",

@@ -1,5 +1,6 @@
 import { alpaca, isAlpacaConfigured } from "../broker/alpaca";
 import { marketCalendar, stockSnapshots, type StockSnapshot } from "../broker/alpaca-data";
+import { checkEntryGuardPre, logEntryGuardSkip, sizeNotionalWithGuards } from "../entry-guards";
 import { checkAccountEntry } from "../risk-envelope";
 import { getOpenTrades, getSettings, logEvent, simColumns, updateSettings, updateTrade, type TradeRow } from "../store";
 import { isBookManaged } from "../strategy-versions";
@@ -104,13 +105,40 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
       block("ALREADY_IN_SYMBOL");
       continue;
     }
-    const size = Math.floor((IBS_CLOSE_PARAMS.notional_pct * broker.equity) / sig.entry);
-    const notional = size * sig.entry;
-    if (size < 1 || notional < 100 || (broker.buying.stock !== null && notional > broker.buying.stock * 0.95)) {
-      block("SIZE");
+    const last = sig.a.d1.bars.length - 1;
+    const pre = checkEntryGuardPre({
+      symbol: sig.a.symbol,
+      asset_class: "STOCK",
+      entry: sig.entry,
+      stop: sig.stop,
+      equity: broker.equity,
+      buying_power: broker.buying.stock,
+      avg_dollar_volume: last >= 0 ? sig.a.dv50[last] : null,
+    });
+    if (pre) {
+      block(pre.reason);
+      void logEntryGuardSkip({ symbol: sig.a.symbol, reason: pre.reason, detail: pre.detail, now });
       continue;
     }
-    const riskUsd = size * (sig.entry - sig.stop);
+    const targetNotional = IBS_CLOSE_PARAMS.notional_pct * broker.equity;
+    const sized = sizeNotionalWithGuards({
+      entry: sig.entry,
+      stop: sig.stop,
+      target_notional: targetNotional,
+      equity: broker.equity,
+      buying_power: broker.buying.stock,
+    });
+    if (!sized || sized.block) {
+      block(sized?.block?.reason ?? "SIZE");
+      if (sized?.block) void logEntryGuardSkip({ symbol: sig.a.symbol, reason: sized.block.reason, detail: sized.block.detail, now });
+      continue;
+    }
+    const { size, risk_usd: riskUsd, notional } = sized;
+    if (broker.buying.stock !== null && notional > broker.buying.stock * 0.95) {
+      block("INSUFFICIENT_BUYING_POWER");
+      void logEntryGuardSkip({ symbol: sig.a.symbol, reason: "INSUFFICIENT_BUYING_POWER", detail: "notional exceeds buffered buying power", now });
+      continue;
+    }
     const blocks = checkAccountEntry(accountRiskState(settings, account), sig.a.symbol, riskUsd);
     if (blocks.length) {
       blocks.forEach(block);

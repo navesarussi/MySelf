@@ -72,8 +72,8 @@ describe("book sizing", () => {
     const s = sizeSignal({ entry: 100, stop: 95, a }, 0.0015, 100_000, null);
     assert.deepEqual(s, { size: 30, riskUsd: 150, notional: 3000 });
   });
-  it("caps notional at 20% of equity and at buying power", () => {
-    assert.equal(sizeSignal({ entry: 100, stop: 99.9, a }, 0.005, 100_000, null)?.size, 200);
+  it("caps notional at 10% of equity and at buying power", () => {
+    assert.equal(sizeSignal({ entry: 100, stop: 99.9, a }, 0.005, 100_000, null)?.size, 100);
     assert.equal(sizeSignal({ entry: 100, stop: 95, a }, 0.0015, 100_000, 1_000)?.size, 9);
     assert.equal(sizeSignal({ entry: 100, stop: 95, a }, 0.0015, 100_000, 50), null);
   });

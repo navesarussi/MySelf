@@ -5,6 +5,7 @@ import { returnCorrelation } from "./indicators";
 import { fetchBtcDominance, fetchEarningsSymbols, fetchFundingRate, fetchVix, type BarCache } from "./market-data";
 import { openRiskR } from "./position";
 import { alpaca, isAlpacaConfigured } from "./broker/alpaca";
+import { checkEntryGuardPre } from "./entry-guards";
 import { checkNewEntry, drawdownFromPeak } from "./risk-envelope";
 import { round } from "./round";
 import { buildTradePlan } from "./sizing";
@@ -121,8 +122,19 @@ export async function scan(input: {
         sym.symbol,
         correlated
       );
+      const metrics = u.metrics as { avg_dollar_volume_30d?: number } | null;
+      const guardPre = checkEntryGuardPre({
+        symbol: sym.symbol,
+        asset_class: sym.asset_class,
+        entry: c.entry,
+        stop: c.stop,
+        equity: input.account.equity,
+        buying_power: null,
+        avg_dollar_volume: metrics?.avg_dollar_volume_30d ?? null,
+      });
+      const entryBlocks = guardPre ? [...blocks, guardPre.reason] : blocks;
       const basePlan = buildTradePlan({ entry: c.entry, stopDistance: c.entry - c.stop, equity: input.account.equity, assetClass: sym.asset_class, riskScale: settings.risk_scale });
-      const deterministic = vetoes.length ? "VETO" : blocks.length || !basePlan ? "BLOCKED" : "ENTER";
+      const deterministic = vetoes.length ? "VETO" : entryBlocks.length || !basePlan ? "BLOCKED" : "ENTER";
       const baselineEnter = isBaselineCandidate(c, params);
       const brief = analystBrief(f, T);
       const snapshot = { candidate: c, brief, correlations, funding_rate: funding ?? null, vix, btc_dominance_pct: dominance };
@@ -140,7 +152,7 @@ export async function scan(input: {
             score: c.score,
             snapshot,
             vetoes,
-            envelope_blocks: blocks,
+            envelope_blocks: entryBlocks,
             plan: basePlan ? { ...basePlan, target: c.target, target_menu: c.target_menu } : null,
             deterministic_decision: deterministic,
             baseline_enter: baselineEnter,
@@ -166,7 +178,7 @@ export async function scan(input: {
           ticket: ticketR.data,
           assetClass: sym.asset_class,
           vetoes,
-          envelopeBlocks: blocks,
+          envelopeBlocks: entryBlocks,
           triggerId,
           headlines: [],
           earningsWindow: earnings?.has(sym.symbol) ?? false,
@@ -241,7 +253,7 @@ export async function scan(input: {
       // No verdict (agent off / budget) → only what the deterministic baseline would take.
       const multiplier = verdict ? verdict.risk_multiplier : baselineEnter ? 1 : 0;
       if (settings.phase === "BACKTEST" || multiplier === 0) continue;
-      if (blocks.length) {
+      if (entryBlocks.length) {
         summary.blocked += 1;
         continue;
       }

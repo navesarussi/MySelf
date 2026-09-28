@@ -2,6 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import { attachProposalTrade, claimProposal, releaseProposal } from "./proposal-claim";
 import { planIntradayTrade, type RatingSnapshot, type TradePlanProposal } from "./agent-rater";
 import { RISK_ENVELOPE } from "./config";
+import { checkEntryGuardPre } from "./entry-guards";
 import { MANUAL_STRATEGY_VERSION } from "./engine";
 import { livePrice, loadIntradayFrames, type IntradaySymbol, type LoadedFrames } from "./intraday-data";
 import { insertIntradayTrade, intradayEnvelopeBlocks, loadIntradayAccount, placeIntradayBrokerEntry, ratingSnapshotFor, scannableSymbols, sizeIntraday, stockSession, symbolsToLoad, syncBrokerEntryNow } from "./intraday-engine";
@@ -134,12 +135,22 @@ export async function findBestTrade(now = Date.now()): Promise<ProposalPayload |
       });
       const plan = await planIntradayTrade({ snap: ratingInput, tier: c.tier, price: c.price, atr15: c.atr15, minStopPct: p.min_stop_pct, maxStopAtr: p.max_stop_atr, minRr: RISK_ENVELOPE.MIN_RR_RATIO });
       const sized = sizeIntraday({ entry: plan.entry, stop: plan.stop, assetClass: c.asset_class, ia, riskScale: settings.risk_scale });
+      const guardPre = checkEntryGuardPre({
+        symbol: c.symbol,
+        asset_class: c.asset_class,
+        entry: plan.entry,
+        stop: plan.stop,
+        equity: ia.account.equity,
+        buying_power: c.asset_class === "STOCK" ? ia.buyingPower.stock : ia.buyingPower.crypto,
+        avg_dollar_volume: byRow.get(c.symbol)?.dollar_volume ?? null,
+        quote_volume_24h: byRow.get(c.symbol)?.dollar_volume ?? null,
+      });
       return {
         ...c,
         plan,
         broker_tradable: Boolean(byRow.get(c.symbol)?.broker_tradable),
         preview: sized ? { size: sized.size, notional: sized.notional, risk_amount: sized.risk_amount, risk_pct: sized.risk_amount / ia.account.equity } : null,
-        envelope_blocks: intradayEnvelopeBlocks(settings, ia.account, c.symbol),
+        envelope_blocks: [...intradayEnvelopeBlocks(settings, ia.account, c.symbol), ...(guardPre ? [guardPre.reason] : [])],
         rating_input: ratingInput,
       };
     })
@@ -248,6 +259,18 @@ async function enterClaimedProposal(input: {
   const ia = await loadIntradayAccount(settings, new Map([[sym.symbol, live]]), now, errors);
   if (!ia.useBroker) throw new EnterError("broker_unavailable");
   if (ia.brokerHeld.has(sym.symbol)) throw new EnterError("already_in_symbol");
+  const uniRow = (await getIntradayUniverse()).find((u) => u.symbol === sym.symbol);
+  const guardPre = checkEntryGuardPre({
+    symbol: sym.symbol,
+    asset_class: sym.asset_class,
+    entry: v.entry,
+    stop: v.stop,
+    equity: ia.account.equity,
+    buying_power: sym.asset_class === "STOCK" ? ia.buyingPower.stock : ia.buyingPower.crypto,
+    avg_dollar_volume: uniRow?.dollar_volume ?? null,
+    quote_volume_24h: uniRow?.dollar_volume ?? null,
+  });
+  if (guardPre) throw new EnterError(`guard:${guardPre.reason}`);
   // Sim fills a MARKET entry on the next 5m bar within a 0.5% tolerance; a LIMIT waits up to an hour.
   const simLimit = orderType === "MARKET" ? v.entry * 1.005 : v.entry;
   const plan = sizeIntraday({ entry: simLimit, stop: v.stop, assetClass: sym.asset_class, ia, riskScale: settings.risk_scale });
