@@ -31,6 +31,8 @@ portfolio backtest — the same functions run live), `lib/trading/book/*` (unive
 | Day | SPY/QQQ/IWM intraday momentum (noise-band, Zarattini 2024) | negative on SPY/IWM, marginal on QQQ | off |
 | Day | Gap fades, overnight holds on index ETFs | no stable edge | off |
 | Day | IBS: equity ETF closing at the bottom of its range (IBS < 0.1) → buy the close, sell the next close | +0.26% / +0.15% / +0.07% / +0.19% a trade (t 12 / 7 / 2.7 / 6), holds with the 15:50 IBS; IEX live bars pick the same signals 87% of the time | **live** |
+| Day | IBS < 0.1 on single stocks (any trend / momentum filter) | excess −0.03% … −0.13% a trade after costs — an index effect, not a stock one | off |
+| Swing (short) | Short a ≥10% 5-day rally in a weak stock (below SMA200, bottom-30% momentum) | event study +1.0% / +0.4% / +0.3% excess, but the portfolio sleeve: Sharpe 0.33, negative in the holdout; book Sharpe unchanged (1.03 → 1.02) despite −0.1 correlation | off (long-only book) |
 | Day | Opening-range breakout on stocks in play | depends on intrabar order at 5m (−0.76R … +0.40R) | 1-minute data pending |
 
 ## The book (live)
