@@ -1,6 +1,6 @@
 {
   "name": "myself-mobile",
-  "version": "2.9.1",
+  "version": "2.10.7",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
