@@ -28,6 +28,8 @@ export type TradingSettings = {
   last_tick_summary: Record<string, unknown> | null;
   last_screen_date: string | null;
   last_daily_trend_scan_date: string | null;
+  /** Last daily bar each book group processed (lib/trading/book/engine.ts) — once per bar. */
+  book_state: Record<string, unknown>;
   execution_venue: "SIM" | "ALPACA_PAPER";
   /** Per-minute intraday (15m/5m) strategy switch + its own heartbeat. */
   intraday_enabled: boolean;
@@ -71,6 +73,7 @@ export async function getSettings(): Promise<TradingSettings> {
     last_tick_summary: (r.last_tick_summary as Record<string, unknown>) ?? null,
     last_screen_date: (r.last_screen_date as string) ?? null,
     last_daily_trend_scan_date: (r.last_daily_trend_scan_date as string) ?? null,
+    book_state: (r.book_state as Record<string, unknown>) ?? {},
     execution_venue: r.execution_venue === "ALPACA_PAPER" ? "ALPACA_PAPER" : "SIM",
     intraday_enabled: Boolean(r.intraday_enabled),
     last_intraday_tick_at: (r.last_intraday_tick_at as string) ?? null,

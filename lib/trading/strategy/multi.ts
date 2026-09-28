@@ -23,7 +23,17 @@ export const D1 = 86_400_000;
 
 export type StrategyGroup = "STOCKS" | "ETF" | "CRYPTO";
 
-export type StrategyId = "TREND" | "MR_RSI2" | "MR_IBS" | "PULLBACK" | "CRYPTO_TREND";
+export type StrategyId =
+  | "TREND"
+  | "MR_RSI2"
+  | "MR_IBS"
+  | "PULLBACK"
+  | "CRYPTO_TREND"
+  | "REVERSAL"
+  | "MOM_PULLBACK"
+  | "ETF_MR"
+  | "MOMENTUM"
+  | "ASSET_ROTATION";
 
 /** A daily asset plus the extra series the families read — all from closed daily bars. */
 export type MultiAsset = DailyAsset & {
@@ -39,6 +49,12 @@ export type MultiAsset = DailyAsset & {
   dv50: number[];
   /** 126-day (≈6-month) return — the momentum a cross-sectional rank is taken on. */
   ret126: number[];
+  /** 12-1 month momentum: return from 252 to 21 bars ago (skips the last month's reversal). */
+  mom12: number[];
+  /** 5-day return. */
+  ret5: number[];
+  /** Blend of 1/3/6/12-month returns — the asset-rotation score. */
+  mom_blend: number[];
 };
 
 export function buildMultiAsset(symbol: string, asset_class: AssetClass, group: StrategyGroup, bars: Bar[]): MultiAsset {
@@ -55,6 +71,9 @@ export function buildMultiAsset(symbol: string, asset_class: AssetClass, group: 
     ibs: bars.map((b) => (b.h > b.l ? (b.c - b.l) / (b.h - b.l) : 0.5)),
     dv50: sma(bars.map((b) => b.c * b.v), 50),
     ret126: c.map((x, i) => (i >= 126 && c[i - 126] > 0 ? x / c[i - 126] - 1 : NaN)),
+    mom12: c.map((_, i) => (i >= 252 && c[i - 252] > 0 ? c[i - 21] / c[i - 252] - 1 : NaN)),
+    ret5: c.map((x, i) => (i >= 5 && c[i - 5] > 0 ? x / c[i - 5] - 1 : NaN)),
+    mom_blend: c.map((x, i) => (i >= 252 ? (x / c[i - 21] + x / c[i - 63] + x / c[i - 126] + x / c[i - 252]) / 4 - 1 : NaN)),
   };
 }
 
@@ -108,6 +127,11 @@ export type StrategyDef = {
   scan(assets: MultiAsset[], t: number, ctx: ScanContext): Signal[];
   /** Exit decided on closed bar `i` of an open position, executed at that close. */
   exit?(a: MultiAsset, i: number, pos: SimPosition): ExitReason | null;
+  /**
+   * Cross-sectional state for bar `t` (ranks), called with the sleeve's whole universe before positions are
+   * managed or scanned on that bar — exits of rank-based families depend on the rest of the universe.
+   */
+  prepare?(assets: MultiAsset[], t: number): void;
 };
 
 const fin = (x: number | undefined) => typeof x === "number" && Number.isFinite(x);
@@ -320,6 +344,235 @@ export function cryptoTrend(p: CryptoTrendParams = CRYPTO_TREND_PARAMS): Strateg
   };
 }
 
+// ── Cross-sectional helpers ─────────────────────────────────────────────────
+
+/** Is closed bar `i` the first session of a new calendar month (the monthly rebalance bar)? */
+export function firstBarOfMonth(a: MultiAsset, i: number): boolean {
+  const bars = a.d1.bars;
+  return i > 0 && new Date(bars[i].t).getUTCMonth() !== new Date(bars[i - 1].t).getUTCMonth();
+}
+
+/** Point-in-time liquid stock: price and 50-day average dollar volume on the bar. */
+export function isLiquid(a: MultiAsset, i: number, minPrice = 10, minDv = 20e6): boolean {
+  return a.d1.bars[i].c >= minPrice && a.dv50[i] >= minDv;
+}
+
+/**
+ * Ordinal ranks (0 = best) of `value` among the eligible assets with a bar at `t`, memoised per t.
+ * Also returns percentile ranks (1 = best) for filters.
+ */
+export function crossRanker(value: (a: MultiAsset, i: number) => number | null) {
+  const cache = new Map<number, { ord: Map<string, number>; pct: Map<string, number>; n: number }>();
+  return {
+    prepare(assets: MultiAsset[], t: number) {
+      if (cache.has(t)) return;
+      const list: { s: string; v: number }[] = [];
+      for (const a of assets) {
+        const i = a.idx.get(t);
+        if (i === undefined) continue;
+        const v = value(a, i);
+        if (v !== null && Number.isFinite(v)) list.push({ s: a.symbol, v });
+      }
+      list.sort((x, y) => y.v - x.v);
+      const n = list.length;
+      cache.set(t, { ord: new Map(list.map((x, k) => [x.s, k])), pct: new Map(list.map((x, k) => [x.s, n > 1 ? 1 - k / (n - 1) : 1])), n });
+      // bounded memory in long backtests: ranks are only read for the current bar
+      if (cache.size > 8) cache.delete(cache.keys().next().value as number);
+    },
+    ord: (symbol: string, t: number) => cache.get(t)?.ord.get(symbol) ?? null,
+    pct: (symbol: string, t: number) => cache.get(t)?.pct.get(symbol) ?? null,
+  };
+}
+
+const liquidMom12 = (a: MultiAsset, i: number) => (isLiquid(a, i) && Number.isFinite(a.mom12[i]) ? a.mom12[i] : null);
+
+// ── Swing: dips in momentum leaders ─────────────────────────────────────────
+
+export type ReversalParams = { drop: number; min_rank: number; stop_atr: number; max_hold: number };
+/**
+ * Chosen 2016-21, confirmed 2022-24H1 and 2024H2+ (excess over the equal-weight universe, t-stats 5.1 / 2.3 / 5.1
+ * — docs/trading/multi-strategy.md). A wide stop: tight stops cut mean-reversion trades before they revert.
+ */
+export const REVERSAL_PARAMS: ReversalParams = { drop: 0.1, min_rank: 0.7, stop_atr: 4, max_hold: 10 };
+
+/**
+ * Short-term reversal in leaders: a liquid stock in a long-term uptrend, in the top 30% by 12-1 momentum,
+ * that fell ≥ 10% in 5 sessions; bought at the next open, sold at the first close back above its 5-day average.
+ */
+export function reversal(p: ReversalParams = REVERSAL_PARAMS): StrategyDef {
+  const ranks = crossRanker(liquidMom12);
+  return {
+    id: "REVERSAL",
+    groups: ["STOCKS"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: p.max_hold },
+    prepare: (assets, t) => ranks.prepare(assets, t),
+    scan(assets, t, ctx) {
+      if (!regimeUp(ctx, "STOCKS", t)) return [];
+      ranks.prepare(assets, t);
+      const out: Signal[] = [];
+      for (const a of assets) {
+        const i = barAt(a, t);
+        if (i === null || i < 253 || !isLiquid(a, i)) continue;
+        const b = a.d1.bars[i];
+        if (!(a.ret5[i] < -p.drop) || !(b.c > a.sma200[i])) continue;
+        const pct = ranks.pct(a.symbol, t);
+        if (pct === null || pct < p.min_rank) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        out.push({ strategy: "REVERSAL", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: null, score: Math.min(1, -a.ret5[i]) });
+      }
+      return out;
+    },
+    exit: (a, i) => (a.d1.bars[i].c > a.sma5[i] ? "SIGNAL" : null),
+  };
+}
+
+export type MomPullbackParams = { down_days: number; min_rank: number; stop_atr: number; max_hold: number };
+/** 2016-21 / 2022-24H1 / 2024H2+: excess +0.28% / +0.19% / +0.54% a trade over the equal-weight universe. */
+export const MOM_PULLBACK_PARAMS: MomPullbackParams = { down_days: 3, min_rank: 0.9, stop_atr: 4, max_hold: 10 };
+
+/** Three lower closes in a top-decile momentum stock above its 200-day average; out on a close above the 5-day average. */
+export function momPullback(p: MomPullbackParams = MOM_PULLBACK_PARAMS): StrategyDef {
+  const ranks = crossRanker(liquidMom12);
+  return {
+    id: "MOM_PULLBACK",
+    groups: ["STOCKS"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: p.max_hold },
+    prepare: (assets, t) => ranks.prepare(assets, t),
+    scan(assets, t, ctx) {
+      if (!regimeUp(ctx, "STOCKS", t)) return [];
+      ranks.prepare(assets, t);
+      const out: Signal[] = [];
+      for (const a of assets) {
+        const i = barAt(a, t);
+        if (i === null || i < 253 || !isLiquid(a, i)) continue;
+        const bars = a.d1.bars;
+        if (!(bars[i].c > a.sma200[i])) continue;
+        let down = true;
+        for (let k = 0; k < p.down_days; k++) if (!(bars[i - k].c < bars[i - k - 1].c)) down = false;
+        if (!down) continue;
+        const pct = ranks.pct(a.symbol, t);
+        if (pct === null || pct < p.min_rank) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        out.push({ strategy: "MOM_PULLBACK", a, i, t, entry: bars[i].c, fill: "CLOSE", stop: bars[i].c - p.stop_atr * atrv, target: null, score: pct });
+      }
+      return out;
+    },
+    exit: (a, i) => (a.d1.bars[i].c > a.sma5[i] ? "SIGNAL" : null),
+  };
+}
+
+/** Broad equity index, sector and country ETFs — where short-term mean reversion held from 2007 to 2026. */
+export const EQUITY_ETFS = new Set(
+  "SPY,QQQ,IWM,DIA,MDY,RSP,XLB,XLE,XLF,XLI,XLK,XLP,XLU,XLV,XLY,SMH,SOXX,IBB,XBI,KRE,XRT,XHB,ITB,IGV,EFA,EEM,VGK,EWJ,EWG,EWU,EWC,EWA,EWZ,EWY,EWT,EWW,FXI,INDA,VNQ,IYR,IJR,IWF,IWD,VTV,VUG,MTUM,QUAL,USMV".split(",")
+);
+
+export type EtfMrParams = { rsi_max: number; stop_atr: number; max_hold: number };
+/** 2007-15 / 2016-21 / 2022-24H1 / 2024H2+: +0.31% / +0.33% / +0.01% / +0.47% a trade, ~350 trades a year. */
+export const ETF_MR_PARAMS: EtfMrParams = { rsi_max: 10, stop_atr: 3, max_hold: 10 };
+
+/** RSI(2) washout in an equity ETF above its 200-day average; out on a close above the 5-day average. */
+export function etfMr(p: EtfMrParams = ETF_MR_PARAMS): StrategyDef {
+  return {
+    id: "ETF_MR",
+    groups: ["ETF"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: p.max_hold },
+    scan(assets, t) {
+      const out: Signal[] = [];
+      for (const a of assets) {
+        if (!EQUITY_ETFS.has(a.symbol)) continue;
+        const i = barAt(a, t);
+        if (i === null || i < 210) continue;
+        const b = a.d1.bars[i];
+        if (!(b.c > a.sma200[i]) || !(a.rsi2[i] < p.rsi_max)) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        out.push({ strategy: "ETF_MR", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: null, score: (p.rsi_max - a.rsi2[i]) / p.rsi_max });
+      }
+      return out;
+    },
+    exit: (a, i) => (a.d1.bars[i].c > a.sma5[i] ? "SIGNAL" : null),
+  };
+}
+
+// ── Long horizon: monthly rotations ─────────────────────────────────────────
+
+export type MomentumParams = { top: number; keep: number; stop_atr: number };
+export const MOMENTUM_PARAMS: MomentumParams = { top: 20, keep: 50, stop_atr: 5 };
+
+/**
+ * Cross-sectional momentum: on the first session of each month buy the top-N liquid stocks by 12-1 momentum;
+ * hold while they stay in the top `keep` (checked monthly). A wide ATR stop is the catastrophe exit.
+ */
+export function momentum(p: MomentumParams = MOMENTUM_PARAMS): StrategyDef {
+  const ranks = crossRanker(liquidMom12);
+  return {
+    id: "MOMENTUM",
+    groups: ["STOCKS"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: null },
+    prepare: (assets, t) => ranks.prepare(assets, t),
+    scan(assets, t) {
+      ranks.prepare(assets, t);
+      const out: Signal[] = [];
+      for (const a of assets) {
+        const i = barAt(a, t);
+        if (i === null || i < 253 || !firstBarOfMonth(a, i)) continue;
+        const ord = ranks.ord(a.symbol, t);
+        if (ord === null || ord >= p.top) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        const c = a.d1.bars[i].c;
+        out.push({ strategy: "MOMENTUM", a, i, t, entry: c, fill: "CLOSE", stop: c - p.stop_atr * atrv, target: null, score: 1 - ord / p.top });
+      }
+      return out;
+    },
+    exit(a, i) {
+      if (!firstBarOfMonth(a, i)) return null;
+      const ord = ranks.ord(a.symbol, a.d1.bars[i].t);
+      return ord === null || ord >= p.keep ? "SIGNAL" : null;
+    },
+  };
+}
+
+/** Cross-asset ETFs: US/international equity, real estate, Treasuries, credit, TIPS, gold, commodities. */
+export const ROTATION_ETFS = new Set("SPY,QQQ,IWM,EFA,EEM,VNQ,TLT,IEF,LQD,HYG,TIP,GLD,DBC".split(","));
+
+export type AssetRotationParams = { top: number; keep: number; stop_atr: number };
+/** 2007-15 / 2016-21 / 2022-24H1 / 2024H2+ (top 5): Sharpe 0.69 / 1.15 / 0.00 / 1.44, max drawdown ≤ 16%. */
+export const ASSET_ROTATION_PARAMS: AssetRotationParams = { top: 5, keep: 7, stop_atr: 5 };
+
+/** Monthly asset-class rotation: the top-N by blended 1/3/6/12-month momentum that are also above their 200-day average. */
+export function assetRotation(p: AssetRotationParams = ASSET_ROTATION_PARAMS): StrategyDef {
+  const ranks = crossRanker((a, i) => (ROTATION_ETFS.has(a.symbol) && a.d1.bars[i].c > a.sma200[i] && a.mom_blend[i] > 0 ? a.mom_blend[i] : null));
+  return {
+    id: "ASSET_ROTATION",
+    groups: ["ETF"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: null },
+    prepare: (assets, t) => ranks.prepare(assets, t),
+    scan(assets, t) {
+      ranks.prepare(assets, t);
+      const out: Signal[] = [];
+      for (const a of assets) {
+        const i = barAt(a, t);
+        if (i === null || i < 253 || !firstBarOfMonth(a, i)) continue;
+        const ord = ranks.ord(a.symbol, t);
+        if (ord === null || ord >= p.top) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        const c = a.d1.bars[i].c;
+        out.push({ strategy: "ASSET_ROTATION", a, i, t, entry: c, fill: "CLOSE", stop: c - p.stop_atr * atrv, target: null, score: 1 - ord / p.top });
+      }
+      return out;
+    },
+    exit(a, i) {
+      if (!firstBarOfMonth(a, i)) return null;
+      const ord = ranks.ord(a.symbol, a.d1.bars[i].t);
+      return ord === null || ord >= p.keep ? "SIGNAL" : null;
+    },
+  };
+}
+
 // ── Portfolio backtest ──────────────────────────────────────────────────────
 
 export type Sleeve = { def: StrategyDef; risk_pct: number; max_positions: number };
@@ -405,7 +658,7 @@ const REGISTRY = new Map<StrategyId, StrategyDef>();
 export function registerStrategies(defs: StrategyDef[]) {
   for (const d of defs) REGISTRY.set(d.id, d);
 }
-registerStrategies([TREND, mrRsi2(), mrIbs(), pullback(), cryptoTrend()]);
+registerStrategies([TREND, mrRsi2(), mrIbs(), pullback(), cryptoTrend(), reversal(), momPullback(), etfMr(), momentum(), assetRotation()]);
 export function defFor(id: StrategyId): StrategyDef {
   const d = REGISTRY.get(id);
   if (!d) throw new Error(`unknown strategy ${id}`);
@@ -467,6 +720,8 @@ export function runBook(input: {
   };
 
   for (const t of times) {
+    // 0) cross-sectional state (ranks) for rank-based exits and scans
+    input.sleeves.forEach((s, k) => s.def.prepare?.(bySleeveAssets[k], t));
     // 1) manage every position on today's closed bar: stops/trail intrabar, strategy exits at the close.
     for (let k = live.length - 1; k >= 0; k--) {
       const l = live[k];

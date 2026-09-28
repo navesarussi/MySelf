@@ -24,9 +24,11 @@ describe("live account envelope (% of equity)", () => {
   });
 
   it("caps the sum of open risk across trades of different sizes", () => {
-    const positions = Array.from({ length: 10 }, (_, i) => ({ symbol: `S${i}`, notional: 10_000, open_risk_usd: 700 }));
+    // 1% of equity short of the cap already at stake, spread over ten differently sized trades
+    const cap = RISK_ENVELOPE.ACCOUNT_MAX_OPEN_RISK_PCT;
+    const positions = Array.from({ length: 10 }, (_, i) => ({ symbol: `S${i}`, notional: 10_000, open_risk_usd: (cap - 0.01) * 10_000 * (i % 2 ? 1.5 : 0.5) }));
     const s = state({ positions });
-    assert.equal(openRiskPct(s), 0.07);
+    assert.ok(Math.abs(openRiskPct(s) - (cap - 0.01)) < 1e-9);
     assert.deepEqual(checkAccountEntry(s, "NEW", 900), []);
     assert.ok(checkAccountEntry(s, "NEW", 1_100).includes("MAX_OPEN_RISK"));
   });
