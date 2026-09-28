@@ -175,3 +175,10 @@ describe("dashboard book overview", () => {
     assert.equal(o.stock_gross_pct, 0.15); // 5k + 5k + 5k; IBS_CLOSE and crypto outside the cap
   });
 });
+
+describe("live equity source", () => {
+  it("uses the broker only on the Alpaca demo venue", async () => {
+    const { brokerLiveEquity } = await import("../trading/account-equity");
+    assert.equal(await brokerLiveEquity({ execution_venue: "SIM" } as never), null);
+  });
+});
