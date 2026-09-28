@@ -94,13 +94,30 @@ export async function computeLiveEquityWithPrices(settings: TradingSettings): Pr
   ]);
   const accountOpen = open.filter((t) => isAccountTrade(t, settings.phase));
   const accountClosed = closed.filter((t) => isAccountTrade(t, settings.phase));
-  const prices = await lastPrices(accountOpen, universe);
-  return { equity: equityFromTrades(settings, accountOpen, accountClosed, prices), prices };
+  const [prices, broker] = await Promise.all([lastPrices(accountOpen, universe), brokerLiveEquity(settings)]);
+  return { equity: broker ?? equityFromTrades(settings, accountOpen, accountClosed, prices), prices };
 }
 
-/** Live account equity — same formula as the trading dashboard. */
+/**
+ * The broker's own equity when trading on the Alpaca demo account: one fast call, and the truth — the journal
+ * can only mark positions whose symbols it has prices for (the book trades ~2,000 stocks), and it polls every
+ * few seconds from the app. Null off Alpaca or when the answer is unusable (the journal takes over).
+ */
+export async function brokerLiveEquity(settings: Pick<TradingSettings, "execution_venue">): Promise<number | null> {
+  if (settings.execution_venue !== "ALPACA_PAPER") return null;
+  const { alpaca, isAlpacaConfigured } = await import("./broker/alpaca");
+  if (!isAlpacaConfigured()) return null;
+  try {
+    const eq = brokerEquity((await alpaca.account()).equity);
+    return eq.ok ? roundMoney(eq.equity) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Live account equity: the broker's figure on Alpaca, else the journal (same formula as the dashboard). */
 export async function computeLiveEquity(settings: TradingSettings): Promise<number> {
-  return (await computeLiveEquityWithPrices(settings)).equity;
+  return (await brokerLiveEquity(settings)) ?? (await computeLiveEquityWithPrices(settings)).equity;
 }
 
 export type LiveEquitySnapshot = {
