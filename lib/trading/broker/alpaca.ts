@@ -52,9 +52,9 @@ export const DUST_NOTIONAL_USD = 1;
 export function isDustPosition(p: Pick<AlpacaPosition, "qty" | "current_price" | "market_value"> | null | undefined): boolean {
   if (!p) return true;
   const qty = Number(p.qty);
-  if (!(qty > 0)) return true;
+  if (!Number.isFinite(qty) || qty === 0) return true;
   const value = Number(p.market_value);
-  const notional = Number.isFinite(value) ? Math.abs(value) : qty * Number(p.current_price);
+  const notional = Number.isFinite(value) ? Math.abs(value) : Math.abs(qty) * Number(p.current_price);
   return Number.isFinite(notional) && notional < DUST_NOTIONAL_USD;
 }
 

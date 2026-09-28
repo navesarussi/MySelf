@@ -46,7 +46,7 @@ export function useLivePrice(symbol: string | null | undefined, assetClass: stri
       if (!token || !serverUrl) return;
       try {
         const res = await api.tradingPrice({ token, serverUrl }, symbol, assetClass === "STOCK" ? "STOCK" : "CRYPTO");
-        if (res.price > 0) emit(res.price, "poll");
+        if (res.price != null && res.price > 0) emit(res.price, "poll");
       } catch {
         // transient — next poll retries
       }

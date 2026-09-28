@@ -6,7 +6,7 @@
 # that column, so replaying 0003 fails with `column "project" does not exist`.
 # scripts/db-migrate.ts keeps a ledger and applies each file exactly once.
 # Squash merges via GITHUB_TOKEN do not fire push workflows; touch this file to re-trigger after automerge.
-# 2026-09-27: re-trigger for 0054_book_last_bars_index (#119).
+# 2026-09-28: re-trigger for 0055_book_series_reconcile_fix.
 name: Apply Supabase migrations
 
 on:

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   entryConfirmedAtBroker,
+  isEntryOrderOpen,
   planReconciliation,
   qtyMismatch,
   reconcileEventKey,
@@ -50,6 +51,7 @@ describe("reconciliation decisions", () => {
           entryConfirmed: true,
           brokerEntryOrderId: "ord-1",
           clientOrderId: "t1-in",
+          brokerStatus: "filled",
         },
       ],
       reopenTradeIds: [],
@@ -73,6 +75,7 @@ describe("reconciliation decisions", () => {
           entryConfirmed: false,
           brokerEntryOrderId: null,
           clientOrderId: "t2-in",
+          brokerStatus: null,
         },
       ],
       reopenTradeIds: [],
@@ -96,6 +99,7 @@ describe("reconciliation decisions", () => {
           entryConfirmed: true,
           brokerEntryOrderId: "o1",
           clientOrderId: "t3-in",
+          brokerStatus: "filled",
         },
       ],
       reopenTradeIds: [],
@@ -119,6 +123,7 @@ describe("reconciliation decisions", () => {
           entryConfirmed: false,
           brokerEntryOrderId: null,
           clientOrderId: "abc-in",
+          brokerStatus: null,
         },
       ],
       reopenTradeIds: [],
@@ -139,6 +144,44 @@ describe("reconciliation decisions", () => {
     assert.equal(qtyMismatch(1000, 990, "CRYPTO_ALT"), true);
     assert.equal(qtyMismatch(10, 9, "STOCK"), true);
     assert.equal(qtyMismatch(10, 10, "STOCK"), false);
+  });
+
+  it("skips qty sync while the entry order is still working or partially filled", () => {
+    const plan = planReconciliation({
+      held: [{ symbol: "ELVN", assetClass: "STOCK", qty: 14, qtyAvailable: 14 }],
+      openTrades: [
+        {
+          id: "t4",
+          symbol: "ELVN",
+          assetClass: "STOCK",
+          qty: 26,
+          state: "OPEN",
+          entryConfirmed: false,
+          brokerEntryOrderId: "o2",
+          clientOrderId: "t4-in",
+          brokerStatus: "partially_filled",
+        },
+      ],
+      reopenTradeIds: [],
+      reopenSymbols: new Set(),
+    });
+    assert.deepEqual(plan.filter((a) => a.kind === "sync_qty"), []);
+  });
+
+  it("plans orphan close for accidental short positions", () => {
+    const plan = planReconciliation({
+      held: [{ symbol: "SPY", assetClass: "STOCK", qty: -2, qtyAvailable: -2 }],
+      openTrades: [],
+      reopenTradeIds: [],
+      reopenSymbols: new Set(),
+    });
+    assert.deepEqual(plan, [{ kind: "close_orphan", symbol: "SPY", assetClass: "STOCK", qty: 2 }]);
+  });
+
+  it("detects working entry orders", () => {
+    assert.equal(isEntryOrderOpen("partially_filled"), true);
+    assert.equal(isEntryOrderOpen("filled"), false);
+    assert.equal(isEntryOrderOpen(null), false);
   });
 });
 

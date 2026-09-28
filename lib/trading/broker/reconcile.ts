@@ -14,7 +14,7 @@ export function matchBrokerOrphans(
   const reopenIds: string[] = [];
   const unknownSymbols: string[] = [];
   for (const pos of held) {
-    if (!(pos.qty > 0)) continue;
+    if (pos.qty === 0) continue;
     const symbol = fromAlpacaPositionSymbol(pos.symbol);
     if (openSymbols.has(symbol)) continue;
     const closed = closedBySymbol.get(symbol);
