@@ -33,7 +33,8 @@ export type StrategyId =
   | "MOM_PULLBACK"
   | "ETF_MR"
   | "MOMENTUM"
-  | "ASSET_ROTATION";
+  | "ASSET_ROTATION"
+  | "IBS_CLOSE";
 
 /** A daily asset plus the extra series the families read — all from closed daily bars. */
 export type MultiAsset = DailyAsset & {
@@ -496,6 +497,45 @@ export function etfMr(p: EtfMrParams = ETF_MR_PARAMS): StrategyDef {
   };
 }
 
+// ── Next-day: closing-range reversal (market-on-close) ──────────────────────
+
+export type IbsCloseParams = { ibs_max: number; max_positions: number; notional_pct: number; stop_atr: number };
+/**
+ * Equity ETFs closing at the bottom of the day's range (IBS < 0.1) rise the next day: +0.26% / +0.15% / +0.07% /
+ * +0.19% a trade in 2007-15 / 2016-21 / 2022-24H1 / 2024H2+ (t 12 / 7 / 2.7 / 6) vs ~0.01% on any day; the IBS
+ * taken at 15:50 ET keeps the edge, and IEX-only live bars pick the same signals 87% of the time.
+ * Traded as notional (5 × 12%), bought and sold with market-on-close orders; the ATR stop only defines R and
+ * guards the position overnight.
+ */
+export const IBS_CLOSE_PARAMS: IbsCloseParams = { ibs_max: 0.1, max_positions: 5, notional_pct: 0.12, stop_atr: 2 };
+
+export function ibsOf(b: Bar): number {
+  return b.h > b.l ? (b.c - b.l) / (b.h - b.l) : 0.5;
+}
+
+/** Buy the close of an equity ETF whose close sits in the bottom tenth of its range; sell the next close. */
+export function ibsClose(p: IbsCloseParams = IBS_CLOSE_PARAMS): StrategyDef {
+  return {
+    id: "IBS_CLOSE",
+    groups: ["ETF"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: 1 },
+    scan(assets, t) {
+      const out: Signal[] = [];
+      for (const a of assets) {
+        if (!EQUITY_ETFS.has(a.symbol)) continue;
+        const i = barAt(a, t);
+        if (i === null || i < 20) continue;
+        const b = a.d1.bars[i];
+        const ibs = ibsOf(b);
+        const atrv = a.d1.atr[i - 1];
+        if (!(ibs < p.ibs_max) || !(b.h > b.l) || !fin(atrv)) continue;
+        out.push({ strategy: "IBS_CLOSE", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: null, score: 1 - ibs / p.ibs_max });
+      }
+      return out.sort((x, y) => y.score - x.score);
+    },
+  };
+}
+
 // ── Long horizon: monthly rotations ─────────────────────────────────────────
 
 export type MomentumParams = { top: number; keep: number; stop_atr: number };
@@ -658,7 +698,7 @@ const REGISTRY = new Map<StrategyId, StrategyDef>();
 export function registerStrategies(defs: StrategyDef[]) {
   for (const d of defs) REGISTRY.set(d.id, d);
 }
-registerStrategies([TREND, mrRsi2(), mrIbs(), pullback(), cryptoTrend(), reversal(), momPullback(), etfMr(), momentum(), assetRotation()]);
+registerStrategies([TREND, mrRsi2(), mrIbs(), pullback(), cryptoTrend(), reversal(), momPullback(), etfMr(), momentum(), assetRotation(), ibsClose()]);
 export function defFor(id: StrategyId): StrategyDef {
   const d = REGISTRY.get(id);
   if (!d) throw new Error(`unknown strategy ${id}`);

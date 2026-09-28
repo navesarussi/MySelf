@@ -4,6 +4,7 @@ import { resurrectDesyncedTrades } from "./broker/resurrect";
 import { runBrokerReconciliation } from "./broker/run-reconciliation";
 import { settleBrokerTrades, SETTLE_LOOKBACK_MS } from "./broker/settle";
 import { loadIntradayFrames, type IntradaySymbol } from "./intraday-data";
+import { runCloseSleeve } from "./book/close-sleeve";
 import { getIntradayUniverse, providerSymbolFor, refreshIntradayUniverse } from "./intraday-universe";
 import { getOpenTrades, getSettings, logEvent, updateSettings, type TradeRow } from "./store";
 import {
@@ -113,6 +114,16 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
         summary.settled = (await settleBrokerTrades({ now, sinceMs: now - SETTLE_LOOKBACK_MS })).settled;
       } catch (err) {
         summary.errors.push(`settle: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+      }
+    }
+
+    if (settings.execution_venue === "ALPACA_PAPER") {
+      // The book's next-day sleeve trades the closing auction; this 5-minute tick is the one that lands in its window.
+      try {
+        const close = await runCloseSleeve(now);
+        if (close?.errors.length) summary.errors.push(...close.errors.map((e) => `close_sleeve: ${e}`));
+      } catch (err) {
+        summary.errors.push(`close_sleeve: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
       }
     }
 

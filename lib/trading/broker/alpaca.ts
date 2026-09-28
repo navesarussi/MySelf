@@ -274,6 +274,17 @@ export const alpaca = {
       client_order_id: input.clientId,
     }),
 
+  /** Market-on-close order (closing auction). Alpaca takes these until 15:50 ET. */
+  placeCloseOrder: (input: { symbol: string; side: "buy" | "sell"; qty: number; clientId: string }) =>
+    call<AlpacaOrder>("POST", "/v2/orders", {
+      symbol: input.symbol,
+      qty: String(Math.floor(input.qty)),
+      side: input.side,
+      type: "market",
+      time_in_force: "cls",
+      client_order_id: input.clientId,
+    }),
+
   /** Market-close the whole position. Cancel the protective orders first — they reserve the quantity. */
   closePosition: (symbol: string, assetClass: AssetClass) =>
     call<AlpacaOrder>("DELETE", `/v2/positions/${encodeURIComponent(alpacaPositionSymbol(symbol, assetClass))}`),

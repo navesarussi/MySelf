@@ -78,6 +78,28 @@ export async function latestStockPrices(symbols: string[]): Promise<Map<string, 
   return out;
 }
 
+export type StockSnapshot = { o: number; h: number; l: number; c: number; v: number; price: number; at: number };
+
+/**
+ * Today's session so far per symbol (IEX feed — real time on the free plan; its high/low come from IEX prints only,
+ * close enough on liquid ETFs). Empty for symbols without a daily bar yet.
+ */
+export async function stockSnapshots(symbols: string[]): Promise<Map<string, StockSnapshot>> {
+  const out = new Map<string, StockSnapshot>();
+  for (let i = 0; i < symbols.length; i += 100) {
+    const batch = symbols.slice(i, i + 100);
+    type Raw = { dailyBar?: RawBar | null; latestTrade?: { p: number; t: string } | null };
+    const data = await getJson<Record<string, Raw>>(`${DATA_BASE}/v2/stocks/snapshots?symbols=${encodeURIComponent(batch.join(","))}&feed=iex`);
+    for (const [s, v] of Object.entries(data ?? {})) {
+      const b = v?.dailyBar;
+      const price = v?.latestTrade?.p ?? b?.c;
+      if (!b || !(price && price > 0)) continue;
+      out.set(s, { o: b.o, h: Math.max(b.h, price), l: Math.min(b.l, price), c: price, v: b.v, price, at: Date.parse(v?.latestTrade?.t ?? b.t) });
+    }
+  }
+  return out;
+}
+
 export type AlpacaClock = { is_open: boolean; next_open: string; next_close: string; timestamp: string };
 
 export function marketClock(): Promise<AlpacaClock> {

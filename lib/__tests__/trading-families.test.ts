@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { inCloseWindow, withProvisionalBar } from "../trading/book/close-sleeve";
 import { bookStockGross } from "../trading/book/engine";
 import { newPendingPosition } from "../trading/position";
 import {
@@ -7,6 +8,7 @@ import {
   buildMultiAsset,
   crossRanker,
   firstBarOfMonth,
+  ibsClose,
   momentum,
   reversal,
   type MultiAsset,
@@ -121,10 +123,40 @@ describe("asset rotation sleeve", () => {
 describe("book gross", () => {
   it("sums stock notional of open and queued trades, ignoring crypto", () => {
     const rows = [
-      { asset_class: "STOCK" as const, entry_limit: 100, entry_price: 101, remaining_size: 10, position_size: 10 },
-      { asset_class: "STOCK" as const, entry_limit: 50, entry_price: null, remaining_size: 0, position_size: 20 }, // queued
-      { asset_class: "CRYPTO_MAJOR" as const, entry_limit: 60000, entry_price: 60000, remaining_size: 1, position_size: 1 },
+      { asset_class: "STOCK" as const, setup: "MOMENTUM", entry_limit: 100, entry_price: 101, remaining_size: 10, position_size: 10 },
+      { asset_class: "STOCK" as const, setup: "REVERSAL", entry_limit: 50, entry_price: null, remaining_size: 0, position_size: 20 }, // queued
+      { asset_class: "STOCK" as const, setup: "IBS_CLOSE", entry_limit: 400, entry_price: 400, remaining_size: 30, position_size: 30 }, // own cap
+      { asset_class: "CRYPTO_MAJOR" as const, setup: "CRYPTO_TREND", entry_limit: 60000, entry_price: 60000, remaining_size: 1, position_size: 1 },
     ];
     assert.equal(bookStockGross(rows), 1010 + 1000);
+  });
+});
+
+describe("IBS close sleeve", () => {
+  it("buys equity ETFs closing in the bottom tenth of the day's range, lowest first", () => {
+    const mk = (s: string, lastClose: number) => {
+      const b = bars(trend(40, 100, 0));
+      b[b.length - 1] = { ...b[b.length - 1], h: 102, l: 98, c: lastClose };
+      return buildMultiAsset(s, "STOCK", "ETF", b);
+    };
+    const xs = [mk("SPY", 98.1), mk("QQQ", 98.3), mk("XLE", 99), mk("ARKK", 98.05)];
+    const sigs = ibsClose().scan(xs, lastT(xs[0]), { references: {} });
+    assert.deepEqual(sigs.map((s) => s.a.symbol), ["SPY", "QQQ"]); // XLE IBS 0.25; ARKK not in the list
+    assert.ok(sigs[0].stop < sigs[0].entry);
+  });
+
+  it("acts only between 21 and 11 minutes before the close", () => {
+    const close = Date.parse("2026-09-28T20:00:00Z");
+    assert.equal(inCloseWindow(close - 25 * 60_000, close), false);
+    assert.equal(inCloseWindow(close - 15 * 60_000, close), true);
+    assert.equal(inCloseWindow(close - 10 * 60_000, close), false);
+  });
+
+  it("replaces a stored bar for today with the live session", () => {
+    const hist = bars([100, 101, 102]);
+    const day = hist[2].t;
+    const out = withProvisionalBar(hist, { o: 102, h: 103, l: 99, c: 99.2, v: 5, price: 99.2, at: day }, day);
+    assert.equal(out.length, 3);
+    assert.equal(out[2].c, 99.2);
   });
 });

@@ -72,7 +72,7 @@ const ALWAYS_STOCKS = [...ROTATION_ETFS, ...EQUITY_ETFS];
 const defById = (id: string) => [...BOOK_SLEEVES.map((s) => s.def), ...RETIRED_DEFS].find((d) => d.id === (id as StrategyId));
 
 export type BookGroupKey = "CRYPTO" | "STOCKS";
-export type BookState = { crypto_bar?: string; stocks_bar?: string; backfill_remaining?: number };
+export type BookState = { crypto_bar?: string; stocks_bar?: string; backfill_remaining?: number; /** Session the close sleeve (IBS_CLOSE) last acted on. */ close_day?: string };
 export type BookPassSummary = { group: BookGroupKey; bar: string; managed: number; exits: number; signals: number; entries: number; blocked: Record<string, number>; errors: string[] };
 
 const REFERENCE: Record<BookGroupKey, { symbol: string; asset_class: AssetClass; provider_symbol: string }> = {
@@ -82,11 +82,11 @@ const REFERENCE: Record<BookGroupKey, { symbol: string; asset_class: AssetClass;
 
 const groupOf = (t: Pick<TradeRow, "asset_class">): BookGroupKey => (t.asset_class === "STOCK" ? "STOCKS" : "CRYPTO");
 
-/** Stock notional of open and queued book trades at their entry price — what BOOK_LIMITS.max_gross caps. */
-export function bookStockGross(trades: Pick<TradeRow, "asset_class" | "entry_limit" | "entry_price" | "remaining_size" | "position_size">[]): number {
+/** Stock notional of open and queued book trades at their entry price — what BOOK_LIMITS.max_gross caps (IBS_CLOSE has its own notional cap). */
+export function bookStockGross(trades: Pick<TradeRow, "asset_class" | "entry_limit" | "entry_price" | "remaining_size" | "position_size" | "setup">[]): number {
   let g = 0;
   for (const t of trades) {
-    if (t.asset_class !== "STOCK") continue;
+    if (t.asset_class !== "STOCK" || t.setup === "IBS_CLOSE") continue;
     const px = Number(t.entry_price ?? t.entry_limit) || 0;
     const qty = Number(t.remaining_size) || Number(t.position_size) || 0;
     g += px * qty;
@@ -111,7 +111,7 @@ export async function lastClosedSession(now: number): Promise<string | null> {
 
 const NY = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 /** New York wall clock minus UTC at (about) instant `t` — negative (−4h / −5h). */
-function nyOffsetMs(t: number): number {
+export function nyOffsetMs(t: number): number {
   const parts = Object.fromEntries(NY.formatToParts(new Date(t)).map((p) => [p.type, p.value]));
   const wall = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour) % 24, Number(parts.minute));
   return wall - Math.floor(t / 60_000) * 60_000;
@@ -221,7 +221,7 @@ async function manageOnBar(trade: TradeRow, a: MultiAsset, barIso: string, now: 
 
 type Buying = { stock: number | null; crypto: number | null };
 
-async function brokerContext(): Promise<{ equity: number | null; buying: Buying; held: Set<string> }> {
+export async function brokerContext(): Promise<{ equity: number | null; buying: Buying; held: Set<string> }> {
   const [acct, positions, orders] = await Promise.all([alpaca.account(), alpaca.positions(), alpaca.allOpenOrders()]);
   const eq = brokerEquity(acct.equity);
   const held = new Set<string>();
@@ -245,7 +245,8 @@ export function sizeSignal(sig: Pick<Signal, "entry" | "stop" | "a">, riskPct: n
   return { size, riskUsd: size * stopDist, notional };
 }
 
-async function enter(sig: Signal, sleeve: Sleeve, size: number, riskUsd: number, settings: TradingSettings, now: number): Promise<string | null> {
+/** Journal the signal and send it to the broker: OTO (stop attached, next open) or market-on-close (MOC). */
+export async function enter(sig: Signal, sleeve: Sleeve, size: number, riskUsd: number, settings: TradingSettings, now: number, order: "OTO" | "MOC" = "OTO"): Promise<string | null> {
   const pos = positionForSignal(sig, size, sleeve.def.manage);
   const sb = getSupabase();
   const { data: trig } = await sb
@@ -309,11 +310,13 @@ async function enter(sig: Signal, sleeve: Sleeve, size: number, riskUsd: number,
   const tradeId = (data as { id: string }).id;
   try {
     const clientId = `${tradeId.slice(0, 18)}-in`;
-    const order =
-      sig.a.asset_class === "STOCK"
+    const placed =
+      order === "MOC"
+        ? await alpaca.placeCloseOrder({ symbol: sig.a.symbol, side: "buy", qty: size, clientId })
+        : sig.a.asset_class === "STOCK"
         ? await alpaca.placeOtoStockEntry({ symbol: sig.a.symbol, qty: size, type: sig.fill === "LIMIT_NEXT" ? "limit" : "market", limit: sig.entry, stop: sig.stop, clientId })
         : await alpaca.placeEntry({ symbol: sig.a.symbol, assetClass: sig.a.asset_class, qty: size, limit: sig.entry, stop: sig.stop, target: sig.entry * 10, clientId, orderType: "market", timeInForce: "gtc" });
-    await updateTrade(tradeId, { broker: "ALPACA_PAPER", broker_entry_order_id: order.id, broker_status: order.status });
+    await updateTrade(tradeId, { broker: "ALPACA_PAPER", broker_entry_order_id: placed.id, broker_status: placed.status });
   } catch (err) {
     const reason = err instanceof Error ? err.message.slice(0, 160) : "broker_error";
     await updateTrade(tradeId, { state: "CANCELLED", exit_reason: "BROKER_REJECTED", broker: "ALPACA_PAPER", broker_status: reason, closed_at: new Date(now).toISOString() });
