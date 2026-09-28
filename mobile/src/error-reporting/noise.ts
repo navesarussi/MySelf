@@ -1,4 +1,4 @@
-export function shouldSkipClientReport(input: { message: string; httpStatus?: number }): boolean {
+export function shouldSkipClientReport(input: { message: string; httpStatus?: number; route?: string }): boolean {
   if (input.httpStatus === 401) return true;
   const msg = input.message.toLowerCase();
   return (
