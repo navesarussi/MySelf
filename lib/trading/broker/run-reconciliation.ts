@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto";
-import { getSupabase } from "@/lib/supabase";
 import {
   alpaca,
   alpacaSymbol,
@@ -9,6 +7,7 @@ import {
   type AlpacaFillActivity,
 } from "./alpaca";
 import { flattenAtBroker } from "./flatten";
+import { backfillOrphanCloses, insertOrphanCloseRow, recordPendingOrphanClose, settlePendingOrphanCloses } from "./orphan-close";
 import { matchBrokerOrphans } from "./reconcile";
 import { toBrokerFill } from "./settle";
 import { settleTrade } from "./ledger";
@@ -16,10 +15,9 @@ import {
   entryConfirmedAtBroker,
   planReconciliation,
   type BrokerHold,
-  type JournalOpen,
   type ReconcileAction,
 } from "./reconcile-decisions";
-import { applyExternalExit, forceClose, newPendingPosition, realizedR, type SimPosition } from "../position";
+import { applyExternalExit, realizedR, type SimPosition } from "../position";
 import { round } from "../round";
 import {
   getClosedTrades,
@@ -32,12 +30,18 @@ import {
   updateTrade,
   type TradeRow,
 } from "../store";
-import { RECONCILIATION_STRATEGY_VERSION } from "../strategy-versions";
-
 export const RECONCILE_EVENT_KIND = "BROKER_RECONCILE";
 const RECONCILE_FAIL_KIND = "BROKER_RECONCILE_FAIL";
 
-export type ReconcileSummary = { actions: number; orphans_closed: number; journal_closed: number; qty_synced: number; orders_resolved: number; errors: string[] };
+export type ReconcileSummary = {
+  actions: number;
+  orphans_closed: number;
+  orphans_settled: number;
+  journal_closed: number;
+  qty_synced: number;
+  orders_resolved: number;
+  errors: string[];
+};
 
 function assetClassForSymbol(symbol: string, universe: Map<string, { asset_class: import("../types").AssetClass }>): import("../types").AssetClass {
   const row = universe.get(symbol);
@@ -45,7 +49,7 @@ function assetClassForSymbol(symbol: string, universe: Map<string, { asset_class
   return symbol.length <= 5 ? "STOCK" : "CRYPTO_ALT";
 }
 
-function journalSnapshots(trades: TradeRow[]): JournalOpen[] {
+function journalSnapshots(trades: TradeRow[]) {
   return trades.map((t) => ({
     id: t.id,
     symbol: t.symbol,
@@ -55,6 +59,7 @@ function journalSnapshots(trades: TradeRow[]): JournalOpen[] {
     entryConfirmed: entryConfirmedAtBroker(t),
     brokerEntryOrderId: t.broker_entry_order_id,
     clientOrderId: `${t.id.slice(0, 18)}-in`,
+    brokerStatus: t.broker_status,
   }));
 }
 
@@ -79,62 +84,6 @@ function exitFromFills(trade: TradeRow, fills: AlpacaFillActivity[]): number | n
   return Number.isFinite(vwap) ? vwap : null;
 }
 
-async function insertOrphanCloseRow(input: {
-  symbol: string;
-  assetClass: import("../types").AssetClass;
-  qty: number;
-  exitPrice: number | null;
-  now: number;
-}): Promise<string> {
-  const id = randomUUID();
-  const p = newPendingPosition({ asset_class: input.assetClass, entry: input.exitPrice ?? 1, stop: (input.exitPrice ?? 1) * 0.99, size: input.qty });
-  p.state = "CLOSED";
-  p.entry_price = null;
-  p.opened_at = null;
-  p.closed_at = input.now;
-  p.exit_price = input.exitPrice;
-  p.exit_reason = "MANUAL";
-  p.size = 0;
-  const nowIso = new Date(input.now).toISOString();
-  const { error } = await getSupabase().from("trading_trades").insert({
-    id,
-    symbol: input.symbol,
-    asset_class: input.assetClass,
-    bucket_id: "reconciliation",
-    mode: "SWING",
-    track: "AGENT",
-    execution: "PAPER",
-    state: "CLOSED",
-    trigger_timestamp: nowIso,
-    trigger_snapshot: { reconciliation: "orphan_close" },
-    agent_decision: "SKIP",
-    agent_model_version: "reconciliation",
-    prompt_version: "reconciliation",
-    param_version: "reconciliation",
-    entry_limit: input.exitPrice ?? 0,
-    stop_price: (input.exitPrice ?? 1) * 0.99,
-    initial_stop_price: (input.exitPrice ?? 1) * 0.99,
-    target_price: (input.exitPrice ?? 1) * 1.01,
-    position_size: input.qty,
-    remaining_size: 0,
-    risk_amount: 0,
-    sim_state: p,
-    events: [{ type: "CLOSED", price: input.exitPrice ?? 0, reason: "MANUAL", at: input.now, note: "reconciliation orphan close" }],
-    strategy_version: RECONCILIATION_STRATEGY_VERSION,
-    reconciliation_kind: "orphan_close",
-    broker: "ALPACA_PAPER",
-    baseline_enter: false,
-    opened_at: null,
-    closed_at: nowIso,
-    exit_price: input.exitPrice,
-    exit_reason: "MANUAL",
-    realized_r: null,
-    realized_pnl: null,
-  });
-  if (error) throw new Error(`orphan row: ${error.message}`);
-  return id;
-}
-
 async function executeAction(action: ReconcileAction, ctx: { trades: Map<string, TradeRow>; fills: AlpacaFillActivity[]; now: number; summary: ReconcileSummary }) {
   switch (action.kind) {
     case "close_orphan": {
@@ -147,16 +96,23 @@ async function executeAction(action: ReconcileAction, ctx: { trades: Map<string,
         broker_stop_order_id: null,
         broker_target_order_id: null,
       };
-      const px = await flattenAtBroker(flat);
-      const rowId = await insertOrphanCloseRow({ symbol: action.symbol, assetClass: action.assetClass, qty: action.qty, exitPrice: px, now: ctx.now });
-      ctx.summary.orphans_closed += 1;
-      await logEvent({
-        kind: RECONCILE_EVENT_KIND,
-        symbol: action.symbol,
-        severity: "warn",
-        message: `${action.symbol}: סגירת יתום בברוקר (${action.qty} → flat)`,
-        data: { action: "orphan_close", qty: action.qty, exit_price: px, trade_id: rowId },
-      });
+      try {
+        const px = await flattenAtBroker(flat);
+        const rowId = await insertOrphanCloseRow({ symbol: action.symbol, assetClass: action.assetClass, qty: action.qty, exitPrice: px, now: ctx.now });
+        ctx.summary.orphans_closed += 1;
+        await logEvent({
+          kind: RECONCILE_EVENT_KIND,
+          symbol: action.symbol,
+          severity: "warn",
+          message: `${action.symbol}: סגירת יתום בברוקר (${action.qty} → flat)`,
+          data: { action: "orphan_close", qty: action.qty, exit_price: px, trade_id: rowId },
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message === "stock_exit_queued_for_open") {
+          await recordPendingOrphanClose({ symbol: action.symbol, assetClass: action.assetClass, qty: action.qty, at: ctx.now });
+        }
+        throw err;
+      }
       return;
     }
     case "sync_qty": {
@@ -259,8 +215,9 @@ async function executeAction(action: ReconcileAction, ctx: { trades: Map<string,
  * Idempotent, wrapped in try/catch by callers — must not crash the tick.
  */
 export async function runBrokerReconciliation(now = Date.now()): Promise<ReconcileSummary> {
-  const summary: ReconcileSummary = { actions: 0, orphans_closed: 0, journal_closed: 0, qty_synced: 0, orders_resolved: 0, errors: [] };
+  const summary: ReconcileSummary = { actions: 0, orphans_closed: 0, orphans_settled: 0, journal_closed: 0, qty_synced: 0, orders_resolved: 0, errors: [] };
   if (!isAlpacaConfigured()) return summary;
+  summary.orphans_settled = await settlePendingOrphanCloses(now).catch(() => 0);
   const settings = await getSettings();
   if (settings.execution_venue !== "ALPACA_PAPER") return summary;
 
@@ -290,7 +247,7 @@ export async function runBrokerReconciliation(now = Date.now()): Promise<Reconci
         qtyAvailable: Number((p as { qty_available?: string }).qty_available ?? p.qty),
       };
     })
-    .filter((p) => p.qty > 0);
+    .filter((p) => p.qty !== 0);
 
   const orphanMatch = matchBrokerOrphans(
     held.map((p) => ({ symbol: p.symbol, qty: p.qty })),
@@ -337,5 +294,14 @@ export async function runBrokerReconciliation(now = Date.now()): Promise<Reconci
       }
     }
   }
+
+  const dayStart = new Date(now).toISOString().slice(0, 10);
+  summary.orphans_settled += await backfillOrphanCloses({
+    symbols: ["AAPL", "MSFT", "SPY"],
+    sinceMs: Date.parse(`${dayStart}T00:00:00.000Z`),
+    now,
+    openTrades: open,
+  }).catch(() => 0);
+
   return summary;
 }

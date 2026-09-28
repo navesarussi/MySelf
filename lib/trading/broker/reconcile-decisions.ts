@@ -19,7 +19,27 @@ export type JournalOpen = {
   entryConfirmed: boolean;
   brokerEntryOrderId: string | null;
   clientOrderId: string | null;
+  brokerStatus: string | null;
 };
+
+const ENTRY_ORDER_OPEN = new Set([
+  "new",
+  "accepted",
+  "pending_new",
+  "partially_filled",
+  "pending_cancel",
+  "pending_replace",
+  "accepted_for_bidding",
+  "stopped",
+  "suspended",
+  "calculated",
+]);
+
+/** Entry order still working or only partially filled — journal qty may lag the broker. */
+export function isEntryOrderOpen(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return ENTRY_ORDER_OPEN.has(status.toLowerCase());
+}
 
 export type ReconcileAction =
   | { kind: "close_orphan"; symbol: string; assetClass: AssetClass; qty: number }
@@ -64,14 +84,19 @@ export function planReconciliation(input: {
 
   const heldSymbols = new Set<string>();
   for (const pos of input.held) {
-    if (!(pos.qty > 0)) continue;
+    if (pos.qty === 0) continue;
     heldSymbols.add(pos.symbol);
+    if (pos.qty < 0) {
+      actions.push({ kind: "close_orphan", symbol: pos.symbol, assetClass: pos.assetClass, qty: Math.abs(pos.qty) });
+      continue;
+    }
     const journal = openBySymbol.get(pos.symbol);
     if (!journal) {
       if (input.reopenSymbols.has(pos.symbol)) continue;
       actions.push({ kind: "close_orphan", symbol: pos.symbol, assetClass: pos.assetClass, qty: pos.qty });
       continue;
     }
+    if (isEntryOrderOpen(journal.brokerStatus)) continue;
     if (qtyMismatch(journal.qty, pos.qty, pos.assetClass)) {
       actions.push({ kind: "sync_qty", tradeId: journal.id, symbol: pos.symbol, brokerQty: pos.qty, journalQty: journal.qty });
     }

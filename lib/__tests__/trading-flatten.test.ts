@@ -99,4 +99,39 @@ describe("flattenAtBroker on the paper engine", () => {
     await assert.rejects(flattenAtBroker(t), /stock_exit_queued_for_open/);
     assert.equal(posted.length, 1);
   });
+
+  it("waits on an existing market sell when the market is open instead of canceling it", async () => {
+    flattenTiming.marketOpen = async () => true;
+    let cancels = 0;
+    let posts = 0;
+    let positionReads = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      if (url.pathname === "/v2/positions/AAPL" && method === "GET") {
+        positionReads += 1;
+        return new Response(JSON.stringify({ symbol: "AAPL", qty: positionReads >= 2 ? "0" : "1", current_price: "340", market_value: "340" }), { status: 200 });
+      }
+      if (url.pathname === "/v2/orders" && method === "GET") {
+        return new Response(JSON.stringify([{ id: "q1", side: "sell", type: "market", status: "filled", filled_avg_price: "339.5" }]));
+      }
+      if (url.pathname.startsWith("/v2/orders/") && method === "GET") {
+        return new Response(JSON.stringify({ id: "q1", status: "filled", filled_avg_price: "339.5" }));
+      }
+      if (method === "DELETE" && url.pathname.startsWith("/v2/orders/")) {
+        cancels += 1;
+        return new Response(null, { status: 204 });
+      }
+      if (url.pathname === "/v2/orders" && method === "POST") {
+        posts += 1;
+        return new Response(JSON.stringify({ id: "new", status: "accepted" }));
+      }
+      return new Response("{}", { status: 500 });
+    }) as typeof fetch;
+    const t = { symbol: "AAPL", asset_class: "STOCK" as const, broker_entry_order_id: null, broker_stop_order_id: null, broker_target_order_id: null };
+    const px = await flattenAtBroker(t);
+    assert.equal(px, 339.5);
+    assert.equal(cancels, 0);
+    assert.equal(posts, 0);
+  });
 });

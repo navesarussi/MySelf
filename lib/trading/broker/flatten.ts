@@ -63,6 +63,16 @@ const FLATTEN_ATTEMPTS = 8;
  * Throws if the broker still holds size after those attempts. Callers must not
  * mark the journal CLOSED in that case.
  */
+async function waitOnMarketSell(t: { symbol: string; asset_class: AssetClass }): Promise<number | null> {
+  const open = await alpaca.openOrders(t.symbol, t.asset_class).catch(() => []);
+  const marketSell = open.find((o) => o.side === "sell" && o.type === "market");
+  if (!marketSell) return null;
+  const order = await settledOrder(marketSell.id);
+  const fill = Number(order?.filled_avg_price);
+  if (await waitFlat(t, order?.status === "filled" ? 6 : 4)) return fill > 0 ? fill : null;
+  throw new Error("stock_exit_queued_for_open");
+}
+
 export async function flattenAtBroker(t: {
   symbol: string;
   asset_class: AssetClass;
@@ -70,6 +80,9 @@ export async function flattenAtBroker(t: {
   broker_stop_order_id: string | null;
   broker_target_order_id: string | null;
 }): Promise<number | null> {
+  const queuedPx = await waitOnMarketSell(t);
+  if (queuedPx !== null) return queuedPx;
+
   if (t.asset_class === "STOCK" && !(await flattenTiming.marketOpen())) {
     // A stock sell cannot fill while the market is closed: retrying spun for ~30s per symbol and ran the
     // tick past 85s (weekend reconcile of AAPL/MSFT/SPY). Queue one market sell for the open instead, and

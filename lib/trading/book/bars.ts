@@ -19,6 +19,8 @@ export const SPLIT_TOLERANCE = 0.005;
 const RECHECK_DAYS = 12;
 /** PostgREST caps RPC rows at 1000; batch symbols so each call stays under that limit. */
 export const BOOK_LAST_BARS_SYMBOL_BATCH = 500;
+/** Smaller batches keep book_series under the 8s statement timeout (250 × ~430 days was ~1.1s warm but spilled work_mem). */
+export const BOOK_SERIES_SYMBOL_BATCH = 100;
 
 export const dayIso = (t: number) => new Date(t).toISOString().slice(0, 10);
 /** UTC midnight of the bar's date — the research convention (Yahoo daily bars are normalised the same way). */
@@ -140,22 +142,39 @@ export async function syncStockBars(input: { symbols: string[]; now: number; dea
   return res;
 }
 
+const isStatementTimeout = (err: unknown) => {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return /57014|statement timeout|canceling statement/i.test(msg);
+};
+
+async function fetchBookSeriesBatch(batch: string[], since: string): Promise<{ symbol: string; t: string[]; o: number[]; h: number[]; l: number[]; c: number[]; v: number[] }[]> {
+  const { data, error } = await getSupabase().rpc("book_series", { p_symbols: batch, p_since: since });
+  if (error) throw new Error(`book_series: ${error.message}`);
+  return (data ?? []) as { symbol: string; t: string[]; o: number[]; h: number[]; l: number[]; c: number[]; v: number[] }[];
+}
+
 /** A year of stored daily bars per symbol, bar times at UTC midnight (ascending). */
 export async function loadStockSeries(symbols: string[], sinceMs: number): Promise<Map<string, Bar[]>> {
   const out = new Map<string, Bar[]>();
   const since = dayIso(utcDay(sinceMs));
   const batches: string[][] = [];
-  for (let i = 0; i < symbols.length; i += 250) batches.push(symbols.slice(i, i + 250));
-  await mapWithConcurrency(batches, 4, async (batch) => {
-    const { data, error } = await getSupabase().rpc("book_series", { p_symbols: batch, p_since: since });
-    if (error) throw new Error(`book_series: ${error.message}`);
-    for (const r of (data ?? []) as { symbol: string; t: string[]; o: number[]; h: number[]; l: number[]; c: number[]; v: number[] }[]) {
+  for (let i = 0; i < symbols.length; i += BOOK_SERIES_SYMBOL_BATCH) batches.push(symbols.slice(i, i + BOOK_SERIES_SYMBOL_BATCH));
+  for (const batch of batches) {
+    let rows: Awaited<ReturnType<typeof fetchBookSeriesBatch>>;
+    try {
+      rows = await fetchBookSeriesBatch(batch, since);
+    } catch (err) {
+      if (!isStatementTimeout(err) || batch.length <= 1) throw err;
+      const half = Math.ceil(batch.length / 2);
+      rows = [...(await fetchBookSeriesBatch(batch.slice(0, half), since)), ...(await fetchBookSeriesBatch(batch.slice(half), since))];
+    }
+    for (const r of rows) {
       out.set(
         r.symbol,
         r.t.map((d, k) => ({ t: Date.parse(`${d}T00:00:00Z`), o: Number(r.o[k]), h: Number(r.h[k]), l: Number(r.l[k]), c: Number(r.c[k]), v: Number(r.v[k]) }))
       );
     }
-  });
+  }
   return out;
 }
 
