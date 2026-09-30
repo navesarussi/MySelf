@@ -14,15 +14,10 @@ import { BOOK_STRATEGY_VERSION, isBookManaged } from "../strategy-versions";
 import { accountRiskState, loadAccount, type Account } from "../tick-context";
 import type { AssetClass, ExitReason } from "../types";
 import {
-  assetRotation,
   buildMultiAsset,
-  cryptoTrend,
   EQUITY_ETFS,
   exitDecision,
-  momentum,
   positionForSignal,
-  pullback,
-  reversal,
   ROTATION_ETFS,
   type MultiAsset,
   type Signal,
@@ -32,40 +27,21 @@ import {
 } from "../strategy/multi";
 import { BOOK_HISTORY_DAYS, D1, dayIso, loadCryptoSeries, loadStockSeries, syncStockBars } from "./bars";
 import { getBookUniverse, type BookUniverseRow } from "./universe";
+import { BOOK_LIMITS, BOOK_SLEEVES, RETIRED_DEFS, sleevesForGroup } from "./sleeves";
+import { ENTERED, saveSignalLog, signalRow, type SignalLogRow } from "../fund/signal-log";
 
-/**
+export { BOOK_LIMITS, BOOK_SLEEVES } from "./sleeves";
+
+/*
  * מערכת המסחר — the deterministic multi-strategy book, live on the Alpaca demo account.
  *
  * Once per closed daily bar and group (crypto after 00:00 UTC, US stocks ~20 minutes after the close):
  * manage every open book position on the new bar (chandelier trail, strategy exits, time stops), then
  * scan the whole universe for new signals and send them to the broker. Between passes the 15-minute tick
  * only mirrors the broker (fills, stops, exits, settlement — advanceBookBroker).
- *
- * Sleeves and risk come from the 10-year research on the full universe (docs/trading/multi-strategy.md), one
- * edge per horizon: crypto trend (weeks), stock momentum and cross-asset rotation (months, rebalanced monthly),
- * and short-term reversal in momentum leaders (days). 2016-26 together: CAGR 24%, Sharpe 1.22, max DD 21%,
- * ~480 trades a year — every period positive. The old stock pullback earned nothing over the equal-weight
- * universe and is retired (open ones are still managed to their exits).
+ * Sleeves, caps and their evidence: ./sleeves.ts. The old stock pullback is retired (open ones are still
+ * managed to their exits).
  */
-export const BOOK_SLEEVES: Sleeve[] = [
-  { def: cryptoTrend(), risk_pct: 0.005, max_positions: 6 },
-  { def: momentum(), risk_pct: 0.003, max_positions: 20 },
-  { def: assetRotation(), risk_pct: 0.008, max_positions: 5 },
-  // Mean reversion needs many small slots: signals cluster in selloffs and 10 big slots fill on the first day.
-  { def: reversal(), risk_pct: 0.0025, max_positions: 40 },
-];
-
-/** Families no longer entered whose open positions are still managed to their exits. */
-const RETIRED_DEFS = [pullback()];
-
-/** The research book's own caps (the account envelope in % of equity sits above these). */
-export const BOOK_LIMITS = Object.freeze({
-  max_positions: 75,
-  max_notional: 0.2,
-  /** Stock gross notional (book positions + queued entries) as a share of equity — research: 1.0 → max DD 21% vs 30% at 1.5. */
-  max_gross: 1.0,
-  max_risk_per_trade: 0.01,
-});
 
 /** Symbols every stock pass loads whatever the day's liquidity ranking (the ETF families trade fixed lists). */
 const ALWAYS_STOCKS = [...ROTATION_ETFS, ...EQUITY_ETFS];
@@ -366,32 +342,38 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
   const account: Account = { ...(await loadAccount(settings, await getOpenTrades(), new Map(), now)), equity: broker.equity };
   const refs = { STOCKS: assets.get("SPY"), CRYPTO: assets.get("BTC") };
   const signals: { sig: Signal; sleeve: Sleeve }[] = [];
-  for (const sleeve of BOOK_SLEEVES) {
-    if (!sleeve.def.groups.some((g) => (group === "CRYPTO" ? g === "CRYPTO" : g !== "CRYPTO"))) continue;
+  for (const sleeve of sleevesForGroup(group, BOOK_SLEEVES)) {
     const assetsFor = pool.filter((a) => sleeve.def.groups.includes(a.group as StrategyGroup));
     for (const sig of sleeve.def.scan(assetsFor, t, { references: refs })) signals.push({ sig, sleeve });
   }
   signals.sort((x, y) => y.sig.score - x.sig.score);
   summary.signals = signals.length;
+  const log: SignalLogRow[] = [];
+  const decide = (sig: Signal, decision: string, extra: { size?: number; riskUsd?: number; tradeId?: string } = {}) =>
+    log.push(signalRow({ bar: barIso, grp: group, sig, decision, ...extra }));
   const bookOpen = () => open.length + summary.entries;
   let stockGross = bookStockGross(open);
   for (const { sig, sleeve } of signals) {
     if (Date.now() > deadline) {
       block("TIME_BUDGET");
+      decide(sig, "TIME_BUDGET");
       break;
     }
     if (broker.held.has(sig.a.symbol)) {
       block("ALREADY_IN_SYMBOL");
+      decide(sig, "ALREADY_IN_SYMBOL");
       continue;
     }
     // Each entry is pushed to both lists; count symbols once or the sleeve fills at half its cap.
     const sleeveOpen = new Set([...open, ...account.open].filter((x) => x.setup === sleeve.def.id).map((x) => x.symbol)).size;
     if (sleeveOpen >= sleeve.max_positions) {
       block(`MAX_${sleeve.def.id}`);
+      decide(sig, `MAX_${sleeve.def.id}`);
       continue;
     }
     if (bookOpen() >= BOOK_LIMITS.max_positions) {
       block("MAX_BOOK");
+      decide(sig, "MAX_BOOK");
       continue;
     }
     const uni = universe.find((r) => r.symbol === sig.a.symbol);
@@ -408,6 +390,7 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
     });
     if (pre) {
       block(pre.reason);
+      decide(sig, pre.reason);
       void logEntryGuardSkip({ symbol: sig.a.symbol, reason: pre.reason, detail: pre.detail, now });
       continue;
     }
@@ -415,21 +398,28 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
     const sized = sizeSignal(sig, sleeve.risk_pct * settings.risk_scale, broker.equity, bp);
     if (!sized) {
       block("SIZE");
+      decide(sig, "SIZE");
       void logEntryGuardSkip({ symbol: sig.a.symbol, reason: "MAX_POSITION_NOTIONAL", detail: "size blocked by guards or min notional", now });
       continue;
     }
     if (sig.a.asset_class === "STOCK" && stockGross + sized.notional > BOOK_LIMITS.max_gross * broker.equity) {
       block("MAX_GROSS");
+      decide(sig, "MAX_GROSS", { size: sized.size, riskUsd: sized.riskUsd });
       continue;
     }
     const blocks = checkAccountEntry(accountRiskState(settings, account), sig.a.symbol, sized.riskUsd);
     if (blocks.length) {
       blocks.forEach(block);
+      decide(sig, blocks.join(","), { size: sized.size, riskUsd: sized.riskUsd });
       continue;
     }
     try {
       const id = await enter(sig, sleeve, sized.size, sized.riskUsd, settings, now);
-      if (!id) continue;
+      if (!id) {
+        decide(sig, "ENTER_FAILED", { size: sized.size, riskUsd: sized.riskUsd });
+        continue;
+      }
+      decide(sig, ENTERED, { size: sized.size, riskUsd: sized.riskUsd, tradeId: id });
       summary.entries += 1;
       broker.held.add(sig.a.symbol);
       if (sig.a.asset_class === "STOCK") {
@@ -441,9 +431,11 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       account.open.push({ symbol: sig.a.symbol, setup: sig.strategy, entry_limit: sig.entry, remaining_size: sized.size, sim_state: pos } as TradeRow);
       await logEvent({ kind: "ORDER_PLACED", symbol: sig.a.symbol, message: `[Alpaca demo] ${sig.a.symbol} ${sig.strategy}: ${sig.fill === "LIMIT_NEXT" ? "Limit" : "Market"} ${sig.entry.toPrecision(6)} · סטופ ${sig.stop.toPrecision(6)} · ${sized.size} יח׳${sig.a.asset_class === "STOCK" ? " · בפתיחת המסחר" : ""}`.slice(0, 300) });
     } catch (err) {
+      decide(sig, "ENTER_ERROR", { size: sized.size, riskUsd: sized.riskUsd });
       summary.errors.push(`enter ${sig.a.symbol}: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
     }
   }
+  await saveSignalLog(log, summary.errors);
   return summary;
 }
 

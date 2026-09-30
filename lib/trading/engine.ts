@@ -29,6 +29,7 @@ import {
 } from "./store";
 import { isoDateInZone, nextTradingDays } from "./veto";
 import { round } from "./round";
+import { updateNav } from "./fund/nav";
 
 /**
  * מערכת המסחר — live pipeline, run every 15 minutes (GitHub Actions → /api/trading/tick).
@@ -187,6 +188,15 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
       },
       { onConflict: "day" }
     );
+
+  // Fund-grade NAV ledger from the broker's own history (lib/trading/fund/nav.ts).
+  if (settings.execution_venue === "ALPACA_PAPER" && isAlpacaConfigured()) {
+    try {
+      await updateNav(now);
+    } catch (err) {
+      summary.errors.push(`nav: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+    }
+  }
 
   summary.duration_ms = Date.now() - started;
   if (summary.errors.length) {
