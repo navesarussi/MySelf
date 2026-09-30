@@ -12,9 +12,9 @@ import { D1, dayIso, loadStockSeries } from "./bars";
 import { brokerContext, enter, nyOffsetMs, type BookState } from "./engine";
 
 /**
- * The next-day sleeve (IBS_CLOSE): ~10 minutes before the US close, sell yesterday's buys and buy today's
- * equity ETFs closing at the bottom of their range — both as market-on-close orders, so they fill in the closing
- * auction. Runs from the 5-minute intraday tick; once per session (settings.book_state.close_day).
+ * The short bracket sleeve (IBS_CLOSE): ~10 minutes before the US close, buy today's equity ETFs closing at the
+ * bottom of their range with market-on-close orders; on the fill the broker holds an OCO (take-profit 1.5×ATR,
+ * stop 1×ATR). Positions still held after 3 sessions leave with a market-on-close sell. Runs from the 5-minute intraday tick; once per session (settings.book_state.close_day).
  */
 
 export const CLOSE_SLEEVE: Sleeve = { def: ibsClose(), risk_pct: 0, max_positions: IBS_CLOSE_PARAMS.max_positions };
@@ -32,6 +32,11 @@ async function todayClose(now: number): Promise<{ date: string; closeUtc: number
   if (!s) return null;
   const closeNy = Date.parse(`${s.date}T${s.close}:00Z`);
   return { date: s.date, closeUtc: closeNy - nyOffsetMs(closeNy) };
+}
+
+/** Has a position bought at the close of `openedDay` been held for `maxHold` sessions by today's close? */
+export function holdExpired(openedDay: string, today: string, sessions: string[], maxHold: number): boolean {
+  return sessions.filter((d) => d > openedDay && d <= today).length >= maxHold;
 }
 
 /** Stored daily history + today's session so far as a provisional bar at today's date. */
@@ -66,9 +71,15 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
   await updateSettings({ book_state: { ...state, close_day: session.date } });
 
   const open = (await getOpenTrades()).filter((t) => isBookManaged(t.strategy_version) && t.setup === "IBS_CLOSE");
-  for (const t of open) {
-    const opened = t.opened_at ?? t.created_at;
-    if ((t.state !== "OPEN" && t.state !== "RISK_FREE") || t.sim_state?.exit_pending || dayIso(Date.parse(opened)) >= session.date) continue;
+  // The broker's OCO takes the profit or the stop; what is still held after `max_hold` closes leaves at this close.
+  const openedDays = open.map((t) => dayIso(Date.parse(t.opened_at ?? t.created_at)));
+  const since = openedDays.length ? openedDays.reduce((a, b) => (a < b ? a : b)) : session.date;
+  const sessions = since < session.date ? (await marketCalendar(since, session.date)).map((x) => x.date) : [session.date];
+  const exiting = new Set<string>();
+  for (const [k, t] of open.entries()) {
+    if ((t.state !== "OPEN" && t.state !== "RISK_FREE") || t.sim_state?.exit_pending) continue;
+    if (!holdExpired(openedDays[k], session.date, sessions, IBS_CLOSE_PARAMS.max_hold)) continue;
+    exiting.add(t.id);
     try {
       await queueCloseExit(t, now);
       summary.exits += 1;
@@ -95,7 +106,7 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
   const signals = CLOSE_SLEEVE.def.scan(assets, dayMs, { references: {} });
   summary.signals = signals.length;
   const account = { ...(await loadAccount(settings, await getOpenTrades(), new Map(), now)), equity: broker.equity };
-  let slots = CLOSE_SLEEVE.max_positions - open.filter((t) => !t.sim_state?.exit_pending && dayIso(Date.parse(t.opened_at ?? t.created_at)) >= session.date).length;
+  let slots = CLOSE_SLEEVE.max_positions - open.filter((t) => !t.sim_state?.exit_pending && !exiting.has(t.id)).length;
   for (const sig of signals) {
     if (slots <= 0) {
       block("MAX_IBS_CLOSE");

@@ -499,26 +499,27 @@ export function etfMr(p: EtfMrParams = ETF_MR_PARAMS): StrategyDef {
 
 // ── Next-day: closing-range reversal (market-on-close) ──────────────────────
 
-export type IbsCloseParams = { ibs_max: number; max_positions: number; notional_pct: number; stop_atr: number };
+export type IbsCloseParams = { ibs_max: number; max_positions: number; notional_pct: number; stop_atr: number; target_atr: number; max_hold: number };
 /**
- * Equity ETFs closing at the bottom of the day's range (IBS < 0.1) rise the next day: +0.26% / +0.15% / +0.07% /
- * +0.19% a trade in 2007-15 / 2016-21 / 2022-24H1 / 2024H2+ (t 12 / 7 / 2.7 / 6) vs ~0.01% on any day; the IBS
- * taken at 15:50 ET keeps the edge, and IEX-only live bars pick the same signals 87% of the time.
- * Traded as notional (5 × 12%), bought and sold with market-on-close orders; the ATR stop only defines R and
- * guards the position overnight.
+ * Equity ETFs closing at the bottom of the day's range (IBS < 0.1) mean-revert over the next days. Traded as a
+ * short bracket: bought at the close (market-on-close), then a broker-side OCO — take-profit 1.5×ATR, stop-loss
+ * 1×ATR — and out at the close of the 3rd session if neither was hit. 2007-15 / 2016-21 / 2022-24H1 / 2024H2+:
+ * +0.096 / +0.106 / +0.099 / +0.120R a trade (t 8.9 / 7.9 / 5.1 / 5.5; ~25% take-profits, ~37% stops); every
+ * TP/SL/hold combination on the grid (0.75–2 ATR, 2–5 days) was positive in every period. The 15:50 ET IBS keeps
+ * the edge, and IEX live bars pick the same signals as SIP 87% of the time.
  */
-export const IBS_CLOSE_PARAMS: IbsCloseParams = { ibs_max: 0.1, max_positions: 5, notional_pct: 0.12, stop_atr: 2 };
+export const IBS_CLOSE_PARAMS: IbsCloseParams = { ibs_max: 0.1, max_positions: 6, notional_pct: 0.12, stop_atr: 1, target_atr: 1.5, max_hold: 3 };
 
 export function ibsOf(b: Bar): number {
   return b.h > b.l ? (b.c - b.l) / (b.h - b.l) : 0.5;
 }
 
-/** Buy the close of an equity ETF whose close sits in the bottom tenth of its range; sell the next close. */
+/** Buy the close of an equity ETF whose close sits in the bottom tenth of its range; exit at the bracket or the 3rd close. */
 export function ibsClose(p: IbsCloseParams = IBS_CLOSE_PARAMS): StrategyDef {
   return {
     id: "IBS_CLOSE",
     groups: ["ETF"],
-    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: 1 },
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: p.max_hold },
     scan(assets, t) {
       const out: Signal[] = [];
       for (const a of assets) {
@@ -529,7 +530,7 @@ export function ibsClose(p: IbsCloseParams = IBS_CLOSE_PARAMS): StrategyDef {
         const ibs = ibsOf(b);
         const atrv = a.d1.atr[i - 1];
         if (!(ibs < p.ibs_max) || !(b.h > b.l) || !fin(atrv)) continue;
-        out.push({ strategy: "IBS_CLOSE", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: null, score: 1 - ibs / p.ibs_max });
+        out.push({ strategy: "IBS_CLOSE", a, i, t, entry: b.c, fill: "CLOSE", stop: b.c - p.stop_atr * atrv, target: b.c + p.target_atr * atrv, score: 1 - ibs / p.ibs_max });
       }
       return out.sort((x, y) => y.score - x.score);
     },

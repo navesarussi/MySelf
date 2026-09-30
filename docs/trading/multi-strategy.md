@@ -33,7 +33,7 @@ portfolio backtest — the same functions run live), `lib/trading/book/*` (unive
 | Day | IBS: equity ETF closing at the bottom of its range (IBS < 0.1) → buy the close, sell the next close | +0.26% / +0.15% / +0.07% / +0.19% a trade (t 12 / 7 / 2.7 / 6), holds with the 15:50 IBS; IEX live bars pick the same signals 87% of the time | **live** |
 | Day | IBS < 0.1 on single stocks (any trend / momentum filter) | excess −0.03% … −0.13% a trade after costs — an index effect, not a stock one | off |
 | Swing (short) | Short a ≥10% 5-day rally in a weak stock (below SMA200, bottom-30% momentum) | event study +1.0% / +0.4% / +0.3% excess, but the portfolio sleeve: Sharpe 0.33, negative in the holdout; book Sharpe unchanged (1.03 → 1.02) despite −0.1 correlation | off (long-only book) |
-| Day | Opening-range breakout on stocks in play | depends on intrabar order at 5m (−0.76R … +0.40R) | 1-minute data pending |
+| Day | Opening-range breakout on stocks in play (Zarattini 2023), 1-minute bars 2016-22 | −0.3 … −0.5R in every variant (0.05–0.2 ATR stops, 2–10R targets, 5/15-min range); no edge even before costs | off |
 
 ## The book (live)
 
@@ -43,7 +43,7 @@ portfolio backtest — the same functions run live), `lib/trading/book/*` (unive
 | MOMENTUM | months (monthly rebalance) | 0.3% (5×ATR catastrophe stop) | 20 | CAGR 10.7%, Sharpe 0.70 |
 | ASSET_ROTATION | months | 0.8% (5×ATR) | 5 | CAGR 4.9%, Sharpe 0.68 |
 | REVERSAL | days (≤ 10) | 0.25% (4×ATR) | 40 | CAGR 4.4%, Sharpe 0.85, DD 7% |
-| IBS_CLOSE | next day | 12% notional each (2×ATR guard stop) | 5 | 5 × 15%: Sharpe 1.28 / 0.67 / 0.40 / 1.43 (2007→) |
+| IBS_CLOSE | 1–3 days, broker OCO | 12% notional each; take-profit 1.5×ATR, stop 1×ATR, out at the 3rd close | 6 | +0.096 / +0.106 / +0.099 / +0.120R a trade (2007→, t ≥ 5 every period) |
 
 Together, stock gross ≤ 100% of equity: **CAGR 23.8%, Sharpe 1.22, max DD 21%, ~480 trades a year**
 (train 29.9% / S1.55, validation 10.4% / S0.67, holdout 24.6% / S1.15). Daily-return correlations: crypto vs
@@ -77,8 +77,8 @@ CAGR from 21% to 5% — not used.
   the stop and queue a market sell for the open (`exit_pending`), closed when the broker is flat.
 - Every 15-minute tick only mirrors the broker (fills, stops, exits); settlement books P&L/R from fills.
 - IBS_CLOSE (`lib/trading/book/close-sleeve.ts`) runs from the 5-minute intraday tick 21–11 minutes before the close:
-  market-on-close sells for yesterday's buys, then market-on-close buys for today's signals (IEX snapshot as the
-  provisional daily bar); a protective stop rests overnight. It has its own notional cap (5 × 12%), outside the
+  market-on-close buys for today's signals (IEX snapshot as the provisional daily bar); on the fill the mirror
+  places an OCO exit (take-profit + stop); positions still held after 3 sessions leave with a market-on-close sell. It has its own notional cap (5 × 12%), outside the
   book's stock gross.
 - Monthly sleeves (MOMENTUM, ASSET_ROTATION) act on the first session of each month: exits for holdings that
   dropped out of the ranks, entries for the new top names (ranks are prepared before exits are decided).
