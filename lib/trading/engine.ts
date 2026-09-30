@@ -30,6 +30,7 @@ import {
 import { isoDateInZone, nextTradingDays } from "./veto";
 import { round } from "./round";
 import { updateNav } from "./fund/nav";
+import { runHealthChecks } from "./fund/health";
 
 /**
  * מערכת המסחר — live pipeline, run every 15 minutes (GitHub Actions → /api/trading/tick).
@@ -197,6 +198,9 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
       summary.errors.push(`nav: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
     }
   }
+
+  // Runs after this tick's mirror and reconcile, so a stop they just placed is already visible.
+  await runHealthChecks(now, "main", summary.errors);
 
   summary.duration_ms = Date.now() - started;
   if (summary.errors.length) {

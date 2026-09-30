@@ -14,6 +14,8 @@ export type { GateCheck } from "./gates";
 export type { GroupStat, PerformanceStats } from "./metrics";
 export type { QualityReport, TradeQuality } from "./trade-quality";
 export type { Bar } from "./types";
+export type { HealthCheck, HealthLevel, HealthReport } from "./fund/health-core";
+import type { HealthReport } from "./fund/health-core";
 
 export type TradingSettings = {
   phase: TradingPhase;
@@ -37,6 +39,7 @@ export type TradingSettings = {
   last_intraday_tick_at: string | null;
   last_intraday_summary: Record<string, unknown> | null;
   last_intraday_universe_date: string | null;
+  health: HealthReport | null;
   updated_at: string;
 };
 
