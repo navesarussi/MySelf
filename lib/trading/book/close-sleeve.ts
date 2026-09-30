@@ -6,10 +6,11 @@ import { getOpenTrades, getSettings, logEvent, simColumns, updateSettings, updat
 import { isBookManaged } from "../strategy-versions";
 import { accountRiskState, loadAccount } from "../tick-context";
 import type { SimPosition } from "../position";
-import { buildMultiAsset, EQUITY_ETFS, IBS_CLOSE_PARAMS, ibsClose, type MultiAsset, type Sleeve } from "../strategy/multi";
+import { buildMultiAsset, EQUITY_ETFS, IBS_CLOSE_PARAMS, ibsClose, type MultiAsset, type Signal, type Sleeve } from "../strategy/multi";
 import type { Bar } from "../types";
 import { D1, dayIso, loadStockSeries } from "./bars";
 import { brokerContext, enter, nyOffsetMs, type BookState } from "./engine";
+import { ENTERED, saveSignalLog, signalRow, type SignalLogRow } from "../fund/signal-log";
 
 /**
  * The short bracket sleeve (IBS_CLOSE): ~10 minutes before the US close, buy today's equity ETFs closing at the
@@ -105,15 +106,20 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
   }
   const signals = CLOSE_SLEEVE.def.scan(assets, dayMs, { references: {} });
   summary.signals = signals.length;
+  const log: SignalLogRow[] = [];
+  const decide = (sig: Signal, decision: string, extra: { size?: number; riskUsd?: number; tradeId?: string } = {}) =>
+    log.push(signalRow({ bar: dayIso(dayMs), grp: "IBS", sig, decision, ...extra }));
   const account = { ...(await loadAccount(settings, await getOpenTrades(), new Map(), now)), equity: broker.equity };
   let slots = CLOSE_SLEEVE.max_positions - open.filter((t) => !t.sim_state?.exit_pending && !exiting.has(t.id)).length;
   for (const sig of signals) {
     if (slots <= 0) {
       block("MAX_IBS_CLOSE");
+      decide(sig, "MAX_IBS_CLOSE");
       continue;
     }
     if (broker.held.has(sig.a.symbol)) {
       block("ALREADY_IN_SYMBOL");
+      decide(sig, "ALREADY_IN_SYMBOL");
       continue;
     }
     const last = sig.a.d1.bars.length - 1;
@@ -128,6 +134,7 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
     });
     if (pre) {
       block(pre.reason);
+      decide(sig, pre.reason);
       void logEntryGuardSkip({ symbol: sig.a.symbol, reason: pre.reason, detail: pre.detail, now });
       continue;
     }
@@ -141,23 +148,30 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
     });
     if (!sized || sized.block) {
       block(sized?.block?.reason ?? "SIZE");
+      decide(sig, sized?.block?.reason ?? "SIZE");
       if (sized?.block) void logEntryGuardSkip({ symbol: sig.a.symbol, reason: sized.block.reason, detail: sized.block.detail, now });
       continue;
     }
     const { size, risk_usd: riskUsd, notional } = sized;
     if (broker.buying.stock !== null && notional > broker.buying.stock * 0.95) {
       block("INSUFFICIENT_BUYING_POWER");
+      decide(sig, "INSUFFICIENT_BUYING_POWER", { size, riskUsd });
       void logEntryGuardSkip({ symbol: sig.a.symbol, reason: "INSUFFICIENT_BUYING_POWER", detail: "notional exceeds buffered buying power", now });
       continue;
     }
     const blocks = checkAccountEntry(accountRiskState(settings, account), sig.a.symbol, riskUsd);
     if (blocks.length) {
       blocks.forEach(block);
+      decide(sig, blocks.join(","), { size, riskUsd });
       continue;
     }
     try {
       const id = await enter(sig, CLOSE_SLEEVE, size, riskUsd, settings, now, "MOC");
-      if (!id) continue;
+      if (!id) {
+        decide(sig, "ENTER_FAILED", { size, riskUsd });
+        continue;
+      }
+      decide(sig, ENTERED, { size, riskUsd, tradeId: id });
       summary.entries += 1;
       slots -= 1;
       broker.held.add(sig.a.symbol);
@@ -165,9 +179,11 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
       account.open.push({ symbol: sig.a.symbol, setup: "IBS_CLOSE", entry_limit: sig.entry, remaining_size: size } as TradeRow);
       await logEvent({ kind: "ORDER_PLACED", symbol: sig.a.symbol, message: `[Alpaca demo] ${sig.a.symbol} IBS_CLOSE: קנייה בנעילה · ${size} יח׳ · IBS ${((1 - sig.score) * IBS_CLOSE_PARAMS.ibs_max).toFixed(3)}` });
     } catch (err) {
+      decide(sig, "ENTER_ERROR", { size, riskUsd });
       summary.errors.push(`enter ${sig.a.symbol}: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
     }
   }
+  await saveSignalLog(log, summary.errors);
   return finish(summary);
 }
 

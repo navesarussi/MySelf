@@ -28,6 +28,7 @@ import {
 import { BOOK_HISTORY_DAYS, D1, dayIso, loadCryptoSeries, loadStockSeries, syncStockBars } from "./bars";
 import { getBookUniverse, type BookUniverseRow } from "./universe";
 import { BOOK_LIMITS, BOOK_SLEEVES, RETIRED_DEFS, sleevesForGroup } from "./sleeves";
+import { ENTERED, saveSignalLog, signalRow, type SignalLogRow } from "../fund/signal-log";
 
 export { BOOK_LIMITS, BOOK_SLEEVES } from "./sleeves";
 
@@ -347,25 +348,32 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
   }
   signals.sort((x, y) => y.sig.score - x.sig.score);
   summary.signals = signals.length;
+  const log: SignalLogRow[] = [];
+  const decide = (sig: Signal, decision: string, extra: { size?: number; riskUsd?: number; tradeId?: string } = {}) =>
+    log.push(signalRow({ bar: barIso, grp: group, sig, decision, ...extra }));
   const bookOpen = () => open.length + summary.entries;
   let stockGross = bookStockGross(open);
   for (const { sig, sleeve } of signals) {
     if (Date.now() > deadline) {
       block("TIME_BUDGET");
+      decide(sig, "TIME_BUDGET");
       break;
     }
     if (broker.held.has(sig.a.symbol)) {
       block("ALREADY_IN_SYMBOL");
+      decide(sig, "ALREADY_IN_SYMBOL");
       continue;
     }
     // Each entry is pushed to both lists; count symbols once or the sleeve fills at half its cap.
     const sleeveOpen = new Set([...open, ...account.open].filter((x) => x.setup === sleeve.def.id).map((x) => x.symbol)).size;
     if (sleeveOpen >= sleeve.max_positions) {
       block(`MAX_${sleeve.def.id}`);
+      decide(sig, `MAX_${sleeve.def.id}`);
       continue;
     }
     if (bookOpen() >= BOOK_LIMITS.max_positions) {
       block("MAX_BOOK");
+      decide(sig, "MAX_BOOK");
       continue;
     }
     const uni = universe.find((r) => r.symbol === sig.a.symbol);
@@ -382,6 +390,7 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
     });
     if (pre) {
       block(pre.reason);
+      decide(sig, pre.reason);
       void logEntryGuardSkip({ symbol: sig.a.symbol, reason: pre.reason, detail: pre.detail, now });
       continue;
     }
@@ -389,21 +398,28 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
     const sized = sizeSignal(sig, sleeve.risk_pct * settings.risk_scale, broker.equity, bp);
     if (!sized) {
       block("SIZE");
+      decide(sig, "SIZE");
       void logEntryGuardSkip({ symbol: sig.a.symbol, reason: "MAX_POSITION_NOTIONAL", detail: "size blocked by guards or min notional", now });
       continue;
     }
     if (sig.a.asset_class === "STOCK" && stockGross + sized.notional > BOOK_LIMITS.max_gross * broker.equity) {
       block("MAX_GROSS");
+      decide(sig, "MAX_GROSS", { size: sized.size, riskUsd: sized.riskUsd });
       continue;
     }
     const blocks = checkAccountEntry(accountRiskState(settings, account), sig.a.symbol, sized.riskUsd);
     if (blocks.length) {
       blocks.forEach(block);
+      decide(sig, blocks.join(","), { size: sized.size, riskUsd: sized.riskUsd });
       continue;
     }
     try {
       const id = await enter(sig, sleeve, sized.size, sized.riskUsd, settings, now);
-      if (!id) continue;
+      if (!id) {
+        decide(sig, "ENTER_FAILED", { size: sized.size, riskUsd: sized.riskUsd });
+        continue;
+      }
+      decide(sig, ENTERED, { size: sized.size, riskUsd: sized.riskUsd, tradeId: id });
       summary.entries += 1;
       broker.held.add(sig.a.symbol);
       if (sig.a.asset_class === "STOCK") {
@@ -415,9 +431,11 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       account.open.push({ symbol: sig.a.symbol, setup: sig.strategy, entry_limit: sig.entry, remaining_size: sized.size, sim_state: pos } as TradeRow);
       await logEvent({ kind: "ORDER_PLACED", symbol: sig.a.symbol, message: `[Alpaca demo] ${sig.a.symbol} ${sig.strategy}: ${sig.fill === "LIMIT_NEXT" ? "Limit" : "Market"} ${sig.entry.toPrecision(6)} · סטופ ${sig.stop.toPrecision(6)} · ${sized.size} יח׳${sig.a.asset_class === "STOCK" ? " · בפתיחת המסחר" : ""}`.slice(0, 300) });
     } catch (err) {
+      decide(sig, "ENTER_ERROR", { size: sized.size, riskUsd: sized.riskUsd });
       summary.errors.push(`enter ${sig.a.symbol}: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
     }
   }
+  await saveSignalLog(log, summary.errors);
   return summary;
 }
 
