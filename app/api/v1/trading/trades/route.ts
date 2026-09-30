@@ -13,6 +13,7 @@ export const GET = withRouteHandler(async function GET(req: NextRequest) {
     symbol: p.get("symbol") || undefined,
     state: (p.get("state") as TradeFilters["state"]) || "all",
     outcome: (p.get("outcome") as TradeFilters["outcome"]) || undefined,
+    setup: p.get("setup") || undefined,
     limit: p.get("limit") ? Number(p.get("limit")) : undefined,
   };
   try {

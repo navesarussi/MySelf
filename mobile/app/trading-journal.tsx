@@ -6,6 +6,7 @@ import { queryKeys, useApiQuery } from "../src/query";
 import { Chip, EmptyState, Row, ScreenList } from "../src/components/ui";
 import { TradeRowCard } from "../src/components/trading/blocks";
 import type { TradeListItem } from "@/lib/trading/types-client";
+import { STRATEGY_ORDER } from "@/lib/trading/strategy-options";
 
 type StateFilter = "all" | "open" | "closed";
 type OutcomeFilter = "" | "win" | "loss";
@@ -14,7 +15,8 @@ export default function TradingJournalScreen() {
   const { t } = useI18n();
   const [state, setState] = useState<StateFilter>("all");
   const [outcome, setOutcome] = useState<OutcomeFilter>("");
-  const filters = useMemo(() => ({ state, outcome: outcome || undefined }), [state, outcome]);
+  const [setup, setSetup] = useState("");
+  const filters = useMemo(() => ({ state, outcome: outcome || undefined, setup: setup || undefined }), [state, outcome, setup]);
   const { data, loading, refresh } = useApiQuery(queryKeys.tradingTrades(filters), (cfg) => api.tradingTrades(cfg, filters));
 
   const renderItem = useCallback(({ item }: { item: TradeListItem }) => <TradeRowCard trade={item} />, []);
@@ -27,6 +29,12 @@ export default function TradingJournalScreen() {
         <Chip label={t("trading.filterClosed")} active={state === "closed" && !outcome} onPress={() => { setState("closed"); setOutcome(""); }} />
         <Chip label={t("trading.filterWins")} active={outcome === "win"} onPress={() => { setState("closed"); setOutcome("win"); }} />
         <Chip label={t("trading.filterLosses")} active={outcome === "loss"} onPress={() => { setState("closed"); setOutcome("loss"); }} />
+      </Row>
+      <Row wrap>
+        <Chip label={t("trading.filterAllStrategies")} active={!setup} onPress={() => setSetup("")} />
+        {STRATEGY_ORDER.map((id) => (
+          <Chip key={id} label={t(`trading.setup_${id}`)} active={setup === id} onPress={() => setSetup(id)} />
+        ))}
       </Row>
     </View>
   );
