@@ -52,6 +52,8 @@ export type SimPosition = {
   initial_target_price?: number;
   /** A strategy exit already sent to the broker (e.g. a stock sell queued for the next open); closed when the broker is flat. */
   exit_pending?: ExitReason | null;
+  /** When the trade was handed to its current strategy (trade card "move to strategy"); hold clocks start here. */
+  strategy_since?: number | null;
   /** Override of EXECUTION_RULES.PENDING_EXPIRY_BARS (e.g. a manual limit order waiting for a pullback). */
   pending_expiry_bars?: number;
 };

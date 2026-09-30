@@ -465,9 +465,8 @@ export function momPullback(p: MomPullbackParams = MOM_PULLBACK_PARAMS): Strateg
 }
 
 /** Broad equity index, sector and country ETFs — where short-term mean reversion held from 2007 to 2026. */
-export const EQUITY_ETFS = new Set(
-  "SPY,QQQ,IWM,DIA,MDY,RSP,XLB,XLE,XLF,XLI,XLK,XLP,XLU,XLV,XLY,SMH,SOXX,IBB,XBI,KRE,XRT,XHB,ITB,IGV,EFA,EEM,VGK,EWJ,EWG,EWU,EWC,EWA,EWZ,EWY,EWT,EWW,FXI,INDA,VNQ,IYR,IJR,IWF,IWD,VTV,VUG,MTUM,QUAL,USMV".split(",")
-);
+export { EQUITY_ETFS } from "./etf-lists";
+import { EQUITY_ETFS, ROTATION_ETFS } from "./etf-lists";
 
 export type EtfMrParams = { rsi_max: number; stop_atr: number; max_hold: number };
 /** 2007-15 / 2016-21 / 2022-24H1 / 2024H2+: +0.31% / +0.33% / +0.01% / +0.47% a trade, ~350 trades a year. */
@@ -577,7 +576,7 @@ export function momentum(p: MomentumParams = MOMENTUM_PARAMS): StrategyDef {
 }
 
 /** Cross-asset ETFs: US/international equity, real estate, Treasuries, credit, TIPS, gold, commodities. */
-export const ROTATION_ETFS = new Set("SPY,QQQ,IWM,EFA,EEM,VNQ,TLT,IEF,LQD,HYG,TIP,GLD,DBC".split(","));
+export { ROTATION_ETFS } from "./etf-lists";
 
 export type AssetRotationParams = { top: number; keep: number; stop_atr: number };
 /** 2007-15 / 2016-21 / 2022-24H1 / 2024H2+ (top 5): Sharpe 0.69 / 1.15 / 0.00 / 1.44, max drawdown ≤ 16%. */

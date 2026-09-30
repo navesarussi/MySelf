@@ -72,7 +72,7 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
 
   const open = (await getOpenTrades()).filter((t) => isBookManaged(t.strategy_version) && t.setup === "IBS_CLOSE");
   // The broker's OCO takes the profit or the stop; what is still held after `max_hold` closes leaves at this close.
-  const openedDays = open.map((t) => dayIso(Date.parse(t.opened_at ?? t.created_at)));
+  const openedDays = open.map((t) => dayIso(t.sim_state?.strategy_since ?? Date.parse(t.opened_at ?? t.created_at)));
   const since = openedDays.length ? openedDays.reduce((a, b) => (a < b ? a : b)) : session.date;
   const sessions = since < session.date ? (await marketCalendar(since, session.date)).map((x) => x.date) : [session.date];
   const exiting = new Set<string>();

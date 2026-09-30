@@ -11,6 +11,8 @@ export type TradeFilters = {
   state?: "open" | "closed" | "all";
   symbol?: string;
   outcome?: "win" | "loss" | "breakeven";
+  /** Strategy (book sleeve id); "MANUAL" = trades outside the book's strategies. */
+  setup?: string;
   limit?: number;
 };
 
@@ -27,6 +29,8 @@ export async function listTrades(f: TradeFilters): Promise<TradeListItem[]> {
   if (f.execution) q = q.eq("execution", f.execution);
   if (f.track) q = q.eq("track", f.track);
   if (f.symbol) q = q.eq("symbol", f.symbol.toUpperCase());
+  if (f.setup === "MANUAL") q = q.or("strategy_version.neq.book,setup.eq.MANUAL,setup.is.null");
+  else if (f.setup) q = q.eq("setup", f.setup).eq("strategy_version", "book");
   if (f.state === "open") q = q.in("state", ["PENDING", "OPEN", "RISK_FREE"]);
   else if (f.state === "closed") q = q.eq("state", "CLOSED");
   // An entry that never filled (rejected, expired) is an order, not a trade — it has no R to show.

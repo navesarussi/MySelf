@@ -12,6 +12,22 @@ import { Badge, Btn, Card, CollapsibleSection, EmptyState, ErrorNote, KpiGridSke
 import { KpiGrid, SeriesChart } from "../../src/components/trading/charts";
 import { ScreenErrorBoundary } from "../../src/components/error-boundary";
 import { PhaseGateCard, PositionCard, TradingHubLinks, TradingText, TriggerCard } from "../../src/components/trading/blocks";
+import { STRATEGY_ORDER, strategyKey } from "@/lib/trading/strategy-options";
+import type { LivePosition } from "@/lib/trading/types-client";
+
+/** Open positions grouped by the strategy that manages them, in STRATEGY_ORDER (unknown ids last). */
+function groupByStrategy(list: LivePosition[]): [string, LivePosition[]][] {
+  const groups = new Map<string, LivePosition[]>();
+  for (const p of list) {
+    const k = strategyKey(p);
+    groups.set(k, [...(groups.get(k) ?? []), p]);
+  }
+  const rank = (k: string) => {
+    const i = (STRATEGY_ORDER as readonly string[]).indexOf(k);
+    return i < 0 ? STRATEGY_ORDER.length : i;
+  };
+  return [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
+}
 import { fmtDateTime, fmtPct, fmtR, fmtSignedUsd, fmtUsd } from "@/lib/trading/format";
 
 export default function TradingScreen() {
@@ -163,12 +179,21 @@ export default function TradingScreen() {
             ) : null}
           </View>
           {positions.length === 0 ? <EmptyState text={t("trading.noPositions")} /> : null}
-          {positions.map((p) => (
-            <PositionCard
-              key={p.id}
-              p={p}
-              onClose={() => confirmDelete(t("trading.closeConfirm", { symbol: p.symbol }), () => void control({ action: "close_position", trade_id: p.id, confirm: true }), t("trading.close"), t("common.cancel"))}
-            />
+          {groupByStrategy(positions).map(([key, list]) => (
+            <CollapsibleSection
+              key={key}
+              id={`trading.tab.positions.${key}`}
+              title={key === "MANUAL" ? t("trading.positionsOtherStrategies") : t(`trading.setup_${key}`)}
+              summary={String(list.length)}
+            >
+              {list.map((p) => (
+                <PositionCard
+                  key={p.id}
+                  p={p}
+                  onClose={() => confirmDelete(t("trading.closeConfirm", { symbol: p.symbol }), () => void control({ action: "close_position", trade_id: p.id, confirm: true }), t("trading.close"), t("common.cancel"))}
+                />
+              ))}
+            </CollapsibleSection>
           ))}
           {otherPositions.length ? (
             <>

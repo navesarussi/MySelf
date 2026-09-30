@@ -1,3 +1,5 @@
+import { moveTradeToStrategy } from "./trade-strategy";
+import { STRATEGY_CHOICES, type StrategyChoice } from "./strategy-options";
 import { getSupabase } from "@/lib/supabase";
 import { entryConfirmedAtBroker } from "./broker/reconcile-decisions";
 import { flattenAtBroker } from "./broker/flatten";
@@ -26,6 +28,7 @@ export type ControlCommand =
   | { action: "set_risk_scale"; value: number }
   | { action: "close_position"; trade_id: string }
   | { action: "edit_trade"; trade_id: string; stop?: number; target?: number | null }
+  | { action: "move_strategy"; trade_id: string; setup: StrategyChoice }
   | { action: "close_all" }
   | { action: "set_symbol_enabled"; symbol: string; enabled: boolean }
   | { action: "add_calendar_event"; kind: "CPI" | "FOMC" | "EARNINGS" | "TOKEN_UNLOCK" | "OTHER_MACRO"; date: string; symbol?: string | null; note?: string | null }
@@ -213,6 +216,11 @@ export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"
       await audit(`${t.symbol}: עריכה ידנית — ${what}`, "info");
       return { ok: true, message: `${t.symbol}: ${what}` };
     }
+    case "move_strategy": {
+      const t = await moveTradeToStrategy(cmd.trade_id, cmd.setup);
+      await audit(`${t.symbol}: הועבר לאסטרטגיה ${cmd.setup}`, "info");
+      return { ok: true, message: `${t.symbol} → ${cmd.setup}` };
+    }
     case "close_all": {
       const open = (await getOpenTrades()).filter((t) => isAccountTrade(t, settings.phase));
       const res = await closeTrades(open, "MANUAL");
@@ -288,6 +296,10 @@ export function parseCommand(body: Record<string, unknown>): ControlCommand | nu
       return typeof body.value === "number" && Number.isFinite(body.value) ? { action: a, value: body.value } : null;
     case "close_position":
       return s(body.trade_id) ? { action: a, trade_id: s(body.trade_id) } : null;
+    case "move_strategy": {
+      const setup = s(body.setup);
+      return s(body.trade_id) && setup && (STRATEGY_CHOICES as readonly string[]).includes(setup) ? { action: a, trade_id: s(body.trade_id), setup: setup as StrategyChoice } : null;
+    }
     case "edit_trade": {
       const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
       const stop = num(body.stop);

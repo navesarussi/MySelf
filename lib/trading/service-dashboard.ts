@@ -23,6 +23,7 @@ export type LivePosition = {
   asset_class: string;
   /** The strategy that opened it (book sleeve id); null for manual/legacy. */
   setup: string | null;
+  strategy_version: string | null;
   mode: string;
   track: string;
   execution: string;
@@ -197,6 +198,7 @@ function toLivePosition(t: TradeRow, prices: Map<string, number>): LivePosition 
     symbol: t.symbol,
     asset_class: t.asset_class,
     setup: t.setup ?? null,
+    strategy_version: t.strategy_version ?? null,
     mode: t.mode,
     track: t.track,
     execution: t.execution,

@@ -8,12 +8,13 @@ import { useLayoutDir } from "../../layout-dir";
 import { queryClient, queryKeys, useApiMutation } from "../../query";
 import { useColors, tokens } from "../../theme";
 import { useToast } from "../../toast";
-import { Btn, Card, Input, confirmDelete } from "../ui";
+import { Btn, Card, Chip, Input, Row, confirmDelete } from "../ui";
+import { strategyChoices, type StrategyChoice } from "@/lib/trading/strategy-options";
 import { TradingText } from "./blocks";
 import { useLivePrice } from "./use-live-price";
 
 /** Server refusals of a manual edit, in words the trader can act on. */
-const EDIT_ERRORS = ["stop_above_price", "target_below_price", "target_below_stop", "invalid_stop", "invalid_target", "trade_not_open", "no_fill_yet"] as const;
+const EDIT_ERRORS = ["stop_above_price", "target_below_price", "target_below_stop", "invalid_stop", "invalid_target", "trade_not_open", "no_fill_yet", "strategy_not_allowed", "no_risk_defined"] as const;
 
 const num = (s: string) => {
   const v = Number(s.replace(",", "."));
@@ -76,6 +77,25 @@ export function TradeManageCard({ trade }: { trade: TradeRow }) {
       },
     });
 
+  const strategyName = (id: string) => t(`trading.setup_${id}`);
+  const currentStrategy = trade.strategy_version === "book" && trade.setup ? trade.setup : "MANUAL";
+  const choices = strategyChoices(trade);
+  const moveTo = (setup: StrategyChoice) =>
+    confirmDelete(
+      t("trading.moveStrategyConfirm", { symbol: trade.symbol, name: strategyName(setup) }),
+      () =>
+        void run((cfg) => api.tradingControl(cfg, { action: "move_strategy", trade_id: trade.id, setup }), {
+          suppressErrorToast: true,
+          onError,
+          onSuccess: () => {
+            show(t("trading.moveStrategyDone", { symbol: trade.symbol, name: strategyName(setup) }), "success");
+            refreshAll();
+          },
+        }),
+      t("trading.moveStrategy"),
+      t("common.cancel")
+    );
+
   const close = () =>
     confirmDelete(
       trade.state === "PENDING" ? t("trading.cancelOrderConfirm", { symbol: trade.symbol }) : t("trading.closeConfirm", { symbol: trade.symbol }),
@@ -136,6 +156,18 @@ export function TradeManageCard({ trade }: { trade: TradeRow }) {
         <View style={{ flex: 1 }} />
         <Btn small variant="warn" label={t("trading.closeNow")} onPress={close} disabled={isPending()} />
       </View>
+      <View style={{ height: 1, backgroundColor: c.border, marginVertical: 12 }} />
+      <TradingText bold size={tokens.textSm}>
+        {t("trading.moveStrategy")}
+      </TradingText>
+      <TradingText muted size={tokens.textXs}>
+        {t("trading.moveStrategyHint", { name: strategyName(currentStrategy) })}
+      </TradingText>
+      <Row wrap>
+        {choices.map((x) => (
+          <Chip key={x} label={strategyName(x)} active={false} onPress={() => moveTo(x)} />
+        ))}
+      </Row>
     </Card>
   );
 }
