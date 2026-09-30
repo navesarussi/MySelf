@@ -45,6 +45,11 @@ export function bracketLegs(order: AlpacaOrder | null): { stop: AlpacaOrder | nu
   };
 }
 
+/** An OCO exit: the parent is the take-profit limit, its leg the stop. */
+export function ocoLegs(order: AlpacaOrder): { stop: AlpacaOrder | null; target: AlpacaOrder } {
+  return { stop: (order.legs ?? []).find((l) => l.type === "stop" || l.type === "stop_limit") ?? null, target: order };
+}
+
 /** Did the broker already exit the position on its own (stop or take-profit filled)? */
 export function brokerExit(view: { stop: AlpacaOrder | null; target: AlpacaOrder | null; positionQty: number | null }): { price: number; reason: ExitReason } | null {
   if (view.stop?.status === "filled") return { price: num(view.stop.filled_avg_price), reason: "STOP" };

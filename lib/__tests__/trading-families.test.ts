@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { inCloseWindow, withProvisionalBar } from "../trading/book/close-sleeve";
+import { holdExpired, inCloseWindow, withProvisionalBar } from "../trading/book/close-sleeve";
 import { bookStockGross } from "../trading/book/engine";
 import { newPendingPosition } from "../trading/position";
 import {
@@ -142,7 +142,10 @@ describe("IBS close sleeve", () => {
     const xs = [mk("SPY", 98.1), mk("QQQ", 98.3), mk("XLE", 99), mk("ARKK", 98.05)];
     const sigs = ibsClose().scan(xs, lastT(xs[0]), { references: {} });
     assert.deepEqual(sigs.map((s) => s.a.symbol), ["SPY", "QQQ"]); // XLE IBS 0.25; ARKK not in the list
-    assert.ok(sigs[0].stop < sigs[0].entry);
+    const s0 = sigs[0];
+    const atr = xs[0].d1.atr[s0.i - 1];
+    assert.ok(Math.abs(s0.entry - s0.stop - atr) < 1e-9); // 1×ATR stop
+    assert.ok(Math.abs((s0.target ?? 0) - s0.entry - 1.5 * atr) < 1e-9); // 1.5×ATR take-profit
   });
 
   it("acts only between 21 and 11 minutes before the close", () => {
@@ -180,5 +183,13 @@ describe("live equity source", () => {
   it("uses the broker only on the Alpaca demo venue", async () => {
     const { brokerLiveEquity } = await import("../trading/account-equity");
     assert.equal(await brokerLiveEquity({ execution_venue: "SIM" } as never), null);
+  });
+});
+
+describe("IBS bracket time exit", () => {
+  it("leaves at the close of the 3rd session after the entry close", () => {
+    const sessions = ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"];
+    assert.equal(holdExpired("2026-09-28", "2026-09-30", sessions, 3), false);
+    assert.equal(holdExpired("2026-09-28", "2026-10-01", sessions, 3), true);
   });
 });

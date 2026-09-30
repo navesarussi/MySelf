@@ -1,4 +1,5 @@
-import { alpaca, ensureProtectiveStop, isDustPosition } from "./broker/alpaca";
+import { alpaca, ensureOcoExit, ensureProtectiveStop, isDustPosition } from "./broker/alpaca";
+import { realTarget } from "./position-display";
 import { flattenAtBroker } from "./broker/flatten";
 import { revertFailedBrokerClose } from "./broker/revert-close";
 import { bracketLegs, brokerExit, brokerSupportsExitPlan, pendingDecision, protectiveAdjustments } from "./broker/sync";
@@ -73,8 +74,15 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
         // v2 / intraday / manual / book stocks entered on a bracket or OTO — its legs already carry the stop/target.
         patch.broker_stop_order_id = legs.stop.id;
         patch.broker_target_order_id = legs.target?.id ?? null;
+      } else if (trade.asset_class === "STOCK" && hasRealTarget(p)) {
+        // A plain stock entry of a bracket strategy (market-on-close buys): stop and take-profit as one OCO.
+        const oco = await ensureOcoExit({ tradeId: trade.id, symbol: trade.symbol, qty: d.qty, stop: p.stop_price, target: p.target_price, now });
+        if (oco) {
+          patch.broker_stop_order_id = oco.stop?.id ?? null;
+          patch.broker_target_order_id = oco.target.id;
+        } else patch.broker_status = "stop_skipped_no_position";
       } else {
-        // Crypto, daily-trend, and plain stock entries without a stop leg (market-on-close buys).
+        // Crypto, daily-trend, and plain stock entries without a stop leg.
         // Sized from what the broker holds (crypto fees are taken in the asset)
         // and adopted when a stop already rests on the symbol — see
         // ensureProtectiveStop. No stop and nothing held means the position is
@@ -86,6 +94,11 @@ export async function resolveBrokerEntry(trade: TradeRow, p: SimPosition, events
       return { done: false, patch };
     }
   }
+}
+
+/** A take-profit the broker should hold (not the far placeholder of signal-exit strategies). */
+function hasRealTarget(p: SimPosition): boolean {
+  return realTarget({ entry_price: p.entry_price, entry_limit: p.entry_limit, stop_price: p.stop_price, target_price: p.target_price, stop_distance: p.stop_distance }) !== null;
 }
 
 /** Make the broker match the strategy: adopt broker exits, close on strategy exits, move protective orders. */
@@ -169,6 +182,15 @@ export async function mirrorToBroker(trade: TradeRow, p: SimPosition, events: Tr
     return patch;
   }
 
+  const dead = (o: typeof stopOrder) => !o || ["canceled", "expired", "rejected", "filled"].includes(o.status);
+  if (trade.asset_class === "STOCK" && hasRealTarget(p) && (dead(stopOrder) || dead(targetOrder))) {
+    const oco = await ensureOcoExit({ tradeId: trade.id, symbol: trade.symbol, qty: p.size, stop: p.stop_price, target: p.target_price, now });
+    if (oco) {
+      patch.broker_stop_order_id = oco.stop?.id ?? null;
+      patch.broker_target_order_id = oco.target.id;
+    }
+    return patch;
+  }
   if (!stopOrder || ["canceled", "expired", "rejected", "filled"].includes(stopOrder.status)) {
     const stop = await ensureProtectiveStop({ tradeId: trade.id, symbol: trade.symbol, assetClass: trade.asset_class, qty: p.size, stop: p.stop_price, now });
     if (stop) {

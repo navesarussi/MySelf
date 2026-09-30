@@ -211,6 +211,24 @@ export const alpaca = {
     });
   },
 
+  /**
+   * Exit bracket for a held stock position (order class OCO): a take-profit limit and a protective stop — when
+   * one fills Alpaca cancels the other. The returned order is the take-profit; its leg is the stop.
+   */
+  placeOcoExit(input: { symbol: string; qty: number; stop: number; target: number; clientId: string }) {
+    return call<AlpacaOrder>("POST", "/v2/orders", {
+      symbol: input.symbol,
+      qty: String(roundQty(input.qty, "STOCK")),
+      side: "sell",
+      type: "limit",
+      time_in_force: "gtc",
+      order_class: "oco",
+      take_profit: { limit_price: priceStr(input.target, "STOCK") },
+      stop_loss: { stop_price: priceStr(input.stop, "STOCK") },
+      client_order_id: input.clientId,
+    });
+  },
+
   getOrder: (id: string) => call<AlpacaOrder>("GET", `/v2/orders/${id}?nested=true`),
 
   getOrderByClientId: (clientOrderId: string) =>
@@ -375,4 +393,21 @@ export async function ensureProtectiveStop(input: {
     }
     throw err;
   }
+}
+
+/**
+ * Exit bracket for a held stock position with a real take-profit: adopt an OCO already working on the symbol,
+ * otherwise place one sized from what is sellable. Null when nothing is held (the position is already gone).
+ */
+export async function ensureOcoExit(input: { tradeId: string; symbol: string; qty: number; stop: number; target: number; now: number }): Promise<{ stop: AlpacaOrder | null; target: AlpacaOrder } | null> {
+  const { ocoLegs } = await import("./sync");
+  const open = await alpaca.openOrders(input.symbol, "STOCK").catch(() => [] as AlpacaOrder[]);
+  const existing = open.find((o) => o.side === "sell" && o.order_class === "oco");
+  if (existing) return ocoLegs(existing);
+  // A lone protective stop would hold the shares — replace it with the bracket.
+  for (const o of open) if (o.side === "sell") await alpaca.cancelOrder(o.id).catch(() => null);
+  const qty = await sellableQty(input.symbol, "STOCK", input.qty);
+  if (qty === null) return null;
+  const placed = await alpaca.placeOcoExit({ symbol: input.symbol, qty, stop: input.stop, target: input.target, clientId: `${input.tradeId.slice(0, 18)}-oco-${input.now}` });
+  return ocoLegs(await alpaca.getOrder(placed.id).catch(() => placed));
 }
