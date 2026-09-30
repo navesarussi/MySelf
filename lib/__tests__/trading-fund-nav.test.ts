@@ -1,35 +1,50 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { attributeDay, buildMarks, chainNav, historyPoints } from "../trading/fund/nav-core";
+import { attributeDay, buildMarks, chainNav, currentSessionDay, historyPoints, liveSessionPoint, sessionDay } from "../trading/fund/nav-core";
 
-const day = (d: string) => Date.parse(`${d}T00:00:00Z`) / 1000;
 
 describe("NAV from portfolio history", () => {
-  it("splits deposits from P&L; fees stay in P&L", () => {
-    const pts = historyPoints({
-      timestamp: [day("2026-09-11"), day("2026-09-14"), day("2026-09-15"), day("2026-09-16")],
-      equity: [0, 100000, 101000, 151500],
-      cashflow: { JNLC: [0, 100000, 0, 50000], CFEE: [0, 0, -40, 0] },
-    });
-    assert.deepEqual(pts.map((p) => [p.day, p.cash_flow]), [["2026-09-14", 100000], ["2026-09-15", 0], ["2026-09-16", 50000]]);
+  // Real Alpaca demo rows (2026-09): placeholder equity before funding, the deposit on the 14th, fees in CFEE.
+  const ts = (iso: string) => Date.parse(iso) / 1000;
+  const h = {
+    timestamp: [ts("2026-09-11T00:00:00Z"), ts("2026-09-12T00:00:00Z"), ts("2026-09-15T00:00:00Z"), ts("2026-09-16T00:00:00Z"), ts("2026-11-04T01:00:00Z")],
+    equity: [100000, 100000, 97672.82, 90785.45, 91785.45],
+    profit_loss: [0, 0, -2327.18, -6887.37, 1000],
+    cashflow: { JNLC: [0, 0, 100000, 0, 0], CFEE: [0, 0, 0, -39.38, 0] },
+  };
+  it("labels each point with its session date", () => {
+    assert.equal(sessionDay(ts("2026-09-15T00:00:00Z")), "2026-09-14");
+    assert.equal(sessionDay(ts("2026-11-04T01:00:00Z")), "2026-11-03");
+    assert.equal(sessionDay(ts("2025-11-28T22:00:00Z")), "2025-11-28");
+  });
+  it("takes P&L net of deposits from Alpaca and chains returns on starting capital", () => {
+    const pts = historyPoints(h);
+    assert.deepEqual(pts.map((p) => [p.day, p.cash_flow]), [["2026-09-10", 0], ["2026-09-11", 0], ["2026-09-14", 100000], ["2026-09-15", 0], ["2026-11-03", 0]]);
     const rows = chainNav(pts, "2026-09-15");
-    assert.equal(rows[0].nav_index, 100);
-    assert.equal(rows[0].pre_book, true);
-    assert.equal(rows[1].pnl, 1000);
-    assert.equal(rows[1].twr_return, 0.01);
-    assert.equal(rows[1].pre_book, false);
-    // +500 on 101000 + 50000 deposited that day
-    assert.equal(rows[2].pnl, 500);
-    assert.ok(Math.abs(rows[2].twr_return - 500 / 151000) < 1e-12);
-    assert.ok(Math.abs(rows[2].nav_index - 100 * 1.01 * (1 + 500 / 151000)) < 1e-9);
+    assert.equal(rows[1].nav_index, 100);
+    assert.ok(Math.abs(rows[2].twr_return - -2327.18 / 100000) < 1e-12);
+    assert.equal(rows[2].pre_book, true);
+    assert.equal(rows[3].pre_book, false);
+    assert.ok(Math.abs(rows[3].twr_return - -6887.37 / 97672.82) < 1e-12);
+    assert.ok(Math.abs(rows[4].nav_index - 100 * (1 - 2327.18 / 100000) * (1 - 6887.37 / 97672.82) * (1 + 1000 / 90785.45)) < 1e-9);
   });
   it("tracks the peak and drawdown of the index", () => {
     const rows = chainNav(
-      [{ day: "a", equity: 100, cash_flow: 0 }, { day: "b", equity: 110, cash_flow: 0 }, { day: "c", equity: 99, cash_flow: 0 }],
+      [{ day: "a", equity: 100, pnl: 0, cash_flow: 0 }, { day: "b", equity: 110, pnl: 10, cash_flow: 0 }, { day: "c", equity: 99, pnl: -11, cash_flow: 0 }],
       "a"
     );
     assert.ok(Math.abs(rows[1].peak_index - 110) < 1e-9);
     assert.ok(Math.abs(rows[2].drawdown - 0.1) < 1e-12);
+  });
+  it("adds the session in progress from the live account", () => {
+    assert.deepEqual(liveSessionPoint({ day: "2026-09-30", equity: 114655.95, last_equity: 114765.36 }), { day: "2026-09-30", equity: 114655.95, pnl: 114655.95 - 114765.36, cash_flow: 0 });
+    assert.equal(liveSessionPoint({ day: "x", equity: 0, last_equity: 1 }), null);
+  });
+  it("rolls weekends into Monday's session, New York time", () => {
+    assert.equal(currentSessionDay(Date.parse("2026-09-30T13:47:00Z")), "2026-09-30");
+    assert.equal(currentSessionDay(Date.parse("2026-10-01T02:00:00Z")), "2026-09-30");
+    assert.equal(currentSessionDay(Date.parse("2026-10-03T15:00:00Z")), "2026-10-05");
+    assert.equal(currentSessionDay(Date.parse("2026-12-01T04:30:00Z")), "2026-11-30");
   });
 });
 

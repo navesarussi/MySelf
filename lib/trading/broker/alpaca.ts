@@ -1,4 +1,5 @@
 import type { AssetClass } from "../types";
+import type { PortfolioHistory } from "../fund/nav-core";
 
 /**
  * Alpaca adapter — PAPER ONLY. The base URL is hard-coded to the paper endpoint and there is no
@@ -26,7 +27,7 @@ export type AlpacaOrder = {
   created_at: string;
 };
 
-export type AlpacaAccount = { equity: string; cash: string; buying_power: string; non_marginable_buying_power?: string; status: string; trading_blocked: boolean; account_blocked: boolean; currency: string };
+export type AlpacaAccount = { equity: string; last_equity?: string; cash: string; buying_power: string; non_marginable_buying_power?: string; status: string; trading_blocked: boolean; account_blocked: boolean; currency: string };
 export type AlpacaPosition = {
   symbol: string;
   qty: string;
@@ -260,6 +261,13 @@ export const alpaca = {
   },
 
   positions: () => call<AlpacaPosition[]>("GET", "/v2/positions"),
+
+  /** Daily equity per session with Alpaca's cash-flow breakdown (JNLC deposits, CFEE fees, …). */
+  portfolioHistory: (input: { period: string; timeframe: "1D" }) =>
+    call<PortfolioHistory>(
+      "GET",
+      `/v2/account/portfolio/history?period=${encodeURIComponent(input.period)}&timeframe=${input.timeframe}&cashflow_types=ALL`
+    ),
 
   /** Every fill between two instants, oldest first (all pages, capped). */
   async fills(input: { after: number; until?: number; maxPages?: number }): Promise<AlpacaFillActivity[]> {

@@ -59,11 +59,14 @@ and for missed-signal analysis.
 `trading_nav_daily(day pk, equity, cash_flow, pnl, twr_return, nav_index, peak_index, drawdown, by_strategy jsonb,
 unattributed, source, updated_at)`.
 
-- **Equity and cash flows come from the broker.** Alpaca `GET /v2/account/portfolio/history?period=…&timeframe=1D`
-  (daily close equity) and `GET /v2/account/activities?activity_types=CSD,CSW,JNLC` (deposits and withdrawals).
-  `pnl = equity − prev_equity − cash_flow`; `twr_return = pnl / prev_equity`; `nav_index` chains from 100 at
-  inception. Inception is the book's first live day, 2026-09-28. Earlier days are also loaded and labelled
-  pre-book, so the intraday era stays visible but is kept apart.
+- **Equity and P&L come from the broker.** Alpaca `GET /v2/account/portfolio/history?period=1A&timeframe=1D&cashflow_types=ALL`
+  gives closed sessions: each timestamp marks the session end (20:00 New York), `profit_loss` is the equity
+  change net of deposits and withdrawals (checked equal to Δequity − flows to the cent), and the cashflow map
+  splits JNLC/CSD/CSW (external) from CFEE/FEE (costs, which stay in P&L). The session in progress comes from
+  the account (`equity − last_equity`), and weekends roll into Monday's session the way Alpaca folds them.
+  `twr_return = pnl / (equity − pnl)`; `nav_index` chains from 100. Sessions before 2026-09-28 are labelled
+  `pre_book`. (Measured 2026-09-30: before funding, Alpaca shows a placeholder equity of $100K with zero P&L,
+  so deriving P&L from equity differences made the funding day −51%.)
 - **Attribution.** For each day and strategy: realized P&L of trades settled that day (`realized_pnl`, fills-based)
   plus the change in unrealized P&L of that strategy's open positions (marked to the day's close: Alpaca
   `unrealized_pl` per symbol, mapped to the trade's `setup`, with a manual trade under `manual`). Whatever does not
