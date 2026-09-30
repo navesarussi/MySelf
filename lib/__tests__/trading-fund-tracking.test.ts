@@ -1,9 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { missedSignals, shortfall, trackingSeries, trackingStats } from "../trading/fund/tracking";
+import { missedSignals, shortfall, trackingSeries, trackingStats, type NavLite } from "../trading/fund/tracking";
 
 describe("live vs model", () => {
-  const nav = [
+  const nav: NavLite[] = [
     { day: "2026-09-25", equity: 100_000, by_strategy: null },
     { day: "2026-09-28", equity: 101_000, by_strategy: { CRYPTO_TREND: 600, REVERSAL: 300, MANUAL: 100 } },
     { day: "2026-09-29", equity: 100_500, by_strategy: { CRYPTO_TREND: -500, MOMENTUM: 0 } },
