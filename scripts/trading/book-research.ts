@@ -27,7 +27,7 @@ const ETF_DIR = process.env.ETF_DIR ?? "etf-max";
 const STOCK_DIR = process.env.STOCK_DIR ?? "daily-all";
 const read = (f: string) => JSON.parse(fs.readFileSync(f, "utf8")) as Bar[];
 const clean = (b: Bar[]) => b.filter((x) => x.o > 0 && x.h > 0 && x.l > 0 && x.c > 0).map((x) => ({ ...x, h: Math.max(x.h, x.o, x.c), l: Math.min(x.l, x.o, x.c) }));
-export function loadBook(since = Date.parse("2014-06-01")): MultiAsset[] {
+export function loadBook(since = Date.parse("2014-06-01"), stockDir = STOCK_DIR): MultiAsset[] {
   const out: MultiAsset[] = [];
   const etfSet = new Set<string>();
   for (const f of fs.readdirSync(ETF_DIR)) {
@@ -36,15 +36,15 @@ export function loadBook(since = Date.parse("2014-06-01")): MultiAsset[] {
     const bars = clean(read(`${ETF_DIR}/${f}`)).filter((b) => b.t >= since - 400 * 86_400_000);
     if (bars.length > 260) out.push(buildMultiAsset(s, "STOCK", "ETF", bars));
   }
-  for (const f of fs.readdirSync(STOCK_DIR)) {
+  for (const f of fs.readdirSync(stockDir)) {
     if (f.endsWith("-CRYPTO.json")) {
       const s = f.replace("-CRYPTO.json", "");
-      out.push(buildMultiAsset(s, s === "BTC" || s === "ETH" ? "CRYPTO_MAJOR" : "CRYPTO_ALT", "CRYPTO", clean(read(`${STOCK_DIR}/${f}`))));
+      out.push(buildMultiAsset(s, s === "BTC" || s === "ETH" ? "CRYPTO_MAJOR" : "CRYPTO_ALT", "CRYPTO", clean(read(`${stockDir}/${f}`))));
       continue;
     }
     const s = f.replace(".json", "");
     if (etfSet.has(s)) continue;
-    const bars = clean(read(`${STOCK_DIR}/${f}`));
+    const bars = clean(read(`${stockDir}/${f}`));
     if (bars.length < 300) continue;
     out.push(buildMultiAsset(s, "STOCK", "STOCKS", bars));
   }

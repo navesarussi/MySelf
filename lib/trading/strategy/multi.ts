@@ -725,6 +725,11 @@ export function runBook(input: {
   end: number;
   starting_equity: number;
   stock_execution?: StockExecution;
+  /**
+   * Risk allocation (lib/trading/strategy/allocation.ts): a multiplier on the sleeve's risk_pct for a new entry,
+   * given the book's daily returns and each sleeve's daily P&L ÷ book equity so far (oldest first).
+   */
+  allocation?: (sleeve: StrategyId, state: { t: number; book: number[]; sleeves: Map<string, number[]> }) => number;
 }): BookResult {
   const env = input.envelope ?? DEFAULT_BOOK_ENVELOPE;
   const ctx: ScanContext = { references: input.references };
@@ -738,10 +743,16 @@ export function runBook(input: {
   const blocked: Record<string, number> = {};
   const live: Live[] = [];
   const block = (k: string) => (blocked[k] = (blocked[k] ?? 0) + 1);
+  // Per-sleeve value (realized + open mark) for the allocation's return series.
+  const sleeveRealized = new Map<string, number>();
+  const sleevePrev = new Map<string, number>();
+  const sleeveReturns = new Map<string, number[]>(input.sleeves.map((s) => [s.def.id, []]));
+  const bookReturns: number[] = [];
 
   const settle = (l: Live) => {
     if (l.pos.state !== "CLOSED") return;
     cash += l.pos.cash_flow;
+    sleeveRealized.set(l.sleeve.def.id, (sleeveRealized.get(l.sleeve.def.id) ?? 0) + l.pos.cash_flow);
     trades.push({
       strategy: l.sleeve.def.id,
       symbol: l.a.symbol,
@@ -797,6 +808,16 @@ export function runBook(input: {
     let mtm = 0;
     for (const l of live) if (l.pos.entry_price !== null) mtm += l.pos.cash_flow + markPrice(l, t) * l.pos.size;
     const equity = cash + mtm;
+    if (input.allocation) {
+      const prevEquity = curve.length ? curve[curve.length - 1].equity : input.starting_equity;
+      bookReturns.push(prevEquity > 0 ? equity / prevEquity - 1 : 0);
+      const value = new Map<string, number>([...sleeveReturns.keys()].map((id) => [id, sleeveRealized.get(id) ?? 0]));
+      for (const l of live) if (l.pos.entry_price !== null) value.set(l.sleeve.def.id, (value.get(l.sleeve.def.id) ?? 0) + l.pos.cash_flow + markPrice(l, t) * l.pos.size);
+      for (const [id, v] of value) {
+        sleeveReturns.get(id)?.push(prevEquity > 0 ? (v - (sleevePrev.get(id) ?? 0)) / prevEquity : 0);
+        sleevePrev.set(id, v);
+      }
+    }
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, 1 - equity / peak);
     curve.push({ t, equity });
@@ -821,7 +842,7 @@ export function runBook(input: {
         continue;
       }
       const openRisk = live.reduce((s, l) => s + (l.pos.state === "RISK_FREE" ? 0 : l.risk_pct), 0);
-      const riskPct = sleeve.risk_pct;
+      const riskPct = sleeve.risk_pct * (input.allocation?.(sleeve.def.id, { t, book: bookReturns, sleeves: sleeveReturns }) ?? 1);
       if (openRisk + riskPct > env.max_open_risk + 1e-9) {
         block("MAX_OPEN_RISK");
         continue;

@@ -130,6 +130,15 @@ function BookResearchSection() {
         <TradingText muted size={tokens.textXs}>
           {t("trading.bookResearchNote")}
         </TradingText>
+        {BOOK_RESEARCH.data || BOOK_RESEARCH.config ? (
+          <TradingText muted size={tokens.textXs} style={{ marginTop: 4 }}>
+            {t("trading.bookResearchSource", {
+              data: BOOK_RESEARCH.data ? t(`trading.bookResearchData_${BOOK_RESEARCH.data}`) : "—",
+              risk: BOOK_RESEARCH.config ? `×${BOOK_RESEARCH.config.risk_scale}` : "—",
+              gross: BOOK_RESEARCH.config ? fmtPct(BOOK_RESEARCH.config.max_gross, 0) : "—",
+            })}
+          </TradingText>
+        ) : null}
         {all ? (
           <View style={{ marginTop: 10 }}>
             <KpiGrid
@@ -161,6 +170,18 @@ function BookResearchSection() {
           {BOOK_RESEARCH.costs} · {BOOK_RESEARCH.generated_at}
         </TradingText>
       </Card>
+      {BOOK_RESEARCH.survivorship?.length ? (
+        <Card>
+          <TradingText bold size={tokens.textSm}>
+            {t("trading.bookResearchSurvivorship")}
+          </TradingText>
+          {BOOK_RESEARCH.survivorship.map((x) => (
+            <TradingText key={x.id} size={tokens.textXs} style={{ writingDirection: "ltr" }}>
+              {`${x.id === "BOOK" ? t("trading.bookResearchBook") : t(`trading.setup_${x.id}`)}: ${fmtPct(x.biased.cagr)} → ${fmtPct(x.clean.cagr)} · S ${x.biased.sharpe ?? "—"} → ${x.clean.sharpe ?? "—"} · DD ${fmtPct(x.biased.max_dd)} → ${fmtPct(x.clean.max_dd)}`}
+            </TradingText>
+          ))}
+        </Card>
+      ) : null}
     </CollapsibleSection>
   );
 }

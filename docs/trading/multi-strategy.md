@@ -109,3 +109,21 @@ slots (trades go *up* from 4,624 to 5,393 at ×0.75). Exposure is the lever. **C
 gross 0.6**, the same 13.9% drawdown as ×0.5 but with more return and a better Sharpe. The gross cap now counts
 crypto too, as the research engine does (it used to count stocks only). IBS_CLOSE keeps its own notional cap,
 scaled by `risk_scale`. The kill switch moves from −25% to −20% from peak.
+
+## Allocation across sleeves (2026-09-30) — rejected
+
+`scripts/trading/allocation-research.ts`, live book (risk ×0.75, gross 0.6), 2016-26. Rule: adopt only if Sharpe
+improves in train, validation and holdout with max DD ≤ 15%.
+
+| Variant | Sharpe train / valid / hold / all | Max DD all |
+|---|---|---|
+| Fixed sleeve risk (live) | 1.58 / 0.68 / 1.00 / 1.22 | 13.9% |
+| Book vol target, 20-day (target = baseline 12.8%) | 1.56 / 0.47 / 1.13 / 1.18 | 17.0% |
+| Book vol target, 60-day | 1.66 / 0.44 / 1.04 / 1.20 | 17.0% |
+| Inverse-vol sleeve weights, 60-day | 1.45 / 0.50 / 1.16 / 1.17 | 15.3% |
+| Inverse-vol sleeve weights, 120-day | 1.43 / 0.67 / 1.24 / 1.20 | 14.5% |
+| Inverse-vol 60d × vol target 20d | 1.67 / 0.62 / 1.02 / 1.24 | 16.3% |
+
+None passes: vol targeting cuts exposure after the 2022 shocks and misses the rebounds (validation Sharpe 0.44–0.47),
+inverse-vol starves the stock sleeves in 2016-21. Fixed sleeve risk stays. The hook (`runBook({ allocation })`,
+`lib/trading/strategy/allocation.ts`) stays for a rerun on survivorship-free data.
