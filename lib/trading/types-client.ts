@@ -550,3 +550,28 @@ export type TradingParamSet = {
   locked_until: string | null;
   created_at: string;
 };
+
+/** The fund view (lib/trading/service-fund.ts): NAV since the book started, attribution, live vs model, health. */
+export type FundAttribution = { strategy: string; mtd_usd: number; mtd_pct: number; itd_usd: number; itd_pct: number };
+export type FundTracking = {
+  grp: "CRYPTO" | "STOCKS";
+  series: { day: string; live: number; model: number; diff: number }[];
+  stats: { days: number; live_cum: number; model_cum: number; diff_cum: number; te_annual: number | null };
+};
+export type FundView = {
+  inception: string;
+  as_of: string | null;
+  equity: number | null;
+  /** Rebased to 100 at inception. */
+  nav: { day: string; index: number; model: number | null }[];
+  itd_return: number | null;
+  mtd_return: number | null;
+  drawdown: number | null;
+  max_drawdown: number | null;
+  attribution: FundAttribution[];
+  unattributed_itd: number;
+  tracking: FundTracking[];
+  shortfall: { strategy: string; n: number; mean_bps: number; usd: number }[];
+  missed: { reason: string; n: number }[];
+  health: HealthReport | null;
+};
