@@ -18,10 +18,6 @@ export type Bar = {
   v: number;
 };
 
-export type AgentDecision = "ENTER" | "SKIP";
-export type AgentConfidence = "LOW" | "MEDIUM" | "HIGH";
-export type RiskMultiplier = 0 | 0.5 | 0.75 | 1;
-
 /** Track = which decision-maker the trade represents (for shadow comparison). */
 export type TradeTrack = "DETERMINISTIC" | "AGENT";
 /** Execution = where the trade lives. SHADOW trades are simulated forward on real bars, never sent anywhere. */
@@ -49,9 +45,6 @@ export type UniverseSymbol = {
   /** Provider-specific ticker, e.g. BTCUSDT for Binance. */
   provider_symbol: string;
 };
-
-export type VolatilityTier = "LOW" | "MID" | "HIGH";
-export type LiquidityTier = "TIER_1" | "TIER_2";
 
 export type IndicatorSnapshot = {
   close: number;

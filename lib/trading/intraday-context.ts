@@ -21,8 +21,6 @@ import type { AssetClass, TradePlan } from "./types";
 
 export const TICK_BUDGET_MS = 80_000;
 export const LOCK_MS = 150_000;
-/** A confirmation older than this (missed ticks) is stale — the entry price is no longer available. */
-export const MAX_CONFIRM_AGE_MS = 10 * 60_000;
 export const MAX_RATINGS_PER_TICK = 4;
 export const CHART_BARS_BEFORE = 96;
 /** Stocks: no new entries in the first 15 / last 30 minutes; flat 10 minutes before the close. */

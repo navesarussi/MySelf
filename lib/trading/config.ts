@@ -8,7 +8,7 @@ import type { AssetClass, UniverseSymbol } from "./types";
 // The envelope the daily-trend research was validated under (docs/trading/research-2026-09.md: +0.24R/trade,
 // Sharpe 0.86, max DD 7.3%). It was loosened on 2026-09-14 (2%/10 positions/no correlation cap/−10R halts)
 // only to measure the intraday strategy on paper; that measurement is done and intraday entries are retired
-// (see intraday-scan.ts), so the automatic system runs at the risk its evidence was produced with.
+// (see intraday-engine.ts), so the automatic system runs at the risk its evidence was produced with.
 export const RISK_ENVELOPE = Object.freeze({
   MAX_RISK_PER_TRADE: Object.freeze({ STOCK: 0.005, CRYPTO_MAJOR: 0.01, CRYPTO_ALT: 0.01 } as Record<AssetClass, number>),
   MIN_RR_RATIO: 2.0,
@@ -67,18 +67,6 @@ export const EXECUTION_RULES = Object.freeze({
 
 /** Strategy params live with the strategy: see DEFAULT_V2_PARAMS in strategy/candidates.ts. */
 
-/** Universe screening thresholds (daily). */
-export const UNIVERSE_RULES = Object.freeze({
-  MIN_AVG_DOLLAR_VOLUME_30D: 50_000_000,
-  MAX_SPREAD_OF_STOP: 0.05,
-  MIN_ATR_PCT: 0.015,
-  MIN_HISTORY_DAYS: 365,
-  MIN_STOCK_PRICE: 5,
-  TIER_1_DOLLAR_VOLUME: 500_000_000,
-  VOL_TIER_LOW_MAX: 0.025,
-  VOL_TIER_MID_MAX: 0.05,
-});
-
 /** Vetoes before the agent ever sees the setup. */
 export const VETO_RULES = Object.freeze({
   EARNINGS_WINDOW_TRADING_DAYS: 3,
@@ -106,7 +94,6 @@ export const PHASE_GATES = Object.freeze({
 });
 
 export { GEMINI_MODEL_ID as AGENT_MODEL_ID } from "@/lib/ai-model";
-export const AGENT_PROMPT_VERSION = "trade-analyst-v3-discretion";
 
 /** Paper account starting equity (USD). */
 export const PAPER_STARTING_EQUITY = 100_000;

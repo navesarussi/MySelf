@@ -5,19 +5,16 @@ import { runBrokerReconciliation } from "./broker/run-reconciliation";
 import { settleBrokerTrades, SETTLE_LOOKBACK_MS } from "./broker/settle";
 import { loadIntradayFrames, type IntradaySymbol } from "./intraday-data";
 import { runCloseSleeve } from "./book/close-sleeve";
-import { getIntradayUniverse, providerSymbolFor, refreshIntradayUniverse } from "./intraday-universe";
+import { providerSymbolFor, refreshIntradayUniverse } from "./intraday-universe";
 import { getOpenTrades, getSettings, logEvent, updateSettings, type TradeRow } from "./store";
 import {
   LOCK_MS,
   iso,
-  loadIntradayAccount,
   stockSession,
   type IntradaySummary,
   type StockSession,
 } from "./intraday-context";
-import { scannableSymbols } from "./intraday-trade";
 import { advanceIntraday } from "./intraday-advance";
-import { INTRADAY_AUTO_ENTRIES, scanAndEnter } from "./intraday-scan";
 import { rateEnteredTriggers } from "./intraday-rate";
 import type { IntradayFeatures, IntradayFrames } from "./strategy/intraday";
 import { runHealthChecks } from "./fund/health";
@@ -86,7 +83,6 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
         summary.errors.push(`universe_refresh: ${err instanceof Error ? err.message.slice(0, 160) : String(err)}`);
       }
     }
-    const universe = await getIntradayUniverse();
     const session = await stockSession(now);
     summary.stocks_open = session.open;
     if (settings.execution_venue === "ALPACA_PAPER") {
@@ -104,7 +100,7 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
     }
     const managed = (await getOpenTrades()).filter((t) => isIntradayManaged(t.strategy_version));
     // With automatic entries retired only the open positions (and the market references) need bars.
-    const frames = await loadIntradayFrames(symbolsToLoad(INTRADAY_AUTO_ENTRIES ? scannableSymbols(universe, session) : [], managed, session), now, summary.errors);
+    const frames = await loadIntradayFrames(symbolsToLoad([], managed, session), now, summary.errors);
     summary.symbols = frames.size;
     const lastPrices = new Map([...frames].map(([s, lf]) => [s, lf.lastPrice]));
 
@@ -128,10 +124,12 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
       }
     }
 
-    const ia = await loadIntradayAccount(settings, lastPrices, now, summary.errors);
     if (settings.phase !== "PAPER" && settings.phase !== "SHADOW") summary.skipped_reason = `phase_${settings.phase.toLowerCase()}`;
     else if (settings.kill_switch_active) summary.skipped_reason = "kill_switch_active";
-    else await scanAndEnter({ settings, universe, frames, ia, session, now, started, summary });
+    // Automatic intraday entries are retired (2026-09-26): measured with Alpaca's real costs they lost
+    // −0.39R/trade on crypto 15m/5m and −0.24R on US stocks (docs/trading/research-2026-09.md). Open
+    // intraday positions are still managed to their exits; the "search trade" button still enters manually.
+    else summary.skipped_reason = "intraday_entries_retired";
 
     await rateEnteredTriggers(now, started, summary);
   } catch (err) {

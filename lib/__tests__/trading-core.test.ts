@@ -7,7 +7,6 @@ import { ENTRY_GUARDS, RISK_ENVELOPE } from "../trading/config";
 import { applyRiskScaleRequest, checkNewEntry, drawdownFromPeak, shouldTripKillSwitch, weekStartIso } from "../trading/risk-envelope";
 import { computeStats, monteCarlo, wilsonInterval } from "../trading/metrics";
 import { evaluateVetoes, nextTradingDays } from "../trading/veto";
-import { bucketId } from "../trading/universe";
 import type { Bar } from "../trading/types";
 
 const bar = (t: number, o: number, h: number, l: number, c: number, v = 1000): Bar => ({ t, o, h, l, c, v });
@@ -300,9 +299,5 @@ describe("vetoes", () => {
     const open = new Date("2026-09-15T13:40:00Z"); // 09:40 ET
     assert.ok(evaluateVetoes({ ...common, mode: "INTRADAY", now: open, symbol: "SPY", asset_class: "STOCK" }).includes("SESSION_EDGE"));
     assert.deepEqual(nextTradingDays("2026-09-18", 2), ["2026-09-18", "2026-09-21"]);
-  });
-
-  it("bucket ids", () => {
-    assert.equal(bucketId("CRYPTO_ALT", { median_atr_pct_90d: 0.06, avg_dollar_volume_30d: 1e9 }), "CRYPTO_ALT:HIGH:TIER_1");
   });
 });
