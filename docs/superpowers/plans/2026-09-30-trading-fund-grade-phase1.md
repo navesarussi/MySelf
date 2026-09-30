@@ -477,7 +477,7 @@ describe("NAV from portfolio history", () => {
       [{ day: "a", equity: 100, cash_flow: 0 }, { day: "b", equity: 110, cash_flow: 0 }, { day: "c", equity: 99, cash_flow: 0 }],
       "a"
     );
-    assert.equal(rows[1].peak_index, 110);
+    assert.ok(Math.abs(rows[1].peak_index - 110) < 1e-9);
     assert.ok(Math.abs(rows[2].drawdown - 0.1) < 1e-12);
   });
 });
