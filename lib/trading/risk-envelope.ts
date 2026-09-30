@@ -34,7 +34,8 @@ export function drawdownFromPeak(equity: number, peak: number): number {
 }
 
 export function shouldTripKillSwitch(equity: number, peak: number): boolean {
-  return drawdownFromPeak(equity, peak) >= RISK_ENVELOPE.MASTER_KILL_SWITCH_DD;
+  // Exactly at the threshold trips (1 − 80k/100k is 0.19999999999999996 in floating point).
+  return drawdownFromPeak(equity, peak) >= RISK_ENVELOPE.MASTER_KILL_SWITCH_DD - 1e-12;
 }
 
 export function haltStatus(state: Pick<EnvelopeState, "realized_r_today" | "realized_r_week">) {

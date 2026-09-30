@@ -180,7 +180,7 @@ export default function TradingControlScreen() {
         id="trading.control.book"
         title={t("trading.bookTitle")}
         defaultOpen={true}
-        summary={dash?.book ? `${dash.book.sleeves.reduce((n, x) => n + x.open, 0)} · ${fmtPct(dash.book.stock_gross_pct, 0)}` : null}
+        summary={dash?.book ? `${dash.book.sleeves.reduce((n, x) => n + x.open, 0)} · ${fmtPct(dash.book.gross_pct, 0)}` : null}
       >
         {dash?.book ? (
           <Card>
@@ -204,7 +204,7 @@ export default function TradingControlScreen() {
               </View>
             ))}
             <TradingText muted size={tokens.textXs} style={{ marginTop: 8 }}>
-              {t("trading.bookGross", { v: fmtPct(dash.book.stock_gross_pct, 0), max: fmtPct(dash.book.max_gross, 0) })}
+              {t("trading.bookGross", { v: fmtPct(dash.book.gross_pct, 0), max: fmtPct(dash.book.max_gross, 0) })}
             </TradingText>
           </Card>
         ) : dashLoading ? (

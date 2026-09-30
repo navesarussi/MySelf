@@ -138,7 +138,8 @@ export async function runCloseSleeve(now: number): Promise<CloseSleeveSummary | 
       void logEntryGuardSkip({ symbol: sig.a.symbol, reason: pre.reason, detail: pre.detail, now });
       continue;
     }
-    const targetNotional = IBS_CLOSE_PARAMS.notional_pct * broker.equity;
+    // Sized by notional, not risk, so the risk budget (trading_settings.risk_scale) scales the notional.
+    const targetNotional = IBS_CLOSE_PARAMS.notional_pct * settings.risk_scale * broker.equity;
     const sized = sizeNotionalWithGuards({
       entry: sig.entry,
       stop: sig.stop,

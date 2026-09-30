@@ -20,10 +20,11 @@ export const RISK_ENVELOPE = Object.freeze({
   DAILY_LOSS_HALT_R: -3,
   WEEKLY_LOSS_HALT_R: -6,
   /**
-   * Drawdown from peak equity that trips the master kill switch. The multi-strategy book's worst 10-year
-   * drawdown was ~20% (docs/trading/multi-strategy.md) — the switch is for a broken state, not a bad month.
+   * Drawdown from peak equity that trips the master kill switch. Risk budget (2026-09-30): the book is sized for
+   * a ≤ 15% worst drawdown over 10 years (13.9% in research); 20% leaves room for live being worse than research
+   * (survivorship) while still meaning "something is broken", not "a bad month".
    */
-  MASTER_KILL_SWITCH_DD: 0.25,
+  MASTER_KILL_SWITCH_DD: 0.2,
   /** Max notional per position. Crypto has no leverage at Alpaca, so this caps real risk below MAX_RISK_PER_TRADE on tight stops. */
   MAX_ASSET_EXPOSURE: 0.2,
   /** Allowed agent risk multipliers — the agent can only reduce. */
