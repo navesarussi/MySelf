@@ -20,6 +20,7 @@ import type {
   ChatMessageRow,
   BrokerStatus,
   DashboardOverview,
+  FundView,
   TradingEvent,
   TradeListItem,
   TradingBacktestDetail,
@@ -673,6 +674,7 @@ export const api = {
     return data as import("@/lib/finance/import/types").ImportUploadSummary;
   },
   tradingDashboard: (c: ApiConfig) => apiFetch<DashboardOverview>(c, "/trading/dashboard"),
+  tradingFund: (c: ApiConfig) => apiFetch<FundView>(c, "/trading/fund"),
   tradingEquity: (c: ApiConfig) => apiFetch<TradingEquitySnapshot>(c, "/trading/equity"),
   tradingBroker: (c: ApiConfig) => apiFetch<BrokerStatus>(c, "/trading/broker"),
   tradingEvents: (c: ApiConfig, limit = 30) => apiFetch<TradingEvent[]>(c, `/trading/events?limit=${limit}`),
