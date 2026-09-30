@@ -18,7 +18,6 @@ export const TF_MS: Record<Timeframe, number> = {
 };
 
 const BINANCE = "https://data-api.binance.vision/api/v3";
-const BINANCE_FUTURES = "https://fapi.binance.com/fapi/v1";
 const YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart";
 const UA = { "User-Agent": "Mozilla/5.0 (MySelf trading)", Accept: "application/json" };
 
@@ -130,29 +129,6 @@ export function createBarCache(now = Date.now()) {
 }
 export type BarCache = ReturnType<typeof createBarCache>;
 
-/** Latest perp funding rate; null when unavailable. */
-export async function fetchFundingRate(providerSymbol: string): Promise<number | null> {
-  try {
-    const data = (await getJson(`${BINANCE_FUTURES}/premiumIndex?symbol=${encodeURIComponent(providerSymbol)}`, 8000)) as { lastFundingRate?: string };
-    const v = Number(data.lastFundingRate);
-    return Number.isFinite(v) ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchBidAskSpreadPct(providerSymbol: string): Promise<number | null> {
-  try {
-    const d = (await getJson(`${BINANCE}/ticker/bookTicker?symbol=${encodeURIComponent(providerSymbol)}`, 8000)) as { bidPrice?: string; askPrice?: string };
-    const bid = Number(d.bidPrice);
-    const ask = Number(d.askPrice);
-    if (!(bid > 0) || !(ask >= bid)) return null;
-    return (ask - bid) / ((ask + bid) / 2);
-  } catch {
-    return null;
-  }
-}
-
 /** Symbols reporting earnings on the given US dates. Returns null if any date fails (fail closed). */
 export async function fetchEarningsSymbols(dates: string[]): Promise<Set<string> | null> {
   try {
@@ -177,24 +153,6 @@ export type MarketContext = {
   spy_above_ma200: boolean | null;
   btc_above_ma200: boolean | null;
 };
-
-export async function fetchVix(): Promise<number | null> {
-  try {
-    const bars = await yahooBars("^VIX", "1d", "5d");
-    return bars.at(-1)?.c ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchBtcDominance(): Promise<number | null> {
-  try {
-    const d = (await getJson("https://api.coingecko.com/api/v3/global", 8000)) as { data?: { market_cap_percentage?: { btc?: number } } };
-    return d.data?.market_cap_percentage?.btc ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export function lookbackForClass(assetClass: AssetClass, tf: Timeframe) {
   // Enough bars for EMA200 on the trend frame plus warm-up on the entry frame.

@@ -3,8 +3,6 @@ import assert from "node:assert/strict";
 import { mulberry32 } from "../trading/metrics";
 import { buildDailyAsset, DEFAULT_DAILY_TREND, LIVE_DAILY_TREND_PARAMS, donchianExitBreached, runDailyTrend, scanDailyTrendCandidates, scoreDailyCandidate } from "../trading/strategy/daily-trend";
 import { dailyTrendGroup } from "../trading/config";
-import { AGENT_SKILL_VERSION, TRADING_SKILL } from "../trading/agent-skill";
-import { JUDGE_SYSTEM_PROMPT, promptVersionFor } from "../trading/agent-judge";
 import type { Bar } from "../trading/types";
 
 function series(seed: number, days = 900, drift = 0.0008): Bar[] {
@@ -113,9 +111,3 @@ describe("dailyTrendGroup", () => {
   });
 });
 
-describe("agent skill", () => {
-  it("is versioned and embedded in the live judge prompt", () => {
-    assert.ok(JUDGE_SYSTEM_PROMPT.startsWith(TRADING_SKILL));
-    assert.ok(promptVersionFor(3).includes(AGENT_SKILL_VERSION));
-  });
-});

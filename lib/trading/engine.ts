@@ -8,7 +8,6 @@ import { flattenAtBroker } from "./broker/flatten";
 import { advancePositions } from "./advance-positions";
 import { learnFromClosedTrades } from "./learn-loop";
 import { advanceBookBroker, runBookTick } from "./book/engine";
-import { scan } from "./scan-v2";
 import { isBookManaged, isIntradayManaged } from "./strategy-versions";
 import { resurrectDesyncedTrades } from "./broker/resurrect";
 import { runBrokerReconciliation } from "./broker/run-reconciliation";
@@ -16,7 +15,6 @@ import { settleBrokerTrades, SETTLE_LOOKBACK_MS } from "./broker/settle";
 import { drawdownFromPeak, shouldTripKillSwitch } from "./risk-envelope";
 import {
   ensureSeeded,
-  getActivePlaybook,
   getActiveV2Params,
   getCalendar,
   getOpenTrades,
@@ -38,10 +36,6 @@ import { runHealthChecks } from "./fund/health";
  * Idempotent: triggers are unique per (symbol, mode, bar) and positions only advance over unseen bars.
  */
 
-
-
-/** The 4h v2 scan is replaced by the intraday strategy (testing phase); open v2 positions are still managed. */
-const V2_SCAN_ENABLED = false;
 
 export { mirrorToBroker, resolveBrokerEntry } from "./broker-mirror";
 export { persistTrade } from "./advance-positions";
@@ -159,10 +153,6 @@ export async function runTick(now = Date.now()): Promise<TickSummary> {
     summary.skipped_reason = "live_broker_not_connected";
     await logEvent({ kind: "LIVE_BLOCKED", severity: "critical", message: "שלב LIVE נבחר אבל אין מתאם ברוקר — אין כניסות." });
   } else if (settings.kill_switch_active) summary.skipped_reason = "kill_switch_active";
-  else {
-    const playbook = await getActivePlaybook();
-    if (V2_SCAN_ENABLED) await scan({ settings, universe: universeRows, params, frames, cache, calendar, account, playbook, now, started, summary });
-  }
   // The multi-strategy book replaces the single daily-trend scan (lib/trading/book): its daily passes
   // manage their own positions and entries; halts and the kill switch are enforced inside (checkAccountEntry).
   if (settings.phase === "PAPER") {

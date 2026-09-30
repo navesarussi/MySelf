@@ -46,7 +46,7 @@ multi-strategy book's 10-year realized-loss tails (worst day −3.2%, worst week
 
 ### Strategy decision (2026-09-26): intraday entries retired, daily trend is the core
 
-Same code, 120 days, Alpaca's real costs (`INTRADAY_AUTO_ENTRIES = false` in `intraday-scan.ts`):
+Same code, 120 days, Alpaca's real costs (automatic intraday entries were switched off, and the scanner removed in 2.19.2):
 
 | Variant | Trades | Gross | Net (real costs) |
 |---|---|---|---|

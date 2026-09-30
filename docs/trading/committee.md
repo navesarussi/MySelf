@@ -1,4 +1,6 @@
-# Trading committee layer (planned)
+# Trading committee layer (removed)
+
+> **Removed in 2.19.2.** The committee only ever ran in shadow behind the v2 / daily-trend / intraday scanners, all of which are gone; `lib/trading/committee/**` and the `committee-metrics` / `committee-gate-eval` routes were deleted. The `trading_committee_*` tables are kept. This page is the design record.
 
 Multi-agent decision layer **above** the existing deterministic scanners (`scan-v2`, `scan-daily-trend`, intraday, `trade-finder`). Agents do not invent trades — they filter, debate, and shrink proposals that already passed math.
 
