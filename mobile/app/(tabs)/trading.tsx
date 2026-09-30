@@ -7,6 +7,7 @@ import { useLayoutDir } from "../../src/layout-dir";
 import { useColors, tokens } from "../../src/theme";
 import { queryClient, queryKeys, useApiMutation, useApiQuery, useTradingEquity } from "../../src/query";
 import { EquityFreshness } from "../../src/components/trading/equity-freshness";
+import { FundCard } from "../../src/components/trading/fund";
 import { tradingPnl } from "@/lib/trading/equity-display";
 import { Badge, Btn, Card, CollapsibleSection, EmptyState, ErrorNote, KpiGridSkeleton, Screen, SkeletonCard, confirmDelete } from "../../src/components/ui";
 import { KpiGrid, SeriesChart } from "../../src/components/trading/charts";
@@ -41,19 +42,21 @@ export default function TradingScreen() {
   const overview = useApiQuery(queryKeys.tradingDashboard, (cfg) => api.tradingDashboard(cfg), { staleTime: 30_000 });
   const triggers = useApiQuery(queryKeys.tradingTriggersFeed, (cfg) => api.tradingTriggers(cfg), { staleTime: 30_000 });
   const events = useApiQuery(queryKeys.tradingEventsFeed, (cfg) => api.tradingEvents(cfg, 30), { staleTime: 30_000 });
+  const fund = useApiQuery(queryKeys.tradingFund, (cfg) => api.tradingFund(cfg), { staleTime: 60_000 });
 
   const data = overview.data;
   const triggerRows = triggers.data ?? [];
   const eventRows = events.data ?? [];
   const positions = data?.positions ?? [];
   const otherPositions = data?.other_positions ?? [];
-  const refreshing = overview.isFetching || triggers.isFetching || events.isFetching;
+  const refreshing = overview.isFetching || triggers.isFetching || events.isFetching || fund.isFetching;
 
   const refresh = () => {
     void liveEquity.refresh();
     void overview.refresh();
     void triggers.refresh();
     void events.refresh();
+    void fund.refresh();
   };
 
   const control = (body: Record<string, unknown>) =>
@@ -105,6 +108,8 @@ export default function TradingScreen() {
           </TradingText>
         </Card>
       ))}
+
+      <FundCard fund={fund.data} />
 
       <Card>
         <TradingText bold>{t("trading.searchCardTitle")}</TradingText>

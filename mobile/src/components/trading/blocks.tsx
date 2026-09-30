@@ -26,6 +26,7 @@ export function TradingText({ children, muted, bold, size, color, style }: { chi
 }
 
 const HUB = [
+  { href: "/trading-fund", key: "trading.hubFund", icon: "podium-outline" as const },
   { href: "/trading-journal", key: "trading.hubJournal", icon: "book-outline" as const },
   { href: "/trading-analytics", key: "trading.hubAnalytics", icon: "analytics-outline" as const },
   { href: "/trading-backtests", key: "trading.hubBacktests", icon: "flask-outline" as const },

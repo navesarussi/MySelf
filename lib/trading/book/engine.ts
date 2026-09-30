@@ -20,6 +20,7 @@ import {
   positionForSignal,
   ROTATION_ETFS,
   type MultiAsset,
+  type ScanContext,
   type Signal,
   type Sleeve,
   type StrategyGroup,
@@ -29,6 +30,7 @@ import { BOOK_HISTORY_DAYS, D1, dayIso, loadCryptoSeries, loadStockSeries, syncS
 import { getBookUniverse, type BookUniverseRow } from "./universe";
 import { BOOK_LIMITS, BOOK_SLEEVES, RETIRED_DEFS, sleevesForGroup } from "./sleeves";
 import { ENTERED, saveSignalLog, signalRow, type SignalLogRow } from "../fund/signal-log";
+import { runModelBook, saveModelDay } from "../fund/model-book";
 
 export { BOOK_LIMITS, BOOK_SLEEVES } from "./sleeves";
 
@@ -435,8 +437,25 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       summary.errors.push(`enter ${sig.a.symbol}: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
     }
   }
+  await recordModel(group, pool, refs, barIso, settings.risk_scale, deadline, summary.errors);
   await saveSignalLog(log, summary.errors);
   return summary;
+}
+
+/** Research engine on the same bars — the live-vs-model comparison (lib/trading/fund/model-book.ts). Never blocks the pass. */
+async function recordModel(group: BookGroupKey, pool: MultiAsset[], refs: ScanContext["references"], barIso: string, riskScale: number, deadline: number, errors: string[]) {
+  if (Date.now() > deadline - 20_000) {
+    errors.push("model_skipped_time");
+    return;
+  }
+  const t0 = Date.now();
+  try {
+    const day = runModelBook({ group, assets: pool, references: refs, bar: barIso, riskScale });
+    if (day) await saveModelDay(day, Date.now() - t0, errors);
+    else errors.push("model_no_bar");
+  } catch (err) {
+    errors.push(`model: ${err instanceof Error ? err.message.slice(0, 120) : "?"}`);
+  }
 }
 
 /** Every 15-minute tick: bring book trades in line with the broker (fills, stops, exits). No strategy decisions. */

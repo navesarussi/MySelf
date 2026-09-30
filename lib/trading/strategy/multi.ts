@@ -656,6 +656,8 @@ export type BookResult = {
   max_dd: number;
   by_strategy: GroupStat[];
   blocked: Record<string, number>;
+  /** Positions still open (or queued for the next open) at `end`, before the final mark-to-market close. */
+  open_at_end: { symbol: string; strategy: StrategyId; size: number; entry: number; stop: number; opened_at: number | null; pending: boolean }[];
 };
 
 type Live = {
@@ -846,6 +848,15 @@ export function runBook(input: {
       live.push({ pos, a: sig.a, sleeve, risk_pct, entered_at_close_of: sig.fill === "CLOSE" ? sig.i : null, enter_next_open: nextOpen });
     }
   }
+  const open_at_end = live.map((l) => ({
+    symbol: l.a.symbol,
+    strategy: l.sleeve.def.id,
+    size: l.pos.size,
+    entry: l.pos.entry_price ?? l.pos.entry_limit,
+    stop: l.pos.stop_price,
+    opened_at: l.pos.opened_at,
+    pending: l.pos.state === "PENDING" || Boolean(l.enter_next_open),
+  }));
   for (const l of live) {
     const i = closedIdx(l.a.d1, input.end + D1);
     if (i < 0) continue;
@@ -871,5 +882,6 @@ export function runBook(input: {
     max_dd: maxDd,
     by_strategy: groupStats(rt, (x) => x.strategy),
     blocked,
+    open_at_end,
   };
 }

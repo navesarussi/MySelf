@@ -36,6 +36,8 @@ export type TradingSettings = {
   last_intraday_tick_at: string | null;
   last_intraday_summary: Record<string, unknown> | null;
   last_intraday_universe_date: string | null;
+  /** Last health report (lib/trading/fund/health.ts). */
+  health: Record<string, unknown> | null;
   updated_at: string;
 };
 
@@ -79,6 +81,7 @@ export async function getSettings(): Promise<TradingSettings> {
     last_intraday_tick_at: (r.last_intraday_tick_at as string) ?? null,
     last_intraday_summary: (r.last_intraday_summary as Record<string, unknown>) ?? null,
     last_intraday_universe_date: (r.last_intraday_universe_date as string) ?? null,
+    health: (r.health as Record<string, unknown>) ?? null,
     updated_at: String(r.updated_at ?? new Date().toISOString()),
   };
 }

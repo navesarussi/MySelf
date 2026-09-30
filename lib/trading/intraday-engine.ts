@@ -20,6 +20,7 @@ import { advanceIntraday } from "./intraday-advance";
 import { INTRADAY_AUTO_ENTRIES, scanAndEnter } from "./intraday-scan";
 import { rateEnteredTriggers } from "./intraday-rate";
 import type { IntradayFeatures, IntradayFrames } from "./strategy/intraday";
+import { runHealthChecks } from "./fund/health";
 
 /**
  * מערכת המסחר — intraday tick, 1 minute after every 5m close (Supabase pg_cron "1-59/5 * * * *" → /api/trading/intraday-tick).
@@ -148,6 +149,8 @@ export async function runIntradayTick(now = Date.now()): Promise<IntradaySummary
         data: { errors: summary.errors, suppressed_insufficient: noisy.length > 1 ? noisy.length - 1 : 0 },
       }).catch(() => null);
     }
+    // Watches the main tick's heartbeat (a tick cannot report its own death).
+    await runHealthChecks(now, "intraday", summary.errors).catch(() => null);
     await getSupabase()
       .from("trading_settings")
       .update({ intraday_lock_until: null, last_intraday_tick_at: iso(now), last_intraday_summary: summary })

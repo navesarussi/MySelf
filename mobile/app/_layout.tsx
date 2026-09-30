@@ -137,6 +137,7 @@ function AppStack() {
         <Stack.Screen name="trading-journal" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-trade" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-analytics" options={{ title: t("nav.trading") }} />
+        <Stack.Screen name="trading-fund" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-backtests" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-chat" options={{ title: t("nav.trading") }} />
         <Stack.Screen name="trading-control" options={{ title: t("nav.trading") }} />

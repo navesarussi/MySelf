@@ -41,6 +41,7 @@ export const queryKeys = {
   financeImportBatches: ["financeImportBatches"] as const,
   financeImportRecent: ["financeImportRecent"] as const,
   tradingDashboard: ["trading", "dashboard"] as const,
+  tradingFund: ["trading", "fund"] as const,
   /** Live account equity — shared by Home tile and Trading screen. */
   tradingEquity: ["trading", "equity"] as const,
   tradingBroker: ["trading", "broker"] as const,
