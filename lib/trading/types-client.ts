@@ -290,7 +290,7 @@ export type DashboardOverview = {
   book?: {
     sleeves: { id: string; horizon: "OVERNIGHT" | "DAYS" | "WEEKS" | "MONTHS"; risk_pct: number | null; notional_pct: number | null; max_positions: number; open: number }[];
     max_gross: number;
-    stock_gross_pct: number;
+    gross_pct: number;
   };
 };
 

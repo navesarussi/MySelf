@@ -62,10 +62,12 @@ const REFERENCE: Record<BookGroupKey, { symbol: string; asset_class: AssetClass;
 const groupOf = (t: Pick<TradeRow, "asset_class">): BookGroupKey => (t.asset_class === "STOCK" ? "STOCKS" : "CRYPTO");
 
 /** Stock notional of open and queued book trades at their entry price — what BOOK_LIMITS.max_gross caps (IBS_CLOSE has its own notional cap). */
-export function bookStockGross(trades: Pick<TradeRow, "asset_class" | "entry_limit" | "entry_price" | "remaining_size" | "position_size" | "setup">[]): number {
+export function bookGross(trades: Pick<TradeRow, "asset_class" | "entry_limit" | "entry_price" | "remaining_size" | "position_size" | "setup">[]): number {
   let g = 0;
   for (const t of trades) {
-    if (t.asset_class !== "STOCK" || t.setup === "IBS_CLOSE") continue;
+    // Crypto counts too: the research engine (runBook) caps the whole book's notional, and the risk budget
+    // was calibrated that way (docs/trading/multi-strategy.md — risk budget). IBS_CLOSE has its own cap.
+    if (t.setup === "IBS_CLOSE") continue;
     const px = Number(t.entry_price ?? t.entry_limit) || 0;
     const qty = Number(t.remaining_size) || Number(t.position_size) || 0;
     g += px * qty;
@@ -354,7 +356,7 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
   const decide = (sig: Signal, decision: string, extra: { size?: number; riskUsd?: number; tradeId?: string } = {}) =>
     log.push(signalRow({ bar: barIso, grp: group, sig, decision, ...extra }));
   const bookOpen = () => open.length + summary.entries;
-  let stockGross = bookStockGross(open);
+  let gross = bookGross(open);
   for (const { sig, sleeve } of signals) {
     if (Date.now() > deadline) {
       block("TIME_BUDGET");
@@ -404,7 +406,7 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       void logEntryGuardSkip({ symbol: sig.a.symbol, reason: "MAX_POSITION_NOTIONAL", detail: "size blocked by guards or min notional", now });
       continue;
     }
-    if (sig.a.asset_class === "STOCK" && stockGross + sized.notional > BOOK_LIMITS.max_gross * broker.equity) {
+    if (gross + sized.notional > BOOK_LIMITS.max_gross * broker.equity) {
       block("MAX_GROSS");
       decide(sig, "MAX_GROSS", { size: sized.size, riskUsd: sized.riskUsd });
       continue;
@@ -424,8 +426,8 @@ export async function runBookPass(group: BookGroupKey, barIso: string, now: numb
       decide(sig, ENTERED, { size: sized.size, riskUsd: sized.riskUsd, tradeId: id });
       summary.entries += 1;
       broker.held.add(sig.a.symbol);
+      gross += sized.notional;
       if (sig.a.asset_class === "STOCK") {
-        stockGross += sized.notional;
         if (broker.buying.stock !== null) broker.buying.stock -= sized.notional;
       } else if (broker.buying.crypto !== null) broker.buying.crypto -= sized.notional;
       const pos = positionForSignal(sig, sized.size, sleeve.def.manage);

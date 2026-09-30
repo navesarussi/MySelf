@@ -23,8 +23,13 @@ export const RETIRED_DEFS: StrategyDef[] = [pullback()];
 export const BOOK_LIMITS = Object.freeze({
   max_positions: 75,
   max_notional: 0.2,
-  /** Stock gross notional (book positions + queued entries) as a share of equity — research: 1.0 → max DD 21% vs 30% at 1.5. */
-  max_gross: 1.0,
+  /**
+   * Book gross notional (stocks and crypto, positions + queued entries; IBS_CLOSE has its own cap) as a share of
+   * equity. The exposure lever of the risk budget (2026-09-30, scripts/trading/risk-budget.ts): at risk ×0.75,
+   * 0.6 keeps the 10-year max drawdown ≤ 15% in every period (13.9%, CAGR 15.7%, Sharpe 1.22) — cutting risk per
+   * trade alone does not, because smaller positions just fill more slots under the cap.
+   */
+  max_gross: 0.6,
   max_risk_per_trade: 0.01,
 });
 

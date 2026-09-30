@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { holdExpired, inCloseWindow, withProvisionalBar } from "../trading/book/close-sleeve";
-import { bookStockGross } from "../trading/book/engine";
+import { bookGross } from "../trading/book/engine";
 import { newPendingPosition } from "../trading/position";
 import {
   assetRotation,
@@ -121,14 +121,14 @@ describe("asset rotation sleeve", () => {
 });
 
 describe("book gross", () => {
-  it("sums stock notional of open and queued trades, ignoring crypto", () => {
+  it("sums the notional of open and queued book trades, crypto included (the research engine's gross), IBS_CLOSE apart", () => {
     const rows = [
       { asset_class: "STOCK" as const, setup: "MOMENTUM", entry_limit: 100, entry_price: 101, remaining_size: 10, position_size: 10 },
       { asset_class: "STOCK" as const, setup: "REVERSAL", entry_limit: 50, entry_price: null, remaining_size: 0, position_size: 20 }, // queued
       { asset_class: "STOCK" as const, setup: "IBS_CLOSE", entry_limit: 400, entry_price: 400, remaining_size: 30, position_size: 30 }, // own cap
       { asset_class: "CRYPTO_MAJOR" as const, setup: "CRYPTO_TREND", entry_limit: 60000, entry_price: 60000, remaining_size: 1, position_size: 1 },
     ];
-    assert.equal(bookStockGross(rows), 1010 + 1000);
+    assert.equal(bookGross(rows), 1010 + 1000 + 60000);
   });
 });
 
@@ -165,7 +165,7 @@ describe("IBS close sleeve", () => {
 });
 
 describe("dashboard book overview", () => {
-  it("lists every sleeve with its live count and the stock exposure", async () => {
+  it("lists every sleeve with its live count and the book exposure", async () => {
     const { bookOverview } = await import("../trading/service-dashboard");
     const row = (setup: string, px: number, qty: number, asset_class = "STOCK") =>
       ({ setup, asset_class, strategy_version: "book", entry_price: px, entry_limit: px, remaining_size: qty, position_size: qty }) as never;
@@ -175,7 +175,7 @@ describe("dashboard book overview", () => {
     assert.equal(by.REVERSAL.open, 2);
     assert.equal(by.IBS_CLOSE.horizon, "OVERNIGHT");
     assert.equal(by.IBS_CLOSE.risk_pct, null);
-    assert.equal(o.stock_gross_pct, 0.15); // 5k + 5k + 5k; IBS_CLOSE and crypto outside the cap
+    assert.equal(o.gross_pct, 0.75); // 5k + 5k + 5k stocks + 60k crypto; IBS_CLOSE has its own cap
   });
 });
 

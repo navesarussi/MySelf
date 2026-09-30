@@ -85,3 +85,27 @@ CAGR from 21% to 5% — not used.
 - Risk: sleeve risk × equity over the stop, ≤ 20% notional, stock gross ≤ 100% of equity, buying power, and
   `checkAccountEntry` (≤ 80 positions, ≤ 25% open risk at the catastrophe stops, −3%/−5% halts, −25% kill switch).
 - Open positions of retired families (PULLBACK) are still managed to their exits.
+
+## Risk budget (2026-09-30)
+
+Target: worst drawdown ≤ 15% in every research period (train / validation / holdout / all), down from ~20%. Live is
+expected to be worse than research (survivorship), and the book is meant to trade real money later.
+`scripts/trading/risk-budget.ts` runs the live sleeves at the live caps through `runBook`, 2016-26, NEXT_OPEN, real
+costs (all periods from one run's equity curve):
+
+| Risk scale | Gross cap | CAGR (all) | Sharpe | Max DD all / train / valid / hold |
+|---|---|---|---|---|
+| 1.0 | 1.0 (before) | 24.3% | 1.25 | 19.9 / 19.9 / 15.1 / 19.8% |
+| 0.75 | 1.0 | 18.9% | 1.17 | 19.0 / 18.0 / 12.2 / 19.0% |
+| 0.6 | 1.0 | 15.4% | 1.15 | 16.3 / 15.4 / 10.2 / 16.3% |
+| 0.5 | 1.0 | 12.8% | 1.14 | 13.9 / 12.9 / 8.7 / 13.9% |
+| 1.0 | 0.6 | 15.9% | 1.18 | 16.6 / 13.7 / 14.6 / 14.5% |
+| 0.75 | 0.8 | 18.4% | 1.22 | 16.0 / 15.8 / 11.5 / 16.0% |
+| 0.75 | 0.7 | 18.1% | 1.26 | 16.1 / 13.8 / 11.5 / 16.1% |
+| **0.75** | **0.6** | **15.7%** | **1.22** | **13.9 / 12.4 / 11.8 / 13.7%** |
+
+Cutting risk per trade alone barely moves the drawdown: the gross cap binds, and smaller positions just fill more
+slots (trades go *up* from 4,624 to 5,393 at ×0.75). Exposure is the lever. **Chosen: `risk_scale` 0.75 and book
+gross 0.6**, the same 13.9% drawdown as ×0.5 but with more return and a better Sharpe. The gross cap now counts
+crypto too, as the research engine does (it used to count stocks only). IBS_CLOSE keeps its own notional cap,
+scaled by `risk_scale`. The kill switch moves from −25% to −20% from peak.

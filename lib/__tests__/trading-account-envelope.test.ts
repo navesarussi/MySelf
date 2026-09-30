@@ -38,8 +38,9 @@ describe("live account envelope (% of equity)", () => {
     const full = Array.from({ length: RISK_ENVELOPE.ACCOUNT_MAX_POSITIONS }, (_, i) => ({ symbol: `S${i}`, notional: 1, open_risk_usd: 0 }));
     assert.ok(checkAccountEntry(state({ positions: full }), "NEW", 100).includes("MAX_CONCURRENT"));
     assert.ok(checkAccountEntry(state({ entries_paused: true }), "NEW", 100).includes("ENTRIES_PAUSED"));
-    assert.ok(checkAccountEntry(state({ equity: 74_000, peak_equity: 100_000 }), "NEW", 100).includes("KILL_SWITCH"));
-    assert.ok(!checkAccountEntry(state({ equity: 76_000, peak_equity: 100_000 }), "NEW", 100).includes("KILL_SWITCH"));
+    const killAt = 100_000 * (1 - RISK_ENVELOPE.MASTER_KILL_SWITCH_DD);
+    assert.ok(checkAccountEntry(state({ equity: killAt - 1_000, peak_equity: 100_000 }), "NEW", 100).includes("KILL_SWITCH"));
+    assert.ok(!checkAccountEntry(state({ equity: killAt + 1_000, peak_equity: 100_000 }), "NEW", 100).includes("KILL_SWITCH"));
   });
 
   it("counts a position's risk only while its stop is below the entry", () => {
