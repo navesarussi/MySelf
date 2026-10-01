@@ -17,6 +17,8 @@ export type HealthSnapshot = {
   overdue_passes: string[];
   last_tick_errors: string[];
   kill_switch_active: boolean;
+  /** Symbols the previous report found without protection (either tick). */
+  prev_naked?: string[];
 };
 
 export const MAIN_TICK_STALE_MS = 40 * 60_000;
@@ -44,7 +46,17 @@ export function evaluateHealth(s: HealthSnapshot): HealthReport {
   );
   const covered = new Set(s.open_sell_orders.filter((o) => PROTECTIVE_TYPES.has(o.type)).map((o) => o.symbol));
   const naked = s.positions.filter((p) => !p.dust && !covered.has(p.symbol)).map((p) => p.symbol).sort();
-  checks.push({ id: "protective_stop", level: naked.length ? "critical" : "ok", message: naked.length ? `פוזיציות בלי סטופ אצל הברוקר: ${naked.join(", ")}` : "", subjects: naked });
+  // Critical only on a second sighting: OTO stop legs are day orders that expire at the close and the next main
+  // tick re-places them (2026-09-30 20:01 UTC — four false alarms in the two minutes between).
+  const prev = new Set(s.prev_naked ?? []);
+  const persistent = naked.filter((x) => prev.has(x));
+  checks.push(
+    persistent.length
+      ? { id: "protective_stop", level: "critical", message: `פוזיציות בלי סטופ אצל הברוקר: ${persistent.join(", ")}`, subjects: persistent }
+      : naked.length
+        ? { id: "protective_stop", level: "warn", message: `בלי סטופ, נבדק שוב ב-tick הבא: ${naked.join(", ")}`, subjects: naked }
+        : { id: "protective_stop", level: "ok", message: "", subjects: [] }
+  );
   checks.push({ id: "book_pass", level: s.overdue_passes.length ? "critical" : "ok", message: s.overdue_passes.length ? `מעבר ספר באיחור: ${s.overdue_passes.join(", ")}` : "", subjects: s.overdue_passes });
   checks.push({ id: "tick_errors", level: s.last_tick_errors.length ? "warn" : "ok", message: s.last_tick_errors.slice(0, 3).join(" | ").slice(0, 300), subjects: [] });
   checks.push({ id: "kill_switch", level: s.kill_switch_active ? "critical" : "ok", message: s.kill_switch_active ? "מתג הכיבוי פעיל — אין כניסות חדשות" : "", subjects: [] });

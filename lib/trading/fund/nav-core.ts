@@ -46,24 +46,29 @@ export function liveSessionPoint(input: { day: string; equity: number; last_equi
   return { day: input.day, equity: input.equity, pnl: input.equity - input.last_equity, cash_flow: 0 };
 }
 
-/** The session a moment belongs to (New York date; weekends roll to Monday — Alpaca folds them into it). */
-export function currentSessionDay(now: number): string {
-  const ny = new Date(now - (isNyDst(now) ? 4 : 5) * 3_600_000);
-  const dow = ny.getUTCDay();
-  const add = dow === 6 ? 2 : dow === 0 ? 1 : 0;
-  return new Date(ny.getTime() + add * 86_400_000).toISOString().slice(0, 10);
+const D1 = 86_400_000;
+
+/**
+ * The session in progress: the first trading session after the newest one in Alpaca's history. Alpaca closes a
+ * session in its history and rolls `last_equity` together, at the next session (not at the close or at midnight —
+ * measured 2026-10-01 07:00 UTC: history and last_equity both still at 09-29), so equity − last_equity is exactly
+ * that session's P&L. `sessions` are Alpaca calendar dates (ascending); without them, weekends are skipped.
+ */
+export function sessionAfter(lastClosed: string, sessions: string[]): string {
+  const next = sessions.find((d) => d > lastClosed);
+  if (next) return next;
+  let t = Date.parse(`${lastClosed}T00:00:00Z`) + D1;
+  while ([0, 6].includes(new Date(t).getUTCDay())) t += D1;
+  return new Date(t).toISOString().slice(0, 10);
 }
 
-/** US DST: second Sunday of March 07:00 UTC → first Sunday of November 06:00 UTC. */
-function isNyDst(t: number): boolean {
-  const y = new Date(t).getUTCFullYear();
-  const nthSunday = (month: number, n: number) => {
-    const first = new Date(Date.UTC(y, month, 1)).getUTCDay();
-    return 1 + ((7 - first) % 7) + (n - 1) * 7;
-  };
-  const start = Date.UTC(y, 2, nthSunday(2, 2), 7);
-  const end = Date.UTC(y, 10, nthSunday(10, 1), 6);
-  return t >= start && t < end;
+/** History + the live session; any other stored day from the history's span on is stale (a mislabelled live row). */
+export function planNavPoints(input: { history: NavPoint[]; stored: NavPoint[]; live: NavPoint | null }): { points: NavPoint[]; stale: string[] } {
+  const points = [...input.history];
+  if (input.live && input.live.day > (input.history.at(-1)?.day ?? "")) points.push(input.live);
+  const keep = new Set(points.map((p) => p.day));
+  const first = input.history[0]?.day ?? "";
+  return { points, stale: input.stored.filter((p) => p.day >= first && !keep.has(p.day)).map((p) => p.day) };
 }
 
 export type NavRow = {
