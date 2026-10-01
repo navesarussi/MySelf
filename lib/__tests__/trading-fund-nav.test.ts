@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { attributeDay, buildMarks, chainNav, currentSessionDay, historyPoints, liveSessionPoint, sessionDay } from "../trading/fund/nav-core";
+import { attributeDay, buildMarks, chainNav, historyPoints, liveSessionPoint, planNavPoints, sessionAfter, sessionDay } from "../trading/fund/nav-core";
 
 
 describe("NAV from portfolio history", () => {
@@ -40,11 +40,24 @@ describe("NAV from portfolio history", () => {
     assert.deepEqual(liveSessionPoint({ day: "2026-09-30", equity: 114655.95, last_equity: 114765.36 }), { day: "2026-09-30", equity: 114655.95, pnl: 114655.95 - 114765.36, cash_flow: 0 });
     assert.equal(liveSessionPoint({ day: "x", equity: 0, last_equity: 1 }), null);
   });
-  it("rolls weekends into Monday's session, New York time", () => {
-    assert.equal(currentSessionDay(Date.parse("2026-09-30T13:47:00Z")), "2026-09-30");
-    assert.equal(currentSessionDay(Date.parse("2026-10-01T02:00:00Z")), "2026-09-30");
-    assert.equal(currentSessionDay(Date.parse("2026-10-03T15:00:00Z")), "2026-10-05");
-    assert.equal(currentSessionDay(Date.parse("2026-12-01T04:30:00Z")), "2026-11-30");
+});
+
+describe("the session in progress", () => {
+  const p = (day: string, pnl = 0) => ({ day, equity: 100 + pnl, pnl, cash_flow: 0 });
+  it("is the first session after the newest one Alpaca has closed — last_equity rolls with the history, not the clock", () => {
+    // 2026-10-01 07:00 UTC: history ends 09-29 and last_equity is still the 09-29 close, so the live row is 09-30.
+    assert.equal(sessionAfter("2026-09-29", ["2026-09-29", "2026-09-30", "2026-10-01"]), "2026-09-30");
+    assert.equal(sessionAfter("2026-11-25", ["2026-11-25", "2026-11-27", "2026-11-30"]), "2026-11-27"); // Thanksgiving
+    assert.equal(sessionAfter("2026-10-02", []), "2026-10-05"); // no calendar: weekend roll
+  });
+  it("chains history + live and marks every other stored day stale", () => {
+    const plan = planNavPoints({
+      history: [p("2026-09-28"), p("2026-09-29", -1)],
+      stored: [p("2026-09-28"), p("2026-09-29", -1), p("2026-10-01", 5)],
+      live: p("2026-09-30", 3),
+    });
+    assert.deepEqual(plan.points.map((x) => [x.day, x.pnl]), [["2026-09-28", 0], ["2026-09-29", -1], ["2026-09-30", 3]]);
+    assert.deepEqual(plan.stale, ["2026-10-01"]);
   });
 });
 

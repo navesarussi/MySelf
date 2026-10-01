@@ -21,16 +21,20 @@ describe("health checks", () => {
   it("is ok when everything is fresh and protected", () => {
     assert.equal(evaluateHealth(base).status, "ok");
   });
-  it("flags a position without a stop (dust ignored; a queued market sell counts)", () => {
+  it("flags a position without a stop once it is seen on two checks in a row (dust ignored; a queued market sell counts)", () => {
     const s = { ...base, open_sell_orders: [{ symbol: "NVDA", type: "market" }] };
-    const r = evaluateHealth(s);
+    // First sighting: a day stop that expired at the close is re-placed by the next main tick (OTO legs, 16:00 ET).
+    const first = evaluateHealth(s).checks.find((x) => x.id === "protective_stop")!;
+    assert.equal(first.level, "warn");
+    assert.deepEqual(first.subjects, ["BTC"]);
+    const r = evaluateHealth({ ...s, prev_naked: ["BTC", "OLD"] });
     const c = r.checks.find((x) => x.id === "protective_stop")!;
     assert.equal(c.level, "critical");
     assert.deepEqual(c.subjects, ["BTC"]);
     assert.equal(r.status, "critical");
   });
   it("a take-profit limit alone is not protection", () => {
-    assert.equal(level({ ...base, open_sell_orders: [{ symbol: "NVDA", type: "stop" }, { symbol: "BTC", type: "limit" }] }, "protective_stop"), "critical");
+    assert.equal(level({ ...base, prev_naked: ["BTC"], open_sell_orders: [{ symbol: "NVDA", type: "stop" }, { symbol: "BTC", type: "limit" }] }, "protective_stop"), "critical");
   });
   it("each tick watches the other's heartbeat", () => {
     assert.equal(level({ ...base, source: "intraday", last_tick_at: new Date(NOW - 41 * 60_000).toISOString() }, "main_heartbeat"), "critical");
@@ -46,7 +50,7 @@ describe("health checks", () => {
 
 describe("alerts", () => {
   it("raises each new critical subject once a day and reports recoveries", () => {
-    const bad = evaluateHealth({ ...base, open_sell_orders: [{ symbol: "NVDA", type: "stop" }] });
+    const bad = evaluateHealth({ ...base, prev_naked: ["BTC"], open_sell_orders: [{ symbol: "NVDA", type: "stop" }] });
     const a = alertsToSend(null, bad, new Map());
     assert.deepEqual(a.raise.map((x) => [x.id, x.subject]), [["protective_stop", "BTC"]]);
     const again = alertsToSend(bad, bad, new Map([["protective_stop", new Set(["BTC"])]]));

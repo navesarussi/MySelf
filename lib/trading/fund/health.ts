@@ -47,7 +47,9 @@ export async function runHealthChecks(now: number, source: "main" | "intraday", 
     const overdue = (await duePasses(state, now)).filter((d) => now - passDueAt(d.group, d.bar) > PASS_GRACE_MS).map((d) => `${d.group} ${d.bar}`);
     const tickErrors = ((settings.last_tick_summary?.errors as string[] | undefined) ?? []).filter((e) => !e.startsWith("model_"));
 
+    const prev = (settings.health ?? null) as unknown as HealthReport | null;
     const report = evaluateHealth({
+      prev_naked: prev?.checks.find((c) => c.id === "protective_stop")?.subjects ?? [],
       now,
       source,
       last_tick_at: settings.last_tick_at,
@@ -64,11 +66,13 @@ export async function runHealthChecks(now: number, source: "main" | "intraday", 
     const critical = report.checks.filter((c) => c.level === "critical");
     const reported = new Map<string, Set<string>>();
     for (const c of critical) reported.set(c.id, new Set(await symbolsLoggedOn(`HEALTH_${c.id.toUpperCase()}`, day)));
-    const prev = (settings.health ?? null) as unknown as HealthReport | null;
     // Either tick's last report: a heartbeat one tick raised is resolved by the other tick running again.
     const { raise, resolved } = alertsToSend(prev, report, reported);
-    for (const a of raise) {
-      await logEvent({ kind: `HEALTH_${a.id.toUpperCase()}`, symbol: a.subject, severity: "critical", message: a.message, push: true });
+    // One row per subject (the once-a-day dedupe reads them), one push per check.
+    for (const id of new Set(raise.map((a) => a.id))) {
+      const items = raise.filter((a) => a.id === id);
+      for (const a of items) await logEvent({ kind: `HEALTH_${id.toUpperCase()}`, symbol: a.subject, severity: "critical", message: a.message });
+      await logEvent({ kind: "HEALTH_ALERT", severity: "critical", message: items[0].message, push: true });
     }
     for (const id of resolved) await logEvent({ kind: "HEALTH_RESOLVED", severity: "info", message: `תקין שוב: ${id}`, push: true });
 
