@@ -34,7 +34,8 @@ export type StrategyId =
   | "ETF_MR"
   | "MOMENTUM"
   | "ASSET_ROTATION"
-  | "IBS_CLOSE";
+  | "IBS_CLOSE"
+  | "ETF_TREND";
 
 /** A daily asset plus the extra series the families read — all from closed daily bars. */
 export type MultiAsset = DailyAsset & {
@@ -615,6 +616,42 @@ export function assetRotation(p: AssetRotationParams = ASSET_ROTATION_PARAMS): S
 
 // ── Portfolio backtest ──────────────────────────────────────────────────────
 
+/**
+ * Time-series trend on non-equity ETFs (phase 2 research, docs/superpowers/specs/2026-09-30-trading-phase2-edge-design.md §D):
+ * every bond / commodity / currency ETF in an uptrend (above SMA200, blended momentum > 0), not just the top few —
+ * the book is all long equities plus crypto, and 2022-24 (rates up, dollar up, commodities up) was its weakest period.
+ * Monthly decisions like ASSET_ROTATION; 5×ATR catastrophe stop.
+ */
+export const NON_EQUITY_ETFS: ReadonlySet<string> = new Set("TLT,IEF,SHY,AGG,LQD,HYG,EMB,TIP,GLD,SLV,DBC,DBA,USO,UNG,UUP,FXE,FXY".split(","));
+export type EtfTrendParams = { stop_atr: number; universe: ReadonlySet<string> };
+export const ETF_TREND_PARAMS: EtfTrendParams = { stop_atr: 5, universe: NON_EQUITY_ETFS };
+
+export function etfTrend(p: EtfTrendParams = ETF_TREND_PARAMS): StrategyDef {
+  const trending = (a: MultiAsset, i: number) => a.d1.bars[i].c > a.sma200[i] && a.mom_blend[i] > 0;
+  return {
+    id: "ETF_TREND",
+    groups: ["ETF"],
+    manage: { breakeven_at_r: 100, trail_after_r: null, trail_mult: 0, max_hold_bars: null },
+    scan(assets, t) {
+      const out: Signal[] = [];
+      for (const a of assets) {
+        if (!p.universe.has(a.symbol)) continue;
+        const i = barAt(a, t);
+        if (i === null || i < 253 || !firstBarOfMonth(a, i) || !trending(a, i)) continue;
+        const atrv = a.d1.atr[i];
+        if (!fin(atrv)) continue;
+        const c = a.d1.bars[i].c;
+        out.push({ strategy: "ETF_TREND", a, i, t, entry: c, fill: "CLOSE", stop: c - p.stop_atr * atrv, target: null, score: 0.5 + Math.min(0.4, a.mom_blend[i]) });
+      }
+      return out;
+    },
+    exit(a, i) {
+      if (!firstBarOfMonth(a, i)) return null;
+      return trending(a, i) ? null : "SIGNAL";
+    },
+  };
+}
+
 export type Sleeve = { def: StrategyDef; risk_pct: number; max_positions: number };
 
 export type BookEnvelope = {
@@ -700,7 +737,7 @@ const REGISTRY = new Map<StrategyId, StrategyDef>();
 export function registerStrategies(defs: StrategyDef[]) {
   for (const d of defs) REGISTRY.set(d.id, d);
 }
-registerStrategies([TREND, mrRsi2(), mrIbs(), pullback(), cryptoTrend(), reversal(), momPullback(), etfMr(), momentum(), assetRotation(), ibsClose()]);
+registerStrategies([TREND, mrRsi2(), mrIbs(), pullback(), cryptoTrend(), reversal(), momPullback(), etfMr(), momentum(), assetRotation(), ibsClose(), etfTrend()]);
 export function defFor(id: StrategyId): StrategyDef {
   const d = REGISTRY.get(id);
   if (!d) throw new Error(`unknown strategy ${id}`);
