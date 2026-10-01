@@ -127,3 +127,21 @@ improves in train, validation and holdout with max DD ≤ 15%.
 None passes: vol targeting cuts exposure after the 2022 shocks and misses the rebounds (validation Sharpe 0.44–0.47),
 inverse-vol starves the stock sleeves in 2016-21. Fixed sleeve risk stays. The hook (`runBook({ allocation })`,
 `lib/trading/strategy/allocation.ts`) stays for a rerun on survivorship-free data.
+
+## Candidate: ETF time-series trend (2026-10-01) — rejected
+
+`scripts/trading/sleeve-research.ts ETF_TREND`: every non-equity ETF (bonds, gold/silver, commodities, dollar,
+currencies — 17) above its SMA200 with positive blended momentum, monthly, 5×ATR stop. Aim: help 2022-24, the book's
+weakest period.
+
+| | Sharpe train / valid / hold / all | Max DD |
+|---|---|---|
+| Live book | 1.58 / 0.68 / 1.00 / 1.22 | 13.9% |
+| ETF_TREND alone (0.6% × 17) | 0.62 / 0.22 / 1.00 / 0.61 | 14.1% |
+| Book + ETF_TREND 0.4% × 10 | 1.51 / 0.40 / 1.23 / 1.17 | 12.6% |
+| Book + ETF_TREND 0.6% × 10 | 1.40 / 0.57 / 1.07 / 1.11 | 12.5% |
+| Book + ETF_TREND 0.8% × 17 | 1.27 / 0.51 / 1.12 / 1.03 | 12.8% |
+
+Weak alone in 2022-24 (0.22) and correlated 0.33 with the book; inside the book it takes room under the 60% gross cap
+from the stock sleeves (trades 3,970 → ~3,000) and lowers train and validation Sharpe. With the gross cap binding,
+a new sleeve has to beat the marginal stock trade it displaces, not just be positive.
