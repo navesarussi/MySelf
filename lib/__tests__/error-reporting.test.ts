@@ -80,6 +80,10 @@ describe("error-reporting noise filter", () => {
     assert.equal(isNoiseError({ error: new Error("no_price") }), true);
   });
 
+  it("skips queued stock exit after hours (not a failure)", () => {
+    assert.equal(isNoiseError({ error: new Error("broker_flatten_failed: stock_exit_queued_for_open") }), true);
+  });
+
   it("skips expected Monday permission denials", () => {
     assert.equal(isNoiseError({ error: new Error("monday_permission_denied") }), true);
     assert.equal(

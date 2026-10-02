@@ -60,6 +60,8 @@ export function isNoiseError(input: {
   if (LOCAL_ONLY_WRITEBACK.has(message)) return true;
   if (TOKEN_EXPIRED_PREFIX.some((p) => message.startsWith(p))) return true;
 
+  if (lower.includes("stock_exit_queued_for_open")) return true;
+
   if (lower.includes("user unauthorized to perform action")) return true;
   if (lower.includes("userunauthorizedexception")) return true;
   if (name === "MondayGraphqlError" && lower.includes("unauthorized")) return true;
