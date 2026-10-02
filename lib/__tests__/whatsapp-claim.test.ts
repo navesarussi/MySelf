@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { claimAgentMessage, type ClaimClient } from "../agent/whatsapp-claim";
@@ -94,5 +97,14 @@ describe("claimAgentMessage", () => {
     });
     assert.equal(inserted[0].direction, "outbound");
     assert.equal(inserted[0].content, "[sending]");
+  });
+
+  it("defaults to userDb, not the shared getSupabase guard", () => {
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../agent/whatsapp-claim.ts"),
+      "utf8"
+    );
+    assert.match(src, /opts\.client \?\? \(await userDb\(\)\)/);
+    assert.doesNotMatch(src, /getSupabase/);
   });
 });

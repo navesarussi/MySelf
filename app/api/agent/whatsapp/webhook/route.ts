@@ -51,7 +51,17 @@ export const POST = withRouteHandler(async function POST(req: NextRequest) {
   }
 
   return runAsUser(account, async () => {
-    const claim = await claimWhatsAppInbound(inbound.messageId);
+    let claim: Awaited<ReturnType<typeof claimWhatsAppInbound>>;
+    try {
+      claim = await claimWhatsAppInbound(inbound.messageId);
+    } catch (err) {
+      console.error("[whatsapp-webhook] claim_throw", inbound.messageId, err);
+      reportIntegrationError("whatsapp", err, {
+        userAction: "claimWhatsAppInbound",
+        route: "/api/agent/whatsapp/webhook",
+      });
+      return webhookOk({ ok: true, skipped: "claim_error" });
+    }
     if (claim === "duplicate") {
       console.log("[whatsapp-webhook] duplicate", inbound.messageId);
       return webhookOk({ ok: true, skipped: "duplicate" });

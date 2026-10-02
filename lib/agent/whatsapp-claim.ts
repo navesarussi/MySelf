@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { userDb } from "@/lib/db/user-db";
 
 export type ClaimResult = "claimed" | "duplicate" | "error";
 
@@ -46,7 +46,7 @@ export async function claimAgentMessage(opts: {
   client?: ClaimClient;
 }): Promise<ClaimResult> {
   const { externalId, direction, placeholder, logTag } = opts;
-  const sb = (opts.client ?? getSupabase()) as ClaimClient;
+  const sb = (opts.client ?? (await userDb())) as ClaimClient;
 
   const { data: existing, error: checkError } = await sb
     .from("agent_messages")
