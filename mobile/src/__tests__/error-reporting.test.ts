@@ -10,4 +10,8 @@ describe("client error reporting noise filter", () => {
   it("keeps unexpected API failures reportable", () => {
     assert.equal(shouldSkipClientReport({ message: "db_error", httpStatus: 500 }), false);
   });
+
+  it("skips queued stock exit after hours", () => {
+    assert.equal(shouldSkipClientReport({ message: "broker_flatten_failed: stock_exit_queued_for_open", httpStatus: 409 }), true);
+  });
 });

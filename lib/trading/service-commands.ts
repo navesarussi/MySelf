@@ -44,7 +44,20 @@ export type CloseOutcome = {
   failed: { symbol: string; reason: string }[];
   /** Closed without a live price — exit price and P&L are approximate. */
   estimated: string[];
+  /** Broker queued a stock market sell for the US session open — journal stays open. */
+  queued: string[];
 };
+
+const STOCK_EXIT_QUEUED_FOR_OPEN = "stock_exit_queued_for_open";
+
+export function recordBrokerFlattenFailure(out: CloseOutcome, symbol: string, err: unknown): void {
+  const detail = err instanceof Error ? err.message.slice(0, 120) : "broker_error";
+  if (detail === STOCK_EXIT_QUEUED_FOR_OPEN) {
+    out.queued.push(symbol);
+    return;
+  }
+  out.failed.push({ symbol, reason: `broker_flatten_failed: ${detail}` });
+}
 
 /**
  * Close positions on demand (manual close, or the kill switch).
@@ -68,7 +81,7 @@ async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH")
   const universe = await getUniverse();
   const prices = await lastPrices(trades, universe);
   const now = Date.now();
-  const out: CloseOutcome = { closed: [], failed: [], estimated: [] };
+  const out: CloseOutcome = { closed: [], failed: [], estimated: [], queued: [] };
 
   for (const t of trades) {
     const p = { ...t.sim_state };
@@ -78,8 +91,7 @@ async function closeTrades(trades: TradeRow[], reason: "MANUAL" | "KILL_SWITCH")
       try {
         brokerPx = await flattenAtBroker(t);
       } catch (err) {
-        const detail = err instanceof Error ? err.message.slice(0, 120) : "broker_error";
-        out.failed.push({ symbol: t.symbol, reason: `broker_flatten_failed: ${detail}` });
+        recordBrokerFlattenFailure(out, t.symbol, err);
         continue;
       }
     }
@@ -206,6 +218,11 @@ export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"
         await audit(`סגירת ${t.symbol} נכשלה: ${res.failed[0].reason}`, "critical");
         throw new Error(res.failed[0].reason);
       }
+      if (res.queued.includes(t.symbol)) {
+        const msg = `${t.symbol}: יציאה הוזמנה לפתיחת מסחר המניות בארה"ב — הפוזיציה תיסגר עם מילוי ההוראה`;
+        await audit(msg, "info");
+        return { ok: true, message: msg };
+      }
       const approx = res.estimated.length ? " (מחיר יציאה משוער — אין ציטוט חי)" : "";
       await audit(`${t.symbol} נסגרה ידנית${approx}`, "warn");
       return { ok: true, message: `${t.symbol} closed${approx}` };
@@ -225,18 +242,19 @@ export async function executeCommand(cmd: ControlCommand, source: "app" | "chat"
       const open = (await getOpenTrades()).filter((t) => isAccountTrade(t, settings.phase));
       const res = await closeTrades(open, "MANUAL");
       const approx = res.estimated.length ? ` · ${res.estimated.length} במחיר משוער` : "";
+      const queuedNote = res.queued.length ? ` · ${res.queued.length} בתור לפתיחה: ${res.queued.join(", ")}` : "";
       if (res.failed.length) {
         // Partial success is the common case when one symbol's broker call
         // fails; the old code threw and told the caller nothing about the rest.
         const detail = res.failed.map((f) => `${f.symbol}: ${f.reason}`).join("; ");
-        await audit(`${res.closed.length} נסגרו, ${res.failed.length} נכשלו — ${detail}`, "critical");
+        await audit(`${res.closed.length} נסגרו, ${res.queued.length} בתור, ${res.failed.length} נכשלו — ${detail}`, "critical");
         return {
           ok: true,
-          message: `${res.closed.length} closed${approx}, ${res.failed.length} failed: ${detail}`,
+          message: `${res.closed.length} closed${approx}${queuedNote}, ${res.failed.length} failed: ${detail}`,
         };
       }
-      await audit(`${res.closed.length} פוזיציות נסגרו ידנית${approx}`, "warn");
-      return { ok: true, message: `${res.closed.length} closed${approx}` };
+      await audit(`${res.closed.length} נסגרו${res.queued.length ? `, ${res.queued.length} בתור לפתיחה` : ""}${approx}`, res.queued.length ? "info" : "warn");
+      return { ok: true, message: `${res.closed.length} closed${approx}${queuedNote}` };
     }
     case "set_symbol_enabled":
       await getSupabase().from("trading_universe").update({ manual_enabled: cmd.enabled, updated_at: iso(now) }).eq("symbol", cmd.symbol.toUpperCase());

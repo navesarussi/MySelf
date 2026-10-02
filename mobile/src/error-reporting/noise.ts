@@ -8,6 +8,7 @@ export function shouldSkipClientReport(input: { message: string; httpStatus?: nu
     msg.includes("no_server") ||
     input.message === "not_connected" ||
     input.message === "no_price" ||
-    input.message.startsWith("token_refresh_failed")
+    input.message.startsWith("token_refresh_failed") ||
+    msg.includes("stock_exit_queued_for_open")
   );
 }
