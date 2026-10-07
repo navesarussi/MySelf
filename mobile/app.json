@@ -2,7 +2,7 @@
   "expo": {
     "name": "MeAndMySelf",
     "slug": "myself",
-    "version": "2.20.11",
+    "version": "2.20.12",
     "scheme": "myself",
     "orientation": "default",
     "icon": "./assets/icon.png",
